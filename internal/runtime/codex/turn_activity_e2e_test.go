@@ -141,7 +141,12 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			events, unsubscribe := eventSink.SubscribeSession(h.RuntimeID, thread)
 			defer unsubscribe()
 			done := make(chan error, 1)
-			go func() { done <- rt.Prompt(promptCtx, h.RuntimeID, thread, "continue working") }()
+			go func() {
+				done <- rt.PromptTurn(promptCtx, h.RuntimeID, PromptRequest{
+					SessionID: thread, Prompt: []PromptContentBlock{TextBlock("continue working")},
+					StreamReasoningSummary: mode == "reasoning_summary",
+				})
+			}()
 			select {
 			case <-entered:
 			case err := <-done:
@@ -179,6 +184,16 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			}
 			if mode == "reasoning_text" || mode == "reasoning_summary" {
 				waitForTestReasoningStart(t, ctx, events, done)
+				if mode == "reasoning_summary" {
+					select {
+					case event := <-events:
+						if event.Kind != activity.RuntimeEventReasoningSummary || event.MessageID == "" || event.Text != "thinking" {
+							t.Fatalf("invalid reasoning summary event: %+v", event)
+						}
+					case <-ctx.Done():
+						t.Fatal(ctx.Err())
+					}
+				}
 			}
 			select {
 			case err := <-done:
@@ -202,6 +217,16 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal(ctx.Err())
 			}
+			if mode == "reasoning_text" || mode == "reasoning_summary" {
+				select {
+				case event := <-events:
+					if event.Kind != activity.RuntimeEventReasoningCompleted || event.MessageID == "" || event.Text != "" {
+						t.Fatalf("invalid reasoning completion event: %+v", event)
+					}
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			}
 			unblock()
 			if live.appServerTurnWaiter(thread) != nil {
 				t.Fatal("turn retained its waiter")
@@ -223,7 +248,7 @@ func waitForTestReasoningStart(t *testing.T, ctx context.Context, events <-chan 
 		select {
 		case event := <-events:
 			if event.Kind == activity.RuntimeEventReasoningStarted {
-				if event.TurnID == "" || event.Text != "" || event.Payload != nil {
+				if event.TurnID == "" || event.MessageID == "" || event.Text != "" || event.Payload != nil {
 					t.Fatalf("invalid reasoning event: %+v", event)
 				}
 				return

@@ -207,24 +207,25 @@ type UserInputResponder interface {
 type RuntimeEventKind string
 
 const (
-	RuntimeEventUserMessageDelta  RuntimeEventKind = "user_message_delta"
-	RuntimeEventTextDelta         RuntimeEventKind = "text_delta"
-	RuntimeEventThoughtDelta      RuntimeEventKind = "thought_delta"
-	RuntimeEventReasoningStarted  RuntimeEventKind = "reasoning_started"
-	RuntimeEventReasoningSummary  RuntimeEventKind = "reasoning_summary_delta"
-	RuntimeEventToolCallStart     RuntimeEventKind = "tool_call_start"
-	RuntimeEventToolCallUpdate    RuntimeEventKind = "tool_call_update"
-	RuntimeEventPlanUpdate        RuntimeEventKind = "plan_update"
-	RuntimeEventActionRequest     RuntimeEventKind = "action_request"
-	RuntimeEventActionDecision    RuntimeEventKind = "action_decision"
-	RuntimeEventUserInputRequest  RuntimeEventKind = "user_input_request"
-	RuntimeEventUserInputResolved RuntimeEventKind = "user_input_resolved"
-	RuntimeEventStructuredOutput  RuntimeEventKind = "structured_output"
-	RuntimeEventFileOutput        RuntimeEventKind = "file_output"
-	RuntimeEventContextUsage      RuntimeEventKind = "context_usage"
-	RuntimeEventTokenUsage        RuntimeEventKind = "token_usage"
-	RuntimeEventPromptCompleted   RuntimeEventKind = "prompt_completed"
-	RuntimeEventPromptFailed      RuntimeEventKind = "prompt_failed"
+	RuntimeEventUserMessageDelta   RuntimeEventKind = "user_message_delta"
+	RuntimeEventTextDelta          RuntimeEventKind = "text_delta"
+	RuntimeEventThoughtDelta       RuntimeEventKind = "thought_delta"
+	RuntimeEventReasoningStarted   RuntimeEventKind = "reasoning_started"
+	RuntimeEventReasoningSummary   RuntimeEventKind = "reasoning_summary_delta"
+	RuntimeEventReasoningCompleted RuntimeEventKind = "reasoning_completed"
+	RuntimeEventToolCallStart      RuntimeEventKind = "tool_call_start"
+	RuntimeEventToolCallUpdate     RuntimeEventKind = "tool_call_update"
+	RuntimeEventPlanUpdate         RuntimeEventKind = "plan_update"
+	RuntimeEventActionRequest      RuntimeEventKind = "action_request"
+	RuntimeEventActionDecision     RuntimeEventKind = "action_decision"
+	RuntimeEventUserInputRequest   RuntimeEventKind = "user_input_request"
+	RuntimeEventUserInputResolved  RuntimeEventKind = "user_input_resolved"
+	RuntimeEventStructuredOutput   RuntimeEventKind = "structured_output"
+	RuntimeEventFileOutput         RuntimeEventKind = "file_output"
+	RuntimeEventContextUsage       RuntimeEventKind = "context_usage"
+	RuntimeEventTokenUsage         RuntimeEventKind = "token_usage"
+	RuntimeEventPromptCompleted    RuntimeEventKind = "prompt_completed"
+	RuntimeEventPromptFailed       RuntimeEventKind = "prompt_failed"
 )
 
 type RuntimeEvent struct {
@@ -282,7 +283,7 @@ func TerminalToolStatus(status string) string {
 
 func RuntimeEventRequiresReliableDelivery(event RuntimeEvent) bool {
 	switch event.Kind {
-	case RuntimeEventTextDelta, RuntimeEventReasoningStarted, RuntimeEventReasoningSummary, RuntimeEventContextUsage, RuntimeEventTokenUsage,
+	case RuntimeEventTextDelta, RuntimeEventReasoningStarted, RuntimeEventReasoningSummary, RuntimeEventReasoningCompleted, RuntimeEventContextUsage, RuntimeEventTokenUsage,
 		RuntimeEventActionRequest, RuntimeEventActionDecision,
 		RuntimeEventUserInputRequest, RuntimeEventUserInputResolved,
 		RuntimeEventStructuredOutput, RuntimeEventFileOutput:

@@ -292,20 +292,9 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	switch method {
 	case "item/reasoning/textDelta", "item/reasoning/summaryTextDelta", "item/reasoning/summaryPartAdded", "item/mcpToolCall/progress":
 		turnID := appServerNotificationTurnID(params)
-		if method != "item/mcpToolCall/progress" {
-			start, summary := live.appServerTurnWaiter(threadID).observeReasoning(turnID)
-			event := SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID}
-			if start {
-				event.Kind = activitypkg.RuntimeEventReasoningStarted
-				m.publishAppServerEvent(event)
-			}
-			if summary && method == "item/reasoning/summaryTextDelta" {
-				if text, _ := params["delta"].(string); text != "" {
-					event.Kind = activitypkg.RuntimeEventReasoningSummary
-					event.Text = text
-					m.publishAppServerEvent(event)
-				}
-			}
+		if method == "item/reasoning/summaryTextDelta" {
+			text, _ := params["delta"].(string)
+			m.publishReasoningSummary(runtimeID, live, threadID, turnID, appServerString(params, "itemId"), text)
 		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
 			turnID:   turnID,
@@ -370,14 +359,23 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	}
 	itemType := appServerString(item, "type")
 	itemID := appServerString(item, "id")
+	turnID := appServerNotificationTurnID(params)
 	activity := strings.Trim(strings.TrimPrefix(method, "item/")+":"+itemType+":"+itemID, ":")
 	live.notifyAppServerTurn(threadID, appServerTurnResult{
-		turnID:   appServerNotificationTurnID(params),
+		turnID:   turnID,
 		activity: activity,
 		progress: appServerItemIsProgress(itemType),
 	})
 
 	switch {
+	case itemType == "reasoning" && (method == "item/started" || method == "item/completed"):
+		if active, _ := live.appServerTurnWaiter(threadID).reasoningStream(turnID); active && itemID != "" {
+			kind := activitypkg.RuntimeEventReasoningStarted
+			if method == "item/completed" {
+				kind = activitypkg.RuntimeEventReasoningCompleted
+			}
+			m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, MessageID: itemID, Kind: kind})
+		}
 	case method == "item/started" && itemType == "agentMessage":
 		phase := appServerString(item, "phase")
 		if strings.TrimSpace(phase) == "" {
@@ -453,6 +451,18 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			event.TurnID = appServerNotificationTurnID(params)
 			m.publishAppServerEvent(event)
 		}
+	}
+}
+
+func (m *appServerManager) publishReasoningSummary(runtimeID string, live *liveSession, threadID, turnID, itemID, text string) {
+	if itemID == "" || text == "" {
+		return
+	}
+	if active, summary := live.appServerTurnWaiter(threadID).reasoningStream(turnID); active && summary {
+		m.publishAppServerEvent(SessionEvent{
+			RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, MessageID: itemID,
+			Kind: activitypkg.RuntimeEventReasoningSummary, Text: text,
+		})
 	}
 }
 

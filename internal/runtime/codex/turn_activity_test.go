@@ -99,45 +99,53 @@ func TestAppServerProgressNotificationsRecordActivity(t *testing.T) {
 	}
 }
 
-func TestAppServerPublishesReasoningStartOncePerTurn(t *testing.T) {
-	sink := &recordingSink{}
-	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
-	live := &liveSession{spec: SessionSpec{RuntimeID: "runtime-1", Profile: testProfile()}, session: &Session{SessionID: "thread-1"}}
-	manager.sessions["runtime-1"] = live
-	notify := func(turnID, method string) {
-		t.Helper()
-		params := map[string]any{"threadId": "thread-1", "turnId": turnID, "itemId": "item-1", "delta": "reasoning text"}
-		manager.handleAppServerNotification("runtime-1", live, appServerNotification{Method: method, Params: mustJSONRaw(t, params)})
-	}
-	for i, turnID := range []string{"turn-1", "turn-2"} {
+func TestAppServerPublishesReasoningItemLifecycle(t *testing.T) {
+	for _, optIn := range []bool{false, true} {
+		sink := &recordingSink{}
+		manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+		live := &liveSession{spec: SessionSpec{RuntimeID: "runtime-1", Profile: testProfile()}, session: &Session{SessionID: "thread-1"}}
+		manager.sessions["runtime-1"] = live
 		waiter, err := live.registerAppServerTurnWaiter("thread-1")
 		if err != nil {
 			t.Fatal(err)
 		}
-		waiter.setTurnID(turnID)
-		waiter.streamReasoningSummary = i == 1
-		notify("previous-turn", "item/reasoning/textDelta")
-		notify(turnID, "item/mcpToolCall/progress")
-		notify(turnID, "item/reasoning/textDelta")
-		notify(turnID, "item/reasoning/summaryTextDelta")
+		waiter.setTurnID("turn-1")
+		waiter.streamReasoningSummary = optIn
+		notify := func(turnID, itemID, method string) {
+			t.Helper()
+			params := map[string]any{"threadId": "thread-1", "turnId": turnID, "itemId": itemID}
+			if method == "item/started" || method == "item/completed" {
+				params["item"] = map[string]any{"id": itemID, "type": "reasoning"}
+			} else {
+				params["delta"] = "reasoning text"
+			}
+			manager.handleAppServerNotification("runtime-1", live, appServerNotification{Method: method, Params: mustJSONRaw(t, params)})
+		}
+		notify("previous-turn", "old-item", "item/completed")
+		var want []SessionEvent
+		for _, itemID := range []string{"item-1", "item-2"} {
+			notify("turn-1", itemID, "item/started")
+			notify("turn-1", itemID, "item/reasoning/textDelta")
+			notify("turn-1", itemID, "item/reasoning/summaryTextDelta")
+			notify("turn-1", itemID, "item/completed")
+			event := SessionEvent{Kind: activity.RuntimeEventReasoningStarted, TurnID: "turn-1", MessageID: itemID}
+			want = append(want, event)
+			if optIn {
+				event.Kind, event.Text = activity.RuntimeEventReasoningSummary, "reasoning text"
+				want = append(want, event)
+			}
+			event.Kind, event.Text = activity.RuntimeEventReasoningCompleted, ""
+			want = append(want, event)
+		}
 		events := sink.snapshot()
-		want := i + 1
-		if i == 1 {
-			want++
+		if len(events) != len(want) {
+			t.Fatalf("opt-in=%v: got %d events, want %d: %+v", optIn, len(events), len(want), events)
 		}
-		if len(events) != want {
-			t.Fatalf("got %d events, want %d: %+v", len(events), want, events)
-		}
-		event := events[i]
-		if event.Kind != activity.RuntimeEventReasoningStarted || event.TurnID != turnID || event.Text != "" || event.Payload != nil {
-			t.Fatalf("unexpected reasoning event: %+v", event)
-		}
-		if i == 1 {
-			summary := events[i+1]
-			if summary.Kind != activity.RuntimeEventReasoningSummary || summary.TurnID != turnID || summary.Text != "reasoning text" {
-				t.Fatalf("unexpected summary event: %+v", summary)
+		for i, event := range events {
+			if event.Kind != want[i].Kind || event.TurnID != want[i].TurnID || event.MessageID != want[i].MessageID ||
+				event.Text != want[i].Text || event.Payload != nil {
+				t.Fatalf("event %d: got %+v, want %+v", i, event, want[i])
 			}
 		}
-		live.removeAppServerTurnWaiter("thread-1", waiter)
 	}
 }

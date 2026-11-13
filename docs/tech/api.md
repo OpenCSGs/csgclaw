@@ -1772,14 +1772,19 @@ message_delta             (stop_reason: end_turn)
 message_stop
 ```
 
-Each SSE block contains both `event: <type>` and a JSON `data:` payload whose
-`type` matches the event name. Before the first answer text, the server may send
-`thinking_start` once when the runtime reports reasoning. Its payload contains
-only `type`. Set `reasoning_summary: true` with `stream: true` to also receive
-Codex summary text, when available, as `reasoning_summary_delta` events with a
-string `delta` field. Raw reasoning and summaries are kept separate from answer
-text. Clients can clear the thinking indicator on answer text, tool use,
-stream termination, or cancellation. A `tool_use` block identifies the tool and
+Each SSE event has an event name and a JSON payload with a matching
+`type`. When the runtime reports reasoning, the stream opens a `thinking`
+content block. The block may contain zero or more `thinking_delta` events
+with a string at `delta.thinking`. A `content_block_stop` with the same
+`index` ends that block. Another thinking block can follow a tool call.
+
+Send `Prefer: csgclaw-reasoning-summary` with `stream: true` to receive a
+model-provided Codex summary when available. The preference is optional.
+A server that applies it returns `Preference-Applied: csgclaw-reasoning-summary`.
+Older servers can ignore the preference and respond normally. Session sends the summary as display text and
+does not forward raw reasoning or emit Anthropic signatures.
+
+A `tool_use` block identifies the tool and
 carries its redacted input in `input_json_delta`. The following `content_block_stop`
 ends the input. When the tool finishes, a single `tool_result` block carries its
 output in `tool_result_delta`. Each text delta waits for results from tools already running when it arrived,

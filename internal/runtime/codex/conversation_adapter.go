@@ -295,8 +295,8 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		output.apply(event.MessageID, phase, event.Text, snapshot)
 	case activity.RuntimeEventThoughtDelta:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventThoughtDelta, Thought: event.Text})
-	case activity.RuntimeEventReasoningSummary:
-		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{
+	case activity.RuntimeEventReasoningStarted, activity.RuntimeEventReasoningSummary, activity.RuntimeEventReasoningCompleted:
+		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, ItemID: event.MessageID, Activity: &contract.ActivityUpdate{
 			Kind: string(event.Kind), Payload: event.Text,
 		}})
 	case activity.RuntimeEventToolCallStart:
@@ -307,7 +307,7 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		tool := toolActivity(event)
 		output.observeTool(contract.TurnEventToolCallUpdate, tool)
 		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallUpdate, Tool: tool})
-	case activity.RuntimeEventTokenUsage, activity.RuntimeEventContextUsage, activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved, activity.RuntimeEventReasoningStarted:
+	case activity.RuntimeEventTokenUsage, activity.RuntimeEventContextUsage, activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{
 			ID: event.ActionID + event.UserInputID, Kind: string(event.Kind), Status: event.ActionStatus + event.UserInputStatus, Payload: event.Payload,
 		}})

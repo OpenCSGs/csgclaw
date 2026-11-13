@@ -26,6 +26,8 @@ import (
 
 const agentSessionResponseBodyLimit = 1024 * 1024
 
+const agentSessionReasoningSummaryPreference = "csgclaw-reasoning-summary"
+
 const agentSessionFileBodyLimit = ((im.MaxAttachmentMessageBytes+2)/3)*4 + 4*(im.MaxAttachmentsPerMessage-1) + agentSessionResponseBodyLimit
 
 const (
@@ -40,18 +42,18 @@ var (
 	agentSessionIDPattern             = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$`)
 	agentSessionExtraDelimiterPattern = regexp.MustCompile(`(?i)</?(extra_context|page_dom|content)\b`)
 	agentSessionHeartbeatInterval     = 15 * time.Second
+	agentSessionPreferenceQuotedValue = regexp.MustCompile(`"(?:\\.|[^"\\])*"`)
 )
 
 type agentSessionResponseRequest struct {
-	UserInput        bool            `json:"user_input,omitempty"`
-	Model            string          `json:"model,omitempty"`
-	ReasoningEffort  string          `json:"reasoning_effort,omitempty"`
-	ReasoningSummary bool            `json:"reasoning_summary,omitempty"`
-	AttachmentIDs    []string        `json:"attachment_ids,omitempty"`
-	Input            json.RawMessage `json:"input"`
-	Stream           *bool           `json:"stream,omitempty"`
-	Extra            string          `json:"extra,omitempty"`
-	ExtraType        string          `json:"extra_type,omitempty"`
+	UserInput       bool            `json:"user_input,omitempty"`
+	Model           string          `json:"model,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	AttachmentIDs   []string        `json:"attachment_ids,omitempty"`
+	Input           json.RawMessage `json:"input"`
+	Stream          *bool           `json:"stream,omitempty"`
+	Extra           string          `json:"extra,omitempty"`
+	ExtraType       string          `json:"extra_type,omitempty"`
 }
 
 type agentSessionRequestValidationError struct {
@@ -138,6 +140,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		writeSessionInputError(w, err)
 		return
 	}
+	input.reasoningSummary = stream && wantsAgentSessionReasoningSummary(r.Header)
 	if input.userInput && !authorized {
 		writeSessionInputError(w, errSessionAuthorization)
 		return
@@ -241,6 +244,10 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 	var eventStream *agentSessionEventStream
 	var sink agentengine.EventSink
 	if stream {
+		w.Header().Add("Vary", "Prefer")
+		if input.reasoningSummary {
+			w.Header().Set("Preference-Applied", agentSessionReasoningSummaryPreference)
+		}
 		eventStream = newAgentSessionEventStream(w)
 		if err := eventStream.writeMessageStart(responseID, response.InputAttachments); err != nil {
 			return false, func() {}
@@ -265,7 +272,7 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 				return eventStream.writeText(event.Text)
 			case agentengine.TurnEventThoughtDelta:
 				if strings.TrimSpace(event.Thought) != "" {
-					return eventStream.writeThinkingStart()
+					return eventStream.openThinkingBlock(event.ItemID)
 				}
 			case agentengine.TurnEventActivityUpdate:
 				if event.Activity == nil {
@@ -273,10 +280,14 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 				}
 				switch activity.RuntimeEventKind(event.Activity.Kind) {
 				case activity.RuntimeEventReasoningStarted:
-					return eventStream.writeThinkingStart()
+					return eventStream.openThinkingBlock(event.ItemID)
 				case activity.RuntimeEventReasoningSummary:
 					if text, ok := event.Activity.Payload.(string); input.reasoningSummary && ok && text != "" {
-						return eventStream.write("reasoning_summary_delta", map[string]any{"delta": text})
+						return eventStream.writeThinkingDelta(event.ItemID, text)
+					}
+				case activity.RuntimeEventReasoningCompleted:
+					if eventStream.blockType == "thinking" && eventStream.thinkingItem == event.ItemID {
+						return eventStream.closeContentBlock()
 					}
 				}
 			case agentengine.TurnEventInteractionRequest:
@@ -519,6 +530,20 @@ func turnResultError(result agentengine.TurnResult) error {
 	return errors.New("agent response failed")
 }
 
+func wantsAgentSessionReasoningSummary(headers http.Header) bool {
+	for _, value := range headers.Values("Prefer") {
+		// Ignore commas inside quoted preference values when splitting the list.
+		list := agentSessionPreferenceQuotedValue.ReplaceAllString(value, `""`)
+		for preference := range strings.SplitSeq(list, ",") {
+			name, _, _ := strings.Cut(preference, ";")
+			if strings.EqualFold(strings.TrimSpace(name), agentSessionReasoningSummaryPreference) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request, allowFiles bool) (agentSessionInput, bool, error) {
 	if isMultipartRequest(r) {
 		if !allowFiles {
@@ -607,8 +632,6 @@ func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body
 			err = decoder.Decode(&request.Model)
 		case strings.EqualFold(name, "reasoning_effort"):
 			err = decoder.Decode(&request.ReasoningEffort)
-		case strings.EqualFold(name, "reasoning_summary"):
-			err = decoder.Decode(&request.ReasoningSummary)
 		default:
 			return fmt.Errorf("unknown field %q", name)
 		}
@@ -642,7 +665,6 @@ func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInp
 	input.userInput = request.UserInput
 	input.model = strings.TrimSpace(request.Model)
 	input.reasoningEffort = strings.TrimSpace(request.ReasoningEffort)
-	input.reasoningSummary = request.ReasoningSummary
 	input.attachmentIDs = request.AttachmentIDs
 	if input.Text == "" && len(input.Files)+len(input.attachmentIDs) == 0 {
 		return agentSessionInput{}, false, fmt.Errorf("input must not be empty")
@@ -851,8 +873,8 @@ type agentSessionEventStream struct {
 	flusher       *http.ResponseController
 	writeMu       sync.Mutex
 	contentIndex  int
-	textBlockOpen bool
-	thinkingSent  bool
+	blockType     string
+	thinkingItem  string
 	tools         map[string]*agentSessionStreamTool
 	pendingTools  []*agentSessionStreamTool       // In tool_use order, until their following text can be delivered.
 	recoveredText []agentengine.RecoveredTextPart // Non-nil while terminal history owns the buffered answer.
@@ -882,7 +904,7 @@ func (s *agentSessionEventStream) write(eventType string, fields map[string]any)
 }
 
 func (s *agentSessionEventStream) writeUserInput(question agentSessionInteraction) error {
-	if err := s.closeTextBlock(); err != nil {
+	if err := s.closeContentBlock(); err != nil {
 		return err
 	}
 	const eventType = "request_user_input"
@@ -956,15 +978,24 @@ func (s *agentSessionEventStream) writeMessageStart(messageID string, inputs []i
 	return s.write("message_start", fields)
 }
 
-func (s *agentSessionEventStream) writeThinkingStart() error {
-	if s.thinkingSent || s.text.Len() != 0 {
+func (s *agentSessionEventStream) openThinkingBlock(itemID string) error {
+	if s.blockType == "thinking" && s.thinkingItem == itemID {
 		return nil
 	}
-	if err := s.write("thinking_start", map[string]any{}); err != nil {
+	if err := s.openContentBlock("thinking", map[string]any{"type": "thinking", "thinking": ""}); err != nil {
 		return err
 	}
-	s.thinkingSent = true
+	s.thinkingItem = itemID
 	return nil
+}
+
+func (s *agentSessionEventStream) writeThinkingDelta(itemID, delta string) error {
+	if err := s.openThinkingBlock(itemID); err != nil {
+		return err
+	}
+	return s.write("content_block_delta", map[string]any{
+		"index": s.contentIndex, "delta": map[string]any{"type": "thinking_delta", "thinking": delta},
+	})
 }
 
 func (s *agentSessionEventStream) writeText(delta string) error {
@@ -1053,13 +1084,10 @@ func (s *agentSessionEventStream) writeDelta(delta string) error {
 	if delta == "" {
 		return nil
 	}
-	if !s.textBlockOpen {
-		if err := s.write("content_block_start", map[string]any{
-			"index": s.contentIndex, "content_block": map[string]any{"type": "text", "text": ""},
-		}); err != nil {
+	if s.blockType != "text" {
+		if err := s.openContentBlock("text", map[string]any{"type": "text", "text": ""}); err != nil {
 			return err
 		}
-		s.textBlockOpen = true
 	}
 	if err := s.write("content_block_delta", map[string]any{
 		"index": s.contentIndex, "delta": map[string]any{"type": "text_delta", "text": delta},
@@ -1070,15 +1098,27 @@ func (s *agentSessionEventStream) writeDelta(delta string) error {
 	return nil
 }
 
-func (s *agentSessionEventStream) closeTextBlock() error {
-	if !s.textBlockOpen {
+func (s *agentSessionEventStream) openContentBlock(kind string, block map[string]any) error {
+	if err := s.closeContentBlock(); err != nil {
+		return err
+	}
+	if err := s.write("content_block_start", map[string]any{"index": s.contentIndex, "content_block": block}); err != nil {
+		return err
+	}
+	s.blockType = kind
+	return nil
+}
+
+func (s *agentSessionEventStream) closeContentBlock() error {
+	if s.blockType == "" {
 		return nil
 	}
 	if err := s.write("content_block_stop", map[string]any{"index": s.contentIndex}); err != nil {
 		return err
 	}
 	s.contentIndex++
-	s.textBlockOpen = false
+	s.blockType = ""
+	s.thinkingItem = ""
 	return nil
 }
 
@@ -1101,7 +1141,7 @@ func (s *agentSessionEventStream) writeCompleted(text, attachmentNote string, in
 	if err := s.writeDelta(attachmentNote); err != nil {
 		return err
 	}
-	if err := s.closeTextBlock(); err != nil {
+	if err := s.closeContentBlock(); err != nil {
 		return err
 	}
 	for _, question := range questions {
@@ -1170,13 +1210,7 @@ func (s *agentSessionEventStream) writeToolUse(toolID string, tool *agentengine.
 	if err != nil {
 		return err
 	}
-	if err := s.closeTextBlock(); err != nil {
-		return err
-	}
-	if err := s.write("content_block_start", map[string]any{
-		"index":         s.contentIndex,
-		"content_block": map[string]any{"type": "tool_use", "id": toolID, "name": toolName, "input": map[string]any{}},
-	}); err != nil {
+	if err := s.openContentBlock("tool_use", map[string]any{"type": "tool_use", "id": toolID, "name": toolName, "input": map[string]any{}}); err != nil {
 		return err
 	}
 	if err := s.write("content_block_delta", map[string]any{
@@ -1184,11 +1218,7 @@ func (s *agentSessionEventStream) writeToolUse(toolID string, tool *agentengine.
 	}); err != nil {
 		return err
 	}
-	if err := s.write("content_block_stop", map[string]any{"index": s.contentIndex}); err != nil {
-		return err
-	}
-	s.contentIndex++
-	return nil
+	return s.closeContentBlock()
 }
 
 func agentSessionToolUse(tool *agentengine.ToolActivity) (string, map[string]any) {
@@ -1282,18 +1312,12 @@ func redactAgentSessionToolValue(value any) any {
 }
 
 func (s *agentSessionEventStream) writeToolResult(toolID, status, output string) error {
-	if err := s.closeTextBlock(); err != nil {
-		return err
-	}
 	block := map[string]any{"type": "tool_result", "tool_use_id": toolID, "content": ""}
 	if status != "completed" {
 		block["status"] = status
 		block["is_error"] = true
 	}
-	if err := s.write("content_block_start", map[string]any{
-		"index":         s.contentIndex,
-		"content_block": block,
-	}); err != nil {
+	if err := s.openContentBlock("tool_result", block); err != nil {
 		return err
 	}
 	if err := s.write("content_block_delta", map[string]any{
@@ -1301,17 +1325,13 @@ func (s *agentSessionEventStream) writeToolResult(toolID, status, output string)
 	}); err != nil {
 		return err
 	}
-	if err := s.write("content_block_stop", map[string]any{"index": s.contentIndex}); err != nil {
-		return err
-	}
-	s.contentIndex++
-	return nil
+	return s.closeContentBlock()
 }
 
 func (s *agentSessionEventStream) writeFailure(response agentSessionResponse, cause error) {
 	s.stopHeartbeat()
 	_ = s.flushPendingText(true)
-	_ = s.closeTextBlock()
+	_ = s.closeContentBlock()
 	_ = s.write("error", map[string]any{"error": map[string]any{
 		"type": "server_error", "message": cause.Error(), "request_id": response.ID,
 	}})

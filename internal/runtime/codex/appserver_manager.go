@@ -1620,7 +1620,6 @@ type appServerTurnWaiter struct {
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
 	progressSequence         uint64
-	reasoningStarted         bool
 	streamReasoningSummary   bool
 	structuredOutputBoundary bool
 	textOnlyUserInput        bool
@@ -2012,12 +2011,12 @@ func (w *appServerTurnWaiter) wake(result appServerTurnResult) {
 	}
 }
 
-func (w *appServerTurnWaiter) observeReasoning(turnID string) (start, summary bool) {
+func (w *appServerTurnWaiter) reasoningStream(turnID string) (active, summary bool) {
 	if w == nil {
 		return false, false
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	if !w.accepted || (turnID != "" && w.turnID != turnID) {
 		return false, false
 	}
@@ -2027,9 +2026,7 @@ func (w *appServerTurnWaiter) observeReasoning(turnID string) (start, summary bo
 	if _, ended := w.terminalResults[""]; ended {
 		return false, false
 	}
-	start = !w.reasoningStarted
-	w.reasoningStarted = true
-	return start, w.streamReasoningSummary
+	return true, w.streamReasoningSummary
 }
 
 func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter {
