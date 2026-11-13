@@ -21,6 +21,7 @@ import (
 type agentSessionInput struct {
 	model                       string
 	reasoningEffort             string
+	reasoningSummary            bool
 	turnModel                   *agentengine.TurnModel
 	preservePendingInteractions bool
 	respondingTo                string

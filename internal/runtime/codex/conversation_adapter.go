@@ -84,11 +84,12 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	promptDone := make(chan error, 1)
 	go func() {
 		promptDone <- a.runtime.PromptTurn(runCtx, a.runtimeID, PromptRequest{
-			Model:               request.Model,
-			SessionID:           sessionID,
-			ClientUserMessageID: string(request.ID),
-			Prompt:              blocks,
-			TextOnlyUserInput:   request.Interaction == contract.InteractionTextOnly,
+			Model:                  request.Model,
+			SessionID:              sessionID,
+			ClientUserMessageID:    string(request.ID),
+			Prompt:                 blocks,
+			TextOnlyUserInput:      request.Interaction == contract.InteractionTextOnly,
+			StreamReasoningSummary: request.StreamReasoningSummary,
 			OnAccepted: func() {
 				if dispatchedState.CompareAndSwap(false, true) {
 					close(accepted)
@@ -294,6 +295,10 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		output.apply(event.MessageID, phase, event.Text, snapshot)
 	case activity.RuntimeEventThoughtDelta:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventThoughtDelta, Thought: event.Text})
+	case activity.RuntimeEventReasoningStarted, activity.RuntimeEventReasoningSummary, activity.RuntimeEventReasoningCompleted:
+		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, ItemID: event.MessageID, Activity: &contract.ActivityUpdate{
+			Kind: string(event.Kind), Payload: event.Text,
+		}})
 	case activity.RuntimeEventToolCallStart:
 		tool := toolActivity(event)
 		output.observeTool(contract.TurnEventToolCallStart, tool)

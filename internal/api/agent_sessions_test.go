@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/agentengine/enginetest"
@@ -590,6 +591,120 @@ func TestAgentSessionResponsesStreamsExistingSSEShapeAndToolBlocks(t *testing.T)
 	}
 }
 
+func TestAgentSessionResponsesStreamThinkingBeforeAnswer(t *testing.T) {
+	engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		for _, event := range []agentengine.TurnEvent{
+			{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{Kind: string(activity.RuntimeEventReasoningStarted)}},
+			{Kind: agentengine.TurnEventThoughtDelta, Thought: "private reasoning"},
+			{Kind: agentengine.TurnEventTextDelta, Text: "final answer"},
+		} {
+			if err := sink.Emit(ctx, event); err != nil {
+				t.Fatalf("emit %s: %v", event.Kind, err)
+			}
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "final answer"}
+	}}
+	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "thinking", map[string]any{"input": "hello", "stream": true})
+	body := recorder.Body.String()
+	thinking := strings.Index(body, `"content_block":{"thinking":"","type":"thinking"}`)
+	answer := strings.Index(body, "final answer")
+	if recorder.Code != http.StatusOK || thinking < 0 || answer <= thinking || strings.Count(body, `"content_block":{"thinking":"","type":"thinking"}`) != 1 ||
+		strings.Contains(body, "private reasoning") || strings.Contains(body, "\"type\":\"tool_use\"") {
+		t.Fatalf("unexpected response: %d %s", recorder.Code, body)
+	}
+}
+
+func TestAgentSessionReasoningSummaryRequiresOptIn(t *testing.T) {
+	for _, optIn := range []bool{false, true} {
+		engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+			if request.StreamReasoningSummary != optIn {
+				t.Fatalf("summary requested = %v, want %v", request.StreamReasoningSummary, optIn)
+			}
+			for _, event := range []agentengine.TurnEvent{
+				{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{Kind: string(activity.RuntimeEventReasoningStarted)}},
+				{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{Kind: string(activity.RuntimeEventReasoningSummary), Payload: "summary text"}},
+				{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{Kind: string(activity.RuntimeEventReasoningCompleted)}},
+				{Kind: agentengine.TurnEventTextDelta, Text: "final answer"},
+			} {
+				if err := sink.Emit(ctx, event); err != nil {
+					t.Fatalf("emit %s: %v", event.Kind, err)
+				}
+			}
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "final answer"}
+		}}
+		handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+		var preferences []string
+		if optIn {
+			preferences = []string{"return=minimal", "CSGClaw-Reasoning-Summary"}
+		} else {
+			preferences = []string{`other="a, csgclaw-reasoning-summary, b"`}
+		}
+		recorder := performAgentSessionRequest(t, handler, "agent-alpha", "summary",
+			map[string]any{"input": "hello", "stream": true}, preferences...)
+		applied := recorder.Header().Get("Preference-Applied")
+		if (applied == agentSessionReasoningSummaryPreference) != optIn || recorder.Header().Get("Vary") != "Prefer" {
+			t.Fatalf("opt-in=%v: unexpected response headers %v", optIn, recorder.Header())
+		}
+		body := recorder.Body.String()
+		summary := strings.Index(body, `"delta":{"thinking":"summary text","type":"thinking_delta"}`)
+		closeBlock := strings.Index(body, `"index":0,"type":"content_block_stop"`)
+		answer := strings.Index(body, "final answer")
+		if (summary >= 0) != optIn || closeBlock < 0 || answer <= closeBlock ||
+			(optIn && (summary <= strings.Index(body, "event: content_block_start") || summary >= closeBlock)) {
+			t.Fatalf("opt-in=%v: unexpected stream %s", optIn, body)
+		}
+	}
+}
+
+func TestAgentSessionThinkingBlocksCloseByItemAroundTools(t *testing.T) {
+	reasoning := func(kind activity.RuntimeEventKind, id, text string) agentengine.TurnEvent {
+		return agentengine.TurnEvent{Kind: agentengine.TurnEventActivityUpdate, ItemID: id,
+			Activity: &agentengine.ActivityUpdate{Kind: string(kind), Payload: text}}
+	}
+	engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		for _, event := range []agentengine.TurnEvent{
+			reasoning(activity.RuntimeEventReasoningStarted, "first", ""),
+			reasoning(activity.RuntimeEventReasoningSummary, "first", "first summary"),
+			{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "a", Kind: "exec_command"}},
+			{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "a", Status: "completed"}},
+			reasoning(activity.RuntimeEventReasoningStarted, "second", ""),
+			reasoning(activity.RuntimeEventReasoningCompleted, "first", ""),
+			reasoning(activity.RuntimeEventReasoningSummary, "second", "second summary"),
+			reasoning(activity.RuntimeEventReasoningCompleted, "second", ""),
+			{Kind: agentengine.TurnEventTextDelta, Text: "answer"},
+		} {
+			if err := sink.Emit(ctx, event); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "answer"}
+	}}
+	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+	body := performAgentSessionRequest(t, handler, "agent-alpha", "multi", map[string]any{
+		"input": "hello", "stream": true,
+	}, agentSessionReasoningSummaryPreference).Body.String()
+	remaining := body
+	for _, want := range []string{
+		`"content_block":{"thinking":"","type":"thinking"},"index":0,"type":"content_block_start"`,
+		`"delta":{"thinking":"first summary","type":"thinking_delta"},"index":0,"type":"content_block_delta"`,
+		`"index":0,"type":"content_block_stop"`,
+		`"type":"tool_use"},"index":1,"type":"content_block_start"`,
+		`"type":"tool_result"},"index":2,"type":"content_block_start"`,
+		`"content_block":{"thinking":"","type":"thinking"},"index":3,"type":"content_block_start"`,
+		`"delta":{"thinking":"second summary","type":"thinking_delta"},"index":3,"type":"content_block_delta"`,
+		`"index":3,"type":"content_block_stop"`,
+		`"delta":{"text":"answer","type":"text_delta"},"index":4,"type":"content_block_delta"`,
+		"event: message_stop",
+	} {
+		_, after, found := strings.Cut(remaining, want)
+		if !found {
+			t.Fatalf("missing or out of order %q in %s", want, body)
+		}
+		remaining = after
+	}
+}
+
 func TestAgentSessionStreamHoldsTextUntilOutstandingToolsFinish(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	stream := newAgentSessionEventStream(recorder)
@@ -1048,7 +1163,7 @@ func newAgentSessionTestHandler(
 	return handler, imSvc, bindings, bindingPath
 }
 
-func performAgentSessionRequest(t *testing.T, handler *Handler, agentSelector, sessionID string, body map[string]any) *httptest.ResponseRecorder {
+func performAgentSessionRequest(t *testing.T, handler *Handler, agentSelector, sessionID string, body map[string]any, preferences ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -1058,6 +1173,9 @@ func performAgentSessionRequest(t *testing.T, handler *Handler, agentSelector, s
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(payload))
 	req.Header.Set("Authorization", "Bearer test-server-token")
+	for _, preference := range preferences {
+		req.Header.Add("Prefer", preference)
+	}
 	handler.Routes().ServeHTTP(recorder, req)
 	return recorder
 }

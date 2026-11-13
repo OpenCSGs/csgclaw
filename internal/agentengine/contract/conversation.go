@@ -140,6 +140,7 @@ type TurnRequest struct {
 	RespondingTo string `json:"-"`
 	// PreservePendingInteractions prevents this turn from superseding a pending form.
 	PreservePendingInteractions bool `json:"-"`
+	StreamReasoningSummary      bool `json:"-"`
 
 	RoomConfiguration *RoomConfiguration   `json:"-"`
 	ImageGeneration   *ImageGenerationTask `json:"image_generation,omitempty"`

@@ -433,6 +433,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	waiter.mu.Lock()
 	waiter.diagnostic = diagnostics.From(ctx)
 	waiter.textOnlyUserInput = req.TextOnlyUserInput
+	waiter.streamReasoningSummary = req.StreamReasoningSummary
 	waiter.mu.Unlock()
 	defer func() { live.removeAppServerTurnWaiter(sessionID, waiter) }()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
@@ -1622,6 +1623,8 @@ type appServerTurnWaiter struct {
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
 	progressSequence         uint64
+	streamReasoningSummary   bool
+	reasoningSummaries       map[string]*appServerReasoningSummary
 	structuredOutputBoundary bool
 	textOnlyUserInput        bool
 }
@@ -2010,6 +2013,24 @@ func (w *appServerTurnWaiter) wake(result appServerTurnResult) {
 	case w.ch <- result:
 	default:
 	}
+}
+
+func (w *appServerTurnWaiter) reasoningStream(turnID string) (active, summary bool) {
+	if w == nil {
+		return false, false
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if !w.accepted || (turnID != "" && w.turnID != turnID) {
+		return false, false
+	}
+	if _, ended := w.terminalResults[w.turnID]; ended {
+		return false, false
+	}
+	if _, ended := w.terminalResults[""]; ended {
+		return false, false
+	}
+	return true, w.streamReasoningSummary
 }
 
 func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter {

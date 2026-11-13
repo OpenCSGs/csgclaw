@@ -5,6 +5,8 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"csgclaw/internal/activity"
 )
 
 // Virtual time crosses the former 5/10/30 minute limits without a slow test.
@@ -91,6 +93,114 @@ func TestAppServerProgressNotificationsRecordActivity(t *testing.T) {
 			if method == "item/started" || method == "item/completed" {
 				if got := live.contextUsage["thread-1"].Compacting; got != (method == "item/started") {
 					t.Fatalf("compacting=%v", got)
+				}
+			}
+		})
+	}
+}
+
+func TestAppServerPublishesReasoningItemLifecycle(t *testing.T) {
+	for _, optIn := range []bool{false, true} {
+		sink := &recordingSink{}
+		manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+		live := &liveSession{spec: SessionSpec{RuntimeID: "runtime-1", Profile: testProfile()}, session: &Session{SessionID: "thread-1"}}
+		manager.sessions["runtime-1"] = live
+		waiter, err := live.registerAppServerTurnWaiter("thread-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		waiter.setTurnID("turn-1")
+		waiter.streamReasoningSummary = optIn
+		notify := func(turnID, itemID, method string) {
+			t.Helper()
+			params := map[string]any{"threadId": "thread-1", "turnId": turnID, "itemId": itemID}
+			if method == "item/started" || method == "item/completed" {
+				params["item"] = map[string]any{"id": itemID, "type": "reasoning", "summary": []string{"snapshot text"}}
+			} else {
+				params["delta"] = "reasoning text"
+			}
+			manager.handleAppServerNotification("runtime-1", live, appServerNotification{Method: method, Params: mustJSONRaw(t, params)})
+		}
+		notify("previous-turn", "old-item", "item/completed")
+		var want []SessionEvent
+		for _, itemID := range []string{"item-1", "item-2"} {
+			notify("turn-1", itemID, "item/started")
+			notify("turn-1", itemID, "item/reasoning/textDelta")
+			notify("turn-1", itemID, "item/reasoning/summaryTextDelta")
+			notify("turn-1", itemID, "item/completed")
+			event := SessionEvent{Kind: activity.RuntimeEventReasoningStarted, TurnID: "turn-1", MessageID: itemID}
+			want = append(want, event)
+			if optIn {
+				event.Kind, event.Text = activity.RuntimeEventReasoningSummary, "reasoning text"
+				want = append(want, event)
+			}
+			event.Kind, event.Text = activity.RuntimeEventReasoningCompleted, ""
+			want = append(want, event)
+		}
+		events := sink.snapshot()
+		if len(events) != len(want) {
+			t.Fatalf("opt-in=%v: got %d events, want %d: %+v", optIn, len(events), len(want), events)
+		}
+		for i, event := range events {
+			if event.Kind != want[i].Kind || event.TurnID != want[i].TurnID || event.MessageID != want[i].MessageID ||
+				event.Text != want[i].Text || event.Payload != nil {
+				t.Fatalf("event %d: got %+v, want %+v", i, event, want[i])
+			}
+		}
+	}
+}
+
+func TestAppServerCompletesReasoningSummary(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		deltas   map[int]string
+		snapshot []string
+		want     []string
+	}{
+		{name: "snapshot only", snapshot: []string{"First", "Second"}, want: []string{"First\n\nSecond"}},
+		{name: "complete prefix and later part", deltas: map[int]string{0: "Fi", 1: "Second"}, snapshot: []string{"First", "Second"}, want: []string{"Fi", "rst\n\nSecond"}},
+		{name: "missing earlier part", deltas: map[int]string{1: "Sec"}, snapshot: []string{"First", "Second"}, want: []string{"First\n\nSecond"}},
+		{name: "no duplicate", deltas: map[int]string{0: "First"}, snapshot: []string{"First"}, want: []string{"First"}},
+		{name: "no snapshot", deltas: map[int]string{0: "First", 1: "Second"}, want: []string{"First", "\n\nSecond"}},
+		{name: "divergent snapshot", deltas: map[int]string{0: "First"}, snapshot: []string{"Rewritten", "Second"}, want: []string{"First", "\n\nSecond"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			sink := &recordingSink{}
+			manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+			live := &liveSession{spec: SessionSpec{RuntimeID: "runtime", Profile: testProfile()}, session: &Session{SessionID: "thread"}}
+			manager.sessions["runtime"] = live
+			waiter, err := live.registerAppServerTurnWaiter("thread")
+			if err != nil {
+				t.Fatal(err)
+			}
+			waiter.setTurnID("turn")
+			waiter.streamReasoningSummary = true
+
+			notify := func(method string, fields map[string]any) {
+				t.Helper()
+				fields["threadId"], fields["turnId"], fields["itemId"] = "thread", "turn", "reasoning-1"
+				manager.handleAppServerNotification("runtime", live, appServerNotification{Method: method, Params: mustJSONRaw(t, fields)})
+			}
+			notify("item/started", map[string]any{"item": map[string]any{"id": "reasoning-1", "type": "reasoning"}})
+			for index := 0; index < 2; index++ {
+				if delta, ok := test.deltas[index]; ok {
+					notify("item/reasoning/summaryTextDelta", map[string]any{"summaryIndex": index, "delta": delta})
+				}
+			}
+			item := map[string]any{"id": "reasoning-1", "type": "reasoning", "summary": test.snapshot, "content": []string{"raw"}}
+			notify("item/completed", map[string]any{"item": item})
+			notify("item/completed", map[string]any{"item": item})
+			notify("item/reasoning/summaryTextDelta", map[string]any{"summaryIndex": 0, "delta": "late"})
+
+			events := sink.snapshot()
+			if len(events) != len(test.want)+2 || events[0].Kind != activity.RuntimeEventReasoningStarted ||
+				events[len(events)-1].Kind != activity.RuntimeEventReasoningCompleted {
+				t.Fatalf("unexpected lifecycle: %+v", events)
+			}
+			for index, text := range test.want {
+				event := events[index+1]
+				if event.Kind != activity.RuntimeEventReasoningSummary || event.MessageID != "reasoning-1" || event.Text != text {
+					t.Fatalf("summary %d: got %+v, want %q", index, event, text)
 				}
 			}
 		})

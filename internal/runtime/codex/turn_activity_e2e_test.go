@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/modelcap"
 	agentruntime "csgclaw/internal/runtime"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -31,8 +32,9 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"reasoning_text", "reasoning_summary", "mcp_progress", "compaction", "silent", "cancel_silent"} {
+	for _, mode := range []string{"reasoning_text", "reasoning_summary", "reasoning_snapshot", "mcp_progress", "compaction", "silent", "cancel_silent"} {
 		t.Run(mode, func(t *testing.T) {
+			reasoning := strings.HasPrefix(mode, "reasoning_")
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 			t.Setenv("CODEX_HOME", filepath.Join(home, "host"))
@@ -81,16 +83,24 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 				if mode == "mcp_progress" && n == 1 {
 					emit(map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "function_call", "call_id": "slow-call", "namespace": "mcp__csgclaw", "name": "slow_operation", "arguments": "{}"}})
 				} else {
-					if n == 1 && (mode == "reasoning_text" || mode == "reasoning_summary") {
+					if n == 1 && reasoning {
 						item := map[string]any{"id": "reasoning-1", "type": "reasoning", "summary": []any{}}
 						emit(map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 						deltaType := "response.reasoning_text.delta"
 						if mode == "reasoning_summary" {
 							deltaType = "response.reasoning_summary_text.delta"
 						}
-						emit(map[string]any{"type": deltaType, "item_id": "reasoning-1", "output_index": 0, "content_index": 0, "summary_index": 0, "delta": "thinking"})
+						if mode != "reasoning_snapshot" {
+							emit(map[string]any{"type": deltaType, "item_id": "reasoning-1", "output_index": 0, "content_index": 0, "summary_index": 0, "delta": "thinking"})
+						}
 						if !waitForRelease(r.Context()) {
 							return
+						}
+						if mode == "reasoning_snapshot" {
+							item["summary"] = []map[string]any{
+								{"type": "summary_text", "text": "First"},
+								{"type": "summary_text", "text": "Second"},
+							}
 						}
 						emit(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 					}
@@ -113,7 +123,8 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			if mode == "mcp_progress" {
 				profile.Env["CSGCLAW_BASE_URL"] = server.URL
 			}
-			rt := New(Dependencies{EventSink: NewEventSink(), BinaryProvider: fakeBinaryProvider{path: binary}, AgentHome: func(string) (string, error) { return filepath.Join(home, "agent"), nil }, ResolveAgent: func(agentruntime.Handle) (AgentRef, error) {
+			eventSink := NewEventSink()
+			rt := New(Dependencies{EventSink: eventSink, BinaryProvider: fakeBinaryProvider{path: binary}, AgentHome: func(string) (string, error) { return filepath.Join(home, "agent"), nil }, ResolveAgent: func(agentruntime.Handle) (AgentRef, error) {
 				return AgentRef{ID: "alice", Name: "alice", Profile: profile, RuntimeOptions: map[string]any{"memory_mode": "disabled"}}, nil
 			}})
 			defer func() { unblock(); _ = rt.Close() }()
@@ -136,8 +147,15 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			pid := live.session.ProcessID
 			promptCtx, cancelPrompt := context.WithCancel(ctx)
 			defer cancelPrompt()
+			events, unsubscribe := eventSink.SubscribeSession(h.RuntimeID, thread)
+			defer unsubscribe()
 			done := make(chan error, 1)
-			go func() { done <- rt.Prompt(promptCtx, h.RuntimeID, thread, "continue working") }()
+			go func() {
+				done <- rt.PromptTurn(promptCtx, h.RuntimeID, PromptRequest{
+					SessionID: thread, Prompt: []PromptContentBlock{TextBlock("continue working")},
+					StreamReasoningSummary: mode == "reasoning_summary" || mode == "reasoning_snapshot",
+				})
+			}()
 			select {
 			case <-entered:
 			case err := <-done:
@@ -151,6 +169,8 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 				wantPrefix = "reasoning/textDelta:"
 			case "reasoning_summary":
 				wantPrefix = "reasoning/summaryTextDelta:"
+			case "reasoning_snapshot":
+				wantPrefix = "started:reasoning:"
 			case "mcp_progress":
 				// Bundled Codex 0.149.1 logs remote MCP progress but does not
 				// forward it as an app-server notification. Check its real tool
@@ -172,6 +192,19 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 					}
 					return waiter != nil && strings.HasPrefix(waiter.currentLastActivity(), wantPrefix)
 				})
+			}
+			if reasoning {
+				waitForTestReasoningStart(t, ctx, events, done)
+				if mode == "reasoning_summary" {
+					select {
+					case event := <-events:
+						if event.Kind != activity.RuntimeEventReasoningSummary || event.MessageID == "" || event.Text != "thinking" {
+							t.Fatalf("invalid reasoning summary event: %+v", event)
+						}
+					case <-ctx.Done():
+						t.Fatal(ctx.Err())
+					}
+				}
 			}
 			select {
 			case err := <-done:
@@ -195,6 +228,26 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal(ctx.Err())
 			}
+			if mode == "reasoning_snapshot" {
+				select {
+				case event := <-events:
+					if event.Kind != activity.RuntimeEventReasoningSummary || event.Text != "First\n\nSecond" {
+						t.Fatalf("invalid reasoning snapshot event: %+v", event)
+					}
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			}
+			if reasoning {
+				select {
+				case event := <-events:
+					if event.Kind != activity.RuntimeEventReasoningCompleted || event.MessageID == "" || event.Text != "" {
+						t.Fatalf("invalid reasoning completion event: %+v", event)
+					}
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			}
 			unblock()
 			if live.appServerTurnWaiter(thread) != nil {
 				t.Fatal("turn retained its waiter")
@@ -207,5 +260,27 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			}
 			t.Logf("mode=%s activity=%s requests=%d follow-up completed on same worker", mode, wantPrefix, requests.Load())
 		})
+	}
+}
+
+func waitForTestReasoningStart(t *testing.T, ctx context.Context, events <-chan SessionEvent, done <-chan error) {
+	t.Helper()
+	for {
+		select {
+		case event := <-events:
+			if event.Kind == activity.RuntimeEventReasoningStarted {
+				if event.TurnID == "" || event.MessageID == "" || event.Text != "" || event.Payload != nil {
+					t.Fatalf("invalid reasoning event: %+v", event)
+				}
+				return
+			}
+			if event.Kind == activity.RuntimeEventTextDelta {
+				t.Fatal("answer arrived before reasoning status")
+			}
+		case err := <-done:
+			t.Fatalf("turn ended before reasoning status: %v", err)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		}
 	}
 }

@@ -1752,8 +1752,16 @@ message_delta             (stop_reason: end_turn)
 message_stop
 ```
 
-每个 SSE block 同时包含 `event: <type>` 和 JSON `data:` payload；payload
-中的 `type` 与事件名一致。工具名称由 `tool_use` 返回，工具参数由 `input_json_delta` 返回，
+每条 SSE 事件都有事件名和 JSON payload，payload 的 `type` 与事件名一致。
+Runtime 报告开始推理时，流会打开一个 `thinking` 内容块。块内可包含零条或多条
+`thinking_delta`，增量文字位于 `delta.thinking`。收到同一 `index` 的
+`content_block_stop` 表示这一段思考结束。工具调用后也可以出现新的思考块。
+
+请求体设置 `stream: true`，并发送 `Prefer: csgclaw-reasoning-summary` 请求头。
+模型向 Codex 提供摘要时，接口会将其作为展示文本输出。服务端接受该偏好时返回
+`Preference-Applied: csgclaw-reasoning-summary`，旧服务端可忽略该偏好并正常回答。Session 不转发原始推理，也不生成 Anthropic 签名。
+
+工具名称由 `tool_use` 返回，工具参数由 `input_json_delta` 返回，
 其中的敏感值已经脱敏。`tool_use` 的 `content_block_stop` 表示参数传输结束。
 工具执行结束时，服务端发送一次 `tool_result`，通过 `tool_result_delta` 返回输出。
 每段正文只等待它到达时仍在执行的工具返回结果。如果工具结果缺失，服务端在本轮结束时发送已收到的正文。
