@@ -2710,6 +2710,7 @@ export const messages = {
     agentWizardLoadingConfiguration: "正在加载运行环境和模型配置…",
     agentWizardResourceUnavailable: "资源尚未连接或已停用，请先在设置中配置。",
     agentWizardResourcesFailed: "智能体已创建，以下资源未能添加，请在智能体详情中重试：{names}",
+    agentCreateRuntimeRecoveryFailed: "智能体已创建，但未能恢复在线状态。请在智能体详情中重试启动。",
     createAgentTitle: "创建智能体",
     createAgentSubtitle: "从模板创建执行智能体，或自定义配置。",
     createAgentSubtitleNotifier: "创建一个通知智能体（推送 Webhook 或拉取收件箱），可与执行智能体一样绑定飞书并进群。",
@@ -6150,6 +6151,8 @@ export const messages = {
     agentWizardResourceUnavailable: "This resource is disconnected or disabled. Configure it in settings first.",
     agentWizardResourcesFailed:
       "Agent created, but these resources could not be added. Retry from the agent details: {names}",
+    agentCreateRuntimeRecoveryFailed:
+      "The agent was created but could not be brought back online. Retry starting it from the agent details.",
     createAgentTitle: "Create Agent",
     createAgentSubtitle: "Create an agent from a template or configure it yourself.",
     createAgentSubtitleNotifier:
