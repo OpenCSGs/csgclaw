@@ -13,9 +13,18 @@ describe("document preview helpers", () => {
     ["application/octet-stream", "sound.mp3", "audio"],
     ["application/pdf", "file.bin", "pdf"],
     ["text/html", "file.bin", "html"],
+    ["text/html", "report.md", "html"],
+    ["text/markdown", "file.bin", "markdown"],
     ["application/xhtml+xml", "file.bin", "html"],
     ["application/octet-stream", "report.html", "html"],
     ["application/octet-stream", "report.md", "markdown"],
+    ["text/plain", "report.md", "markdown"],
+    ["text/plain; charset=utf-8", "会议纪要.MD", "markdown"],
+    ["text/plain", "report.markdown", "markdown"],
+    ["text/plain", "report.html", "html"],
+    ["text/plain", "notes.txt", "text"],
+    ["text/plain", "notes", "text"],
+    ["text/plain", "notes.unknown", "text"],
     ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "file", "docx"],
     ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "file", "spreadsheet"],
     ["application/vnd.openxmlformats-officedocument.presentationml.presentation", "file", "powerpoint"],
@@ -23,6 +32,13 @@ describe("document preview helpers", () => {
   ])("maps %s %s to %s", (mediaType, name, expected) => {
     expect(documentPreviewKind({ mediaType, name })).toBe(expected);
   });
+
+  it.each(["failed.pdf", "report.docx", "report.xlsx", "report.pptx", "image.png", "movie.mp4", "data.json"])(
+    "keeps explicit plain-text content readable for %s",
+    (name) => {
+      expect(documentPreviewKind({ mediaType: "text/plain; charset=utf-8", name })).toBe("text");
+    },
+  );
 
   it("pretty prints valid JSON and preserves invalid JSON", () => {
     expect(formatPreviewText(new TextEncoder().encode('{"ok":true}').buffer, "application/json")).toBe(

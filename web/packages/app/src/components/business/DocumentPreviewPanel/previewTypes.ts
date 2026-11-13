@@ -13,7 +13,6 @@ const mediaKinds = new Map<string, PreviewKind>([
   ["text/csv", "text"],
   ["text/html", "html"],
   ["text/markdown", "markdown"],
-  ["text/plain", "text"],
 ]);
 
 const extensionKinds = new Map<string, PreviewKind>([
@@ -66,6 +65,9 @@ export function documentPreviewKind(
   }
   const extension = item.name.toLowerCase().split(".").pop() ?? "";
   const byExtension = extensionKinds.get(extension);
+  if (mediaType === "text/plain") {
+    return byExtension === "markdown" || byExtension === "html" ? byExtension : "text";
+  }
   if (byExtension) {
     return byExtension;
   }
