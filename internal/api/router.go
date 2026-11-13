@@ -245,6 +245,11 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Route("/{id}", func(r chi.Router) {
 				r.Patch("/", h.updateRoom)
 				r.Delete("/", h.deleteRoom)
+				r.Get("/browsers", h.handleRoomBrowsers)
+				r.Post("/browsers", h.handleRoomBrowsers)
+				r.Get("/browsers/{browser_id}", h.handleRoomBrowsers)
+				r.Post("/browsers/{browser_id}", h.handleRoomBrowsers)
+				r.Delete("/browsers/{browser_id}", h.handleRoomBrowsers)
 				r.Get("/diagnostics", h.listDiagnostics)
 				r.Get("/diagnostics/{diagnostic_id}", h.getDiagnostic)
 				r.Get("/diagnostics/{diagnostic_id}/bundle", h.getDiagnosticBundle)

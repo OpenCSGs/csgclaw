@@ -158,6 +158,7 @@ func Run(opts Options) error {
 		return fmt.Errorf("initialize relay: %w", err)
 	}
 	defer handler.CloseRelay()
+	defer handler.CloseBrowser()
 	if opts.AppsStatePath != "" {
 		if err := handler.EnableConnectors(opts.AppsStatePath); err != nil {
 			_ = listener.Close()

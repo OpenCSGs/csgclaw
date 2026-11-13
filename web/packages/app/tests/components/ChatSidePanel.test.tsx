@@ -15,6 +15,14 @@ import {
 } from "@/api/chatFiles";
 import type { IMConversation } from "@/models/conversations";
 import { createQueryWrapper } from "../helpers/queryClient";
+import { fetchBrowserSessions, closeBrowserSession } from "@/api/browser";
+
+vi.mock("@/api/browser", async (original) => ({
+  ...(await original<typeof import("@/api/browser")>()),
+  fetchBrowserSessions: vi.fn().mockResolvedValue([]),
+  closeBrowserSession: vi.fn().mockResolvedValue(undefined),
+  fetchBrowserFrame: vi.fn(() => new Promise(() => {})),
+}));
 
 vi.mock("@/api/chatFiles", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/chatFiles")>()),
@@ -326,6 +334,7 @@ describe("shared chat sidebar", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    vi.mocked(fetchBrowserSessions).mockResolvedValue([]);
     vi.mocked(fetchFileLocation).mockResolvedValue({
       absolute_path: "/workspace/Alice/README.md",
       directory: false,
@@ -623,4 +632,29 @@ describe("shared chat sidebar", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(panel).not.toBeVisible();
   });
+});
+
+it("opens the Agent's live browser in its chat and closes the shared session with its tab", async () => {
+  localStorage.clear();
+  vi.mocked(fetchBrowserSessions).mockResolvedValue([
+    {
+      id: "shared-browser",
+      room_id: conversation.id,
+      url: "https://example.test/form",
+      title: "Form",
+      revision: 1,
+      width: 1280,
+      height: 800,
+      can_go_back: false,
+      can_go_forward: false,
+    },
+  ]);
+  const user = userEvent.setup();
+  const { wrapper } = createQueryWrapper();
+  render(<Harness />, { wrapper });
+  expect(await screen.findByRole("region", { name: "Agent browser" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Close tab example.test" }));
+  await waitFor(() => expect(closeBrowserSession).toHaveBeenCalledWith(conversation.id, "shared-browser"));
+  expect(screen.queryByRole("region", { name: "Agent browser" })).not.toBeInTheDocument();
+  vi.mocked(fetchBrowserSessions).mockResolvedValue([]);
 });
