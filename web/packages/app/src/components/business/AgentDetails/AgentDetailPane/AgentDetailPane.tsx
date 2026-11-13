@@ -196,6 +196,7 @@ export type AgentDetailPaneProps = {
   modelError?: unknown;
   modelDirectory?: readonly string[] | null;
   modelSaveError?: string;
+  modelSaveBlocked?: boolean;
   modelOptions?: ModelProviderOption[];
   modelProviders?: ModelProviderCatalog | null;
   models?: string[];
@@ -309,6 +310,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     modelError = null,
     modelDirectory,
     modelSaveError,
+    modelSaveBlocked = false,
     onRetryModels,
     saving = false,
     linkedTemplate,
@@ -452,7 +454,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const supportsTemplateMemory = ["codex", "dsh"].includes(runtimeKind);
   const hasUnsavedChanges =
     hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
-  const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
+  const saveDisabled = modelSaveBlocked || agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
   const updateDraft = useCallback(
     (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch }),
     [draft, item, onDraftChange],
@@ -666,7 +668,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const visibleActiveProfileTab = profileTabs.some((tab) => tab.id === selectedProfileTab)
     ? selectedProfileTab
     : profileTabs[0]?.id;
-  const visibleSaveError = saveError || (visibleActiveProfileTab !== "profile" ? modelSaveError : "");
+  const modelSaveBlockedOutsideProfile = modelSaveBlocked && visibleActiveProfileTab !== "profile";
+  const visibleSaveError =
+    saveError || (visibleActiveProfileTab !== "profile" && !modelSaveBlockedOutsideProfile ? modelSaveError : "");
   useEffect(() => {
     if (visibleActiveProfileTab === "skills" && workspaceSupported) void onRefreshSkills?.();
   }, [item.id, visibleActiveProfileTab, workspaceSupported, onRefreshSkills]);
@@ -1021,6 +1025,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                   loading={saving}
                   loadingLabel={t("agentSavingChanges")}
                   disabled={saveDisabled}
+                  title={modelSaveBlocked ? t("profileModelSelectAvailableToSave") : undefined}
                   onClick={onSave}
                 >
                   {t("agentSaveChanges")}
@@ -1050,6 +1055,16 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 </a>
               </>
             ) : null}
+          </InlineError>
+        ) : null}
+        {modelSaveBlockedOutsideProfile ? (
+          <InlineError role="status" className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              {t("profileModelOutsideDirectory")} {t("profileModelSelectAvailableToSave")}
+            </span>
+            <Button variant="tertiaryGray" size="sm" onClick={() => selectProfileTab("profile")}>
+              {t("profileModelOpenConfiguration")}
+            </Button>
           </InlineError>
         ) : null}
         {notice ? (
@@ -1156,6 +1171,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                     modelError={modelError}
                     modelDirectory={modelDirectory}
                     modelSaveError={modelSaveError}
+                    modelSaveBlocked={modelSaveBlocked}
                     onRetryModels={onRetryModels}
                     onRequireOpenCSGAuth={onRequireOpenCSGAuth}
                     providerOptions={providerOptions}

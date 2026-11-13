@@ -39,7 +39,7 @@ describe("agents API", () => {
         api_key: "previous-test-key",
         headers: { "X-Previous": "previous" },
       }),
-    ).resolves.toEqual({ models: ["new-model"] });
+    ).resolves.toEqual({ models: ["new-model"], providerStatus: "connected" });
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
       "api/v1/model-providers/new-provider/check",
       expect.objectContaining({ method: "POST", body: "{}" }),

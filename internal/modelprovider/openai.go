@@ -151,11 +151,13 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 	videoMetadata := make(map[string]modelcap.VideoGeneration)
 	visionModels := []string{}
 	seen := make(map[string]struct{}, len(payload.Data))
+	hasModelID := false
 	for _, item := range payload.Data {
 		id := strings.TrimSpace(item.ID)
 		if id == "" {
 			continue
 		}
+		hasModelID = true
 		if item.Availability != nil && item.Availability.IsAvailable != nil && !*item.Availability.IsAvailable {
 			continue
 		}
@@ -190,7 +192,7 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 			models = append(models, id)
 		}
 	}
-	if len(models) == 0 && len(imageModels) == 0 && len(videoModels) == 0 {
+	if payload.Data == nil || (len(payload.Data) > 0 && !hasModelID) {
 		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
 	}
 	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, VideoModels: videoModels, VisionModels: visionModels, ModelMetadata: metadata, VideoMetadata: videoMetadata}, nil

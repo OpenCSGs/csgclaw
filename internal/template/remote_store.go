@@ -53,6 +53,7 @@ type RemoteAPIError struct {
 	StatusCode int
 	Code       string
 	Message    string
+	Path       string
 	Cause      error
 }
 
@@ -962,14 +963,21 @@ func (s *RemoteStore) sendJSON(ctx context.Context, method, endpoint string, inp
 
 func decodeRemoteAPIError(statusCode int, data []byte) *RemoteAPIError {
 	var payload struct {
-		Code string `json:"code"`
-		Msg  string `json:"msg"`
+		Code    string          `json:"code"`
+		Msg     string          `json:"msg"`
+		Context json.RawMessage `json:"context"`
 	}
 	if err := json.Unmarshal(data, &payload); err == nil {
 		remoteErr := &RemoteAPIError{
 			StatusCode: statusCode,
 			Code:       strings.TrimSpace(payload.Code),
 			Message:    strings.TrimSpace(payload.Msg),
+		}
+		var details struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(payload.Context, &details) == nil {
+			remoteErr.Path = details.Path
 		}
 		if remoteErr.Code != "" || remoteErr.Message != "" {
 			return remoteErr

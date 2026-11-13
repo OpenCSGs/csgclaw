@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import agentDetailPaneStyles from "@/components/business/AgentDetails/AgentDetailPane/AgentDetailPane.module.css";
 import { AgentModelConfiguration } from "@/components/business/AgentModelConfiguration";
@@ -18,6 +19,7 @@ type AgentModelPanelProps = {
   modelError: unknown;
   modelDirectory?: readonly string[] | null;
   modelSaveError?: string;
+  modelSaveBlocked: boolean;
   onRetryModels?: () => void | Promise<unknown>;
   onRequireOpenCSGAuth: () => boolean;
   providerOptions: readonly ModelProviderSelectOption[];
@@ -34,6 +36,7 @@ export function AgentModelPanel({
   modelError,
   modelDirectory,
   modelSaveError,
+  modelSaveBlocked,
   onRetryModels,
   onRequireOpenCSGAuth,
   providerOptions,
@@ -43,12 +46,18 @@ export function AgentModelPanel({
   t,
   updateDraft,
 }: AgentModelPanelProps) {
-  let modelHint: string | undefined;
+  const modelOutsideDirectory = Boolean(
+    selectedModelValue && modelDirectory && !selectedProviderModels.includes(selectedModelValue),
+  );
+  const missingModelMessage = modelSaveBlocked
+    ? `${t("profileModelOutsideDirectory")} ${t("profileModelSelectAvailableToSave")}`
+    : t("profileModelOutsideDirectory");
+  let modelHint: ReactNode;
   if (selectedModelValue && !modelSaveError) {
-    if (modelDirectory === null || modelBusy) {
+    if (modelOutsideDirectory) {
+      modelHint = <span className="text-[var(--csgclaw-ui-danger)]">{missingModelMessage}</span>;
+    } else if (modelDirectory === null || modelBusy) {
       modelHint = t("profileModelAvailabilityUnknown");
-    } else if (modelDirectory && !selectedProviderModels.includes(selectedModelValue)) {
-      modelHint = t("profileModelOutsideDirectory");
     }
   }
   return (
@@ -64,6 +73,21 @@ export function AgentModelPanel({
       </div>
       <div className="agent-section-form">
         <div className="agent-page-form-content agent-model-form-content">
+          {selectedProviderID && modelDirectory?.length === 0 && onRetryModels ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span role="status">{t("modelProviderNoModels")}</span>
+              <Button
+                loading={modelBusy}
+                loadingLabel={t("profileLoadingModels")}
+                size="sm"
+                variant="secondaryGray"
+                onClick={() => void onRetryModels()}
+              >
+                <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
+                {t("profileModelRefreshDirectory")}
+              </Button>
+            </div>
+          ) : null}
           <AgentModelConfiguration
             draft={draft}
             providerOptions={providerOptions}
@@ -71,8 +95,9 @@ export function AgentModelPanel({
             modelID={selectedModelValue}
             models={selectedProviderModels}
             busy={modelBusy}
+            deferModelSelection={modelDirectory !== undefined}
             modelHint={modelHint}
-            modelSaveError={modelSaveError}
+            modelSaveError={modelOutsideDirectory && modelSaveError ? missingModelMessage : modelSaveError}
             onPatch={updateDraft}
             onRequireOpenCSGAuth={onRequireOpenCSGAuth}
             t={t}

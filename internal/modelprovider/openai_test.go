@@ -38,6 +38,35 @@ func TestUpstreamErrorCodeForPaymentRequiredResponse(t *testing.T) {
 	}
 }
 
+func TestOpenAIModelDirectoryDistinguishesEmptyFromInvalid(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		ok   bool
+	}{
+		{`{"data":[]}`, true},
+		{`{"data":[{"id":"retired","availability":{"is_available":false}}]}`, true},
+		{`{"data":null}`, false},
+		{`{}`, false},
+		{`{"data":[{}]}`, false},
+	} {
+		t.Run(tc.body, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			directory, err := ListOpenCSGModelDirectoryWithClient(context.Background(), server.Client(), server.URL, "", nil)
+			if (err == nil) != tc.ok || len(directory.Models) != 0 {
+				t.Fatalf("models = %v, error = %v, want empty models, success=%t", directory.Models, err, tc.ok)
+			}
+			if tc.ok {
+				if _, err := ListOpenAIModelsWithClient(context.Background(), server.Client(), server.URL, "", nil); err == nil {
+					t.Fatal("a caller requiring text models accepted an empty catalog")
+				}
+			}
+		})
+	}
+}
+
 func TestListOpenAIModelsWithClientDoesNotAddPageSizeForOpenCSG(t *testing.T) {
 	var gotURL string
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

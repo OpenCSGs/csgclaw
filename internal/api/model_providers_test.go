@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -200,6 +201,53 @@ func TestModelProviderCatalogCreateCheckAndSaveCustomProvider(t *testing.T) {
 	}
 	if got, want := provider.Headers["X-CSG-Trace"], "dev"; got != want {
 		t.Fatalf("Headers[X-CSG-Trace] = %q, want %q", got, want)
+	}
+}
+
+func TestModelProviderCheckClearsStaleModelsAndRecovers(t *testing.T) {
+	var response atomic.Value
+	response.Store(`{"data":[]}`)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Errorf("unexpected upstream request: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(response.Load().(string)))
+	}))
+	defer upstream.Close()
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	configText := `[models.providers.openai]
+preset = "openai"
+base_url = "` + upstream.URL + `/v1"
+api_key = "test-key"
+status = "failed"
+models = ["retired-model"]
+`
+	if err := os.WriteFile(configPath, []byte(configText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv := newModelProviderTestHandler(t, configPath, nil)
+	for _, want := range []string{"", "recovered-model"} {
+		if want != "" {
+			response.Store(`{"data":[{"id":"recovered-model"}]}`)
+		}
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers/openai/check", strings.NewReader("{}")))
+		var result agent.ModelProviderCheckResult
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &result) != nil ||
+			result.Status != agent.ModelProviderStatusConnected || strings.Join(result.Models, ",") != want {
+			t.Fatalf("check = %d %s, want connected with models %q", rec.Code, rec.Body.String(), want)
+		}
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		provider := cfg.Models.Providers["openai"]
+		if provider.Status != agent.ModelProviderStatusConnected || strings.Join(provider.Models, ",") != want {
+			t.Fatalf("persisted status = %s, models = %v, want connected with %q", provider.Status, provider.Models, want)
+		}
 	}
 }
 

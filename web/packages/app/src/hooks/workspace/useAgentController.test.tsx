@@ -1416,7 +1416,80 @@ describe("useAgentController", () => {
     expect(result.current.refreshWorkspaceManagerProfile).not.toHaveBeenCalled();
   });
 
-  it.each(["model_not_found", "cluster_not_found"])(
+  it.each([
+    ["codex", true],
+    ["dsh", false],
+  ] as const)("checks whether %s needs a model probe before saving runtime settings", async (runtimeKind, blocked) => {
+    const agentProfile: AgentProfileLike = { ...profile, provider: "csghub", model_provider_id: "opencsg" };
+    const agent: AgentLike = {
+      ...oldAgent,
+      runtime_kind: runtimeKind,
+      provider: "csghub",
+      model_provider_id: "opencsg",
+      agent_profile: agentProfile,
+    };
+    vi.mocked(fetchAgent).mockReset().mockResolvedValue(agent);
+    vi.mocked(fetchAgentProfile).mockResolvedValue(agentProfile);
+    vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: [] });
+    vi.mocked(updateAgentRequest).mockResolvedValue(agent);
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ agents: [agent], openCSGAuthenticated: true }).controller,
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.agentViewProps.modelDirectory).toEqual([]));
+    await waitFor(() => expect(result.current.agentViewProps.savedDraft?.model_provider_id).toBe("opencsg"));
+
+    act(() => {
+      const draft = result.current.agentViewProps.draft!;
+      result.current.agentViewProps.onDraftChange?.({
+        ...draft,
+        runtime_options: { ...draft.runtime_options, workspace_dir: "/tmp/agent-workspace" },
+      });
+    });
+    expect(result.current.agentViewProps.modelSaveBlocked).toBe(blocked);
+    await act(async () => {
+      await result.current.agentViewProps.onSave?.();
+    });
+    if (blocked) {
+      expect(updateAgentRequest).not.toHaveBeenCalled();
+    } else {
+      expect(updateAgentRequest).toHaveBeenCalledWith(
+        "u-manager",
+        expect.objectContaining({
+          runtime_options: expect.objectContaining({ workspace_dir: "/tmp/agent-workspace" }),
+        }),
+      );
+    }
+
+    await act(async () => {
+      await result.current.agentViewProps.onMetadataSave?.({ description: "Updated description" });
+    });
+    expect(updateAgentRequest).toHaveBeenLastCalledWith("u-manager", { description: "Updated description" });
+  });
+
+  it("makes a failed provider selectable after model discovery succeeds", async () => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [{ id: "codex", builtin: true, status: "failed", models: ["cached-model"] }],
+    });
+    vi.mocked(fetchAgentProfileModels)
+      .mockRejectedValueOnce(new Error("Model directory unavailable"))
+      .mockResolvedValue({ models: ["recovered-model"], providerStatus: "connected" });
+    const { result } = renderHook(() => useAgentControllerHarness({ modelProviders: catalog }).controller, {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.agentViewProps.modelError).toBeTruthy());
+    await act(async () => {
+      await result.current.agentViewProps.onRetryModels?.();
+    });
+    await waitFor(() =>
+      expect(
+        result.current.agentViewProps.modelProviders?.providers.find((provider) => provider.id === "codex"),
+      ).toMatchObject({ status: "connected", models: ["recovered-model"] }),
+    );
+  });
+
+  it.each(["model_not_found", "cluster_not_found", "model_unavailable", "model_not_running"])(
     "refreshes the model directory and surfaces a field error when saving returns %s",
     async (code) => {
       vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["retired-model", "current-model"] });
@@ -1446,6 +1519,7 @@ describe("useAgentController", () => {
       expect(fetchAgentProfileModels).toHaveBeenCalled();
       expect(result.current.agentViewProps.draft?.model_id).toBe("retired-model");
       expect(result.current.agentViewProps.modelSaveError).toBe("Model no longer routable");
+      expect(result.current.agentViewProps.modelSaveBlocked).toBe(true);
       expect(result.current.agentViewProps.saveError).toBe("");
 
       act(() => {
@@ -1455,6 +1529,7 @@ describe("useAgentController", () => {
         });
       });
       expect(result.current.agentViewProps.modelSaveError).toBeUndefined();
+      expect(result.current.agentViewProps.modelSaveBlocked).toBe(false);
     },
   );
 

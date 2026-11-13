@@ -353,7 +353,7 @@ export async function fetchAgentProfileModels(draft: AgentProfileModelRequest): 
     if (result.status !== "connected") {
       throw new Error(result.message || "Model provider check failed");
     }
-    return { models: result.models };
+    return { models: result.models ?? [], providerStatus: result.status };
   }
   return post("api/v1/agent-profiles/models", modelPayload(draft));
 }

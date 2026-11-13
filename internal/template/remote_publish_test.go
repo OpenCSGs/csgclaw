@@ -240,6 +240,97 @@ func TestRemotePublicationFilesTraversesPagesAndDirectories(t *testing.T) {
 	}
 }
 
+func TestRemotePublicationRecoversMissingGitIgnore(t *testing.T) {
+	for _, scenario := range []string{"new repository", "existing repository", "concurrent creation", "unrelated file"} {
+		t.Run(scenario, func(t *testing.T) {
+			const endpoint = "/api/v1/codes/wanghj/ReviewBot"
+			initialRef := "main"
+			if scenario == "existing repository" {
+				initialRef = "base"
+			}
+			creates, preuploads := 0, 0
+			head := "base"
+			var committed []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method + " " + r.URL.Path {
+				case "GET " + endpoint + "/last_commit":
+					_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"id": head}})
+				case "GET " + endpoint + "/refs/base/tree/":
+					_, _ = w.Write([]byte(`{"data":{"files":[{"path":".gitattributes","type":"file"}]}}`))
+				case "GET " + endpoint + "/refs/ready/tree/":
+					_, _ = w.Write([]byte(`{"data":{"files":[{"path":".gitattributes","type":"file"},{"path":".gitignore","type":"file"}]}}`))
+				case "POST " + endpoint + "/preupload/" + initialRef:
+					preuploads++
+					path := ".gitignore"
+					if scenario == "unrelated file" {
+						path = "skills/missing.md"
+					}
+					if scenario == "concurrent creation" {
+						head = "ready"
+					}
+					if scenario == "unrelated file" {
+						w.WriteHeader(http.StatusBadRequest)
+					} else {
+						w.WriteHeader(http.StatusInternalServerError)
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"code": "GIT-ERR-15", "msg": "File not found in repository", "context": map[string]string{"path": path},
+					})
+				case "POST " + endpoint + "/raw/.gitignore":
+					creates++
+					var request struct {
+						Branch  string `json:"branch"`
+						Content string `json:"content"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+						t.Error(err)
+					}
+					content, err := base64.StdEncoding.DecodeString(request.Content)
+					if err != nil || request.Branch != "main" || strings.TrimSpace(string(content)) != "" {
+						t.Errorf("unexpected .gitignore request: %+v, %v", request, err)
+					}
+					head = "ready"
+				case "POST " + endpoint + "/preupload/ready":
+					preuploads++
+					respondTemplatePreupload(t, w, r)
+				case "PUT " + endpoint:
+					w.WriteHeader(http.StatusOK)
+				case "POST " + endpoint + "/commit/main":
+					var request struct{ Files []remoteCommitFile }
+					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+						t.Error(err)
+					}
+					for _, file := range request.Files {
+						committed = append(committed, file.Path)
+					}
+				default:
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			remote := NewAuthenticatedRemoteStore(server.URL, "token", "wanghj")
+			files := map[string][]byte{"skills/sample.md": []byte("sample"), localManifestFileName: []byte("manifest")}
+			err := remote.commitRemoteTemplate(context.Background(), "ReviewBot", "main", files, scenario == "existing repository", "ReviewBot")
+			if scenario == "unrelated file" {
+				if RemoteAPIErrorCode(err) != "GIT-ERR-15" || creates != 0 || len(committed) != 0 {
+					t.Fatalf("unexpected recovery: error=%v creates=%d committed=%v", err, creates, committed)
+				}
+				return
+			}
+			wantCreates := 1
+			if scenario == "concurrent creation" {
+				wantCreates = 0
+			}
+			if err != nil || creates != wantCreates || preuploads != 2 ||
+				!reflect.DeepEqual(committed, []string{"skills/sample.md", localManifestFileName}) {
+				t.Fatalf("error=%v creates=%d preuploads=%d committed=%v", err, creates, preuploads, committed)
+			}
+		})
+	}
+}
+
 func TestRemotePublicationAllowsCombinedSizeAbovePerFileLimit(t *testing.T) {
 	spec := versionSpec(t, "Reviewer")
 	files, err := buildRemoteTemplateFiles(spec, remotePublishMaxFileBytes)

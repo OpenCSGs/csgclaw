@@ -130,6 +130,7 @@ import {
   modelProviderCatalogWithModels,
   modelProviderConfigUsesOpenCSG,
   modelProviderOptionsFromCatalog,
+  type ModelProviderCatalog,
 } from "@/models/modelProviders";
 import { agentTemplatesSearch, WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
@@ -827,6 +828,7 @@ export function useAgentController({
   const {
     models: agentPageDiscoveredModels,
     modelsLoaded: agentPageModelsLoaded,
+    providerConfirmedConnected: agentPageProviderConfirmedConnected,
     modelBusy: agentPageModelProbeBusy,
     modelError: agentPageModelError,
     retryModels: retryAgentPageModels,
@@ -835,15 +837,31 @@ export function useAgentController({
     enabled: Boolean(selectedAgentForPage),
     onDraftChange: setAgentPageDraft,
   });
+  const agentPageProviderID = agentPageDraft?.model_provider_id || "";
+  const agentPageModelDirectory = agentPageModelsLoaded ? agentPageDiscoveredModels : undefined;
   const agentPageModelProviders = useMemo(
     () =>
-      modelProviderCatalogWithModels(
-        agentModelProviders,
-        String(agentPageDraft?.model_provider_id || ""),
-        agentPageDiscoveredModels,
-      ),
-    [agentModelProviders, agentPageDiscoveredModels, agentPageDraft?.model_provider_id],
+      modelProviderCatalogWithModels(agentModelProviders, agentPageProviderID, agentPageModelDirectory, {
+        confirmedConnected: agentPageProviderConfirmedConnected,
+      }),
+    [agentModelProviders, agentPageProviderID, agentPageModelDirectory, agentPageProviderConfirmedConnected],
   );
+  useEffect(() => {
+    if (!agentPageProviderID || agentPageModelDirectory === undefined || agentPageModelProbeBusy) return;
+    queryClient.setQueryData<ModelProviderCatalog>(workspaceQueryKeys.modelProviders(), (catalog) =>
+      catalog
+        ? (modelProviderCatalogWithModels(catalog, agentPageProviderID, agentPageModelDirectory, {
+            confirmedConnected: agentPageProviderConfirmedConnected,
+          }) ?? catalog)
+        : catalog,
+    );
+  }, [
+    agentPageProviderID,
+    agentPageModelDirectory,
+    agentPageModelProbeBusy,
+    agentPageProviderConfirmedConnected,
+    queryClient,
+  ]);
   const agentPageModelOptions = useMemo(
     () => modelProviderOptionsFromCatalog(agentPageModelProviders),
     [agentPageModelProviders],
@@ -1735,9 +1753,26 @@ export function useAgentController({
     }
   }
 
+  const agentPageModelChanged =
+    agentPageDraft?.model_id !== agentPageSavedDraft?.model_id ||
+    agentPageDraft?.model_provider_id !== agentPageSavedDraft?.model_provider_id;
+  const agentPageProbesModelOnSave =
+    agentRuntimeKind(selectedAgentForPage) === "codex" &&
+    !["codex", "claude_code", "claude-code"].includes(String(agentPageDraft?.provider ?? ""));
+  const agentPageModelSaveBlocked = Boolean(
+    agentPageDraft?.model_id &&
+    agentPageSavedDraft &&
+    agentPageModelsLoaded &&
+    !agentPageDiscoveredModels.includes(agentPageDraft.model_id) &&
+    (agentPageModelChanged ||
+      (agentPageProbesModelOnSave &&
+        (profilePayloadForCompare(agentPageDraft) !== profilePayloadForCompare(agentPageSavedDraft) ||
+          runtimeOptionsPayloadForCompare(agentPageDraft) !== runtimeOptionsPayloadForCompare(agentPageSavedDraft)))),
+  );
+
   async function saveAgentPage(): Promise<void> {
     const draftToSave = agentPageDraft;
-    if (!draftToSave || !selectedAgentForPage?.id) {
+    if (!draftToSave || !selectedAgentForPage?.id || agentPageModelSaveBlocked) {
       return;
     }
     if (modelProviderConfigUsesOpenCSG(draftToSave) && !requireOpenCSGAuthentication()) {
@@ -1855,7 +1890,16 @@ export function useAgentController({
       }
     } catch (err) {
       const code = apiErrorCode(err);
-      if (code === "model_not_found" || code === "cluster_not_found") {
+      if (
+        [
+          "model_not_found",
+          "cluster_not_found",
+          "model_unavailable",
+          "model_not_running",
+          "required_upstream_unavailable",
+          "response_route_unavailable",
+        ].includes(code)
+      ) {
         const requestKey = modelRequestKey(draftToSave);
         setModelSaveFailure({
           agentID: selectedAgentForPage.id,
@@ -2916,7 +2960,8 @@ export function useAgentController({
       modelProviders: agentPageModelProviders,
       modelBusy: agentPageModelBusy,
       modelError: agentPageModelError,
-      modelDirectory: agentPageModelsLoaded ? agentPageDiscoveredModels : null,
+      modelDirectory: agentPageModelDirectory ?? null,
+      modelSaveBlocked: agentPageModelSaveBlocked,
       modelSaveError:
         modelSaveFailure &&
         modelSaveFailure.agentID === selectedAgentForPage?.id &&

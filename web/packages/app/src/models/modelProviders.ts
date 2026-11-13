@@ -363,23 +363,28 @@ export function modelProviderOptionsFromCatalog(
 export function modelProviderCatalogWithModels(
   catalog: ModelProviderCatalog | null | undefined,
   providerID: string,
-  models: readonly string[],
+  models: readonly string[] | undefined,
+  { confirmedConnected = false }: { confirmedConnected?: boolean } = {},
 ): ModelProviderCatalog | null {
   if (!catalog) {
     return null;
   }
   const normalizedProviderID = normalizeModelProviderID(providerID);
-  const normalizedModels = normalizeModelIDs(models);
-  if (!normalizedProviderID || normalizedModels.length === 0) {
+  if (!normalizedProviderID || models === undefined) {
     return catalog;
   }
+  const normalizedModels = normalizeModelIDs(models);
   let matched = false;
   const providers = catalog.providers.map((provider) => {
-    if (provider.id !== normalizedProviderID || provider.status !== "connected") {
+    if (provider.id !== normalizedProviderID || (!confirmedConnected && provider.status !== "connected")) {
       return provider;
     }
     matched = true;
-    return { ...provider, models: normalizedModels };
+    return {
+      ...provider,
+      models: normalizedModels,
+      ...(confirmedConnected ? { status: "connected" as const, message: "" } : {}),
+    };
   });
   if (!matched) {
     return catalog;
