@@ -127,6 +127,7 @@ type activeTurn struct {
 	sink             contract.EventSink
 	seq              uint64
 	output           strings.Builder
+	thoughtPrefixes  map[string][]int64
 	tools            map[string]contract.ToolActivity
 	presentedFiles   []presentedFile
 	presentedPaths   map[string]bool

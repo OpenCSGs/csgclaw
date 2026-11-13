@@ -416,13 +416,15 @@ func TestProgressFailureRetainsDiagnosticMetadata(t *testing.T) {
 	}
 }
 
-func TestProgressPreservesStructuredContextFailures(t *testing.T) {
+func TestProgressPreservesStructuredFailures(t *testing.T) {
 	for _, tc := range []struct {
 		code   agentengine.ErrorCode
 		zh, en string
 	}{
 		{"context_length_exceeded", "本次内容超过模型容量，请拆分输入、检查模型容量设置或选择容量更大的模型。已有对话已保留。", "This request exceeds the model context capacity."},
 		{"context_compaction_failed", "暂时无法整理对话，已有记录已保留。请重试或选择容量更大的模型。", "The conversation could not be compacted."},
+		{"empty_agent_response", "智能体没有返回回答。", "The agent did not return an answer."},
+		{"output_token_limit", "模型达到输出上限，未能生成回答。", "The model reached its output limit before generating an answer."},
 	} {
 		for _, locale := range []string{"zh-CN", "en"} {
 			for _, raw := range []string{"unexpected status 400: provider diagnostic", ""} {
@@ -430,7 +432,8 @@ func TestProgressPreservesStructuredContextFailures(t *testing.T) {
 					renderer, service, turn := progressFixture(t)
 					turn.Locale = locale
 					ctx := context.Background()
-					if err := renderer.Emit(ctx, turn, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Phase: "commentary", Text: "Checking context."}); err != nil {
+					const thought = "Thinking about the task."
+					if err := renderer.Emit(ctx, turn, agentengine.TurnEvent{Kind: agentengine.TurnEventThoughtDelta, Thought: thought}); err != nil {
 						t.Fatal(err)
 					}
 					if err := renderer.Complete(ctx, turn, agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: tc.code, Message: raw}}); err != nil {
@@ -444,6 +447,10 @@ func TestProgressPreservesStructuredContextFailures(t *testing.T) {
 					meta := msg.Metadata["csgclaw"].(map[string]any)
 					if progress.Status != "failed" || !strings.HasPrefix(progress.Error, want) || meta["error_code"] != string(tc.code) {
 						t.Fatalf("lost structured failure: progress=%+v metadata=%+v", progress, meta)
+					}
+					if !im.IsAgentActivityMessage(msg) || msg.Content != "\u200b" || len(progress.Items) != 1 ||
+						progress.Items[0].Kind != "reasoning" || progress.Items[0].Text != thought {
+						t.Fatalf("failed turn should keep reasoning in progress without publishing an answer: content=%q items=%+v", msg.Content, progress.Items)
 					}
 					if raw != "" && (meta["error_detail"] != raw || strings.Contains(progress.Error, raw) || strings.Contains(msg.Content, raw)) {
 						t.Fatal("raw diagnostics must remain in activity metadata only")
