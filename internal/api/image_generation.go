@@ -92,12 +92,12 @@ func (h *Handler) retryImageGeneration(w http.ResponseWriter, r *http.Request) {
 		for _, id := range task.AttachmentIDs {
 			attachment, err := h.im.RoomAttachmentFile(turn.RoomID, id)
 			if err != nil {
-				http.Error(w, "original reference image is unavailable", http.StatusConflict)
+				writeCodedAPIError(w, http.StatusConflict, "image_reference_unavailable", "The original reference image is unavailable.")
 				return
 			}
 			source, err := os.Open(attachment.Path)
 			if err != nil {
-				http.Error(w, "original reference image is unavailable", http.StatusConflict)
+				writeCodedAPIError(w, http.StatusConflict, "image_reference_unavailable", "The original reference image is unavailable.")
 				return
 			}
 			file, err := files.Create(r.Context(), agentengine.FileCreateRequest{
@@ -106,7 +106,7 @@ func (h *Handler) retryImageGeneration(w http.ResponseWriter, r *http.Request) {
 			}, source)
 			_ = source.Close()
 			if err != nil {
-				http.Error(w, "original reference image is unavailable", http.StatusConflict)
+				writeCodedAPIError(w, http.StatusConflict, "image_reference_unavailable", "The original reference image is unavailable.")
 				return
 			}
 			defer files.Delete(context.WithoutCancel(r.Context()), file.ID)

@@ -47,6 +47,37 @@ describe("Image generation status", () => {
     finish?.({ status: "succeeded" });
     await waitFor(() => expect(button).not.toBeDisabled());
   });
+  it.each([
+    ["zh", "重新生成", "原始参考图片已不可用，请重新上传图片后发起新的编辑请求。"],
+    ["en", "Regenerate", "The original reference image is unavailable. Upload it again and start a new edit."],
+  ] as const)(
+    "shows a missing reference error alongside the provider error in %s",
+    async (locale, retryLabel, message) => {
+      vi.mocked(retryImageGenerationRequest).mockRejectedValueOnce(
+        Object.assign(new Error("The original reference image is unavailable."), {
+          code: "image_reference_unavailable",
+        }),
+      );
+      render(
+        <ImageGenerationStatus
+          roomID="room-1"
+          t={createTranslator(locale)}
+          message={{
+            id: "image-1",
+            content: "original prompt",
+            metadata: {
+              image_generation: { state: "failed", error_details: { message: "Previous provider failure." } },
+            },
+          }}
+        />,
+      );
+
+      await userEvent.setup().click(screen.getByRole("button", { name: retryLabel }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(message);
+      expect(screen.getByText("Previous provider failure.")).toBeInTheDocument();
+    },
+  );
+
   it("replaces generating state with the provider reason and diagnostic code", () => {
     const pending = {
       id: "image-1",

@@ -196,7 +196,11 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 		if taskSupportsVisionInput(declaredTasks) {
 			visionModels = append(visionModels, id)
 		}
-		if !taskPresent(declaredTasks) || taskSupportsTextGeneration(declaredTasks) {
+		chatTasks := declaredTasks
+		if isImage {
+			chatTasks = imageTasks
+		}
+		if !taskPresent(chatTasks) || taskSupportsTextGeneration(chatTasks) {
 			models = append(models, id)
 		}
 	}

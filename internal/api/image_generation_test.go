@@ -121,6 +121,19 @@ func TestImageEditRetryHTTPUsesCapturedModelAndReferences(t *testing.T) {
 	messageID := messages[len(messages)-1].ID
 	h := &Handler{im: imSvc, participant: participants, agentEngine: engine}
 	route := "/api/v1/messages/" + messageID + "/image-generation/retry"
+	missingTask := task
+	missingTask.AttachmentIDs = []string{"missing-attachment"}
+	if err := store.DeliverImageGeneration(context.Background(), turn, missingTask); err != nil {
+		t.Fatal(err)
+	}
+	missing := httptest.NewRecorder()
+	h.Routes().ServeHTTP(missing, httptest.NewRequest(http.MethodPost, route, strings.NewReader(`{"room_id":"`+room.ID+`"}`)))
+	if missing.Code != http.StatusConflict || !strings.Contains(missing.Body.String(), `"code":"image_reference_unavailable"`) || calls != 0 {
+		t.Fatalf("retry without reference: HTTP %d, calls=%d, body=%s", missing.Code, calls, missing.Body.String())
+	}
+	if err := store.DeliverImageGeneration(context.Background(), turn, task); err != nil {
+		t.Fatal(err)
+	}
 	for attempt, wantStatus := range []int{http.StatusOK, http.StatusOK, http.StatusConflict} {
 		response := httptest.NewRecorder()
 		h.Routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, route, strings.NewReader(`{"room_id":"`+room.ID+`"}`)))

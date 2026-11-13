@@ -559,6 +559,9 @@ func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t 
    {"id":"image-one","task":"text-to-image"},
    {"id":"image-two","task":"text-to-image","metadata":{"tasks":["image-to-image"]}},
    {"id":"editor-only","task":"image-to-image"},
+   {"id":"nested-editor","metadata":{"tasks":["image-to-image"]}},
+   {"id":"plural-editor","tasks":["image-to-image"]},
+   {"id":"nested-chat-editor","metadata":{"tasks":["text-generation","image-to-image"]}},
    {"id":"image-offline","task":"text-to-image","availability":{"is_available":false}},
    {"id":"MiniMax-Hailuo-2.3","task":"text-to-video","metadata":{"capabilities":{"video":{"size":["768P","1080P"],"seconds":[6,10]}}}},
    {"id":"gpt-image-2"}, {"id":"image-one","task":"text-to-image"}
@@ -569,10 +572,10 @@ func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(directory.ImageModels, []string{"image-one", "image-two", "editor-only", "gpt-image-2"}) {
+	if !reflect.DeepEqual(directory.ImageModels, []string{"image-one", "image-two", "editor-only", "nested-editor", "plural-editor", "nested-chat-editor", "gpt-image-2"}) {
 		t.Fatalf("image models: %v", directory.ImageModels)
 	}
-	if got := directory.ImageMetadata; len(got) != 3 || !got["image-one"].TextToImage || got["image-one"].ImageToImage ||
+	if got := directory.ImageMetadata; len(got) != 6 || !got["image-one"].TextToImage || got["image-one"].ImageToImage ||
 		!got["image-two"].TextToImage || !got["image-two"].ImageToImage ||
 		got["editor-only"].TextToImage || !got["editor-only"].ImageToImage {
 		t.Fatalf("image metadata: %#v", got)
@@ -583,7 +586,7 @@ func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t 
 	if got := directory.VideoMetadata["MiniMax-Hailuo-2.3"]; !reflect.DeepEqual(got.Sizes, []string{"768P", "1080P"}) || !reflect.DeepEqual(got.Seconds, []int{6, 10}) {
 		t.Fatalf("video metadata: %#v", got)
 	}
-	if !reflect.DeepEqual(directory.Models, []string{"chat-vision", "gpt-image-2"}) {
+	if !reflect.DeepEqual(directory.Models, []string{"chat-vision", "nested-chat-editor", "gpt-image-2"}) {
 		t.Fatalf("chat models: %v", directory.Models)
 	}
 	if !reflect.DeepEqual(directory.VisionModels, []string{"chat-vision"}) {

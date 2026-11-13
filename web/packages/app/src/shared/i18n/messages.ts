@@ -3227,6 +3227,7 @@ export const messages = {
       resource_unavailable: "所选资源暂时不可用，请检查连接或授权",
       resource_service_unavailable: "资源服务暂时不可用，请稍后重试",
       unknown_api_error: "操作失败，请稍后重试。",
+      image_reference_unavailable: "原始参考图片已不可用，请重新上传图片后发起新的编辑请求。",
       file_reference_unavailable: "引用文件不可用，请检查文件是否存在以及来源 Agent 是否仍在会话中。",
       workspace_file_unavailable: "工作区文件不可用。",
 
@@ -6739,6 +6740,7 @@ export const messages = {
       resource_unavailable: "A selected resource is unavailable. Check its connection or authorization.",
       resource_service_unavailable: "The resource service is unavailable. Try again later.",
       unknown_api_error: "The operation failed. Try again later.",
+      image_reference_unavailable: "The original reference image is unavailable. Upload it again and start a new edit.",
       file_reference_unavailable:
         "Referenced file is unavailable. Check that it exists and its source agent is still in this conversation.",
       workspace_file_unavailable: "Workspace file is unavailable.",
