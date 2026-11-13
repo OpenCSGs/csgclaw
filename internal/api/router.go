@@ -184,6 +184,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		})
 		r.Route("/auth", func(r chi.Router) {
 			r.Get("/status", h.handleAuthStatus)
+			r.Get("/login-sites", h.handleAuthLoginSites)
 			r.Get("/callback", h.handleAuthCallback)
 			r.Post("/login", h.handleAuthLogin)
 			r.Post("/logout", h.handleAuthLogout)

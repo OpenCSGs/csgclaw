@@ -32,6 +32,7 @@ export function useAuthLoginDialog() {
     <OpenCSGConnectionDialog
       busy={sidebar.authBusy}
       environment={connectionDraft}
+      locale={sidebar.locale}
       open={connectionOpen}
       t={sidebar.t}
       onConnect={handleLogin}
