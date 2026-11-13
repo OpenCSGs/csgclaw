@@ -30,6 +30,7 @@ export function SkillsSection() {
   const skills = useMemo(() => skillsQuery.data ?? hub?.skills ?? [], [skillsQuery.data, hub?.skills]);
   const remoteSkills = hub?.remoteSkills ?? [];
   const authed = isAuthenticated(controller.sidebarProps?.authStatus);
+  const count = tab === "installed" ? skills.length : authed ? hub?.remoteSkillsTotal : null;
   const setRemoteEnabled = hub?.setRemoteSkillsEnabled;
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export function SkillsSection() {
       title={
         <span>
           {t("iaSettingsCardSkills")}
-          <span className={styles.countBadge}>{skills.length}</span>
+          {count != null ? <span className={styles.countBadge}>{count}</span> : null}
         </span>
       }
       description={t("iaSettingsCardSkillsHint")}

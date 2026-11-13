@@ -7,6 +7,7 @@ export type MCPServer = {
 };
 
 export type RemoteMCPServer = {
+  recommended?: boolean;
   description?: string;
   id: string;
   name: string;

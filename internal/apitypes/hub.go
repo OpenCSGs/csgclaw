@@ -37,6 +37,7 @@ type TemplatePublication struct {
 }
 
 type HubTemplate struct {
+	Recommended    bool                  `json:"recommended"`
 	VersionCount   int                   `json:"version_count,omitempty"`
 	LatestRevision int                   `json:"latest_revision,omitempty"`
 	SourceAgentID  string                `json:"source_agent_id,omitempty"`

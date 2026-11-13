@@ -154,6 +154,21 @@ func (h *Handler) handleRelayCatalog(w http.ResponseWriter, r *http.Request) {
 		} else if err == nil {
 			entries = []relay.CatalogEntry{entry}
 		}
+	} else if query.Has("probe") {
+		ids := query["agent_ids"]
+		switch query.Get("probe") {
+		case "none":
+			entries, err = h.relayManager.DiscoverCatalog(ctx, nil)
+		case "selected":
+			if len(ids) == 0 || len(ids) > 24 {
+				http.Error(w, "expected 1 to 24 agent IDs", http.StatusBadRequest)
+				return
+			}
+			entries, err = h.relayManager.DiscoverCatalog(ctx, ids)
+		default:
+			http.Error(w, "invalid probe mode", http.StatusBadRequest)
+			return
+		}
 	} else {
 		entries, err = h.relayManager.Discover(ctx)
 	}

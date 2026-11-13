@@ -41,6 +41,12 @@
   gap: 2px;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .title {
   color: var(--text);
   font-size: 13px;

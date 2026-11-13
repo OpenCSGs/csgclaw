@@ -1,3 +1,4 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { LoaderCircle, LogIn, Plus, RefreshCw } from "lucide-react";
 import { InlineError, Button, Tooltip } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
@@ -94,7 +95,10 @@ export function MCPMarketPane({
                   <SidebarMcpIcon size={16} aria-hidden="true" />
                 </ResourceFeaturedIcon>
                 <button type="button" className="agent-skill-candidate-copy" onClick={() => onOpenServer(item)}>
-                  <span className="agent-skill-name">{item.name}</span>
+                  <span className="agent-skill-name">
+                    <span>{item.name}</span>
+                    {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+                  </span>
                   <span className="agent-skill-description">{item.description || item.url || item.name}</span>
                   <MCPMarketItemFeedback
                     installed={installed}
@@ -147,9 +151,12 @@ export function MCPMarketPane({
               key={item.id}
               title={item.name}
               titleBadge={
-                installed ? (
-                  <span className={resourceSettingsStyles.marketInstalled}>{t("iaMCPTabInstalled")}</span>
-                ) : null
+                <>
+                  {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+                  {installed ? (
+                    <span className={resourceSettingsStyles.marketInstalled}>{t("iaMCPTabInstalled")}</span>
+                  ) : null}
+                </>
               }
               description={item.description || item.url || item.name}
               badge={

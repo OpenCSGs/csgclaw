@@ -32,6 +32,8 @@ const (
 	agenticHubSkillsAPIPathRoot = "skills"
 )
 
+var ErrAgenticHubSignInRequired = errors.New("OpenCSG sign-in is required")
+
 var ErrInvalidAgenticHubRequest = errors.New("invalid AgenticHub skill request")
 
 type AgenticHubSkillListOptions struct {
@@ -41,6 +43,7 @@ type AgenticHubSkillListOptions struct {
 }
 
 type AgenticHubSkillSummary struct {
+	Recommended bool
 	Description string
 	Name        string
 	Ref         string
@@ -82,6 +85,7 @@ type agenticHubSkillsResponse struct {
 }
 
 type agenticHubSkillRecord struct {
+	Recommended        bool   `json:"recommended"`
 	DefaultBranch      string `json:"default_branch"`
 	DefaultBranchCamel string `json:"defaultBranch"`
 	Description        string `json:"description"`
@@ -387,6 +391,9 @@ func getAgenticHubJSONWithAccessToken(ctx context.Context, client *http.Client, 
 	if int64(len(body)) > agenticHubMaxJSONBytes {
 		return fmt.Errorf("AgenticHub response exceeds %d bytes", agenticHubMaxJSONBytes)
 	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		return ErrAgenticHubSignInRequired
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("AgenticHub request failed with status %d: %s", resp.StatusCode, truncateAgenticHubBody(body))
 	}
@@ -431,9 +438,7 @@ func agenticHubSkillsListURL(baseURL string, page, per int, search string) (stri
 	query.Set("page", fmt.Sprintf("%d", page))
 	query.Set("per", fmt.Sprintf("%d", per))
 	query.Set("search", strings.TrimSpace(search))
-	query.Set("sort", "trending")
-	query.Set("source", "")
-	return buildAgenticHubURL(baseURL, []string{"api", "v1", agenticHubSkillsAPIPathRoot}, false, query)
+	return buildAgenticHubURL(baseURL, []string{"api", "v1", "agent", agenticHubSkillsAPIPathRoot}, false, query)
 }
 
 func buildAgenticHubURL(baseURL string, parts []string, trailingSlash bool, query url.Values) (string, error) {
@@ -532,6 +537,7 @@ func agenticHubSkillSummaryFromRecord(record agenticHubSkillRecord) (AgenticHubS
 	}
 	return AgenticHubSkillSummary{
 		Description: firstAgenticHubValue(record.Description, record.Summary),
+		Recommended: record.Recommended,
 		Name:        name,
 		Ref:         firstAgenticHubValue(record.DefaultBranch, record.DefaultBranchCamel),
 		RemotePath:  remotePath,

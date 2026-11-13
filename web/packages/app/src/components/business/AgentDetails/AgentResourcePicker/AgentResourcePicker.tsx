@@ -1,3 +1,4 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { InlineError, Button, Checkbox, DialogRoot, SegmentedControl, TextInput } from "@/components/ui";
@@ -94,6 +95,7 @@ export function AgentResourcePicker({
             setPreview(skill);
           },
           name: skill.name,
+          recommended: skill.recommended,
           description: skill.description,
           installed: false,
           actionLabel: skillActionLabel(skill),
@@ -106,6 +108,7 @@ export function AgentResourcePicker({
             id: server.id,
             open: undefined,
             name: server.name,
+            recommended: server.recommended,
             description: server.description,
             installed: picker.globalServers.some(
               (item) => picker.enabledNames.has(item.name) && isRemoteMCPInstalled([item], server),
@@ -120,6 +123,7 @@ export function AgentResourcePicker({
               id: item.id,
               open: undefined,
               name: item.name,
+              recommended: item.recommended,
               description: item.unavailableReason || item.description,
               installed: false,
               actionLabel: undefined,
@@ -305,7 +309,14 @@ export function AgentResourcePicker({
                             {kind === "skill" ? <SidebarPuzzlePiece02Icon size={16} /> : <SidebarMcpIcon size={16} />}
                           </ResourceFeaturedIcon>
                         )}
-                        <ResourcePickerCopy name={item.name} description={item.description} onOpen={item.open} />
+                        <ResourcePickerCopy
+                          name={item.name}
+                          titleBadge={
+                            item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null
+                          }
+                          description={item.description}
+                          onOpen={item.open}
+                        />
                         <Button
                           size="sm"
                           variant={

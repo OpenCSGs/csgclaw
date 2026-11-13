@@ -48,7 +48,7 @@ func TestHandleRemoteMCPServersUsesConfiguredOfficialHub(t *testing.T) {
 		if got, want := r.Header.Get("Authorization"), "Bearer hub-token"; got != want {
 			t.Fatal("unexpected fixture authorization")
 		}
-		_, _ = fmt.Fprint(w, `{"msg":"OK","data":{"data":[{"id":"builtin:calendar","name":"calendar","description":"Calendar tools"}],"total":25}}`)
+		_, _ = fmt.Fprint(w, `{"msg":"OK","data":{"data":[{"id":"builtin:calendar","name":"calendar","description":"Calendar tools","recommended":true}],"total":25}}`)
 	}))
 	t.Cleanup(remote.Close)
 	t.Setenv("CSGHUB_API_BASE_URL", remote.URL)
@@ -92,7 +92,7 @@ enabled = true
 		t.Fatalf("len(items) = %d, want %d", got, want)
 	}
 	item := response.Items[0]
-	if item.ID != "builtin:calendar" || item.Name != "calendar" || item.Description != "Calendar tools" || item.URL != "" {
+	if item.ID != "builtin:calendar" || item.Name != "calendar" || item.Description != "Calendar tools" || item.URL != "" || !item.Recommended {
 		t.Fatalf("item = %#v, want remote summary without configuration", item)
 	}
 }

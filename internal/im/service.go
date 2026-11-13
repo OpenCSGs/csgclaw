@@ -182,6 +182,7 @@ var (
 
 type Service struct {
 	agentState       func(User) string
+	legacyNotifier   func(User) bool
 	diagnosticsOnce  sync.Once
 	diagnostics      *diagnostics.Store
 	mu               sync.RWMutex
@@ -2732,6 +2733,9 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		}
 		if user.Role == "cloud" {
 			return Room{}, fmt.Errorf("cannot invite a cloud agent to this room")
+		}
+		if s.isLegacyNotifierLocked(user) {
+			return Room{}, fmt.Errorf("cannot invite a legacy notifier to this room")
 		}
 		existing[userID] = struct{}{}
 		addedIDs = append(addedIDs, userID)

@@ -117,6 +117,7 @@ function normalizeRemoteSkill(record: unknown): SkillSummary | null {
   return {
     description: stringFromUnknown(values.description) || undefined,
     name,
+    recommended: values.recommended === true,
     readonly: values.readonly !== false,
     remoteRef: stringFromUnknown(values.remote_ref) || undefined,
     remotePath,

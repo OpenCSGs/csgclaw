@@ -585,6 +585,7 @@ export function useWorkspaceHubSelection({
     templates: resourcesTemplates,
     skills,
     remoteSkills,
+    remoteSkillsTotal: officialSkillsQuery.data?.pages[0]?.total ?? null,
     remoteSkillsHasMore: Boolean(officialSkillsQuery.hasNextPage),
     remoteSkillsLoading:
       remoteSkillsEnabled && officialSkillsQuery.isFetching && !officialSkillsQuery.isFetchingNextPage,

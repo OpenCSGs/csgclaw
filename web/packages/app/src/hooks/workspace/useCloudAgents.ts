@@ -7,8 +7,8 @@ import { CLOUD_AGENTS_STORAGE_KEY } from "@/shared/storage/keys";
 
 const MEMBERSHIP_CHANGED_EVENT = "csgclaw-cloud-membership-changed";
 
-export function useCloudAgents(auth?: AuthStatus, enabled = true, target?: RelayCatalogTarget) {
-  const query = useCloudAgentCatalog(auth, enabled, target);
+export function useCloudAgents(auth?: AuthStatus, enabled = true, target?: RelayCatalogTarget, metadataOnly = false) {
+  const query = useCloudAgentCatalog(auth, enabled, target, metadataOnly);
   const [savedAgents, setSavedAgents] = useState<CloudAgent[]>(() => {
     try {
       return parseCloudAgents(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY));

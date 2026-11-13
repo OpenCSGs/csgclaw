@@ -32,6 +32,7 @@ type remoteMCPServersListResponse struct {
 }
 
 type remoteMCPServerSummary struct {
+	Recommended bool   `json:"recommended"`
 	Description string `json:"description,omitempty"`
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -80,6 +81,7 @@ func (h *Handler) handleRemoteMCPServers(w http.ResponseWriter, r *http.Request)
 	for _, item := range list.Items {
 		items = append(items, remoteMCPServerSummary{
 			Description: item.Description,
+			Recommended: item.Recommended,
 			ID:          item.ID,
 			Name:        item.Name,
 			Protocol:    item.Protocol,

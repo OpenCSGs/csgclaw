@@ -40,6 +40,7 @@ export type IMUser = {
   agent_id?: string | null;
   agent_state?: "archived" | "deleted" | "";
   deleted_at?: string | null;
+  legacy_notifier?: boolean | null;
   accent_hex?: string | null;
   avatar?: string | null;
   description?: string | null;
@@ -870,6 +871,8 @@ export function roomInviteCandidates(
     (user) =>
       user.role !== "cloud" &&
       !user.agent_state &&
+      !user.legacy_notifier &&
+      normalizeComparable(user.role) !== "notifier" &&
       !conversation.members.some((memberID) => localIdentitiesMatch(memberID, user.id)),
   );
 }
