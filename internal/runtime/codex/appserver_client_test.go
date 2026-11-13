@@ -2,14 +2,18 @@ package codex
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"csgclaw/internal/diagnostics"
 )
 
 func TestAppServerClientRequestHandlesResponse(t *testing.T) {
@@ -46,7 +50,8 @@ func TestAppServerClientRequestHandlesResponse(t *testing.T) {
 
 func TestAppServerClientRequestHandlesJSONRPCError(t *testing.T) {
 	writer := &lockedStringWriter{}
-	client := newAppServerClient(writer, nil)
+	var log bytes.Buffer
+	client := newAppServerClient(writer, slog.New(diagnostics.NewServerLogHandler(&log, slog.LevelInfo, nil)))
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -55,7 +60,7 @@ func TestAppServerClientRequestHandlesJSONRPCError(t *testing.T) {
 	}()
 
 	_ = waitForJSONRPCLine(t, writer)
-	client.handleLine(`{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"thread not found","data":{"threadId":"missing"}}}`)
+	client.handleLine(`{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"thread not found, token=private-example","data":{"threadId":"missing"}}}`)
 
 	err := <-errCh
 	if err == nil {
@@ -65,6 +70,14 @@ func TestAppServerClientRequestHandlesJSONRPCError(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("request() error = %q, want it to contain %q", err.Error(), want)
 		}
+	}
+	for _, want := range []string{"level=ERROR", "codex app-server protocol error", "method=thread/resume", "request_id=1", "code=-32000", "thread not found", "[redacted]"} {
+		if !strings.Contains(log.String(), want) {
+			t.Fatalf("missing %q in log: %s", want, &log)
+		}
+	}
+	if strings.Contains(log.String(), "private-example") || strings.Contains(log.String(), "missing") {
+		t.Fatalf("log contains credentials or raw RPC data: %s", &log)
 	}
 }
 

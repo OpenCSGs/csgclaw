@@ -64,6 +64,19 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 		return
 	}
 	if isRawAppServerNotificationMethod(note.Method) {
+		switch note.Method {
+		case "error":
+			willRetry, _ := params["willRetry"].(bool)
+			live.appClient.logTurnError(note.Method, params, params, willRetry)
+		case "turn/completed":
+			turn, _ := params["turn"].(map[string]any)
+			if turn == nil {
+				turn = params
+			}
+			if strings.EqualFold(appServerString(turn, "status"), "failed") {
+				live.appClient.logTurnError(note.Method, params, turn, false)
+			}
+		}
 		live.appServerProtocol(note.Method)
 		m.handleRawAppServerNotification(runtimeID, live, note.Method, params)
 		return
@@ -71,12 +84,44 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 
 	protocol := live.appServerProtocol(note.Method)
 	if protocol == appServerProtocolLegacy {
+		switch appServerString(params, "type") {
+		case "error":
+			live.appClient.logTurnError(note.Method, params, params, false)
+		case "stream_error":
+			live.appClient.logTurnError(note.Method, params, params, true)
+		}
 		m.handleLegacyAppServerEvent(runtimeID, live, params)
 		return
 	}
 	if protocol == appServerProtocolRaw {
 		m.handleRawAppServerNotification(runtimeID, live, note.Method, params)
 	}
+}
+
+// Log the error fields before turn recovery can replace the provider's message.
+func (c *appServerClient) logTurnError(method string, params, event map[string]any, willRetry bool) {
+	if c == nil || c.logger == nil {
+		return
+	}
+	details, _ := event["error"].(map[string]any)
+	message := appServerString(details, "message")
+	if message == "" {
+		message = appServerString(event, "message")
+	}
+	attrs := []any{
+		"method", method,
+		"thread_id", appServerNotificationThreadID(params),
+		"turn_id", legacyNotificationTurnID(params),
+		"error", message,
+	}
+	if extra := appServerString(details, "additionalDetails"); extra != "" {
+		attrs = append(attrs, "details", extra)
+	}
+	if willRetry {
+		c.logger.Warn(appServerProtocolErrorLog, append(attrs, "will_retry", true)...)
+		return
+	}
+	c.logger.Error(appServerProtocolErrorLog, attrs...)
 }
 
 func isRawAppServerNotificationMethod(method string) bool {

@@ -1117,6 +1117,37 @@ func TestAppServerManagerPromptCancellationPreservesRuntimeOnWriteFailure(t *tes
 }
 
 func TestAppServerManagerPromptFailedTurnPublishesFailure(t *testing.T) {
+	if os.Getenv("CSGCLAW_TEST_PROTOCOL_ERROR_STDOUT") == "" {
+		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestAppServerManagerPromptFailedTurnPublishesFailure$")
+		cmd.Env = append(os.Environ(), "CSGCLAW_TEST_PROTOCOL_ERROR_STDOUT=1")
+		stdout, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("failed turn test process: %v\n%s", err, stdout)
+		}
+		var records []string
+		for line := range strings.Lines(string(stdout)) {
+			if strings.HasPrefix(line, "source=worker.stderr runtime=codex ") && strings.Contains(line, "codex app-server protocol error") {
+				records = append(records, line)
+			}
+		}
+		if len(records) != 2 {
+			t.Fatalf("expected retry and failure on stdout, got %q", records)
+		}
+		for i, fields := range [][]string{
+			{"level=WARN", "method=error", "will_retry=true", "retrying connection"},
+			{"level=ERROR", "method=turn/completed", "model failed", "provider unavailable", "[redacted]"},
+		} {
+			for _, field := range append(fields, "thread_id=main-thread", "turn_id=turn-failed") {
+				if !strings.Contains(records[i], field) {
+					t.Fatalf("stdout record missing %q: %s", field, records[i])
+				}
+			}
+		}
+		if strings.Contains(string(stdout), "private-example") {
+			t.Fatal("stdout exposed a credential from the protocol error")
+		}
+		return
+	}
 	withAppServerHelperCommand(t, "prompt-failed")
 	dir := t.TempDir()
 	spec := testAppServerSessionSpec(dir)
@@ -3728,12 +3759,16 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 			case "turn/start":
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-failed"}})
+				writeRPCNotification(t, "error", map[string]any{
+					"threadId": "main-thread", "turnId": "turn-failed", "willRetry": true,
+					"error": map[string]any{"message": "retrying connection"},
+				})
 				writeRPCNotification(t, "turn/completed", map[string]any{
 					"threadId": "main-thread",
 					"turn": map[string]any{
 						"id":     "turn-failed",
 						"status": "failed",
-						"error":  map[string]any{"message": "model failed"},
+						"error":  map[string]any{"message": "model failed", "additionalDetails": "provider unavailable, token=private-example"},
 					},
 				})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-failed"}), true
