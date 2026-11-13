@@ -115,17 +115,28 @@ func TestAppServerPublishesReasoningStartOncePerTurn(t *testing.T) {
 			t.Fatal(err)
 		}
 		waiter.setTurnID(turnID)
+		waiter.streamReasoningSummary = i == 1
 		notify("previous-turn", "item/reasoning/textDelta")
 		notify(turnID, "item/mcpToolCall/progress")
 		notify(turnID, "item/reasoning/textDelta")
 		notify(turnID, "item/reasoning/summaryTextDelta")
 		events := sink.snapshot()
-		if len(events) != i+1 {
-			t.Fatalf("got %d events, want %d: %+v", len(events), i+1, events)
+		want := i + 1
+		if i == 1 {
+			want++
+		}
+		if len(events) != want {
+			t.Fatalf("got %d events, want %d: %+v", len(events), want, events)
 		}
 		event := events[i]
 		if event.Kind != activity.RuntimeEventReasoningStarted || event.TurnID != turnID || event.Text != "" || event.Payload != nil {
 			t.Fatalf("unexpected reasoning event: %+v", event)
+		}
+		if i == 1 {
+			summary := events[i+1]
+			if summary.Kind != activity.RuntimeEventReasoningSummary || summary.TurnID != turnID || summary.Text != "reasoning text" {
+				t.Fatalf("unexpected summary event: %+v", summary)
+			}
 		}
 		live.removeAppServerTurnWaiter("thread-1", waiter)
 	}

@@ -1721,7 +1721,9 @@ message_stop
 
 每个 SSE block 同时包含 `event: <type>` 和 JSON `data:` payload；payload
 中的 `type` 与事件名一致。首段正文前，如果 runtime 报告开始推理，服务端可发送一次
-`thinking_start`，payload 只包含 `type`。客户端可在收到正文或工具调用、
+`thinking_start`，payload 只包含 `type`。在流式请求中设置 `reasoning_summary: true`，
+可接收 Codex 提供的思考摘要。每个 `reasoning_summary_delta` 事件的 `delta` 字段是一段摘要文字。
+正文、摘要和原始推理分开处理。客户端可在收到正文或工具调用、
 流结束或取消时关闭思考提示。工具名称由 `tool_use` 返回，工具参数由 `input_json_delta` 返回，
 其中的敏感值已经脱敏。`tool_use` 的 `content_block_stop` 表示参数传输结束。
 工具执行结束时，服务端发送一次 `tool_result`，通过 `tool_result_delta` 返回输出。

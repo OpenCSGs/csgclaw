@@ -21,6 +21,7 @@ import (
 type agentSessionInput struct {
 	model                       string
 	reasoningEffort             string
+	reasoningSummary            bool
 	turnModel                   *agentengine.TurnModel
 	preservePendingInteractions bool
 	respondingTo                string
@@ -88,7 +89,9 @@ func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSe
 	}
 	inputs := form.Value["input"]
 	for name := range form.Value {
-		if name != "input" && name != "stream" && name != "user_input" && name != "model" && name != "reasoning_effort" {
+		switch name {
+		case "input", "stream", "user_input", "model", "reasoning_effort", "reasoning_summary":
+		default:
 			return agentSessionInput{}, false, fmt.Errorf("unknown multipart field %q", name)
 		}
 	}
@@ -112,7 +115,7 @@ func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSe
 			request.ReasoningEffort = values[0]
 		}
 	}
-	for _, field := range []string{"stream", "user_input"} {
+	for _, field := range []string{"stream", "user_input", "reasoning_summary"} {
 		values := form.Value[field]
 		if len(values) == 0 {
 			continue
@@ -125,10 +128,13 @@ func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSe
 		if err != nil {
 			return agentSessionInput{}, false, fmt.Errorf("%s must be a boolean", field)
 		}
-		if field == "stream" {
+		switch field {
+		case "stream":
 			request.Stream = &enabled
-		} else {
+		case "user_input":
 			request.UserInput = enabled
+		case "reasoning_summary":
+			request.ReasoningSummary = enabled
 		}
 	}
 	if metadataBytes > agentSessionResponseBodyLimit {

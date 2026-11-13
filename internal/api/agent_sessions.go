@@ -43,14 +43,15 @@ var (
 )
 
 type agentSessionResponseRequest struct {
-	UserInput       bool            `json:"user_input,omitempty"`
-	Model           string          `json:"model,omitempty"`
-	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
-	AttachmentIDs   []string        `json:"attachment_ids,omitempty"`
-	Input           json.RawMessage `json:"input"`
-	Stream          *bool           `json:"stream,omitempty"`
-	Extra           string          `json:"extra,omitempty"`
-	ExtraType       string          `json:"extra_type,omitempty"`
+	UserInput        bool            `json:"user_input,omitempty"`
+	Model            string          `json:"model,omitempty"`
+	ReasoningEffort  string          `json:"reasoning_effort,omitempty"`
+	ReasoningSummary bool            `json:"reasoning_summary,omitempty"`
+	AttachmentIDs    []string        `json:"attachment_ids,omitempty"`
+	Input            json.RawMessage `json:"input"`
+	Stream           *bool           `json:"stream,omitempty"`
+	Extra            string          `json:"extra,omitempty"`
+	ExtraType        string          `json:"extra_type,omitempty"`
 }
 
 type agentSessionRequestValidationError struct {
@@ -267,8 +268,16 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 					return eventStream.writeThinkingStart()
 				}
 			case agentengine.TurnEventActivityUpdate:
-				if event.Activity != nil && event.Activity.Kind == string(activity.RuntimeEventReasoningStarted) {
+				if event.Activity == nil {
+					return nil
+				}
+				switch activity.RuntimeEventKind(event.Activity.Kind) {
+				case activity.RuntimeEventReasoningStarted:
 					return eventStream.writeThinkingStart()
+				case activity.RuntimeEventReasoningSummary:
+					if text, ok := event.Activity.Payload.(string); input.reasoningSummary && ok && text != "" {
+						return eventStream.write("reasoning_summary_delta", map[string]any{"delta": text})
+					}
 				}
 			case agentengine.TurnEventInteractionRequest:
 				if !acceptUserInput || event.Interaction == nil {
@@ -297,6 +306,7 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 		Admission:                   admission,
 		RespondingTo:                input.respondingTo,
 		PreservePendingInteractions: input.preservePendingInteractions,
+		StreamReasoningSummary:      stream && input.reasoningSummary,
 		Interaction:                 policy,
 		Input:                       sessionTurnInput(input.Text, response.InputAttachments),
 	}, sink)
@@ -597,6 +607,8 @@ func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body
 			err = decoder.Decode(&request.Model)
 		case strings.EqualFold(name, "reasoning_effort"):
 			err = decoder.Decode(&request.ReasoningEffort)
+		case strings.EqualFold(name, "reasoning_summary"):
+			err = decoder.Decode(&request.ReasoningSummary)
 		default:
 			return fmt.Errorf("unknown field %q", name)
 		}
@@ -630,6 +642,7 @@ func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInp
 	input.userInput = request.UserInput
 	input.model = strings.TrimSpace(request.Model)
 	input.reasoningEffort = strings.TrimSpace(request.ReasoningEffort)
+	input.reasoningSummary = request.ReasoningSummary
 	input.attachmentIDs = request.AttachmentIDs
 	if input.Text == "" && len(input.Files)+len(input.attachmentIDs) == 0 {
 		return agentSessionInput{}, false, fmt.Errorf("input must not be empty")

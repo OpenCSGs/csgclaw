@@ -292,13 +292,20 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	switch method {
 	case "item/reasoning/textDelta", "item/reasoning/summaryTextDelta", "item/reasoning/summaryPartAdded", "item/mcpToolCall/progress":
 		turnID := appServerNotificationTurnID(params)
-		if method != "item/mcpToolCall/progress" && live.appServerTurnWaiter(threadID).startReasoning(turnID) {
-			m.publishAppServerEvent(SessionEvent{
-				RuntimeID: runtimeID,
-				SessionID: threadID,
-				TurnID:    turnID,
-				Kind:      activitypkg.RuntimeEventReasoningStarted,
-			})
+		if method != "item/mcpToolCall/progress" {
+			start, summary := live.appServerTurnWaiter(threadID).observeReasoning(turnID)
+			event := SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID}
+			if start {
+				event.Kind = activitypkg.RuntimeEventReasoningStarted
+				m.publishAppServerEvent(event)
+			}
+			if summary && method == "item/reasoning/summaryTextDelta" {
+				if text, _ := params["delta"].(string); text != "" {
+					event.Kind = activitypkg.RuntimeEventReasoningSummary
+					event.Text = text
+					m.publishAppServerEvent(event)
+				}
+			}
 		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
 			turnID:   turnID,

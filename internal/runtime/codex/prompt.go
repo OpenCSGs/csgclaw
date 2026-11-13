@@ -12,13 +12,14 @@ const (
 )
 
 type PromptRequest struct {
-	Model               *contract.TurnModel
-	SessionID           string
-	ClientUserMessageID string
-	TextOnlyUserInput   bool
-	Prompt              []PromptContentBlock
-	Meta                map[string]any
-	OnAccepted          func()
+	Model                  *contract.TurnModel
+	SessionID              string
+	ClientUserMessageID    string
+	TextOnlyUserInput      bool
+	StreamReasoningSummary bool
+	Prompt                 []PromptContentBlock
+	Meta                   map[string]any
+	OnAccepted             func()
 }
 
 type PromptResponse struct {

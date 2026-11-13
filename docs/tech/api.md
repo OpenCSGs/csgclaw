@@ -1775,7 +1775,10 @@ message_stop
 Each SSE block contains both `event: <type>` and a JSON `data:` payload whose
 `type` matches the event name. Before the first answer text, the server may send
 `thinking_start` once when the runtime reports reasoning. Its payload contains
-only `type`. Clients can clear the thinking indicator on answer text, tool use,
+only `type`. Set `reasoning_summary: true` with `stream: true` to also receive
+Codex summary text, when available, as `reasoning_summary_delta` events with a
+string `delta` field. Raw reasoning and summaries are kept separate from answer
+text. Clients can clear the thinking indicator on answer text, tool use,
 stream termination, or cancellation. A `tool_use` block identifies the tool and
 carries its redacted input in `input_json_delta`. The following `content_block_stop`
 ends the input. When the tool finishes, a single `tool_result` block carries its

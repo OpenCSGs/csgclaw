@@ -211,6 +211,7 @@ const (
 	RuntimeEventTextDelta         RuntimeEventKind = "text_delta"
 	RuntimeEventThoughtDelta      RuntimeEventKind = "thought_delta"
 	RuntimeEventReasoningStarted  RuntimeEventKind = "reasoning_started"
+	RuntimeEventReasoningSummary  RuntimeEventKind = "reasoning_summary_delta"
 	RuntimeEventToolCallStart     RuntimeEventKind = "tool_call_start"
 	RuntimeEventToolCallUpdate    RuntimeEventKind = "tool_call_update"
 	RuntimeEventPlanUpdate        RuntimeEventKind = "plan_update"
@@ -281,7 +282,7 @@ func TerminalToolStatus(status string) string {
 
 func RuntimeEventRequiresReliableDelivery(event RuntimeEvent) bool {
 	switch event.Kind {
-	case RuntimeEventTextDelta, RuntimeEventReasoningStarted, RuntimeEventContextUsage, RuntimeEventTokenUsage,
+	case RuntimeEventTextDelta, RuntimeEventReasoningStarted, RuntimeEventReasoningSummary, RuntimeEventContextUsage, RuntimeEventTokenUsage,
 		RuntimeEventActionRequest, RuntimeEventActionDecision,
 		RuntimeEventUserInputRequest, RuntimeEventUserInputResolved,
 		RuntimeEventStructuredOutput, RuntimeEventFileOutput:

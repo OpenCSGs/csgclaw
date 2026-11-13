@@ -615,6 +615,38 @@ func TestAgentSessionResponsesStreamThinkingBeforeAnswer(t *testing.T) {
 	}
 }
 
+func TestAgentSessionReasoningSummaryRequiresOptIn(t *testing.T) {
+	for _, optIn := range []bool{false, true} {
+		engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+			if request.StreamReasoningSummary != optIn {
+				t.Fatalf("summary requested = %v, want %v", request.StreamReasoningSummary, optIn)
+			}
+			for _, event := range []agentengine.TurnEvent{
+				{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{Kind: string(activity.RuntimeEventReasoningStarted)}},
+				{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{Kind: string(activity.RuntimeEventReasoningSummary), Payload: "summary text"}},
+				{Kind: agentengine.TurnEventThoughtDelta, Thought: "raw thought"},
+				{Kind: agentengine.TurnEventTextDelta, Text: "final answer"},
+			} {
+				if err := sink.Emit(ctx, event); err != nil {
+					t.Fatalf("emit %s: %v", event.Kind, err)
+				}
+			}
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "final answer"}
+		}}
+		handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+		payload := map[string]any{"input": "hello", "stream": true}
+		if optIn {
+			payload["reasoning_summary"] = true
+		}
+		body := performAgentSessionRequest(t, handler, "agent-alpha", "summary", payload).Body.String()
+		summary := strings.Index(body, "event: reasoning_summary_delta\ndata: {\"delta\":\"summary text\",\"type\":\"reasoning_summary_delta\"}")
+		if (summary >= 0) != optIn || strings.Contains(body, "raw thought") ||
+			(optIn && (summary <= strings.Index(body, "event: thinking_start") || summary >= strings.Index(body, "final answer"))) {
+			t.Fatalf("opt-in=%v: unexpected stream %s", optIn, body)
+		}
+	}
+}
+
 func TestAgentSessionStreamHoldsTextUntilOutstandingToolsFinish(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	stream := newAgentSessionEventStream(recorder)

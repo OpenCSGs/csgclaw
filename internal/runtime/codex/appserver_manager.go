@@ -433,6 +433,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	waiter.mu.Lock()
 	waiter.diagnostic = diagnostics.From(ctx)
 	waiter.textOnlyUserInput = req.TextOnlyUserInput
+	waiter.streamReasoningSummary = req.StreamReasoningSummary
 	waiter.mu.Unlock()
 	defer func() { live.removeAppServerTurnWaiter(sessionID, waiter) }()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
@@ -1620,6 +1621,7 @@ type appServerTurnWaiter struct {
 	lastActivity             string
 	progressSequence         uint64
 	reasoningStarted         bool
+	streamReasoningSummary   bool
 	structuredOutputBoundary bool
 	textOnlyUserInput        bool
 }
@@ -2010,23 +2012,24 @@ func (w *appServerTurnWaiter) wake(result appServerTurnResult) {
 	}
 }
 
-func (w *appServerTurnWaiter) startReasoning(turnID string) bool {
+func (w *appServerTurnWaiter) observeReasoning(turnID string) (start, summary bool) {
 	if w == nil {
-		return false
+		return false, false
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.reasoningStarted || !w.accepted || (turnID != "" && w.turnID != turnID) {
-		return false
+	if !w.accepted || (turnID != "" && w.turnID != turnID) {
+		return false, false
 	}
 	if _, ended := w.terminalResults[w.turnID]; ended {
-		return false
+		return false, false
 	}
 	if _, ended := w.terminalResults[""]; ended {
-		return false
+		return false, false
 	}
+	start = !w.reasoningStarted
 	w.reasoningStarted = true
-	return true
+	return start, w.streamReasoningSummary
 }
 
 func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter {
