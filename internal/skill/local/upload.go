@@ -77,13 +77,14 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 	}
 	record := options.Origin
 	if record.Source != skillinstall.SourceMarket {
-		record = skillinstall.Record{Source: skillinstall.SourceLocal}
+		record = *summary.Install
 	}
 	record.SHA256, err = skillinstall.BundleSHA256(skillDir)
 	if err != nil {
 		return SkillSummary{}, err
 	}
 	summary.Source = record.Source
+	summary.Install = &record
 
 	destDir := filepath.Join(root, summary.Name)
 	if err := ensurePathInsideRoot(root, destDir); err != nil {
@@ -268,13 +269,14 @@ func summarizeSkillDir(skillDir, skillName string) (SkillSummary, error) {
 	if info.IsDir() {
 		return SkillSummary{}, ErrSKILLMDMissing
 	}
-	description, err := skillDescription(skillFile)
+	metadata, err := readSkillMetadata(skillFile)
 	if err != nil {
 		return SkillSummary{}, err
 	}
 	return SkillSummary{
 		Name:        skillName,
-		Description: description,
+		Description: metadata.Description,
+		Install:     &skillinstall.Record{Source: skillinstall.SourceLocal, Version: metadata.Version},
 	}, nil
 }
 

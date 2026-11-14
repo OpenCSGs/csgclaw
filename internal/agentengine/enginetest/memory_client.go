@@ -455,7 +455,32 @@ func (a *memoryAgents) Update(ctx context.Context, agentID string, request agent
 		}
 	}()
 	spec := request.Spec
-	ctx, release, err := a.client.lifecycle.Mutation(ctx, agentID)
+	ctx, release, err := a.client.lifecycle.MutationPrepare(ctx, agentID, func(context.Context) error {
+		a.client.mu.Lock()
+		item, ok := a.client.agents[strings.TrimSpace(agentID)]
+		a.client.mu.Unlock()
+		if !ok {
+			return &agentengine.TurnError{Code: agentengine.ErrorAgentNotFound, Message: "agent not found"}
+		}
+		if request.ResourceVersion != "" && request.ResourceVersion != item.ResourceVersion {
+			return &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "agent resource version is stale"}
+		}
+		desired := request.Spec
+		if len(request.FieldMask) > 0 {
+			desired = mergeMemoryUpdate(item.Spec, request)
+		}
+		desired = normalizeSpec(desired)
+		if err := validateSpec(desired); err != nil {
+			return err
+		}
+		if item.Spec.Role != desired.Role {
+			return &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "agent role changes are not supported"}
+		}
+		if desired.DesiredState == agentengine.AgentDesiredStateStopped {
+			a.client.interruptAgent(agentID)
+		}
+		return nil
+	})
 	if err != nil {
 		return agentengine.Agent{}, err
 	}
@@ -549,7 +574,7 @@ func (a *memoryAgents) Start(_ context.Context, agentID string) (agentengine.Age
 }
 
 func (a *memoryAgents) Stop(ctx context.Context, agentID string) (agentengine.Agent, error) {
-	ctx, release, err := a.client.lifecycle.Mutation(ctx, agentID)
+	ctx, release, err := a.client.lifecycle.MutationInterrupt(ctx, agentID, func() { a.client.interruptAgent(agentID) })
 	if err != nil {
 		return agentengine.Agent{}, err
 	}
@@ -1397,4 +1422,15 @@ func (a *memoryAgents) SetArchived(ctx context.Context, id string, archived bool
 	}
 	a.client.agents[id] = item
 	return cloneAgent(item), nil
+}
+
+func (c *MemoryClient) interruptAgent(agentID string) {
+	c.mu.Lock()
+	for key, turn := range c.active {
+		if key.agentID == strings.TrimSpace(agentID) {
+			turn.cancel()
+		}
+	}
+	c.mu.Unlock()
+	c.interactions.Interrupt(agentID, "", "", true)
 }

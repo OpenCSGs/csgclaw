@@ -1291,15 +1291,17 @@ func TestConversationResolveRestoresClaimAfterRuntimeFailure(t *testing.T) {
 	}
 }
 
-func TestAgentStopDrainsActiveEngineTurn(t *testing.T) {
+func TestAgentStopCancelsAndDrainsActiveEngineTurn(t *testing.T) {
 	runtimeImpl := &fakeConversationRuntime{}
 	started := make(chan struct{})
 	release := make(chan struct{})
-	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+	canceled := make(chan struct{})
+	runtimeImpl.prompt = func(ctx context.Context, runtimeID, sessionID, _ string) error {
 		close(started)
+		<-ctx.Done()
+		close(canceled)
 		<-release
-		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
-		return nil
+		return ctx.Err()
 	}
 	service := newTestAgentService(t, []agent.Agent{{
 		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
@@ -1325,12 +1327,17 @@ func TestAgentStopDrainsActiveEngineTurn(t *testing.T) {
 		stopDone <- err
 	}()
 	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("stop did not interrupt the active turn")
+	}
+	select {
 	case err := <-stopDone:
 		t.Fatalf("Stop returned before active Turn drained: %v", err)
-	case <-time.After(20 * time.Millisecond):
+	default:
 	}
 	close(release)
-	if result := <-runDone; result.Status != TurnSucceeded {
+	if result := <-runDone; result.Status != TurnCanceled {
 		t.Fatalf("run result = %+v", result)
 	}
 	if err := <-stopDone; err != nil {
@@ -1377,7 +1384,7 @@ func TestAgentLifecycleDrainTimeoutLeavesRuntimeUnchanged(t *testing.T) {
 		t.Fatalf("Agent changed after drain timeout: %+v, %t", selected, ok)
 	}
 	close(release)
-	if result := <-runDone; result.Status != TurnSucceeded {
+	if result := <-runDone; result.Status != TurnCanceled {
 		t.Fatalf("result = %+v", result)
 	}
 }

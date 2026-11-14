@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -15,6 +16,28 @@ import (
 
 	"github.com/go-rod/rod/lib/launcher"
 )
+
+func TestBrowserFailedLaunchReturnsWithoutWaitingForAnUnstartedProcess(t *testing.T) {
+	t.Setenv("CSGCLAW_BROWSER_ALLOW_PRIVATE_NETWORK", "true")
+	t.Setenv("CSGCLAW_BROWSER_BIN", filepath.Join(t.TempDir(), "missing-browser"))
+	s := New()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := s.Open(ctx, "room", "http://127.0.0.1:1"); done <- err }()
+	select {
+	case err := <-done:
+		defer s.Close()
+		if err == nil || !strings.Contains(err.Error(), "start Chromium") {
+			t.Fatalf("missing launch failure: %v", err)
+		}
+		if len(s.List("room")) != 0 {
+			t.Fatal("failed launch left a browser session")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("failed launch waited forever for a process that was never started")
+	}
+}
 
 func TestBrowserURLValidation(t *testing.T) {
 	for _, raw := range []string{"file:///etc/passwd", "javascript:alert(1)", "https://u:p@example.com", "data:text/html,test", "https:///path", ""} {
@@ -173,8 +196,7 @@ func TestBrowserEndToEnd(t *testing.T) {
 	}
 	// Losing Chromium must not leave the server permanently unable to open
 	// another page. The new session also exercises idle and room cleanup.
-	s.launcher.Kill()
-	s.launcher.Cleanup()
+	s.stopBrowser()
 	recovered, err := s.Open(ctx, "room-a", server.URL)
 	if err != nil {
 		t.Fatalf("recover browser process: %v", err)

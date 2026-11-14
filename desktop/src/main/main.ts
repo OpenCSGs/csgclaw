@@ -71,8 +71,9 @@ app.on("will-quit", () => logDesktopInfo("will-quit"));
 app.on("quit", (_event, exitCode) => logDesktopInfo("quit", { exitCode }));
 
 if (electronSquirrelStartup) {
-  logDesktopInfo("squirrel-startup-exit", { flags: diagnosticLaunchFlags(process.argv) });
-  app.quit();
+  // The handler owns quitting after Update.exe finishes creating or removing
+  // shortcuts. Quitting here closes its pipes before that work completes.
+  logDesktopInfo("squirrel-startup-handled", { flags: diagnosticLaunchFlags(process.argv) });
 } else {
   const hasSingleInstanceLock = app.requestSingleInstanceLock();
   if (!hasSingleInstanceLock) {

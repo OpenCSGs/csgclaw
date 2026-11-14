@@ -400,6 +400,7 @@ type agentUpdateOptions struct {
 	loadMemory            bool
 	reconcileDesiredState bool
 	reconcileResources    bool
+	interruptForStop      bool
 	forceRecreate         bool
 	replaceSkills         []string
 }
@@ -412,14 +413,20 @@ func updateOptionsFor(request contract.AgentUpdateRequest) agentUpdateOptions {
 		loadMemory:            fieldMaskContains(request.FieldMask, "memory") || request.Spec.Memory != nil,
 		reconcileDesiredState: fieldMaskContains(request.FieldMask, "desired_state"),
 		reconcileResources:    loadSkills || fieldMaskContains(request.FieldMask, "mcp_servers"),
+		interruptForStop:      request.Spec.DesiredState == contract.AgentDesiredStateStopped && (len(request.FieldMask) == 0 || fieldMaskContains(request.FieldMask, "desired_state")),
 		replaceSkills:         slices.Clone(request.ReplaceSkills),
 	}
 }
 
 func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion string, options agentUpdateOptions, mutate func(contract.AgentSpec) (contract.AgentSpec, error)) (contract.Agent, error) {
-	var updated Agent
-	err := f.WithAgentLifecycle(ctx, agentID, func(lifecycleCtx context.Context) error {
-		previous, ok := f.Agent(agentID)
+	var updated, previous Agent
+	var previousSkills []string
+	var current, desired contract.AgentSpec
+	var change agentSpecChange
+	var err error
+	prepare := func(lifecycleCtx context.Context) error {
+		var ok bool
+		previous, ok = f.Agent(agentID)
 		if !ok {
 			return fmt.Errorf("agent %q not found", agentID)
 		}
@@ -429,15 +436,13 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 		if resourceVersion != "" && resourceVersion != resourceVersionForAgent(previous) {
 			return ErrAgentResourceVersionConflict
 		}
-		var previousSkills []string
-		var err error
 		if options.loadSkills {
 			previousSkills, err = f.Skills(agentID)
 			if err != nil {
 				return err
 			}
 		}
-		current, err := f.specFromService(previous, previousSkills, true)
+		current, err = f.specFromService(previous, previousSkills, true)
 		if err != nil {
 			return err
 		}
@@ -448,7 +453,7 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 			}
 			current.Memory = &contract.MemorySpec{Enabled: document.Enabled}
 		}
-		desired, err := mutate(cloneAgentSpec(current))
+		desired, err = mutate(cloneAgentSpec(current))
 		if err != nil {
 			return err
 		}
@@ -481,7 +486,7 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 				}
 			}
 		}
-		change := diffAgentSpec(current, desired)
+		change = diffAgentSpec(current, desired)
 		change.skills = change.skills || len(options.replaceSkills) > 0
 		change.instructions = options.saveInstructions
 		if change.skillStates {
@@ -489,6 +494,31 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 				return err
 			}
 		}
+		if desired.DesiredState == contract.AgentDesiredStateStopped && f.interruptAgent != nil {
+			f.interruptAgent(canonicalAgentID(agentID))
+		}
+		return nil
+	}
+	var lifecycleCtx context.Context
+	var release func()
+	if options.interruptForStop {
+		lifecycleCtx, release, err = f.LifecycleCoordinator().MutationPrepare(ctx, canonicalAgentID(agentID), prepare)
+	} else {
+		// Ordinary configuration changes still read their complete resource
+		// snapshot after active work has finished modifying workspace files.
+		lifecycleCtx, release, err = f.acquireAgentLifecycle(ctx, agentID)
+		if err == nil {
+			if err = prepare(lifecycleCtx); err != nil {
+				release()
+				return contract.Agent{}, err
+			}
+		}
+	}
+	if err != nil {
+		return contract.Agent{}, err
+	}
+	defer release()
+	apply := func(lifecycleCtx context.Context) error {
 		resourceUpdate := change.skills || change.skillStates || change.mcpServers || (previous.AgentProfile.EnvRestartRequired && options.reconcileResources)
 		if resourceUpdate && isHostRuntimeKind(previous.RuntimeKind) {
 			lifecycleCtx = context.WithValue(lifecycleCtx, deferResourceRestartKey{}, true)
@@ -621,8 +651,8 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 			return err
 		}
 		return nil
-	})
-	if err != nil {
+	}
+	if err := apply(lifecycleCtx); err != nil {
 		return contract.Agent{}, err
 	}
 	return f.convert(updated)

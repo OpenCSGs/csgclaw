@@ -17,7 +17,7 @@ import {
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import { SkillSourceDetails } from "./SkillSourceDetails";
-import { skillDirectory, skillVersionLabel } from "@/models/skillLibrary";
+import { skillDirectory, skillLibraryVersion, skillVersionLabel } from "@/models/skillLibrary";
 import { isReadonlySkill } from "@/models/skillhub";
 import { SkillDetailFiles } from "@/components/business/SkillDetailFiles";
 import styles from "./SkillDetailDialog.module.css";
@@ -66,6 +66,7 @@ export function SkillDetailDialog({
   const hub = controller.hubViewProps?.hub;
   const skill = target?.skill ?? null;
   const variant = target?.variant ?? "installed";
+  const versionLabel = skill ? skillVersionLabel(skillLibraryVersion(skill)) : "";
   const [confirmOpen, setConfirmOpen] = useState(false);
   // Keep deletion errors local; hub errors depend on the selected resource type.
   const [deleteError, setDeleteError] = useState("");
@@ -110,7 +111,7 @@ export function SkillDetailDialog({
                         ? t("iaSkillsActiveVersion", {
                             version: skillVersionLabel(skill.discovery.version) || t("iaSkillsUnversioned"),
                           })
-                        : originLabel(skill, t)}
+                        : originLabel(skill, t) + (variant === "installed" && versionLabel ? ` · ${versionLabel}` : "")}
                     </span>
                   </div>
                   <SkillDescription key={skill.name} text={skill.description || skill.name} t={t} />

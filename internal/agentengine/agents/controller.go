@@ -1731,7 +1731,11 @@ func (s *Controller) Stop(ctx context.Context, id string) (Agent, error) {
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
 	}
-	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	ctx, release, err := s.LifecycleCoordinator().MutationInterrupt(ctx, canonicalAgentID(id), func() {
+		if s.interruptAgent != nil {
+			s.interruptAgent(canonicalAgentID(id))
+		}
+	})
 	if err != nil {
 		return Agent{}, err
 	}
