@@ -681,21 +681,35 @@ function StartTaskForm({
                         if (event.target === editorRef.current) event.preventDefault();
                       }}
                     >
-                      {promptMentions.candidates.length ? (
-                        <MentionPicker
-                          groupPeopleAndFiles
-                          showRole={false}
-                          className={`${styles.mentions} ${styles.peopleAndFiles}`}
-                          users={promptMentions.candidates}
-                          activeIndex={promptMentions.activeIndex}
-                          onSelect={promptMentions.choose}
-                          t={t}
-                        />
-                      ) : promptMentions.directoryStatus ? (
-                        <div className={styles.mentionStatus} role="status">
-                          <div>{promptMentions.directoryStatus.path}/</div>
-                          <div>{t(promptMentions.directoryStatus.message)}</div>
-                        </div>
+                      {promptMentions.candidates.length || promptMentions.directoryStatus ? (
+                        <>
+                          {promptMentions.candidates.length ? (
+                            <MentionPicker
+                              groupPeopleAndFiles
+                              showRole={false}
+                              className={`${styles.mentions} ${styles.peopleAndFiles}`}
+                              users={promptMentions.candidates}
+                              activeIndex={promptMentions.activeIndex}
+                              onSelect={promptMentions.choose}
+                              t={t}
+                            />
+                          ) : null}
+                          {promptMentions.directoryStatus ? (
+                            <div className={styles.mentionStatus}>
+                              <div role="status">
+                                {promptMentions.directoryStatus.path ? (
+                                  <div>{promptMentions.directoryStatus.path}/</div>
+                                ) : null}
+                                {t(promptMentions.directoryStatus.message)}
+                              </div>
+                              {promptMentions.directoryStatus.retry ? (
+                                <Button size="sm" variant="tertiaryGray" onClick={promptMentions.directoryStatus.retry}>
+                                  {t("retry")}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </>
                       ) : (
                         <SlashPicker
                           className={styles.mentions}

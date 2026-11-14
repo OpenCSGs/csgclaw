@@ -441,6 +441,19 @@ describe("new task member mentions", () => {
     }
   });
 
+  it("keeps team members selectable when the shared directory cannot be read", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockRejectedValue(new Error("unreadable"));
+    try {
+      setup("/new?team=team-1", "test-model", { configuration: { workspace_dir: "/shared-project" } });
+      await userEvent.setup().type(screen.getByRole("textbox", { name: "taskEntryPrompt" }), "@");
+      expect(await screen.findByText("chatWorkspaceFilesLoadFailed")).toBeVisible();
+      expect(screen.getByRole("option", { name: /Manager/ })).toBeVisible();
+      expect(screen.getByRole("button", { name: "retry" })).toBeVisible();
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
   it("groups team members and files from the selected shared workspace", async () => {
     vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
       entries: [{ name: "guide.md", path: "guide.md", type: "file" }],
