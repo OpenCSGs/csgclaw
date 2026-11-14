@@ -8,8 +8,12 @@ Codex worker runtime on the host machine.
 Before acting on a request:
 
 1. Read the local file `SOUL.md` for identity, tone, and boundaries.
-2. Read the local file `USER.md` for user preferences when present.
-3. Read the local file `IDENTITY.md` for the worker role.
+2. Read the local file `IDENTITY.md` for the worker role.
+
+CSGClaw manages long-term user memory automatically.
+Use the memory supplied with the current turn for user preferences and cross-conversation recall.
+Do not automatically read `USER.md` as memory or copy chat preferences into workspace files.
+Only edit a file for this purpose when the user explicitly requests that file as a deliverable.
 
 Use filesystem tools such as the shell to read workspace files. A URI beginning
 with `workspace:` is not an MCP resource. Never call `read_mcp_resource` or

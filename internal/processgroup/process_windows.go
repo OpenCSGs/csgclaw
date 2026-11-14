@@ -127,6 +127,12 @@ func Stop(pid int, force bool) error {
 	defer jobs.Unlock()
 	job, ok := jobs.handles[pid]
 	if !ok {
+		// The exit watcher and an explicit stop both reclaim the same tree.
+		// Avoid starting taskkill after the owned process has already exited;
+		// its startup can otherwise outlast the runtime's cleanup deadline.
+		if running, err := processAlive(pid); err == nil && !running {
+			return nil
+		}
 		err := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").Run()
 		if err != nil {
 			// An exited process can still be opened while another caller owns

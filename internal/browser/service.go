@@ -81,7 +81,7 @@ type Service struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	browser     *rod.Browser
-	launcher    *launcher.Launcher
+	stopBrowser func()
 	egress      *egressProxy
 	policy      *egressPolicy
 	sessions    map[string]*session
@@ -114,10 +114,9 @@ func (s *Service) start(ctx context.Context) (*rod.Browser, error) {
 		}
 		// A crashed Chromium cannot preserve its incognito sessions. Drop their
 		// stale inventory and allow the next browser_open to recover.
-		s.launcher.Kill()
-		s.launcher.Cleanup()
+		s.stopBrowser()
 		s.egress.Close()
-		s.browser, s.launcher = nil, nil
+		s.browser, s.stopBrowser = nil, nil
 		s.mu.Lock()
 		clear(s.sessions)
 		s.mu.Unlock()
@@ -136,21 +135,18 @@ func (s *Service) start(ctx context.Context) (*rod.Browser, error) {
 		return nil, fmt.Errorf("start browser egress proxy: %w", err)
 	}
 	l := launcher.New().Bin(bin).Headless(true).Proxy(proxy.URL()).Set("disable-back-forward-cache").Set("proxy-bypass-list", "<-loopback>").Set("disable-quic").Set("force-webrtc-ip-handling-policy", "disable_non_proxied_udp")
-	control, err := l.Context(ctx).Launch()
+	control, stopBrowser, err := launchChromium(ctx, l)
 	if err != nil {
-		l.Kill()
-		l.Cleanup()
 		proxy.Close()
 		return nil, fmt.Errorf("start Chromium: %w", err)
 	}
 	b := rod.New().ControlURL(control).Context(s.ctx).NoDefaultDevice()
 	if err = b.Connect(); err != nil {
-		l.Kill()
-		l.Cleanup()
+		stopBrowser()
 		proxy.Close()
 		return nil, fmt.Errorf("connect Chromium: %w", err)
 	}
-	s.launcher, s.browser, s.egress = l, b, proxy
+	s.stopBrowser, s.browser, s.egress = stopBrowser, b, proxy
 	return b, nil
 }
 
@@ -668,9 +664,8 @@ func (s *Service) Close() {
 	s.cancel()
 	s.launchMu.Lock()
 	defer s.launchMu.Unlock()
-	if s.launcher != nil {
-		s.launcher.Kill()
-		s.launcher.Cleanup()
+	if s.stopBrowser != nil {
+		s.stopBrowser()
 	}
 	s.egress.Close()
 }
