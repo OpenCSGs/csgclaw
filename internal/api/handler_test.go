@@ -6932,10 +6932,9 @@ func TestHandleIMEventsExposeRoomIDOnly(t *testing.T) {
 	srv := &Handler{imBus: bus}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
+	rec := newSSERecorder()
 
 	done := make(chan struct{})
 	go func() {
@@ -6943,7 +6942,13 @@ func TestHandleIMEventsExposeRoomIDOnly(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), ": connected\n\n")
+	})
 	bus.Publish(im.Event{
 		Type:   im.EventTypeMessageCreated,
 		RoomID: "room-1",
@@ -6954,11 +6959,13 @@ func TestHandleIMEventsExposeRoomIDOnly(t *testing.T) {
 		},
 		Sender: &im.User{ID: "u-admin", Name: "admin"},
 	})
-	time.Sleep(20 * time.Millisecond)
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), `"room_id":"room-1"`)
+	})
 	cancel()
 	<-done
 
-	body := rec.Body.String()
+	body := rec.BodyString()
 	if !strings.Contains(body, `"room_id":"room-1"`) {
 		t.Fatalf("body = %q, want room_id", body)
 	}
@@ -6972,10 +6979,9 @@ func TestHandleIMEventsExposeTeamPayload(t *testing.T) {
 	srv := &Handler{imBus: bus}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
+	rec := newSSERecorder()
 
 	done := make(chan struct{})
 	go func() {
@@ -6983,7 +6989,13 @@ func TestHandleIMEventsExposeTeamPayload(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), ": connected\n\n")
+	})
 	bus.Publish(im.Event{
 		Type:   im.EventTypeTeamCreated,
 		TeamID: "team-1",
@@ -6992,11 +7004,13 @@ func TestHandleIMEventsExposeTeamPayload(t *testing.T) {
 			Title: "Weather team",
 		},
 	})
-	time.Sleep(20 * time.Millisecond)
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), `"type":"team.created"`)
+	})
 	cancel()
 	<-done
 
-	body := rec.Body.String()
+	body := rec.BodyString()
 	if !strings.Contains(body, `"type":"team.created"`) || !strings.Contains(body, `"team_id":"team-1"`) || !strings.Contains(body, `"title":"Weather team"`) {
 		t.Fatalf("body = %q, want team.created payload", body)
 	}

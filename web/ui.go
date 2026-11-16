@@ -54,6 +54,14 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if fileExists(h.fsys, name) {
+		if name == "html-preview.html" {
+			// A real HTTP document avoids inheriting the renderer's script policy.
+			// Enforce isolation even when opened outside the application's iframe.
+			w.Header().Set("Content-Security-Policy", "sandbox allow-scripts allow-forms; frame-ancestors 'self'; object-src 'none'")
+			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+			w.Header().Set("Referrer-Policy", "no-referrer")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+		}
 		setAssetCacheHeaders(w, name)
 		h.files.ServeHTTP(w, r)
 		return
@@ -82,7 +90,7 @@ func setAssetCacheHeaders(w http.ResponseWriter, name string) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		return
 	}
-	if name == "index.html" {
+	if name == "index.html" || name == "html-preview.html" {
 		w.Header().Set("Cache-Control", "no-cache")
 	}
 }
