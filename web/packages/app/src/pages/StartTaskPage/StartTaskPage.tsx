@@ -144,6 +144,7 @@ function StartTaskForm({
   const composing = useRef(false);
   const upload = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const mentionRetryRef = useRef<HTMLButtonElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const pageRef = useRef<HTMLElement>(null);
   const panelTrigger = useRef<HTMLButtonElement>(null);
@@ -604,7 +605,8 @@ function StartTaskForm({
                       promptMentions.sync(event.currentTarget);
                       syncSlash(event.currentTarget);
                     }}
-                    onBlur={() => {
+                    onBlur={(event) => {
+                      if (event.relatedTarget === mentionRetryRef.current && mentionRetryRef.current) return;
                       promptMentions.dismiss();
                       setSlashQuery(null);
                     }}
@@ -633,8 +635,13 @@ function StartTaskForm({
                     }}
                     disabled={busy}
                     onKeyDown={(event) => {
-                      if (composing.current || isComposerKeyboardEventComposing(event) || promptMentions.keyDown(event))
+                      if (composing.current || isComposerKeyboardEventComposing(event)) return;
+                      if (event.key === "Tab" && !event.shiftKey && mentionRetryRef.current) {
+                        event.preventDefault();
+                        mentionRetryRef.current.focus();
                         return;
+                      }
+                      if (promptMentions.keyDown(event)) return;
                       if (
                         handleSlashPickerNavigation({
                           event,
@@ -703,7 +710,18 @@ function StartTaskForm({
                                 {t(promptMentions.directoryStatus.message)}
                               </div>
                               {promptMentions.directoryStatus.retry ? (
-                                <Button size="sm" variant="tertiaryGray" onClick={promptMentions.directoryStatus.retry}>
+                                <Button
+                                  ref={mentionRetryRef}
+                                  size="sm"
+                                  variant="tertiaryGray"
+                                  onBlur={(event) => {
+                                    if (event.relatedTarget !== editorRef.current) promptMentions.dismiss();
+                                  }}
+                                  onClick={() => {
+                                    editorRef.current?.focus();
+                                    promptMentions.directoryStatus?.retry?.();
+                                  }}
+                                >
                                   {t("retry")}
                                 </Button>
                               ) : null}
