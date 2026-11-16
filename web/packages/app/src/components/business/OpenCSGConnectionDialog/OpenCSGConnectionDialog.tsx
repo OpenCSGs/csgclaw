@@ -19,7 +19,7 @@ import {
   AUTH_ENVIRONMENT_PRESETS,
   authEnvironmentDraftFromPreset,
   authEnvironmentLoginReady,
-  resolveAuthEnvironmentDraft,
+  normalizeBaseURL,
 } from "@/models/authEnvironment";
 import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
@@ -32,6 +32,11 @@ const CATALOG_SITE_PREFIX = "catalog:";
 
 function customSiteDraft(url: string): AuthEnvironmentDraft {
   return { preset: "custom", opencsgBaseURL: url, csgHubBaseURL: "", aiGatewayBaseURL: "" };
+}
+
+function siteDraft(url: string): AuthEnvironmentDraft {
+  const preset = AUTH_ENVIRONMENT_PRESETS.find((item) => item.opencsgBaseURL === url);
+  return preset ? authEnvironmentDraftFromPreset(preset.id) : customSiteDraft(url);
 }
 
 type SiteCatalog = { status: "loading" | "unavailable" } | { status: "ready"; sites: AuthLoginSite[] };
@@ -71,9 +76,10 @@ export function OpenCSGConnectionDialog({
   const [saveError, setSaveError] = useState(false);
   const siteLocale = locale === "zh" ? "zh" : "en";
   const sites = catalog.status === "ready" ? catalog.sites : [];
-  const selectedSite = manual ? undefined : sites.find((site) => site.url === draft.opencsgBaseURL);
+  const draftURL = normalizeBaseURL(draft.opencsgBaseURL);
+  const selectedSite = manual ? undefined : sites.find((site) => site.url === draftURL);
   const localSites = savedSites.filter((url) => !sites.some((site) => site.url === url));
-  const selectedSavedSite = manual ? undefined : localSites.find((url) => url === draft.opencsgBaseURL);
+  const selectedSavedSite = manual ? undefined : localSites.find((url) => url === draftURL);
   const showCustomField = manual || (!selectedSite && !selectedSavedSite && catalog.status !== "loading");
   const ready = Boolean(selectedSite || selectedSavedSite || showCustomField) && authEnvironmentLoginReady(draft);
   const showCustomFieldError = showCustomField && customFieldTouched && !ready;
@@ -96,7 +102,9 @@ export function OpenCSGConnectionDialog({
     setCatalog({ status: "loading" });
     void fetchAuthLoginSites(controller.signal).then(
       (sites) => {
-        if (!controller.signal.aborted) setCatalog({ status: "ready", sites });
+        if (!controller.signal.aborted) {
+          setCatalog({ status: "ready", sites: sites.map((site) => ({ ...site, url: normalizeBaseURL(site.url) })) });
+        }
       },
       () => {
         if (!controller.signal.aborted) setCatalog({ status: "unavailable" });
@@ -116,29 +124,22 @@ export function OpenCSGConnectionDialog({
     const savedSite = localSites.find((url) => SAVED_SITE_PREFIX + url === value);
     if (savedSite) {
       setManual(false);
-      setDraft(customSiteDraft(savedSite));
+      setDraft(siteDraft(savedSite));
       return;
     }
     const site = sites.find((item) => CATALOG_SITE_PREFIX + item.id === value);
     if (!site) return;
     setManual(false);
-    const preset = AUTH_ENVIRONMENT_PRESETS.find((item) => item.opencsgBaseURL === site.url);
-    setDraft(preset ? authEnvironmentDraftFromPreset(preset.id) : customSiteDraft(site.url));
+    setDraft(siteDraft(site.url));
   }
 
   function saveCustomSite() {
     if (!ready) return;
-    const url = resolveAuthEnvironmentDraft(draft).opencsgBaseURL;
     try {
       setSavedSites(saveStoredAuthCustomSite(draft));
-      const matchingSite = sites.find((site) => site.url === url);
-      if (matchingSite) {
-        selectSite(CATALOG_SITE_PREFIX + matchingSite.id);
-      } else {
-        setDraft(customSiteDraft(url));
-        setManual(false);
-        setSaveError(false);
-      }
+      setDraft(siteDraft(draftURL));
+      setManual(false);
+      setSaveError(false);
       document.getElementById(siteFieldID)?.focus();
     } catch (_) {
       setSaveError(true);

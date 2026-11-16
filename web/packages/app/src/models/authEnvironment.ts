@@ -215,7 +215,7 @@ function normalizePresetID(source: unknown): AuthEnvironmentPresetID {
   return DEFAULT_PRESET.id;
 }
 
-function normalizeBaseURL(source: unknown): string {
+export function normalizeBaseURL(source: unknown): string {
   const raw = typeof source === "string" ? source.trim().replace(/\/+$/, "") : "";
   if (!raw) {
     return "";

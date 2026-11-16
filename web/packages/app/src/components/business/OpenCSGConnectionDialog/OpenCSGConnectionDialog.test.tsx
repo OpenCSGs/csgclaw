@@ -2,7 +2,11 @@ import { fetchAuthLoginSites } from "@/api/auth";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@/components/ui";
-import { defaultAuthEnvironmentDraft } from "@/models/authEnvironment";
+import {
+  authEnvironmentDraftFromPreset,
+  authEnvironmentLoginPayload,
+  defaultAuthEnvironmentDraft,
+} from "@/models/authEnvironment";
 import type { TranslateFn } from "@/models/conversations";
 import { OpenCSGConnectionDialog } from "./OpenCSGConnectionDialog";
 
@@ -127,6 +131,58 @@ describe("OpenCSGConnectionDialog", () => {
       csgHubBaseURL: "",
       aiGatewayBaseURL: "",
     });
+  });
+
+  it("preserves preset endpoints offline and merges an equivalent catalog URL on retry", async () => {
+    const user = userEvent.setup();
+    const onConnect = vi.fn();
+    const renderDialog = (environment = defaultAuthEnvironmentDraft()) =>
+      render(
+        <TooltipProvider delayDuration={0}>
+          <OpenCSGConnectionDialog
+            busy={false}
+            environment={environment}
+            locale="en"
+            open
+            t={t}
+            onConnect={onConnect}
+            onOpenChange={vi.fn()}
+          />
+        </TooltipProvider>,
+      );
+    const expectProductionLogin = async () => {
+      onConnect.mockClear();
+      await user.click(screen.getByRole("button", { name: "csghubConnectContinue" }));
+      expect(onConnect).toHaveBeenCalledTimes(1);
+      expect(authEnvironmentLoginPayload(onConnect.mock.calls[0][0])).toEqual({
+        opencsg_base_url: "https://opencsg.com",
+        csghub_base_url: "https://hub.opencsg.com",
+        ai_gateway_base_url: "https://ai.space.opencsg.com/v1",
+      });
+    };
+
+    vi.mocked(fetchAuthLoginSites).mockRejectedValueOnce(new Error("unavailable"));
+    const first = renderDialog();
+    await screen.findByText("csghubLoginSitesUnavailable");
+    await user.click(screen.getByRole("button", { name: "csghubSaveCustomSite" }));
+    await expectProductionLogin();
+    first.unmount();
+
+    vi.mocked(fetchAuthLoginSites)
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockResolvedValueOnce([{ ...sites[0], url: "https://OPENCSG.com/" }]);
+    renderDialog(authEnvironmentDraftFromPreset("east"));
+    await screen.findByText("csghubLoginSitesUnavailable");
+    await chooseSite(user, /^https:\/\/opencsg\.com$/);
+    await expectProductionLogin();
+
+    await user.click(screen.getByRole("button", { name: "retry" }));
+    await screen.findByText("OpenCSG Main Site");
+    const picker = screen.getByRole("combobox", { name: "csghubLoginEnvironment" });
+    picker.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("option", { name: /OpenCSG Main Site/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^https:\/\/opencsg\.com$/ })).not.toBeInTheDocument();
   });
 
   it("uses the same site selection flow when authentication is required", async () => {
