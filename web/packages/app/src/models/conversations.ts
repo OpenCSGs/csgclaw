@@ -1296,11 +1296,19 @@ export function appendMessageToData<T extends IMData | null | undefined>(
     }
     const existingIndex = room.messages.findIndex((item) => item.id === message.id);
     if (existingIndex >= 0) {
+      const existing = room.messages[existingIndex];
+      const merged = newerProgressMessage(existing, message);
+      const previousTime = Date.parse(existing.created_at || "");
+      const nextTime = Date.parse(merged.created_at || "");
+      if (Number.isFinite(previousTime) && Number.isFinite(nextTime) && nextTime > previousTime) {
+        return {
+          ...room,
+          messages: [...room.messages.filter((_, index) => index !== existingIndex), merged],
+        };
+      }
       return {
         ...room,
-        messages: room.messages.map((item, index) =>
-          index === existingIndex ? newerProgressMessage(item, message) : item,
-        ),
+        messages: room.messages.map((item, index) => (index === existingIndex ? merged : item)),
       };
     }
     return { ...room, messages: [...room.messages, message] };

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { OpenCSGSwitchDialog } from "@/components/business/OpenCSGConnectionDialog";
+import { OpenCSGConnectionDialog, OpenCSGSwitchDialog } from "@/components/business/OpenCSGConnectionDialog";
 import { Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
@@ -7,6 +7,7 @@ import {
   authEnvironmentDisplayLabel,
   authEnvironmentDraftFromStatus,
   defaultAuthEnvironmentDraft,
+  type AuthEnvironmentDraft,
 } from "@/models/authEnvironment";
 import { SettingsRow } from "./SettingsRow";
 import { useAuthLoginDialog } from "./useAuthLoginDialog";
@@ -17,6 +18,7 @@ export function AccountSection() {
   const controller = useWorkspaceControllerContext();
   const sidebar = controller.sidebarProps;
   const [switchOpen, setSwitchOpen] = useState(false);
+  const [switchTarget, setSwitchTarget] = useState<AuthEnvironmentDraft | null>(null);
   const { loginDialog, openLoginDialog } = useAuthLoginDialog();
 
   if (!sidebar) {
@@ -35,9 +37,9 @@ export function AccountSection() {
 
   // Clear the current identity before authenticating against another site.
   async function handleSwitchEnvironment() {
-    await sidebar?.onLogout();
-    setSwitchOpen(false);
-    openLoginDialog(activeAuthEnvironmentDraft);
+    if (!sidebar || !switchTarget || !(await sidebar.onLogout())) return;
+    setSwitchTarget(null);
+    void sidebar.onLogin(switchTarget);
   }
 
   return (
@@ -111,14 +113,31 @@ export function AccountSection() {
       </SettingsRow>
 
       {loginDialog}
+      <OpenCSGConnectionDialog
+        busy={sidebar.authBusy}
+        environment={activeAuthEnvironmentDraft}
+        locale={sidebar.locale}
+        open={switchOpen}
+        t={t}
+        variant="switch-site"
+        onConnect={(target) => {
+          setSwitchOpen(false);
+          setSwitchTarget(target);
+        }}
+        onOpenChange={setSwitchOpen}
+      />
       <OpenCSGSwitchDialog
         accountName={accountName}
         busy={sidebar.authBusy}
         environmentLabel={authEnvironmentLabel}
-        open={switchOpen}
+        targetLabel={switchTarget ? authEnvironmentDisplayLabel(switchTarget, t("csghubEnvCustom")) : ""}
+        error={sidebar.authError}
+        open={Boolean(switchTarget)}
         t={t}
         onConfirm={() => void handleSwitchEnvironment()}
-        onOpenChange={setSwitchOpen}
+        onOpenChange={(open) => {
+          if (!open) setSwitchTarget(null);
+        }}
       />
     </>
   );

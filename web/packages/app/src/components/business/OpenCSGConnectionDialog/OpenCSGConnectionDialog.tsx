@@ -1,4 +1,4 @@
-import { fetchAuthLoginSites } from "@/api/auth";
+import { checkAuthSite, fetchAuthLoginSites } from "@/api/auth";
 import type { AuthLoginSite } from "@/api/auth";
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -23,7 +23,8 @@ import {
 } from "@/models/authEnvironment";
 import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
-import { readStoredAuthCustomSites, saveStoredAuthCustomSite } from "@/shared/storage/authEnvironment";
+import { readStoredAuthCustomSites, writeStoredAuthCustomSites } from "@/shared/storage/authEnvironment";
+import type { SavedAuthSite } from "@/shared/storage/authEnvironment";
 import styles from "./OpenCSGConnectionDialog.module.css";
 
 const CUSTOM_SITE = "custom";
@@ -32,6 +33,12 @@ const CATALOG_SITE_PREFIX = "catalog:";
 
 function customSiteDraft(url: string): AuthEnvironmentDraft {
   return { preset: "custom", opencsgBaseURL: url, csgHubBaseURL: "", aiGatewayBaseURL: "" };
+}
+
+function normalizeSiteInput(raw: string): string {
+  const address = raw.trim();
+  const bareHost = /^(?:localhost|\[[a-f0-9:]+\]|[^\s/:@]+\.[^\s/:@]+)(?::\d+)?(?:[/?#]|$)/i;
+  return normalizeBaseURL(bareHost.test(address) ? `https://${address}` : address);
 }
 
 function siteDraft(url: string): AuthEnvironmentDraft {
@@ -48,7 +55,7 @@ export type OpenCSGConnectionDialogProps = {
   locale: LocaleCode;
   open: boolean;
   t: TranslateFn;
-  variant?: "connect" | "authentication-required";
+  variant?: "connect" | "authentication-required" | "switch-site";
   onConnect: (environment: AuthEnvironmentDraft) => void;
   onOpenChange: (open: boolean) => void;
 };
@@ -74,15 +81,27 @@ export function OpenCSGConnectionDialog({
   const [catalog, setCatalog] = useState<SiteCatalog>({ status: "loading" });
   const [savedSites, setSavedSites] = useState(readStoredAuthCustomSites);
   const [saveError, setSaveError] = useState(false);
+  const [siteName, setSiteName] = useState("");
+  const [editingURL, setEditingURL] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [probe, setProbe] = useState<"idle" | "testing" | "failed" | number>("idle");
+  const probeRequest = useRef<AbortController | null>(null);
   const siteLocale = locale === "zh" ? "zh" : "en";
   const sites = catalog.status === "ready" ? catalog.sites : [];
-  const draftURL = normalizeBaseURL(draft.opencsgBaseURL);
+  const draftURL = manual ? normalizeSiteInput(draft.opencsgBaseURL) : normalizeBaseURL(draft.opencsgBaseURL);
   const selectedSite = manual ? undefined : sites.find((site) => site.url === draftURL);
-  const localSites = savedSites.filter((url) => !sites.some((site) => site.url === url));
-  const selectedSavedSite = manual ? undefined : localSites.find((url) => url === draftURL);
+  const localSites = savedSites.filter((saved) => !sites.some((site) => site.url === saved.url));
+  const selectedSavedSite = manual ? undefined : savedSites.find((saved) => saved.url === draftURL);
   const showCustomField = manual || (!selectedSite && !selectedSavedSite && catalog.status !== "loading");
-  const ready = Boolean(selectedSite || selectedSavedSite || showCustomField) && authEnvironmentLoginReady(draft);
+  const ready =
+    Boolean(selectedSite || selectedSavedSite || showCustomField) &&
+    authEnvironmentLoginReady(customSiteDraft(draftURL));
   const showCustomFieldError = showCustomField && customFieldTouched && !ready;
+  const duplicateEdit = Boolean(
+    editingURL && editingURL !== draftURL && savedSites.some((saved) => saved.url === draftURL),
+  );
+  const switching = variant === "switch-site";
+  const sameSite = switching && draftURL === normalizeBaseURL(environment.opencsgBaseURL);
   const authenticationRequired = variant === "authentication-required";
 
   useEffect(() => {
@@ -91,6 +110,10 @@ export function OpenCSGConnectionDialog({
       setSavedSites(readStoredAuthCustomSites());
       setSaveError(false);
       setManual(false);
+      setSiteName("");
+      setEditingURL("");
+      setConfirmDelete(false);
+      setProbe("idle");
       setCustomFieldTouched(false);
     }
     previousOpenRef.current = open;
@@ -113,7 +136,33 @@ export function OpenCSGConnectionDialog({
     return () => controller.abort();
   }, [attempt, open]);
 
+  useEffect(() => {
+    return () => probeRequest.current?.abort();
+  }, [open]);
+
+  function resetProbe() {
+    probeRequest.current?.abort();
+    setProbe("idle");
+  }
+
+  async function testSite() {
+    resetProbe();
+    const controller = new AbortController();
+    probeRequest.current = controller;
+    setProbe("testing");
+    try {
+      const result = await checkAuthSite(draftURL, controller.signal);
+      if (!controller.signal.aborted) setProbe(result.latency_ms);
+    } catch (_) {
+      if (!controller.signal.aborted) setProbe("failed");
+    }
+  }
+
   function selectSite(value: string) {
+    resetProbe();
+    setSiteName("");
+    setEditingURL("");
+    setConfirmDelete(false);
     setCustomFieldTouched(false);
     setSaveError(false);
     if (value === CUSTOM_SITE) {
@@ -121,10 +170,10 @@ export function OpenCSGConnectionDialog({
       setDraft(customSiteDraft(selectedSite || selectedSavedSite ? "" : draft.opencsgBaseURL));
       return;
     }
-    const savedSite = localSites.find((url) => SAVED_SITE_PREFIX + url === value);
+    const savedSite = localSites.find((saved) => SAVED_SITE_PREFIX + saved.url === value);
     if (savedSite) {
       setManual(false);
-      setDraft(siteDraft(savedSite));
+      setDraft(siteDraft(savedSite.url));
       return;
     }
     const site = sites.find((item) => CATALOG_SITE_PREFIX + item.id === value);
@@ -133,17 +182,44 @@ export function OpenCSGConnectionDialog({
     setDraft(siteDraft(site.url));
   }
 
-  function saveCustomSite() {
-    if (!ready) return;
+  function persistSites(next: SavedAuthSite[]): boolean {
     try {
-      setSavedSites(saveStoredAuthCustomSite(draft));
-      setDraft(siteDraft(draftURL));
-      setManual(false);
+      writeStoredAuthCustomSites(next);
+      setSavedSites(next);
       setSaveError(false);
-      document.getElementById(siteFieldID)?.focus();
+      return true;
     } catch (_) {
       setSaveError(true);
+      return false;
     }
+  }
+
+  function saveCustomSite() {
+    if (!ready) return;
+    const current = readStoredAuthCustomSites();
+    const existing = current.find((saved) => saved.url === draftURL);
+    if (editingURL && editingURL !== draftURL && existing) {
+      setSavedSites(current);
+      return;
+    }
+    const saved = { url: draftURL, name: siteName.trim() || (editingURL ? "" : existing?.name) || "" };
+    const replacedURL = editingURL || draftURL;
+    const next = current.some((item) => item.url === replacedURL)
+      ? current.map((item) => (item.url === replacedURL ? saved : item))
+      : [...current, saved];
+    if (!persistSites(next)) return;
+    setDraft(siteDraft(draftURL));
+    setManual(false);
+    setEditingURL("");
+    document.getElementById(siteFieldID)?.focus();
+  }
+
+  function deleteSite(url: string) {
+    if (!persistSites(readStoredAuthCustomSites().filter((saved) => saved.url !== url))) return;
+    setConfirmDelete(false);
+    resetProbe();
+    setDraft(authEnvironmentDraftFromPreset("prod"));
+    document.getElementById(siteFieldID)?.focus();
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -177,7 +253,7 @@ export function OpenCSGConnectionDialog({
                 selectedSite
                   ? CATALOG_SITE_PREFIX + selectedSite.id
                   : selectedSavedSite
-                    ? SAVED_SITE_PREFIX + selectedSavedSite
+                    ? SAVED_SITE_PREFIX + selectedSavedSite.url
                     : showCustomField
                       ? CUSTOM_SITE
                       : ""
@@ -196,7 +272,12 @@ export function OpenCSGConnectionDialog({
                     </span>
                   </span>
                 ) : selectedSavedSite ? (
-                  <span className={styles.siteOption}>{selectedSavedSite}</span>
+                  <span className={styles.siteOption}>
+                    <span className={styles.siteCopy}>
+                      <span>{selectedSavedSite.name || selectedSavedSite.url}</span>
+                      {selectedSavedSite.name ? <small>{selectedSavedSite.url}</small> : null}
+                    </span>
+                  </span>
                 ) : undefined
               }
               options={[
@@ -212,10 +293,11 @@ export function OpenCSGConnectionDialog({
                   description: new URL(site.url).host,
                   separatorAfter: index === sites.length - 1,
                 })),
-                ...localSites.map((url) => ({
+                ...localSites.map(({ url, name }) => ({
                   value: SAVED_SITE_PREFIX + url,
-                  textValue: url,
-                  label: <span className={styles.siteOption}>{url}</span>,
+                  textValue: name ? `${name} ${url}` : url,
+                  label: <span className={styles.siteOption}>{name || url}</span>,
+                  description: name ? url : undefined,
                 })),
                 { value: CUSTOM_SITE, label: t("csghubEnvCustom") },
               ]}
@@ -236,6 +318,15 @@ export function OpenCSGConnectionDialog({
           {showCustomField ? (
             <div className={styles.customField}>
               <label className={styles.customField}>
+                {t("csghubSiteName")}
+                <TextInput
+                  disabled={busy}
+                  value={siteName}
+                  maxLength={40}
+                  onChange={(event) => setSiteName(event.currentTarget.value)}
+                />
+              </label>
+              <label className={styles.customField}>
                 <span>{t("csghubOpenCSGBaseURL")}</span>
                 <TextInput
                   disabled={busy}
@@ -244,6 +335,7 @@ export function OpenCSGConnectionDialog({
                   value={draft.opencsgBaseURL}
                   placeholder="https://openeast.opencsg.com"
                   onChange={(event) => {
+                    resetProbe();
                     setCustomFieldTouched(true);
                     setSaveError(false);
                     setManual(true);
@@ -257,13 +349,88 @@ export function OpenCSGConnectionDialog({
                 ) : null}
               </label>
               <div>
-                <Button variant="secondaryGray" size="sm" disabled={busy || !ready} onClick={saveCustomSite}>
+                <Button
+                  variant="secondaryGray"
+                  size="sm"
+                  disabled={busy || !ready || duplicateEdit}
+                  onClick={saveCustomSite}
+                >
                   {t("csghubSaveCustomSite")}
                 </Button>
+                {editingURL ? (
+                  <Button
+                    variant="tertiaryGray"
+                    size="sm"
+                    onClick={() => {
+                      setDraft(siteDraft(editingURL));
+                      setManual(false);
+                      setEditingURL("");
+                      setSaveError(false);
+                      resetProbe();
+                    }}
+                  >
+                    {t("cancel")}
+                  </Button>
+                ) : null}
               </div>
-              {saveError ? <InlineError>{t("csghubSaveCustomSiteFailed")}</InlineError> : null}
+              {duplicateEdit ? <InlineError>{t("csghubSiteDuplicate")}</InlineError> : null}
             </div>
           ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={busy || !ready}
+              loading={probe === "testing"}
+              onClick={() => void testSite()}
+            >
+              {t("csghubSiteTest")}
+            </Button>
+            {selectedSavedSite && !showCustomField ? (
+              <>
+                <Button
+                  variant="secondaryGray"
+                  size="sm"
+                  disabled={busy || confirmDelete}
+                  onClick={() => {
+                    setSiteName(selectedSavedSite.name);
+                    setEditingURL(selectedSavedSite.url);
+                    setManual(true);
+                  }}
+                >
+                  {t("csghubSiteEdit")}
+                </Button>
+                {confirmDelete ? (
+                  <>
+                    <Button
+                      variant="secondaryGray"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => deleteSite(selectedSavedSite.url)}
+                    >
+                      {t("csghubSiteConfirmDelete")}
+                    </Button>
+                    <Button variant="tertiaryGray" size="sm" disabled={busy} onClick={() => setConfirmDelete(false)}>
+                      {t("cancel")}
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="secondaryGray" size="sm" disabled={busy} onClick={() => setConfirmDelete(true)}>
+                    {t("delete")}
+                  </Button>
+                )}
+              </>
+            ) : null}
+          </div>
+          {sameSite ? <p className={styles.returnHint}>{t("csghubSiteAlreadyConnected")}</p> : null}
+          {typeof probe === "number" ? (
+            <p role="status" className={styles.returnHint}>
+              {t("csghubSiteTestPassed", { latency: String(probe) })}
+            </p>
+          ) : null}
+          {probe === "failed" ? <InlineError>{t("csghubSiteTestFailed")}</InlineError> : null}
+          {saveError ? <InlineError>{t("csghubSaveCustomSiteFailed")}</InlineError> : null}
 
           <p className={styles.returnHint}>
             {t(authenticationRequired ? "openCSGLoginRequiredHint" : "csghubConnectReturnHint")}
@@ -274,8 +441,16 @@ export function OpenCSGConnectionDialog({
           <Button variant="secondaryGray" size="md" disabled={busy} onClick={() => handleOpenChange(false)}>
             {t("cancel")}
           </Button>
-          <Button variant="primary" size="md" loading={busy} disabled={!ready} onClick={() => onConnect(draft)}>
-            {t(authenticationRequired ? "csghubSignIn" : "csghubConnectContinue")}
+          <Button
+            variant="primary"
+            size="md"
+            loading={busy}
+            disabled={!ready || sameSite || Boolean(editingURL)}
+            onClick={() => onConnect(manual ? siteDraft(draftURL) : draft)}
+          >
+            {t(
+              switching ? "csghubSwitchEnvironment" : authenticationRequired ? "csghubSignIn" : "csghubConnectContinue",
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -287,6 +462,8 @@ type OpenCSGSwitchDialogProps = {
   accountName: string;
   busy: boolean;
   environmentLabel: string;
+  targetLabel: string;
+  error?: string;
   open: boolean;
   t: TranslateFn;
   onConfirm: () => void;
@@ -297,25 +474,37 @@ export function OpenCSGSwitchDialog({
   accountName,
   busy,
   environmentLabel,
+  targetLabel,
+  error,
   open,
   t,
   onConfirm,
   onOpenChange,
 }: OpenCSGSwitchDialogProps) {
   return (
-    <DialogRoot open={open} onOpenChange={onOpenChange}>
+    <DialogRoot
+      open={open}
+      onOpenChange={(next) => {
+        if (!busy) onOpenChange(next);
+      }}
+    >
       <DialogContent className={styles.dialog}>
         <DialogHeader className={styles.header}>
           <div className={styles.copy}>
             <DialogTitle>{t("csghubSwitchConfirmTitle")}</DialogTitle>
             <DialogDescription>
-              {t("csghubSwitchConfirmDescription", { environment: environmentLabel, user: accountName })}
+              {t("csghubSwitchConfirmDescription", {
+                environment: environmentLabel,
+                user: accountName,
+                target: targetLabel,
+              })}
             </DialogDescription>
           </div>
-          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly disabled={busy} />
         </DialogHeader>
         <DialogBody>
           <p className={styles.switchNote}>{t("csghubSwitchConfirmNote")}</p>
+          {error ? <InlineError>{error}</InlineError> : null}
         </DialogBody>
         <DialogFooter className={styles.actions}>
           <Button variant="secondaryGray" size="md" disabled={busy} onClick={() => onOpenChange(false)}>

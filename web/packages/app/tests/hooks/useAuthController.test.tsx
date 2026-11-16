@@ -109,7 +109,7 @@ describe("useAuthController", () => {
     const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.status.authenticated).toBe(true));
 
-    let logoutPromise!: Promise<void>;
+    let logoutPromise!: Promise<boolean>;
     act(() => {
       logoutPromise = result.current.logout();
     });
@@ -119,7 +119,7 @@ describe("useAuthController", () => {
 
     await act(async () => {
       resolveLogout({ authenticated: false });
-      await logoutPromise;
+      expect(await logoutPromise).toBe(true);
     });
 
     expect(result.current.loggingOut).toBe(false);

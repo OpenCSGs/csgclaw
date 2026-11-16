@@ -88,7 +88,11 @@ type ThreadListOptions struct {
 }
 
 type DeliverMessageRequest struct {
-	Transient         bool                      `json:"-"`
+	Transient bool `json:"-"`
+	// RefreshCreatedAt moves a replacement message to the current point in the
+	// transcript. It is used when a transient progress message becomes the
+	// turn's final response after user interaction.
+	RefreshCreatedAt  bool                      `json:"-"`
 	RoomID            string                    `json:"room_id"`
 	SenderID          string                    `json:"sender_id,omitempty"`
 	MentionID         string                    `json:"mention_id,omitempty"`
@@ -2377,10 +2381,16 @@ func (s *Service) DeliverMessageContext(ctx context.Context, req DeliverMessageR
 	}
 	message.Attachments = attachments
 	if replaceIndex >= 0 {
-		message.CreatedAt = room.Messages[replaceIndex].CreatedAt
-		message.RoomSequence = room.Messages[replaceIndex].RoomSequence
+		previous := room.Messages[replaceIndex]
+		message.RoomSequence = previous.RoomSequence
 		assignAutonomousSequence(room, &message)
-		room.Messages[replaceIndex] = message
+		if req.RefreshCreatedAt {
+			room.Messages = append(room.Messages[:replaceIndex], room.Messages[replaceIndex+1:]...)
+			room.Messages = append(room.Messages, message)
+		} else {
+			message.CreatedAt = previous.CreatedAt
+			room.Messages[replaceIndex] = message
+		}
 		s.rebuildThreadStatesLocked(room)
 		if err := s.saveMessageProjectionLocked(req.Transient, operation); err != nil {
 			return Message{}, err

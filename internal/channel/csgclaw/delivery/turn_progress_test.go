@@ -210,6 +210,32 @@ func TestProgressStreamsThroughIMAndCommitsOneFinal(t *testing.T) {
 		t.Fatal("late update overwrote final")
 	}
 }
+
+func TestProgressFinalReplyFollowsMessagesAddedDuringTurn(t *testing.T) {
+	renderer, service, turn := progressFixture(t)
+	if err := renderer.Emit(t.Context(), turn, agentengine.TurnEvent{Sequence: 1, Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: "Working."}); err != nil {
+		t.Fatal(err)
+	}
+	question, err := service.CreateMessage(im.CreateMessageRequest{RoomID: turn.RoomID, SenderID: "user", Content: "确认生成"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Generated."}); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := service.ListMessages(turn.RoomID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("message count = %d, want 2", len(messages))
+	}
+	final := messages[1]
+	if !final.CreatedAt.After(question.CreatedAt) {
+		t.Fatalf("final timestamp = %s, want after confirmation at %s", final.CreatedAt, question.CreatedAt)
+	}
+}
+
 func TestProgressUnphasedSegmentationAndCancellation(t *testing.T) {
 	for _, status := range []agentengine.TurnStatus{agentengine.TurnSucceeded, agentengine.TurnCanceled, agentengine.TurnFailed} {
 		t.Run(string(status), func(t *testing.T) {

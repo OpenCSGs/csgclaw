@@ -1,4 +1,4 @@
-import { fetchAuthLoginSites } from "@/api/auth";
+import { checkAuthSite, fetchAuthLoginSites } from "@/api/auth";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@/components/ui";
@@ -8,11 +8,12 @@ import {
   defaultAuthEnvironmentDraft,
 } from "@/models/authEnvironment";
 import type { TranslateFn } from "@/models/conversations";
+import { AUTH_CUSTOM_SITES_STORAGE_KEY } from "@/shared/storage/keys";
 import { OpenCSGConnectionDialog } from "./OpenCSGConnectionDialog";
 
 const t: TranslateFn = (key) => key;
 
-vi.mock("@/api/auth", () => ({ fetchAuthLoginSites: vi.fn() }));
+vi.mock("@/api/auth", () => ({ checkAuthSite: vi.fn(), fetchAuthLoginSites: vi.fn() }));
 
 const sites = [
   { id: "main", url: "https://opencsg.com", title: "OpenCSG Main Site" },
@@ -183,6 +184,71 @@ describe("OpenCSGConnectionDialog", () => {
     await user.keyboard("{Enter}");
     expect(screen.getByRole("option", { name: /OpenCSG Main Site/ })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /^https:\/\/opencsg\.com$/ })).not.toBeInTheDocument();
+  });
+
+  it("edits and deletes a legacy saved URL and tests the edited site's login endpoint", async () => {
+    window.localStorage.setItem(AUTH_CUSTOM_SITES_STORAGE_KEY, JSON.stringify(["https://legacy.example.com"]));
+    vi.mocked(checkAuthSite).mockResolvedValueOnce({ latency_ms: 31 });
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <OpenCSGConnectionDialog
+          busy={false}
+          environment={defaultAuthEnvironmentDraft()}
+          locale="en"
+          open
+          t={t}
+          onConnect={vi.fn()}
+          onOpenChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    await screen.findByText("OpenCSG Main Site");
+    await chooseSite(user, /legacy\.example\.com/);
+    await user.click(screen.getByRole("button", { name: "csghubSiteEdit" }));
+    await user.type(screen.getByRole("textbox", { name: "csghubSiteName" }), "Partner");
+    const address = screen.getByRole("textbox", { name: "csghubOpenCSGBaseURL" });
+    await user.clear(address);
+    await user.type(address, "partner.example.com");
+    await user.click(screen.getByRole("button", { name: "csghubSaveCustomSite" }));
+    expect(screen.getByRole("combobox")).toHaveTextContent("Partner");
+    expect(JSON.parse(window.localStorage.getItem(AUTH_CUSTOM_SITES_STORAGE_KEY) || "[]")).toEqual([
+      { name: "Partner", url: "https://partner.example.com" },
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "csghubSiteTest" }));
+    expect(checkAuthSite).toHaveBeenCalledWith("https://partner.example.com", expect.any(AbortSignal));
+    expect(await screen.findByText("csghubSiteTestPassed")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "delete" }));
+    await user.click(screen.getByRole("button", { name: "csghubSiteConfirmDelete" }));
+    expect(screen.getByRole("combobox")).toHaveTextContent("OpenCSG Main Site");
+    expect(window.localStorage.getItem(AUTH_CUSTOM_SITES_STORAGE_KEY)).toBe("[]");
+  });
+
+  it("requires choosing a different site before continuing a switch", async () => {
+    const user = userEvent.setup();
+    const onConnect = vi.fn();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <OpenCSGConnectionDialog
+          busy={false}
+          environment={defaultAuthEnvironmentDraft()}
+          locale="en"
+          open
+          t={t}
+          variant="switch-site"
+          onConnect={onConnect}
+          onOpenChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    await screen.findByText("OpenCSG Main Site");
+    const proceed = screen.getByRole("button", { name: "csghubSwitchEnvironment" });
+    expect(proceed).toBeDisabled();
+    await chooseSite(user, /Open East Community/);
+    await user.click(proceed);
+    expect(onConnect).toHaveBeenCalledWith(authEnvironmentDraftFromPreset("east"));
   });
 
   it("uses the same site selection flow when authentication is required", async () => {

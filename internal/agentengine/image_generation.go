@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -15,13 +16,34 @@ import (
 
 type imageGenerator func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error)
 
-func (c *conversations) imageHandler(turn *activeTurn, sink EventSink, ref *modelprovider.ImageGenerationConfig, input []InputPart) contract.ImageGenerationHandler {
+func (c *conversations) imageHandler(turn *activeTurn, sink EventSink, ref *modelprovider.ImageGenerationConfig, input []InputPart) (contract.ImageGenerationHandler, func(bool) error) {
 	var mu sync.Mutex
 	tasks := map[string]error{}
-	return func(ctx context.Context, id, prompt string, indices []int, options modelprovider.ImageGenerationOptions) error {
+	var stopErr error
+	editFailed := false
+	check := func(edit bool) error {
+		if stopErr != nil {
+			return stopErr
+		}
+		if editFailed && !edit {
+			return fmt.Errorf("image_edit_fallback_blocked: editing the original failed; ask the user before generating a replacement in a new turn")
+		}
+		if c.engine.imageGenerationModes != nil {
+			modes := c.engine.imageGenerationModes(ref)
+			if err := modelprovider.ValidateImageGenerationMode(modes, edit); err != nil {
+				stopErr = fmt.Errorf("image_retry_blocked: %w End the image request for this turn.", err)
+				return stopErr
+			}
+		}
+		return nil
+	}
+	handle := func(ctx context.Context, id, prompt string, indices []int, options modelprovider.ImageGenerationOptions) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if err, ok := tasks[id]; ok {
+			return err
+		}
+		if err := check(len(indices) > 0); err != nil {
 			return err
 		}
 		task := contract.ImageGenerationTask{ID: id, Options: options, Prompt: strings.TrimSpace(prompt), Model: modelprovider.CloneImageGeneration(ref)}
@@ -30,8 +52,19 @@ func (c *conversations) imageHandler(turn *activeTurn, sink EventSink, ref *mode
 			task.AttachmentIDs = ids
 			err = c.generateImage(ctx, turn, sink, task, references...)
 		}
+		editFailed = editFailed || (len(indices) > 0 && err != nil)
+		var imageErr *modelprovider.ImageGenerationError
+		if errors.As(err, &imageErr) && (imageErr.HTTPStatus == http.StatusBadRequest || imageErr.Code == "image_edit_unsupported" || imageErr.Code == "image_generation_unsupported") {
+			stopErr = fmt.Errorf("image_retry_blocked: %w. Report this error and end the image request for this turn", err)
+			err = stopErr
+		}
 		tasks[id] = err
 		return err
+	}
+	return handle, func(edit bool) error {
+		mu.Lock()
+		defer mu.Unlock()
+		return check(edit)
 	}
 }
 

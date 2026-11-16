@@ -344,6 +344,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	result := conversation.Run(ctx, agentengine.TurnRequest{
 		MemorySource:      memorySource,
 		RoomConfiguration: session,
+		Locale:            turn.Locale,
 		ID:                turn.TurnID,
 		ConversationKey:   turn.ConversationKey,
 		Input:             input,

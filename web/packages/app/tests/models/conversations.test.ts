@@ -511,6 +511,28 @@ describe("conversation model helpers", () => {
     expect(next.rooms[0].messages.map((item) => item.id)).toEqual(["general-message"]);
   });
 
+  it("moves a finalized progress message after confirmation received during the turn", () => {
+    const current = {
+      rooms: [
+        room("general", "2026-05-15T00:00:00Z", {
+          messages: [
+            message("turn-final", "2026-05-15T00:00:00Z", "agent"),
+            message("confirmation", "2026-05-15T00:01:00Z", "user"),
+          ],
+        }),
+      ],
+      users: [],
+    };
+
+    const next = appendMessageToData(current, "general", {
+      ...message("turn-final", "2026-05-15T00:02:00Z", "agent"),
+      content: "已提交生成任务。",
+    });
+
+    expect(next.rooms[0].messages.map((item) => item.id)).toEqual(["confirmation", "turn-final"]);
+    expect(next.rooms[0].messages[1].content).toBe("已提交生成任务。");
+  });
+
   it("applies room messages cleared events as authoritative room updates", () => {
     const current = {
       rooms: [

@@ -1360,6 +1360,25 @@ describe("HubDetailPane", () => {
     expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true);
   });
 
+  it("shows progress and a disabled publishing action while the template request is pending", async () => {
+    const user = userEvent.setup();
+    const localTemplate = { ...template, id: "local.demo-template", source: { kind: "local" } };
+    const onPublishTemplate = vi.fn(() => new Promise<{ status: "success" }>(() => {}));
+    renderHubDetailPane("template", { selectedTemplate: localTemplate, onPublishTemplate });
+
+    await openTemplateDetail(user);
+    await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Publish agent template" }));
+    await user.click(dialog.getByRole("button", { name: "Publish V1 to community" }));
+
+    const progress = dialog.getByRole("status");
+    const publishing = dialog.getByRole("button", { name: "Publishing" });
+    expect(progress).toBeVisible();
+    expect(publishing).toBeDisabled();
+    expect(progress.parentElement).toContainElement(publishing);
+    expect(onPublishTemplate).toHaveBeenCalledOnce();
+  });
+
   it("does not show publishing success when publishing fails", async () => {
     const user = userEvent.setup();
     const localTemplate = {

@@ -209,3 +209,23 @@ func TestGenerateImageDownloadsURLResults(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveImageGenerationOptionsDefaultsOnlyVerifiedTextRoutes(t *testing.T) {
+	for _, tc := range []struct {
+		provider string
+		model    string
+		edit     bool
+		options  ImageGenerationOptions
+		want     ImageGenerationOptions
+	}{
+		{provider: "opencsg", model: "Qwen/Qwen-Image-2512-test", want: ImageGenerationOptions{Size: "1024x1024"}},
+		{provider: "opencsg", model: "Qwen-Image-2512", want: ImageGenerationOptions{Size: "1536x1024"}},
+		{provider: "opencsg", model: "Qwen-Image-2512", edit: true},
+		{provider: "custom", model: "Qwen-Image-2512"},
+		{provider: "opencsg", model: "Qwen-Image-2512", options: ImageGenerationOptions{Size: "1024x1024"}, want: ImageGenerationOptions{Size: "1024x1024"}},
+	} {
+		if got := ResolveImageGenerationOptions(tc.provider, tc.model, tc.edit, tc.options); got != tc.want {
+			t.Errorf("%+v: got %+v", tc, got)
+		}
+	}
+}
