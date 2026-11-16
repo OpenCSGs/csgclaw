@@ -2407,7 +2407,15 @@ func ignoreBackupError(rel string, predicates []func(string) bool) bool {
 }
 
 func isExcludedBackupEntry(rel string) bool {
-	return strings.EqualFold(filepath.Clean(rel), runtimeLockFileName)
+	if strings.EqualFold(filepath.Clean(rel), runtimeLockFileName) {
+		return true
+	}
+	// DSH regenerates this shared installation dependency mirror on launch.
+	// Its Windows links can be unreadable to Go. Keep profile-local packages,
+	// profile configuration, memories, and workspaces in the backup.
+	parts := strings.Split(filepath.ToSlash(filepath.Clean(rel)), "/")
+	return len(parts) >= 6 && parts[0] == "agents" && parts[2] == ".dsh" &&
+		parts[3] == "home" && parts[4] == "profiles" && parts[5] == "node_modules"
 }
 
 func copyFile(src, dst string, mode fs.FileMode) error {
