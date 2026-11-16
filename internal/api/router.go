@@ -291,6 +291,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Post("/invite", h.createIMRoomMembersInvite)
 		})
 		r.Route("/messages", func(r chi.Router) {
+			r.Get("/unread", h.readUnreadMessages)
+			r.Post("/unread/ack", h.acknowledgeUnreadMessages)
 			r.Get("/", h.listMessages)
 			r.Post("/{message_id}/image-generation/retry", h.retryImageGeneration)
 			r.Post("/", h.createMessage)
@@ -398,6 +400,8 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			})
 		})
 		r.Route("/csgclaw/messages", func(r chi.Router) {
+			r.Get("/unread", h.readUnreadMessages)
+			r.Post("/unread/ack", h.acknowledgeUnreadMessages)
 			r.Get("/", h.listMessages)
 			r.Post("/{message_id}/image-generation/retry", h.retryImageGeneration)
 			r.Post("/", h.createMessage)

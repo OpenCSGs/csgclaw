@@ -1,0 +1,163 @@
+.status {
+  width: min(100%, var(--chat-content-max-width, 1120px));
+  min-width: 0;
+  margin: 0 auto 6px;
+  color: var(--muted);
+}
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding: 0 4px;
+  font-size: 12px;
+}
+.members {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  padding: 3px;
+}
+.member {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  width: max-content;
+  min-width: min(100%, 220px);
+  max-width: min(100%, 344px);
+  padding-inline-end: 3px;
+  border: 1px solid color-mix(in oklab, var(--muted) 12%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--muted) 6%, transparent);
+}
+.member > .memberButton,
+.memberContent {
+  --btn-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 6px;
+  text-align: left;
+  font-weight: normal;
+}
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.copy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  line-height: 16px;
+}
+.identity {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+  max-width: 100%;
+}
+.identity strong {
+  flex-shrink: 2;
+  min-width: 0;
+  max-width: 12ch;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.identity strong,
+.action > span,
+.detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.action > svg {
+  flex-shrink: 0;
+}
+.detail {
+  padding-inline-start: 6px;
+  border-inline-start: 1px solid color-mix(in oklab, var(--muted) 22%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+}
+.member > .stop {
+  --btn-height: 26px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.usage {
+  display: flex;
+  flex-shrink: 0;
+}
+.member > .stop:hover {
+  color: var(--danger);
+}
+.member[data-problem] .action,
+.member[data-problem] .detail {
+  color: var(--danger);
+}
+.pulse {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 12px;
+}
+.pulse i {
+  width: 3px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--primary);
+  animation: working 1.4s ease-in-out infinite;
+}
+.pulse i:nth-child(2) {
+  animation-delay: 160ms;
+}
+.pulse i:nth-child(3) {
+  animation-delay: 320ms;
+}
+@keyframes working {
+  0%,
+  70%,
+  100% {
+    transform: scaleY(1);
+    opacity: 0.5;
+  }
+  35% {
+    transform: scaleY(2);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse i {
+    animation: none;
+  }
+}

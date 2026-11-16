@@ -123,6 +123,13 @@ func (h *Handler) setAgentArchived(w http.ResponseWriter, r *http.Request, archi
 			if cancelErr := h.roomTaskSvc.CancelAgentTasks(actors); cancelErr != nil && err == nil {
 				err = cancelErr
 			}
+			if h.autonomousTasks != nil {
+				if releaseErr := h.autonomousTasks.ReleaseOwner(func(owner string) bool {
+					return slices.Contains(actors, owner)
+				}); releaseErr != nil && err == nil {
+					err = releaseErr
+				}
+			}
 		}
 	}
 	if h.im != nil {

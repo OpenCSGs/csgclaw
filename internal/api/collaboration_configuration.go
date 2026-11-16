@@ -10,7 +10,7 @@ import (
 )
 
 func validateCollaborationConfiguration(room apitypes.Room, configuration *taskconfig.Config) (*taskconfig.Config, error) {
-	if !room.IsOnDemand() {
+	if !room.IsOnDemand() && !room.IsAutonomous() {
 		return nil, fmt.Errorf("workspace configuration requires a collaboration room")
 	}
 	cfg := *configuration
@@ -46,7 +46,7 @@ func (h *Handler) applyRoomTeamGuide(req *apitypes.CreateRoomRequest) error {
 	if req.SourceTeamID == "" {
 		return nil
 	}
-	if req.IsDirect || apitypes.NormalizeRoomType(req.Type) != apitypes.RoomTypeOnDemand {
+	if req.IsDirect || (apitypes.NormalizeRoomType(req.Type) != apitypes.RoomTypeOnDemand && apitypes.NormalizeRoomType(req.Type) != apitypes.RoomTypeAutonomous) {
 		return fmt.Errorf("team guides require a collaboration room")
 	}
 	if h.im != nil {

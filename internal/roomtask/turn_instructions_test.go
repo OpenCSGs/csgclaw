@@ -65,33 +65,44 @@ func TestOnDemandPolicyInstructionsDoNotEnableOtherCoordinationScopes(t *testing
 	}
 }
 
-func TestOnDemandTurnDirectiveRepeatsTheImmediateRoleGate(t *testing.T) {
-	manager := OnDemandTurnDirective(TurnRoleManager)
-	for _, want := range []string{"ON-DEMAND ROOM MANAGER MODE IS ACTIVE", "not the direct executor", "task submit, task plan, and task dispatch", "Do not bypass this workflow", "Only non-actionable replies", "another Worker's participation"} {
-		if !strings.Contains(manager, want) {
-			t.Fatalf("Manager turn directive missing %q in %q", want, manager)
+func TestConversationInstructionsScopeTeamTasksToWorkerDispatch(t *testing.T) {
+	manager := ConversationInstructions(TurnRoleManager, "csgclaw-cli")
+	worker := ConversationInstructions(TurnRoleWorker, "csgclaw-cli")
+	for _, want := range []string{"addressed server task_assigned event", `source_message_id starts with "team:"`, "team task claim --team", "team task update --team"} {
+		if !strings.Contains(worker, want) || strings.Contains(manager, want) {
+			t.Errorf("Team workflow scope for %q is incorrect", want)
 		}
 	}
-	if strings.Contains(manager, "GitHub") || strings.Contains(manager, "code review") {
-		t.Fatalf("Manager turn directive contains domain-specific routing: %q", manager)
-	}
-	worker := OnDemandTurnDirective(TurnRoleWorker)
-	if !strings.Contains(worker, "ON-DEMAND ROOM WORKER MODE IS ACTIVE") || !strings.Contains(worker, "Claim it before doing the work") {
-		t.Fatalf("Worker turn directive is incomplete: %q", worker)
-	}
-	if got := OnDemandTurnDirective("unknown"); got != "" {
-		t.Fatalf("unknown role turn directive = %q, want empty", got)
+	for _, want := range []string{"only way to schedule Worker participation", "Never use ordinary message_send", "already dispatched task"} {
+		if !strings.Contains(manager, want) {
+			t.Errorf("on-demand policy missing %q", want)
+		}
 	}
 }
 
-func TestOnDemandWorkerParticipationRequiresTrackedDispatch(t *testing.T) {
-	for name, instructions := range map[string]string{
-		"policy": OnDemandPolicyInstructions(TurnRoleManager, "csgclaw-cli"),
-		"turn":   onDemandManagerTurnDirective,
-	} {
-		for _, want := range []string{"only way to schedule Worker participation", "Never use ordinary message_send", "already dispatched task"} {
-			if !strings.Contains(instructions, want) {
-				t.Errorf("%s missing %q", name, want)
+func TestAutonomousPolicyCoordinatesWorkThroughPublicMessages(t *testing.T) {
+	for _, role := range []TurnRole{TurnRoleManager, TurnRoleWorker} {
+		policy := ConversationInstructions(role, "csgclaw-cli")
+		_, afterHeading, found := strings.Cut(policy, "### Autonomous room")
+		scene, _, done := strings.Cut(afterHeading, "### Public room messages")
+		if !found || !done {
+			t.Fatal("autonomous policy section is missing")
+		}
+		for _, rule := range []string{
+			"use message_send to post one short public message",
+			"end this turn immediately with exactly <csgclaw-silent/>",
+			"Do not send a waiting update",
+			"Batch new unread notices and read them at a natural break",
+			"defer to the first clear commitment in room message order",
+			"yield the overlapping part at the next safe step",
+		} {
+			if !strings.Contains(scene, rule) {
+				t.Errorf("%s policy is missing %q", role, rule)
+			}
+		}
+		for _, tool := range []string{"autonomous_task", "task claim", "task submit", "room_task_dispatch"} {
+			if strings.Contains(scene, tool) {
+				t.Errorf("%s autonomous policy directs the agent to use %q", role, tool)
 			}
 		}
 	}

@@ -1,7 +1,9 @@
-import { expandProgressMessage } from "@/models/turnProgress";
+import { expandProgressMessage, newerProgressMessage } from "@/models/turnProgress";
 import {
   agentActivityMessageToolMergeKey,
   agentActivityToolMergeKeys,
+  isAutonomousCoordinationNotice,
+  isAutonomousCoordinationTool,
   isTerminalAgentActivityTool,
   parseAgentActivity,
   parseMessageActivityCommand,
@@ -93,6 +95,7 @@ export function conversationActivityEntries(
   agents: readonly ConversationActivityAgent[],
   conversationMemberIDs: readonly string[] = [],
   usersById?: UsersById,
+  autonomous = false,
 ): ConversationActivityEntry[] {
   const entries: MutableConversationActivityEntry[] = [];
   const mergedEntries = new Map<string, MutableConversationActivityEntry>();
@@ -101,6 +104,11 @@ export function conversationActivityEntries(
     .flatMap(expandProgressMessage)
     .forEach((message) => {
       const activity = parseAgentActivity(message);
+      if (
+        autonomous &&
+        (isAutonomousCoordinationNotice(message) || isAutonomousCoordinationTool(activity?.content.tool?.title ?? ""))
+      )
+        return;
       const agent = resolveMessageAgent(message, activity, agents);
       const userPrompt = isConversationUserPrompt(message, activity, agent, conversationMemberIDs, usersById);
       if (!agent && !userPrompt) {
@@ -139,7 +147,7 @@ export function conversationActivityEntries(
   return entries
     .sort((left, right) => activityTime(left.createdAt) - activityTime(right.createdAt))
     .map((entry, index) => {
-      const eventType = activityEventType(entry);
+      const eventType = activityEventType(entry, autonomous);
       return {
         ...entry,
         eventType,
@@ -154,7 +162,11 @@ export function mergeConversationActivityMessages(
 ): IMMessage[] {
   const messages = new Map<string, IMMessage>();
   collections.forEach((collection) => {
-    (collection || []).forEach((message) => messages.set(messageMergeKey(message), message));
+    (collection || []).forEach((message) => {
+      const key = messageMergeKey(message);
+      const previous = messages.get(key);
+      messages.set(key, previous ? newerProgressMessage(previous, message) : message);
+    });
   });
   return sortMessages(Array.from(messages.values()));
 }
@@ -322,7 +334,10 @@ function conversationWorkingActionForStage(
   }
 }
 
-export function conversationActivityEntryDetails(entry: ConversationActivityEntry): ConversationActivityDetail[] {
+export function conversationActivityEntryDetails(
+  entry: ConversationActivityEntry,
+  includeToolInput = false,
+): ConversationActivityDetail[] {
   const runtimeErrorDetail = messageRuntimeErrorDetail(entry.message);
   if (runtimeErrorDetail) {
     return [{ kind: "result", value: runtimeErrorDetail }];
@@ -339,6 +354,10 @@ export function conversationActivityEntryDetails(entry: ConversationActivityEntr
     const command = toolCommandText(tool);
     return compactDetails([
       { kind: command ? "command" : "input", value: command || toolInputText(tool) },
+      {
+        kind: "input",
+        value: includeToolInput && command && toolInputText(tool) !== command ? toolInputText(tool) : "",
+      },
       { kind: "result", value: toolOutputText(tool) },
     ]);
   }
@@ -520,12 +539,16 @@ function mergeActivityCommand(base: AgentActivityCommand | null, next: AgentActi
   };
 }
 
-function activityEventType(entry: MutableConversationActivityEntry): string {
+function activityEventType(entry: MutableConversationActivityEntry, autonomous: boolean): string {
   if (messageRuntimeErrorDetail(entry.message)) {
     return "error";
   }
   if (entry.source === "user") {
     return AgentActivityKinds.message;
+  }
+  const runtime = recordValue(recordValue(entry.message.metadata)?.csgclaw);
+  if (autonomous && runtime?.progress_item_kind === "commentary") {
+    return "commentary";
   }
   const activity = entry.activity;
   if (activity?.content.msgtype === AgentActivityMsgTypes.tool && activity.content.tool) {

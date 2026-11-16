@@ -6,7 +6,7 @@ import { normalizeBrowserURL } from "./fileReferences";
 export type ChatSideTab =
   | { id: string; kind: "new" }
   | { id: string; kind: "files" }
-  | { id: string; kind: "activity"; entryID?: string }
+  | { id: string; kind: "activity"; entryID?: string; agentID?: string; turnID?: string; requestID?: string }
   | { id: string; kind: "tasks" }
   | { id: string; kind: "browser"; url: string; browserID?: string }
   | {

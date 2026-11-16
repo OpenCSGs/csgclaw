@@ -25,8 +25,9 @@ import { ConversationActivityPanel } from "@/components/business/ConversationAct
 import { CitationSources } from "@/components/business/MessageContent";
 import { attachmentCapability, filePreviewItem, transcriptRoomFiles } from "@/api/chatFiles";
 import { useRoomFileReader } from "./useRoomFileReader";
-import { clampChatSideWidth, type ChatSideTab } from "@/models/chatSidePanel";
+import { clampChatSideWidth, closeChatSideTab, type ChatSideTab } from "@/models/chatSidePanel";
 import { parseCitationDocument } from "@/models/citations";
+import { usesCollaborationTranscript } from "@/models/collaborationTranscript";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
@@ -102,7 +103,9 @@ export function ChatSidePanel({
   const [maximized, setMaximized] = useState(false);
   const [resizing, setResizing] = useState(false);
   const drag = useRef<{ pointerID: number; x: number; width: number } | null>(null);
-  const { state, patch, openTab, closeTab, replaceTab } = controller;
+  const { state: savedState, patch, openTab, closeTab, replaceTab } = controller;
+  const savedTasksTab = savedState.tabs.find((tab) => tab.kind === "tasks");
+  const state = savedTasksTab && !kinds.includes("tasks") ? closeChatSideTab(savedState, savedTasksTab.id) : savedState;
   const [browserError, setBrowserError] = useState(false);
   const [closingBrowser, setClosingBrowser] = useState(false);
   const browsers = useRoomBrowsers(roomID);
@@ -545,6 +548,7 @@ export function ChatSidePanel({
                   agents={agents}
                   conversation={conversation}
                   initialEntryID={tab.entryID}
+                  actorSelection={usesCollaborationTranscript(conversation) ? tab : undefined}
                   locale={locale}
                   t={t}
                   usersById={usersById}

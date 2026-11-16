@@ -363,8 +363,8 @@ func TestNewRecreatesRuntimeDirectoriesAfterDelete(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(runtimeRoot, homeDirName, settingsFileName)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("generated DSH settings after Delete() error = %v, want not exist", err)
 	}
-	if _, err := os.Stat(filepath.Join(runtimeRoot, homeDirName, "skills", "agent-teams", "SKILL.md")); err != nil {
-		t.Fatalf("DSH template skill after Delete() error = %v", err)
+	if _, err := os.Stat(filepath.Join(runtimeRoot, homeDirName, "skills", "agent-teams")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retired DSH template skill stat after Delete() = %v, want absent", err)
 	}
 
 	if _, err := rt.New(context.Background(), agentruntime.Spec{RuntimeID: "rt-agent-test", AgentID: "agent-test", Profile: profile}); err != nil {

@@ -83,7 +83,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	creatorID := fs.String("creator-id", "", "creator participant id")
 	memberIDs := fs.String("member-ids", "", "comma-separated member participant ids")
 	locale := fs.String("locale", "", "room locale")
-	roomTypeValue := fs.String("type", "", "room type: on_demand or free (CSGClaw defaults to on_demand)")
+	roomTypeValue := fs.String("type", "", "room type: on_demand, autonomous or free (CSGClaw defaults to on_demand)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -98,11 +98,11 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 			roomType = apitypes.RoomTypeOnDemand
 		}
 	}
-	if roomType != apitypes.RoomTypeFree && roomType != apitypes.RoomTypeOnDemand {
-		return fmt.Errorf("type must be one of: on_demand, free")
+	if roomType != apitypes.RoomTypeFree && roomType != apitypes.RoomTypeOnDemand && roomType != apitypes.RoomTypeAutonomous {
+		return fmt.Errorf("type must be one of: on_demand, autonomous, free")
 	}
-	if roomType == apitypes.RoomTypeOnDemand && *channelName != "csgclaw" {
-		return fmt.Errorf("on-demand rooms currently support csgclaw only")
+	if (roomType == apitypes.RoomTypeOnDemand || roomType == apitypes.RoomTypeAutonomous) && *channelName != "csgclaw" {
+		return fmt.Errorf("collaboration rooms currently support csgclaw only")
 	}
 	room, err := run.APIClient(globals).CreateRoomByChannel(ctx, *channelName, apitypes.CreateRoomRequest{
 		Type:        roomType,

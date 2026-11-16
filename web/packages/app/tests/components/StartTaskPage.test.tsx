@@ -311,6 +311,7 @@ describe("StartTaskPage task preparation", () => {
   it("creates and opens a task for the selected worker instead of Manager", async () => {
     vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
     const { create, open } = setup("/new?agent=u-worker");
+    expect(screen.queryByRole("combobox", { name: "collaborationMode" })).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), { target: { value: "hi" } });
     fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(room));
@@ -319,19 +320,32 @@ describe("StartTaskPage task preparation", () => {
     );
     expect(sendMessageRequest).toHaveBeenCalledWith(expect.objectContaining({ room_id: room.id, content: "hi" }));
   });
-  it("creates collaboration using a team member snapshot and on-demand delivery", async () => {
+  it.each(["on_demand", "autonomous"])("creates %s collaboration using a team member snapshot", async (mode) => {
     vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
     const { create, open } = setup("/new?team=team-1");
     expect(screen.getByLabelText("iaWorkdirTitle")).toBeInTheDocument();
     expect(screen.queryByLabelText("iaModelTitle")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("iaReasoningTitle")).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    const selector = screen.getByRole("combobox", { name: "collaborationMode" });
+    expect(selector).toHaveAccessibleDescription("onDemandCollaboration");
+    if (mode === "autonomous") {
+      await user.click(selector);
+      const onDemand = screen.getByRole("option", { name: "onDemandCollaboration" });
+      const autonomous = screen.getByRole("option", { name: "autonomousCollaboration" });
+      expect(onDemand).toHaveAccessibleDescription("onDemandCollaborationHint");
+      expect(autonomous).toHaveAccessibleDescription("autonomousCollaborationHint");
+      await user.click(autonomous);
+      expect(selector).toHaveAccessibleDescription("autonomousCollaboration");
+      expect(selector).toHaveAttribute("aria-expanded", "false");
+    }
     fireEvent.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
     await waitFor(() => expect(open).toHaveBeenCalled());
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         auto_title: false,
         is_direct: false,
-        type: "on_demand",
+        type: mode,
         manager_id: "manager",
         member_ids: ["manager", "worker"],
         source_team_id: "team-1",
@@ -697,6 +711,7 @@ describe("cloud task targets", () => {
         await user.click(await screen.findByRole("button", { name: /合同条款审阅/ }));
       }
       expect(await screen.findByRole("button", { name: /iaTargetLabel.*合同条款审阅/ })).toBeVisible();
+      expect(screen.queryByRole("group", { name: "collaborationMode" })).not.toBeInTheDocument();
       expect(screen.queryByText("taskEntryModelMissing")).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "composerAddContent" })).not.toBeInTheDocument();
       fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), {

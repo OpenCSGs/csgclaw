@@ -390,6 +390,49 @@ func TestParticipantWorkStopReportsDeliveryFailureAndTimeout(t *testing.T) {
 	}
 }
 
+func TestAutonomousStopKeepsHumanMessageSentDuringCancellation(t *testing.T) {
+	h := newAppTaskTestHandler(t)
+	h.serverNoAuth = true
+	room, source := createAutonomousTaskFixture(t, h)
+	h.SetParticipantService(participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID: "pt-dev", Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent,
+		ChannelUserRef: "user-dev", LifecycleStatus: participant.LifecycleStatusActive,
+	}})))
+	registry := worklease.NewRegistry(h.participant, h.im, worklease.NewBus(),
+		worklease.WithTurnControlDispatcher(worklease.NewTurnControlDispatcher(nil)))
+	h.participantWork = registry
+	leaseID := worklease.NewID()
+	leasePath := "/api/v1/channels/csgclaw/participants/dev/work-leases/" + leaseID
+	started := performParticipantWorkRequest(t, h, http.MethodPut, leasePath, map[string]any{
+		"room_id": room.ID, "request_id": source.ID, "kind": "agent_turn",
+	})
+	if started.Code != http.StatusOK {
+		t.Fatalf("start: %d %s", started.Code, started.Body.String())
+	}
+	patched := performParticipantWorkRequest(t, h, http.MethodPatch, leasePath, map[string]any{
+		"capabilities": []string{"turn_stop_v1"}, "sequence": 1, "phase": "working",
+	})
+	if patched.Code != http.StatusOK {
+		t.Fatalf("status: %d %s", patched.Code, patched.Body.String())
+	}
+	var next im.Message
+	unregister := registry.RegisterTurnController("pt-dev", apiTurnControllerFunc(func(context.Context, agentruntime.TurnRef) error {
+		var err error
+		next, err = h.im.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "admin", Content: "New request"})
+		return err
+	}))
+	defer unregister()
+	stopped := performParticipantWorkRequest(t, h, http.MethodPost, "/api/v1/channels/csgclaw/participants/dev/work:stop", map[string]any{
+		"room_id": room.ID, "lease_id": leaseID, "request_id": source.ID,
+	})
+	if stopped.Code != http.StatusAccepted {
+		t.Fatalf("stop: %d %s", stopped.Code, stopped.Body.String())
+	}
+	if _, admitted, err := h.im.AdmitAutonomousNotification(room.ID, next.ID, "pt-dev"); err != nil || !admitted {
+		t.Fatalf("human message during cancellation was suppressed: admitted=%v err=%v", admitted, err)
+	}
+}
+
 func TestParticipantWorkEventsMergeWithIMEvents(t *testing.T) {
 	imBus := im.NewBus()
 	workBus := worklease.NewBus()

@@ -76,7 +76,7 @@ export const HUMAN_CHANNELS: Record<HumanChannelID, { id: HumanChannelID; name: 
   },
 };
 
-export type MessageMention = string | { id?: string | null };
+export type MessageMention = string | { id?: string | null; name?: string | null };
 export const THREAD_RELATION_TYPE = "m.thread";
 
 export type IMMessageEvent = {
@@ -189,6 +189,7 @@ export type IMConversation = {
   messages: IMMessage[];
   search_match?: IMMessage | null;
   notify_all_agents?: boolean | null;
+  autonomous_state?: { source_id: string; receipts?: string[]; paused?: boolean } | null;
   threads?: ThreadState[] | null;
   title?: string | null;
 };
@@ -196,6 +197,7 @@ export type IMConversation = {
 export const RoomTypes = {
   free: "free",
   onDemand: "on_demand",
+  autonomous: "autonomous",
 } as const;
 
 export type RoomType = (typeof RoomTypes)[keyof typeof RoomTypes];
@@ -861,7 +863,11 @@ export function isDirectConversation(conversation: { is_direct?: boolean | null 
 }
 
 export function roomType(conversation: { type?: RoomType | null } | null | undefined): RoomType {
-  return conversation?.type === RoomTypes.onDemand ? RoomTypes.onDemand : RoomTypes.free;
+  return conversation?.type === RoomTypes.autonomous
+    ? RoomTypes.autonomous
+    : conversation?.type === RoomTypes.onDemand
+      ? RoomTypes.onDemand
+      : RoomTypes.free;
 }
 
 export function isOnDemandConversation(conversation: { type?: RoomType | null } | null | undefined): boolean {
@@ -1433,6 +1439,7 @@ export function mergeRoomMetadataUpdateInData<T extends IMData | null | undefine
           pinned: Boolean(conversation.pinned),
           configuration: conversation.configuration,
           notify_all_agents: conversation.notify_all_agents ?? item.notify_all_agents,
+          autonomous_state: conversation.autonomous_state,
         }
       : item,
   );

@@ -98,8 +98,9 @@ function MessageBody({
           return translated && translated !== "citationLinkLabel" ? translated : `查看引用：${title}`;
         },
         message?.attachments,
+        message?.mentions,
       ),
-    [displayContent, message?.attachments, t],
+    [displayContent, message?.attachments, message?.mentions, t],
   );
   const markup = useMemo(
     () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : rendered.html),

@@ -16,6 +16,7 @@ import { MessageTokenUsage } from "./MessageTokenUsage/MessageTokenUsage";
 import type { VoidOrPromise } from "./types";
 
 export type ConversationMessageActionsProps = {
+  showTokenUsage?: boolean;
   metadata?: Record<string, unknown> | null;
   className?: string;
   leading?: ReactNode;
@@ -27,6 +28,7 @@ export type ConversationMessageActionsProps = {
 };
 
 export function ConversationMessageActions({
+  showTokenUsage = true,
   metadata,
   className = "",
   content,
@@ -46,7 +48,7 @@ export function ConversationMessageActions({
   const copyText = flattenMentionText(resourceMessageText(renderSlashCommandPreviewText(content), metadata));
   const imageURL = image?.download_url || image?.preview_url || "";
   const canCopy = Boolean(imageURL || copyText.replace(/\u200b/g, ""));
-  const usage = messageTokenUsage(metadata);
+  const usage = showTokenUsage ? messageTokenUsage(metadata) : null;
   const copyLabel = copied
     ? t("copiedToClipboard")
     : copying && imageURL

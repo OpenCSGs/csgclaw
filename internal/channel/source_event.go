@@ -7,8 +7,10 @@ type MessageAttachment = apitypes.MessageAttachment
 // Event is the transport-neutral message delivered from a Channel source to a
 // Binding-scoped ingress worker.
 type Event struct {
+	NotificationOnly  bool                        `json:"notification_only,omitempty"`
 	MemoryUserID      string                      `json:"-"`
 	MemoryText        string                      `json:"-"`
+	Sender            *ActorRef                   `json:"sender,omitempty"`
 	ResourceSelection *apitypes.ResourceSelection `json:"resource_selection,omitempty"`
 	RoomManager       bool                        `json:"room_manager,omitempty"`
 	TaskAttempt       int                         `json:"task_attempt,omitempty"`

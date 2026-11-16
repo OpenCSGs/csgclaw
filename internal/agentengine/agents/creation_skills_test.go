@@ -85,7 +85,7 @@ func TestCreateCodexPreservesSkillsThroughStartup(t *testing.T) {
 				if tc.skills != nil && !slices.Equal(names, tc.skills) {
 					t.Fatalf("skills before Codex process startup = %v, want %v", names, tc.skills)
 				}
-				if tc.skills == nil && (!slices.Contains(names, "host-extra") || !slices.Contains(names, "agent-teams")) {
+				if tc.skills == nil && !slices.Contains(names, "host-extra") {
 					t.Fatalf("omitted selection lost inherited skills: %v", names)
 				}
 			}}

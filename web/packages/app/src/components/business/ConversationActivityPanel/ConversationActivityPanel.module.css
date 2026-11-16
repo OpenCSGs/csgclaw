@@ -58,6 +58,15 @@
   min-width: 0;
 }
 
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .titleGroup h2 {
   margin: 0;
   color: var(--text);
@@ -635,6 +644,13 @@
   }
 }
 
+@container conversation-activity (max-width: 300px) {
+  .collaborationHeader {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+}
+
 @media (max-width: 960px) {
   .panel {
     width: min(var(--conversation-activity-panel-width, 640px), 100%);
@@ -656,4 +672,16 @@
   height: 100%;
   border: 0;
   box-shadow: none;
+}
+
+.turnMode {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.toolFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+  overflow-wrap: anywhere;
 }

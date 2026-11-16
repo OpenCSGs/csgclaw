@@ -1,15 +1,21 @@
 package delivery
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"unicode/utf8"
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/diagnostics"
 )
 
 func progressTool(tool agentengine.ToolActivity, previous *activity.ProgressTool) *activity.ProgressTool {
+	return progressToolDetails(tool, previous, false)
+}
+
+func progressToolDetails(tool agentengine.ToolActivity, previous *activity.ProgressTool, collaboration bool) *activity.ProgressTool {
 	value := activity.ProgressTool{}
 	if previous != nil {
 		value = *previous
@@ -30,6 +36,24 @@ func progressTool(tool agentengine.ToolActivity, previous *activity.ProgressTool
 		value.Output = tool.OutputSummary
 	}
 	payload, _ := tool.Payload.(map[string]any)
+	if collaboration {
+		value.DetailsVersion = 1
+		// Runtime adapters already redact this payload. Preserve known argument
+		// and result fields instead of the 240-character presentation summaries.
+		for _, key := range []string{"arguments", "rawInput"} {
+			if input, ok := payload[key]; ok && input != nil {
+				value.Input = progressDetailJSON(input)
+			}
+		}
+		for _, key := range []string{"result", "rawOutput", "contentItems", "content"} {
+			if output, ok := payload[key]; ok && output != nil {
+				value.Output = progressDetailJSON(output)
+			}
+		}
+		if failure, ok := payload["error"]; ok && failure != nil {
+			value.Output = progressDetailJSON(map[string]any{"result": payload["result"], "error": failure})
+		}
+	}
 	// Only copy known display fields; arbitrary provider payloads never reach Web.
 	for _, field := range []struct {
 		key  string
@@ -125,6 +149,21 @@ func progressTool(tool agentengine.ToolActivity, previous *activity.ProgressTool
 		}
 	}
 	return &value
+}
+
+func progressDetailJSON(value any) string {
+	// Reuse diagnostic redaction for JSON embedded in MCP text blocks and for
+	// binary content. This preserves numeric precision and avoids persisting credentials.
+	data := diagnostics.Protect(value)
+	var text string
+	if json.Unmarshal(data, &text) == nil {
+		return text
+	}
+	var formatted bytes.Buffer
+	if err := json.Indent(&formatted, data, "", "  "); err != nil {
+		return string(data)
+	}
+	return formatted.String()
 }
 func progressNumber(value any) (int64, bool) {
 	switch n := value.(type) {

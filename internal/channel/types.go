@@ -3,6 +3,7 @@
 package channel
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -25,9 +26,10 @@ type SourceEventID string
 
 // ActorRef is a source sender or interaction actor.
 type ActorRef struct {
-	ID          string
-	DisplayName string
-	IsBot       bool
+	Role        string `json:"role,omitempty"`
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name,omitempty"`
+	IsBot       bool   `json:"is_bot,omitempty"`
 }
 
 // ConversationScope is channel context used to build an Engine ConversationKey.
@@ -61,6 +63,7 @@ func (b Binding) StableID() BindingID {
 // SourceMessageID is a dedupe key, not a TurnID.
 type TurnContext struct {
 	AgentTurn       bool // Set for agent execution, excluding control acknowledgments.
+	Autonomous      bool
 	RoomManager     bool
 	TaskAttempt     int
 	TaskID          string
@@ -74,6 +77,17 @@ type TurnContext struct {
 	SourceMessageID string
 	ConversationKey agentengine.ConversationKey
 	TurnID          agentengine.TurnID
+}
+
+type turnContextKey struct{}
+
+func WithTurnContext(ctx context.Context, turn TurnContext) context.Context {
+	return context.WithValue(ctx, turnContextKey{}, turn)
+}
+
+func TurnContextFrom(ctx context.Context) (TurnContext, bool) {
+	turn, ok := ctx.Value(turnContextKey{}).(TurnContext)
+	return turn, ok
 }
 
 // Outcome keeps the channel context next to the normalized Engine result.

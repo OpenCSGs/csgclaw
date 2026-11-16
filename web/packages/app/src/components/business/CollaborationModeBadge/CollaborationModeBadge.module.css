@@ -1,0 +1,39 @@
+.badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  max-width: calc(100% - 6px);
+  padding: 2px 7px;
+  border: 1px solid color-mix(in oklab, currentColor 22%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, currentColor 10%, transparent);
+  color: var(--accent-text-strong);
+  font: var(--text-xs-medium);
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.badge > svg {
+  flex: none;
+}
+
+.badge > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge[data-mode="on_demand"] {
+  color: var(--teal-800);
+}
+
+:global(:root[data-theme="dark"]) .badge[data-mode="on_demand"] {
+  color: var(--teal-200);
+}
+
+.badge[data-compact] {
+  padding: 1px 5px;
+  border: none;
+  font-size: 11px;
+  line-height: 15px;
+}

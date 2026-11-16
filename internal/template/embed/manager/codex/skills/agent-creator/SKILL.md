@@ -7,7 +7,7 @@ description: Provision a new CSGClaw agent-backed participant only when the user
 
 Guide users through hub template selection and agent creation. This skill owns **all new worker provisioning**.
 
-Use the CSGClaw administration rules in `AGENTS.md` after creation only when the user explicitly asks for room membership or a message.
+Add room membership or send a message after creation only when the user explicitly asks for it.
 
 ## Routing Gate (mandatory)
 
@@ -70,7 +70,7 @@ csgclaw-cli participant create --type agent --bind create \
   --env GITLAB_TOKEN=<user-provided> \
 ```
 
-10. Report participant id, template id, and env status. Use the administration rules in `AGENTS.md` for `member create` only if the user also asked to add the worker to a room. Do **not** assign work automatically.
+10. Report participant id, template id, and env status. Use `member create` only if the user also asked to add the worker to a room. Do **not** assign work automatically.
 11. If creation fails with a runtime name conflict for the requested worker name, stop and report that the host has a stale runtime with that exact name. Do **not** silently rename `dev` to `dev-worker` or `dev-feishu`; that changes the user's requested identity and breaks the later Feishu bind.
 
 ## Commands

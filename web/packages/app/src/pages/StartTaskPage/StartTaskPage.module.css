@@ -210,6 +210,85 @@
   flex: 0 0 auto;
   align-self: center;
 }
+button.modeTrigger[data-csg-control] {
+  width: auto;
+  flex: none;
+  gap: 5px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+  font: var(--text-xs-medium);
+}
+button.modeTrigger[data-csg-control]:is(:hover, [data-state="open"]):not(:disabled) {
+  background: var(--panel-soft);
+  color: var(--text);
+}
+button.modeTrigger[data-csg-control]:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+button.modeTrigger[data-csg-control]:disabled {
+  opacity: 0.55;
+}
+.modeTrigger :global(.csg-select-value) {
+  flex: 0 1 auto;
+}
+.modeTrigger > svg {
+  width: 14px;
+  height: 14px;
+}
+.modeLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.modeLabel > svg {
+  flex: none;
+  color: var(--muted);
+}
+.modeLabel > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.modeMenu[role="listbox"] {
+  width: min(272px, calc(100vw - 24px));
+  min-width: 0;
+  border-color: color-mix(in oklab, var(--line) 80%, transparent);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.modeOption[role="option"] {
+  min-height: 48px;
+  padding: 7px 32px 7px 34px;
+}
+/* The shared Select renders its check in the first slot. */
+.modeOption > :first-child {
+  inset-inline-start: auto;
+  inset-inline-end: 9px;
+  color: var(--accent-text);
+}
+.modeOptionIcon {
+  position: absolute;
+  inset-inline-start: 9px;
+  top: 50%;
+  color: var(--muted);
+  transform: translateY(-50%);
+}
+.modeOptionTitle {
+  font: var(--text-sm-medium);
+}
+.modeOptionHint {
+  font: var(--text-xs-normal);
+}
+.modeOption[data-state="checked"] .modeOptionIcon {
+  color: var(--accent-text);
+}
+.modeOption[data-state="checked"] .modeOptionTitle {
+  font-weight: var(--font-weight-semibold);
+}
 .attachmentFeedback {
   display: flex;
   align-items: center;

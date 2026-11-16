@@ -244,6 +244,14 @@ export function isToolDeliveryMessage(message: IMMessage | null | undefined): bo
   return activityDeliveryKind(message) === "tool";
 }
 
+export function isAutonomousCoordinationNotice(message: IMMessage | null | undefined): boolean {
+  return activityDeliveryKind(message) === "autonomous_task_update";
+}
+
+export function isAutonomousCoordinationTool(name: string): boolean {
+  return /(?:^|__)(?:autonomous_tasks_list|autonomous_task_(?:claim|split|update))$/.test(name);
+}
+
 export function activityToolCallID(message: IMMessage | null | undefined): string {
   const runtimeMetadata = activityMetadata(message);
   const deliveryInfo = activityDeliveryInfo(runtimeMetadata);

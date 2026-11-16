@@ -20,6 +20,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { CollaborationModeBadge } from "@/components/business/CollaborationModeBadge";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useTaskConversationPages } from "@/hooks/workspace/useTaskConversationPages";
 import { useCloudAgentAvatarMetadata } from "@/hooks/workspace/useCloudAgentAvatarMetadata";
@@ -335,7 +336,10 @@ export function TaskConversationList({
                     </span>
                   ) : null}
                   <span className={styles.text}>
-                    <strong>{room.title || t("taskEntryUntitled")}</strong>
+                    <span className={styles.titleLine}>
+                      <strong>{room.title || t("taskEntryUntitled")}</strong>
+                      <CollaborationModeBadge conversation={room} compact t={t} />
+                    </span>
                     <small
                       className={searchMatch ? styles.searchMatch : undefined}
                       title={searchMatch ? fullPreviewText : undefined}

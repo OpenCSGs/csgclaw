@@ -308,8 +308,8 @@ func TestAdapterProjectsRoomContextOnceAndRefreshesAfterReset(t *testing.T) {
 	if len(inputs) != 2 || !strings.Contains(inputs[0], `mode="full"`) || !strings.Contains(inputs[0], `room_type="on_demand"`) || !strings.Contains(inputs[0], `role="manager"`) || !strings.Contains(inputs[0], `policy_id="on-demand-manager/v1"`) {
 		t.Fatalf("first room context was not full: %#v", inputs)
 	}
-	if !strings.Contains(inputs[1], `mode="steady"`) || !strings.Contains(inputs[1], "task submit, task plan, and task dispatch") || strings.Contains(inputs[1], `kind="room-scope"`) || strings.Contains(inputs[1], `kind="task-snapshot"`) {
-		t.Fatalf("second room context omitted the action gate or repeated stable facts: %s", inputs[1])
+	if !strings.Contains(inputs[1], `mode="steady"`) || !strings.Contains(inputs[1], `policy_id="on-demand-manager/v1"`) || strings.Contains(inputs[1], `kind="room-scope"`) || strings.Contains(inputs[1], `kind="task-snapshot"`) {
+		t.Fatalf("second room context omitted its policy ID or repeated stable facts: %s", inputs[1])
 	}
 	if err := adapter.Reset(context.Background(), binding.AgentID, conversationKey); err != nil {
 		t.Fatal(err)
@@ -810,5 +810,58 @@ func TestAdapterRejectsInheritedFilesWithoutResolver(t *testing.T) {
 	out, err := adapter.Run(context.Background(), channel.Binding{ID: "binding", AgentID: "worker", ParticipantID: "worker"}, channel.Event{RoomID: "room", MessageID: "reply", Text: "Read", ThreadContext: &channel.ThreadContext{Context: []channel.ThreadContextMessage{{ID: "root", Attachments: []channel.MessageAttachment{{ID: "file"}}}}}})
 	if err != nil || out.Result.Status != agentengine.TurnFailed || len(engine.request.Input) != 0 {
 		t.Fatalf("missing resolver silently ignored inherited file: %+v %v", out, err)
+	}
+}
+
+func TestAutonomousNotificationDoesNotPushBodyOrAttachments(t *testing.T) {
+	engine := &fakeEngine{}
+	adapter, err := New(engine, &fakeRenderer{}, WithRoomContextProvider(func(request roomtask.TurnContextRequest) (roomtask.PrivateTurnContext, error) {
+		return roomtask.PrivateTurnContext{Role: roomtask.TurnRoleAutonomous, PolicyID: roomtask.TurnPolicyID(roomtask.TurnRoleAutonomous), Notification: &apitypes.UnreadNotification{RoomID: "r", ParticipantID: "pt-dev", Count: 2}, ScopeJSON: `{"room_id":"r"}`, SnapshotJSON: `{"unread":{"unread_count":2}}`, TurnJSON: `{"source_message_id":"m"}`, CollaborationGuide: "Review contributions before publishing"}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := adapter.Run(context.Background(), channel.Binding{ID: "b", ParticipantID: "pt-dev", AgentID: "dev"}, channel.Event{MessageID: "m", RoomID: "r", Text: "private source body", Attachments: []channel.MessageAttachment{{ID: "file"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !outcome.Turn.Autonomous {
+		t.Fatalf("autonomous room mode lost: %+v", outcome.Turn)
+	}
+	text := ""
+	for _, part := range engine.request.Input {
+		if part.Kind == agentengine.InputPartFile {
+			t.Fatal("eager attachment input")
+		}
+		text += part.Text
+	}
+	if strings.Contains(text, "private source body") || strings.Contains(text, "Current message:") || !strings.Contains(text, "messages_read") || !strings.Contains(text, "Review contributions before publishing") {
+		t.Fatalf("input=%s", text)
+	}
+}
+
+func TestRoomGuideIsRefreshedAfterNativeCompaction(t *testing.T) {
+	engine := &fakeEngine{}
+	inputs := []string{}
+	engine.run = func(ctx context.Context, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		inputs = append(inputs, request.Input[0].Text)
+		if len(inputs) == 2 {
+			if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{Kind: "context_usage", Payload: map[string]any{"compacting": true}}}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded}
+	}
+	adapter, _ := New(engine, &fakeRenderer{}, WithRoomContextProvider(func(roomtask.TurnContextRequest) (roomtask.PrivateTurnContext, error) {
+		return roomtask.PrivateTurnContext{Role: roomtask.TurnRoleAutonomous, PolicyID: roomtask.TurnPolicyID(roomtask.TurnRoleAutonomous), ScopeJSON: `{}`, SnapshotJSON: `{}`, TurnJSON: `{}`, CollaborationGuide: "Review before publishing"}, nil
+	}))
+	binding := channel.Binding{ID: "dev", ParticipantID: "dev", AgentID: "dev"}
+	for i := range 3 {
+		if _, err := adapter.Run(context.Background(), binding, channel.Event{MessageID: fmt.Sprint(i), RoomID: "room", Text: "continue"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !strings.Contains(inputs[0], "Review before publishing") || strings.Contains(inputs[1], "Review before publishing") || !strings.Contains(inputs[2], "Review before publishing") {
+		t.Fatal(inputs)
 	}
 }

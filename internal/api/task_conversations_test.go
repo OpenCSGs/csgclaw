@@ -88,9 +88,10 @@ func TestTaskConversationArchiveAndDeleteRejectRunningWork(t *testing.T) {
 
 func TestTaskConversationSearchIncludesThreadRepliesAndRejectsPagination(t *testing.T) {
 	svc := im.NewServiceFromBootstrap(im.Bootstrap{CurrentUserID: "user-admin", Users: []im.User{{ID: "user-admin", Role: "admin"}}, Rooms: []im.Room{
-		{ID: "thread-room", Title: "Review", Members: []string{"user-admin"}, Messages: []im.Message{
+		{ID: "thread-room", Title: "Review", Type: apitypes.RoomTypeAutonomous, Members: []string{"user-admin"}, Messages: []im.Message{
 			{ID: "root", SenderID: "user-admin", Content: "root"},
 			{ID: "reply", SenderID: "user-admin", Content: "hidden-thread-needle", RelatesTo: &apitypes.MessageRelation{RelType: im.RelationTypeThread, EventID: "root"}},
+			{ID: "notice", SenderID: "user-admin", Content: "claimed task-17", Metadata: map[string]any{"csgclaw": map[string]any{"delivery_kind": "autonomous_task_update"}}},
 		}},
 	}})
 	h := &Handler{im: svc}
@@ -99,6 +100,14 @@ func TestTaskConversationSearchIncludesThreadRepliesAndRejectsPagination(t *test
 	var page taskConversationPage
 	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil || page.Total != 1 {
 		t.Fatalf("thread search %s: %v", rec.Body.String(), err)
+	}
+	if len(page.Rooms[0].Messages) != 1 || page.Rooms[0].Messages[0].ID != "reply" {
+		t.Fatalf("preview must use the latest public message: %+v", page.Rooms[0].Messages)
+	}
+	rec = httptest.NewRecorder()
+	h.listTaskConversations(rec, httptest.NewRequest(http.MethodGet, "/api/v1/conversations?q=task-17", nil))
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil || page.Total != 0 {
+		t.Fatalf("internal notice matched conversation search %s: %v", rec.Body.String(), err)
 	}
 	for _, q := range []string{"limit=0", "offset=-1", "limit=101", "limit=bad"} {
 		rec := httptest.NewRecorder()

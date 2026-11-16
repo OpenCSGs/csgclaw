@@ -39,7 +39,7 @@ func (h *Handler) roomContextFacts(meta roomtask.Roster) map[string]any {
 		item := member{ID: participantID, Name: user.Name, Role: user.Role, Description: user.Description}
 		if h.agentEngine != nil {
 			if profile, err := h.agentEngine.Agents().Get(context.Background(), h.runtimeAgentIDForBridgeID(participantID), agentengine.AgentGetOptions{}); err == nil {
-				item.Description = profile.Spec.Description
+				item.Name, item.Description = profile.Spec.Name, profile.Spec.Description
 			}
 		}
 		members = append(members, item)
@@ -54,8 +54,11 @@ func (h *Handler) roomExecutionContext(request roomtask.TurnContextRequest) (roo
 	roomID, participantID := request.RoomID, request.ParticipantID
 	sourceID, taskID := request.SourceID, request.TaskID
 	room, ok := h.im.Room(roomID)
-	if !ok || !room.IsOnDemand() {
+	if !ok {
 		return roomtask.PrivateTurnContext{}, nil
+	}
+	if !room.IsOnDemand() {
+		return h.roomSceneContext(room, request)
 	}
 	roster, ok := h.roomSchedulingContext(roomID)
 	if !ok || h.roomTaskSvc == nil {
@@ -67,7 +70,7 @@ func (h *Handler) roomExecutionContext(request roomtask.TurnContextRequest) (roo
 	scope := map[string]any{"room_id": roomID, "room_type": apitypes.RoomTypeOnDemand, "manager_id": roster.ManagerID,
 		"participant_id": actor.bridgeID, "role": "worker"}
 	snapshot := map[string]any{}
-	turn := map[string]any{"source_message_id": sourceID, "related_task_id": taskID}
+	turn := h.sceneEvent(room, request)
 	if manager {
 		role = roomtask.TurnRoleManager
 		scope = h.roomContextFacts(roster)
@@ -143,6 +146,7 @@ func (h *Handler) roomExecutionContext(request roomtask.TurnContextRequest) (roo
 	if policyID == "" {
 		return roomtask.PrivateTurnContext{}, fmt.Errorf("collaboration instructions unavailable")
 	}
+	h.addSceneIdentity(scope, room, request)
 	scopeJSON, err := json.Marshal(scope)
 	if err != nil {
 		return roomtask.PrivateTurnContext{}, err
@@ -171,6 +175,9 @@ func contextExcerpt(value string, limit int) string {
 }
 
 func (h *Handler) handleGetRoomTask(w http.ResponseWriter, r *http.Request) {
+	if h.autonomousRoomTaskRead(w, r, false) {
+		return
+	}
 	if !h.requireRoomTasks(w, r) {
 		return
 	}

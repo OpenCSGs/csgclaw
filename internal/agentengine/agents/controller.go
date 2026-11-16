@@ -752,6 +752,7 @@ func (s *Controller) newCodexManagerAgent(name, description, instructions, avata
 	prof := cloneProfile(profile)
 	existing, _ := s.agentSnapshot(ManagerUserID)
 	return Agent{
+		CreatedBy: existing.CreatedBy, NamedBy: existing.NamedBy,
 		SkillStates:      maps.Clone(existing.SkillStates),
 		ID:               ManagerUserID,
 		Name:             strings.TrimSpace(name),
@@ -2422,7 +2423,12 @@ func (s *Controller) persistStartingWorker(ctx context.Context, id, name, descri
 		State:     agentruntime.StateCreated,
 		CreatedAt: time.Now().UTC(),
 	})
+	worker.CreatedBy, worker.NamedBy = identityActor(ctx), identityActor(ctx)
 	if exists {
+		worker.CreatedBy, worker.NamedBy = previous.CreatedBy, previous.NamedBy
+		if previous.Name != name {
+			worker.NamedBy = identityActor(ctx)
+		}
 		worker.SkillStates = maps.Clone(previous.SkillStates)
 	}
 	if exists && previousKey != worker.ID {
@@ -2474,7 +2480,12 @@ func (s *Controller) persistCreatedWorker(ctx context.Context, id, name, descrip
 	}
 
 	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, createRuntimeExt, mcpServers, runtimeCredentials, runtimeInitShell, info)
+	worker.CreatedBy, worker.NamedBy = identityActor(ctx), identityActor(ctx)
 	if exists {
+		worker.CreatedBy, worker.NamedBy = previous.CreatedBy, previous.NamedBy
+		if previous.Name != name {
+			worker.NamedBy = identityActor(ctx)
+		}
 		worker.SkillStates = maps.Clone(previous.SkillStates)
 	}
 	s.clearRuntimeAvailabilityLocked(worker.ID)

@@ -198,6 +198,7 @@ function renderThreadPane({
   agents = [],
   conversationTitle = "manager",
   conversationMembers = users,
+  conversationType,
   isDirect = true,
   messages,
   onClearRoomMessages = vi.fn(),
@@ -230,6 +231,7 @@ function renderThreadPane({
   agentDetailPanelStateRef?: { close?: () => void };
   conversationTitle?: string;
   conversationMembers?: IMUser[];
+  conversationType?: IMConversation["type"];
   isDirect?: boolean;
   messages?: IMConversation["messages"];
   visibleMessages?: IMConversation["messages"];
@@ -279,6 +281,7 @@ function renderThreadPane({
       members: conversationMembers.map((user) => user.id),
       messages: timelineMessages,
       title: conversationTitle,
+      type: conversationType,
       cloud_agent: cloudAgent,
     };
     const [threadRootID, setThreadRootID] = useState(root.id);
@@ -397,7 +400,7 @@ function renderThreadPane({
   }
 
   const view = render(
-    cloudAgent ? (
+    cloudAgent || conversationType === "on_demand" ? (
       <MemoryRouter>
         <Harness />
       </MemoryRouter>
@@ -420,6 +423,69 @@ function renderThreadPane({
 }
 
 describe("ConversationPane", () => {
+  it.each([
+    ["autonomous", "autonomousCollaboration"],
+    ["on_demand", "onDemandCollaboration"],
+  ] as const)("shows the %s mode with the room title", (conversationType, label) => {
+    const { container } = renderThreadPane({ isDirect: false, conversationType });
+    expect(container.querySelector(".chat-header")).toHaveTextContent(label);
+    expect(container.querySelector(".composer")).not.toHaveTextContent(label);
+    if (conversationType === "autonomous") {
+      expect(screen.queryByRole("button", { name: "roomTasksOpen" })).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByRole("button", { name: "roomTasksOpen" })).toBeVisible();
+    }
+  });
+
+  it("separates thread execution from public replies only in collaboration rooms", () => {
+    const reply: IMMessage = {
+      id: "thread-result",
+      sender_id: "u-manager",
+      content: "Thread result",
+      created_at: "2026-11-11T12:00:00Z",
+      metadata: {
+        csgclaw: {
+          turn_progress: {
+            id: "thread-turn",
+            revision: 1,
+            status: "succeeded",
+            started_at: "2026-11-11T12:00:00Z",
+            ended_at: "2026-11-11T12:02:00Z",
+            items: [
+              {
+                id: "read",
+                kind: "tool",
+                tool: { name: "read_file", actions: ["read"], status: "completed", input: "private execution" },
+              },
+            ],
+          },
+        },
+      },
+    };
+    renderThreadPane({
+      isDirect: false,
+      conversationType: "autonomous",
+      replies: [
+        reply,
+        { id: "claim", sender_id: "u-manager", content: "Thread acknowledgment", created_at: "2026-11-11T12:01:00Z" },
+        {
+          id: "coordination",
+          sender_id: "u-manager",
+          content: "Claimed task-17",
+          metadata: { csgclaw: { delivery_kind: "autonomous_task_update" } },
+        },
+      ],
+    });
+    const thread = screen.getByRole("complementary", { name: "Thread" });
+    expect(within(thread).getByText("Thread result")).toBeVisible();
+    expect(within(thread).queryByText("private execution")).not.toBeInTheDocument();
+    expect(within(thread).queryByRole("region", { name: "collaborationActivity" })).not.toBeInTheDocument();
+    const messages = [...thread.querySelectorAll("[data-message-id]")].filter(
+      (message) => message.getAttribute("data-message-id") !== "msg-root",
+    );
+    expect(messages.map((message) => message.getAttribute("data-message-id"))).toEqual(["claim", "thread-result"]);
+  });
+
   it("uses the cloud agent name without its identity suffix for both pending and completed replies", () => {
     const job = { id: "cloud-job", sender_id: "u-admin", content: "Hello" };
     const cloudUser = { ...users[1], name: "manager-cloud-c30d6746", role: "cloud" };
@@ -456,12 +522,13 @@ describe("ConversationPane", () => {
     };
     const onStopWorkingTurn = vi.fn();
     const { container } = renderThreadPane({ isDirect, workingParticipants: [participant], onStopWorkingTurn });
-    const pending = screen.getByText("Preparing a reply").closest(".message-row");
+    const pending = screen.getByText("Preparing a reply").closest(isDirect ? ".message-row" : "[data-work-lease-id]");
     expect(pending).not.toBeNull();
-    expect(pending?.querySelector(".avatar")).toBeInTheDocument();
+    if (isDirect) expect(pending?.querySelector(".avatar")).toBeInTheDocument();
+    else expect(pending?.closest("[aria-label='collaborationActivity']")).not.toBeNull();
     expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
     const stopButton = screen.getByRole("button", { name: "conversationWorkingStopAria" });
-    expect(stopButton.closest(isDirect ? ".composer-box" : ".message-row")).not.toBeNull();
+    expect(stopButton.closest(isDirect ? ".composer-box" : "[data-work-lease-id]")).not.toBeNull();
     await userEvent.click(stopButton);
     expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
   });

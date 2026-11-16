@@ -151,6 +151,15 @@ func (h *Handler) listTaskConversations(w http.ResponseWriter, r *http.Request) 
 		if !slices.Contains(room.Members, currentUserID) {
 			continue
 		}
+		if room.IsAutonomous() {
+			messages := make([]im.Message, 0, len(room.Messages))
+			for _, message := range room.Messages {
+				if !im.IsAutonomousCoordinationNotice(message) {
+					messages = append(messages, message)
+				}
+			}
+			room.Messages = messages
+		}
 		// Automatically provisioned agent DMs are preparation, not task history.
 		if room.IsDirect && !room.TaskSession && !room.CustomTitle && !room.Pinned && !room.Archived && !hasConversationHistory(room) {
 			continue

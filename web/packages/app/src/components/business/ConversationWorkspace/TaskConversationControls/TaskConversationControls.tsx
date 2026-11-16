@@ -43,7 +43,9 @@ export function TaskConversationControls({
           agent={agent}
           showModel={Boolean(agent && conversation.is_direct)}
           showDirectory={Boolean(
-            conversation.is_direct || (conversation.type === "on_demand" && conversation.configuration?.workspace_dir),
+            conversation.is_direct ||
+            (["on_demand", "autonomous"].includes(conversation.type || "") &&
+              conversation.configuration?.workspace_dir),
           )}
           configuration={conversation.configuration}
           directoryLocked
@@ -58,7 +60,12 @@ export function TaskConversationControls({
           t={t}
         />
       ) : null}
-      {onNewTask && !conversation.cloud_agent && hasChatMessages ? (
+      {conversation.type === "autonomous" && conversation.autonomous_state?.paused ? (
+        <span role="status" className="text-sm text-[var(--muted)]">
+          {t("autonomousPaused")}
+        </span>
+      ) : null}
+      {onNewTask && !conversation.cloud_agent && conversation.type !== "autonomous" && hasChatMessages ? (
         <Button
           variant="tertiaryGray"
           size="sm"

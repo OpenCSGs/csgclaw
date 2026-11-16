@@ -3,6 +3,7 @@ import conversationHeaderStyles from "./ConversationHeader.module.css";
 import { memo } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { CollaborationModeBadge } from "@/components/business/CollaborationModeBadge";
 import { IconButton, Button, Tooltip, PanelHeader } from "@/components/ui";
 import { AddUserIcon, TrashIcon, UsersIcon, WrenchIcon } from "@/components/business/Icons";
 import type { IMConversation, IMUser, TranslateFn, UsersById } from "@/models/conversations";
@@ -108,6 +109,7 @@ export const ConversationHeader = memo(function ConversationHeader({
                     </Tooltip>
                   </>
                 )}
+                <CollaborationModeBadge conversation={conversation} t={t} />
               </div>
               <Tooltip
                 content={conversation.title}

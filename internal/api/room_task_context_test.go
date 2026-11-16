@@ -56,23 +56,23 @@ func TestPrivateRoomContextTracksDurableWorkWithoutDiscovery(t *testing.T) {
 	if !strings.Contains(initial, `mode="full"`) || !strings.Contains(initial, `room_type="on_demand"`) || !strings.Contains(initial, `role="manager"`) || !strings.Contains(initial, `policy_id="on-demand-manager/v1"`) || !strings.Contains(initial, `"tasks":[]`) || !strings.Contains(initial, `"has_tasks":false`) || !strings.Contains(initial, "pt-dev") {
 		t.Fatal(initial)
 	}
-	if strings.Contains(initial, "task claim --task") || !strings.Contains(initial, "task submit, task plan, and task dispatch") || !strings.Contains(initial, "not the direct executor") {
-		t.Fatal("dynamic context did not carry the compact Manager action gate", initial)
+	if strings.Contains(initial, "task claim --task") || strings.Contains(initial, "task submit --room") {
+		t.Fatal("dynamic context duplicated standing task policy", initial)
 	}
 	if strings.Contains(initial, "task_policy") || strings.Contains(initial, "as_of") {
 		t.Fatal("volatile or duplicated policy facts remain in projected context", initial)
 	}
 	unchanged := contextFor("manager", "")
-	if !strings.Contains(unchanged, `mode="steady"`) || !strings.Contains(unchanged, "task submit, task plan, and task dispatch") || strings.Contains(unchanged, `kind="room-scope"`) || strings.Contains(unchanged, `kind="task-snapshot"`) {
-		t.Fatal("unchanged Manager context omitted the action gate or repeated stable facts", unchanged)
+	if !strings.Contains(unchanged, `mode="steady"`) || !strings.Contains(unchanged, `policy_id="on-demand-manager/v1"`) || strings.Contains(unchanged, `kind="room-scope"`) || strings.Contains(unchanged, `kind="task-snapshot"`) {
+		t.Fatal("unchanged Manager context omitted its policy ID or repeated stable facts", unchanged)
 	}
 	freeRoom, err := messages.CreateRoom(im.CreateRoomRequest{Title: "Free", CreatorID: "admin", MemberIDs: []string{"dev"}, Type: apitypes.RoomTypeFree})
 	if err != nil {
 		t.Fatal(err)
 	}
-	freeContext, err := h.participantBridge.RoomContext(roomtask.TurnContextRequest{ConversationID: "free", RoomID: freeRoom.ID, ParticipantID: "manager", SourceID: "source-free"})
-	if got, projectErr := projector.Project("free", freeContext); err != nil || projectErr != nil || got != "" {
-		t.Fatalf("free room context = %q, provider error %v, projection error %v; want no room workflow instructions", got, err, projectErr)
+	freeContext, err := h.participantBridge.RoomContext(roomtask.TurnContextRequest{ConversationID: "free", RoomID: freeRoom.ID, ParticipantID: "pt-dev", SourceID: "source-free"})
+	if got, projectErr := projector.Project("free", freeContext); err != nil || projectErr != nil || !strings.Contains(got, `policy_id="free-member/v1"`) || strings.Contains(got, "task submit") {
+		t.Fatalf("free room context = %q, provider error %v, projection error %v; want free room policy only", got, err, projectErr)
 	}
 	// A member added after creation receives the same room-owned guide.
 	if _, err := messages.AddRoomMembers(im.AddRoomMembersRequest{RoomID: room.ID, InviterID: "admin", UserIDs: []string{"qa"}}); err != nil {

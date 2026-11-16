@@ -76,7 +76,7 @@ func TestBrowserMCPWorkflow(t *testing.T) {
 	}
 	// Native turn metadata binds all browser tools to the originating room.
 	bound := map[string]any{"room_id": "other"}
-	if err = h.scopeAppPlatformRoomConversation("agent-dev", "browser_list", "csgclaw-im:csgclaw:room:"+room.ID, bound); err != nil || bound["room_id"] != room.ID {
+	if err = h.scopeAppPlatformRoomConversation("agent-dev", "browser_list", "csgclaw-im:csgclaw:room:"+room.ID, "", bound); err != nil || bound["room_id"] != room.ID {
 		t.Fatalf("scope=%v %v", bound, err)
 	}
 	callTaskTool(t, client, "browser_close", args, nil)
@@ -236,13 +236,13 @@ func TestBrowserScreenshotDeliveredAndSurvivesBrowserClose(t *testing.T) {
 func TestBrowserScreenshotNativeThreadScope(t *testing.T) {
 	h := newAppTaskTestHandler(t)
 	args := map[string]any{"room_id": "forged", "thread_root_id": "forged"}
-	if err := h.scopeAppPlatformRoomConversation("agent-dev", "browser_screenshot", "csgclaw-im:binding:room:room%2Fone:thread:root%2Fone", args); err != nil {
+	if err := h.scopeAppPlatformRoomConversation("agent-dev", "browser_screenshot", "csgclaw-im:binding:room:room%2Fone:thread:root%2Fone", "", args); err != nil {
 		t.Fatal(err)
 	}
 	if args["room_id"] != "room/one" || args["thread_root_id"] != "root/one" {
 		t.Fatalf("native scope was not bound: %v", args)
 	}
-	if err := h.scopeAppPlatformRoomConversation("agent-dev", "browser_screenshot", "csgclaw-im:binding:room:room%2Ftwo", args); err != nil {
+	if err := h.scopeAppPlatformRoomConversation("agent-dev", "browser_screenshot", "csgclaw-im:binding:room:room%2Ftwo", "", args); err != nil {
 		t.Fatal(err)
 	}
 	if args["room_id"] != "room/two" || args["thread_root_id"] != "" {

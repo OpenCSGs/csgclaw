@@ -436,6 +436,8 @@ func usesHostRuntime(selected agentengine.Agent) bool {
 
 func botEvent(value channel.Binding, event im.ParticipantEvent) channel.Event {
 	return channel.Event{
+		NotificationOnly:  event.NotificationOnly,
+		Sender:            &channel.ActorRef{ID: event.Sender.ID, DisplayName: event.Sender.DisplayName, Role: event.Sender.Role, IsBot: event.Sender.Role == "worker" || event.Sender.Role == "manager" || event.Sender.Role == "agent"},
 		ResourceSelection: event.ResourceSelection.Clone(),
 		RoomManager:       event.RoomManager,
 		MemoryUserID:      event.MemoryUserID,

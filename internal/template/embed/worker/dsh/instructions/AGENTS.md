@@ -44,11 +44,6 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
 
 - Local skills are installed under the DSH home `skills/` directory. Read a
   matching `SKILL.md` before following a skill.
-- If the assignment is a direct agent task notification with
-  `csgclaw-cli task claim --task <task_id>`, claim it with
-  `csgclaw-cli task claim --task <task_id> --actor-id <your_participant_id>`
-  and report completion, failure, or blockage with
-  `csgclaw-cli task update --task <task_id> --actor-id <your_participant_id> --status <completed|failed|blocked> ...`.
 - 按照当前消息的公共资源选择规则处理显式技能调用，读取所选 slug 对应的 `SKILL.md` 并执行其中步骤。
 - Prefer local skills before installing or fetching external skills.
 - Use `TOOLS.md` for local tool notes and operational details.

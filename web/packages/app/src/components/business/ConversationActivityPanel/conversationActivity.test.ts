@@ -44,6 +44,53 @@ function toolMessage(id: string, createdAt: string, tool: Record<string, unknown
 }
 
 describe("conversation activity model", () => {
+  it("shows autonomous commentary and chat replies without internal coordination records", () => {
+    const entries = conversationActivityEntries(
+      [
+        {
+          id: "turn",
+          sender_id: "u-dev",
+          created_at: "2026-07-16T10:00:00Z",
+          content: "Board is ready",
+          metadata: {
+            csgclaw: {
+              turn_progress: {
+                id: "turn",
+                revision: 1,
+                status: "succeeded",
+                started_at: "2026-07-16T10:00:00Z",
+                items: [
+                  { id: "note", kind: "commentary", text: "I'll read the room messages first." },
+                  { id: "thought", kind: "reasoning", text: "internal" },
+                  {
+                    id: "claim-tool",
+                    kind: "tool",
+                    tool: { name: "autonomous_task_claim", actions: ["tool"], status: "completed" },
+                  },
+                ],
+              },
+            },
+          },
+        },
+        {
+          id: "claim",
+          sender_id: "u-qa",
+          created_at: "2026-07-16T10:00:01Z",
+          content: "Claimed the task",
+          metadata: { csgclaw: { delivery_kind: "autonomous_task_update" } },
+        },
+      ],
+      conversationActivityAgents(room, agents),
+      room.members,
+      undefined,
+      true,
+    );
+    expect(entries.map((entry) => [entry.eventType, entry.message.content])).toEqual([
+      ["commentary", "I'll read the room messages first."],
+      ["message", "Board is ready"],
+    ]);
+  });
+
   it("shows runtime diagnostics in activity while preserving the chat fallback", () => {
     const roomAgents = conversationActivityAgents(room, agents);
     const entries = conversationActivityEntries(
