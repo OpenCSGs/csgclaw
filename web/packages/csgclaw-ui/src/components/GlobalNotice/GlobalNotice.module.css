@@ -25,7 +25,8 @@
   border-radius: 12px;
   background: var(--csgclaw-ui-panel);
   color: var(--csgclaw-ui-text);
-  box-shadow: 0 12px 36px color-mix(in srgb, var(--csgclaw-ui-gray-900) 18%, transparent);
+  box-shadow: 0 12px 36px
+    color-mix(in srgb, var(--csgclaw-ui-gray-900) 18%, transparent);
 }
 
 .global-notice.warning {
@@ -101,4 +102,11 @@
     opacity: 0;
     transform: translateY(-6px);
   }
+}
+
+.global-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
 }

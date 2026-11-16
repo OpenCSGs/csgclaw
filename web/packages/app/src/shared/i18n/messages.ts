@@ -1,5 +1,7 @@
+import { labMessages } from "./uiLab";
 export const messages = {
   zh: {
+    uiLab: labMessages.zh,
     scheduledTaskExecutorEmpty: "没有匹配的智能体",
     scheduledTaskTextTitle: "让 Manager 建一个定时任务",
     scheduledTaskTextBody: "说清什么时候、由谁做什么，也可以输入 @ 选择执行者。",
@@ -3019,12 +3021,13 @@ export const messages = {
     agentPublish: "发布",
     agentPublishing: "发布中...",
     agentSaveLocalTemplate: "保存为本地模板",
-    agentSaveAndPublishTemplate: "保存并发布",
     agentTemplateSavedPublishFileTooLarge: "已保存为本地模板。{reason}",
-    agentTemplateSavedPublishFailed: "已保存为本地模板，但发布到社区失败：{reason}。重试将复用已保存的本地模板。",
+    agentSaveAndPublishTemplate: "保存并发布",
+    agentTemplateSavedPublishFailed:
+      "已保存为本地模板，但发布到 AgenticHub 失败：{reason}。重试将复用已保存的本地模板。",
     agentPublishCommunity: "发布到社区",
     agentPublishCommunityTemplateOnly: "仅发布模板",
-    agentPublishLoginRequired: "保存并发布到社区需要先登录；无需登录即可保存为本地模板。",
+    agentPublishLoginRequired: "保存并发布到 AgenticHub 需要先登录；无需登录即可保存为本地模板。",
     agentTemplateLoginToPublish: "登录后发布",
     agentPublishTemplateTitle: "发布智能体模板",
     agentTemplateHubGuidance: "发布后，在 AgenticHub 模板库查看模板、审核状态并管理云端部署。",
@@ -3475,6 +3478,7 @@ export const messages = {
     },
   },
   en: {
+    uiLab: labMessages.en,
     scheduledTaskExecutorEmpty: "No matching agents.",
     scheduledTaskTextTitle: "Let Manager schedule a task",
     scheduledTaskTextBody: "Describe when, who, and what. Type @ to choose an executor.",
@@ -6610,14 +6614,14 @@ export const messages = {
     agentPublish: "Publish",
     agentPublishing: "Publishing...",
     agentSaveLocalTemplate: "Save as local template",
-    agentSaveAndPublishTemplate: "Save & publish",
     agentTemplateSavedPublishFileTooLarge: "Saved as a local template. {reason}",
+    agentSaveAndPublishTemplate: "Save & publish",
     agentTemplateSavedPublishFailed:
-      "Saved locally, but publishing to community failed: {reason}. Retrying will reuse the saved local template.",
+      "Saved locally, but publishing to AgenticHub failed: {reason}. Retrying will reuse the saved local template.",
     agentPublishCommunity: "Publish to community",
     agentPublishCommunityTemplateOnly: "Publish template only",
     agentPublishLoginRequired:
-      "Sign in to save and publish to community. Saving a local template does not require sign-in.",
+      "Sign in to save and publish to AgenticHub. Saving a local template does not require sign-in.",
     agentTemplateLoginToPublish: "Sign in to publish",
     agentPublishTemplateTitle: "Publish agent template",
     agentPublishTemplateLocalSubtitle: "Enter template details and save it as a local template.",

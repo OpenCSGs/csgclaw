@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="32" height="40" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Page">
+<mask id="stroke0_0_285" fill="white">
+<path d="M0 4C0 1.79086 1.79086 0 4 0H20C20.3201 0 20.6272 0.127177 20.8536 0.353553L31.6464 11.1464C31.8728 11.3728 32 11.6799 32 12V36C32 38.2091 30.2091 40 28 40H4C1.79086 40 0 38.2091 0 36V4Z"/>
+</mask>
+<path id="Page background" d="M20 0H4C1.79086 0 0 1.79086 0 4V36C0 38.2091 1.79086 40 4 40H28C30.2091 40 32 38.2091 32 36V12C32 11.6799 31.8728 11.3728 31.6464 11.1464L20.8536 0.353553C20.6272 0.127177 20.3201 0 20 0Z" stroke-width="3" stroke="#D5D7DA" mask="url(#stroke0_0_285)"/>
+<path id="Earmark" d="M20 0.5V8C20 10.2091 21.7909 12 24 12H31.5" stroke-width="1.5" stroke="#D5D7DA"/>
+</g>
+</svg>

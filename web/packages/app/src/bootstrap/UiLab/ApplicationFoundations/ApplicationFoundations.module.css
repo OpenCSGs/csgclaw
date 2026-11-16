@@ -1,0 +1,546 @@
+.foundation {
+  min-width: 0;
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+.sourceButton {
+  margin-inline-start: auto;
+}
+.foundation > p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+:where(.foundation) a:where(:not(.sourceButton)) {
+  color: var(--primary);
+}
+.foundation details {
+  min-width: 0;
+  margin-block: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.foundation summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.demoSurface {
+  font-family: "PingFang SC", sans-serif;
+}
+.liveStage:not([data-kind="messaging"]) p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-block: 16px;
+}
+.field {
+  display: grid;
+  gap: 8px;
+  margin-block: 16px;
+}
+.field input {
+  min-width: 0;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel);
+  font: inherit;
+}
+.indexScroll {
+  max-height: 320px;
+  overflow: auto;
+}
+.indexScroll ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.indexScroll li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.indexScroll small {
+  color: var(--muted);
+}
+.liveStage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  min-block-size: 320px;
+  margin-block-start: 16px;
+}
+.withReset {
+  position: relative;
+  padding-block-start: calc(var(--space-6) + 36px + var(--space-3));
+}
+
+.canvasReset {
+  position: absolute;
+  inset-block-start: calc(var(--space-6) - 1px);
+  inset-inline-end: calc(var(--space-6) - 1px);
+}
+.referenceScroll {
+  display: flex;
+  block-size: clamp(320px, 62vw, 640px);
+  overflow: auto;
+  margin-block: 16px;
+  overscroll-behavior: contain;
+}
+.referenceScroll:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.reference {
+  isolation: isolate;
+  position: relative;
+  flex: none;
+  width: max-content;
+  margin: auto;
+  color: #414651;
+  font:
+    400 14px/20px "PingFang SC",
+    sans-serif;
+  font-synthesis: none;
+}
+.reference :where(p, button, h1, h2, h3, h4, pre) {
+  margin: 0;
+}
+.reference :where(button) {
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+}
+.reference :where(img) {
+  display: block;
+  max-width: none;
+}
+.navigationDemo {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.navigationDemo nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  width: 240px;
+  max-width: 100%;
+}
+.navigationDemo > section {
+  flex: 1;
+  min-width: min(100%, 180px);
+}
+.cta,
+.metric {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block: 28px;
+}
+.divider span {
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+.demoSurface.drawer {
+  top: 0;
+  right: 0;
+  left: auto;
+  transform: none;
+  width: min(440px, 100vw);
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+.drawer > div:nth-child(2) {
+  flex: 1;
+  overflow: auto;
+}
+.demoSurface.modal {
+  width: min(400px, calc(100vw - 32px));
+  border-radius: 16px;
+}
+.tableScroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.table caption {
+  text-align: left;
+  font-weight: 500;
+  margin-block: 12px;
+}
+.table th,
+.table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.table th {
+  background: var(--control-hover-background);
+  font-weight: 500;
+}
+.metric {
+  display: grid;
+  gap: 8px;
+  max-width: 388px;
+  margin-top: 16px;
+}
+.metric strong {
+  font-size: 30px;
+  line-height: 38px;
+  font-weight: 500;
+}
+.metric span {
+  color: var(--muted);
+}
+.chart {
+  margin: 20px 0;
+}
+.bars {
+  display: flex;
+  gap: 12px;
+  height: 220px;
+  margin-top: 16px;
+  padding: 16px 8px 32px;
+  border-bottom: 1px solid var(--line);
+}
+.bars > div {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  align-items: flex-end;
+  justify-content: center;
+  position: relative;
+}
+.bars span {
+  display: block;
+  width: min(24px, 100%);
+  border-radius: 4px 4px 0 0;
+  background: #3250bd;
+}
+.bars small {
+  position: absolute;
+  bottom: -28px;
+}
+.feed {
+  padding: 0;
+  list-style: none;
+}
+.feed li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.feed li > div {
+  flex: 1;
+  min-width: 120px;
+}
+.feed img {
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.feed p {
+  margin: 4px 0;
+}
+.feed small {
+  color: var(--muted);
+}
+.alert {
+  position: relative;
+  border: 1px solid var(--line);
+  padding: 20px 48px 20px 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+.loading {
+  display: grid;
+  justify-items: center;
+  padding: 24px;
+}
+.spinner {
+  display: block;
+  animation: rotate 1.2s linear infinite;
+}
+@keyframes rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+.calendar {
+  width: 100%;
+  max-width: 480px;
+}
+.calendarEventForm {
+  display: grid;
+  gap: var(--space-3);
+}
+.calendarEventForm > button {
+  justify-self: start;
+}
+.calendarHeader {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.calendarHeader strong {
+  text-align: center;
+  flex: 1;
+}
+.calendarHeader > button {
+  padding-inline: 8px;
+  font-size: 12px;
+}
+.calendarTable {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  text-align: center;
+}
+.calendarTable th {
+  padding-block: 8px;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.calendarTable td {
+  padding: 2px 0;
+}
+.calendarTable button {
+  display: block;
+  margin: auto;
+  width: min(40px, 100%);
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text);
+  font:
+    400 14px/20px "PingFang SC",
+    sans-serif;
+  cursor: pointer;
+}
+.calendarTable button[data-outside="true"] {
+  color: var(--muted);
+}
+.calendarTable button:hover {
+  background: var(--control-hover-background);
+}
+.calendarTable button[aria-pressed="true"] {
+  background: #3250bd;
+  color: white;
+}
+.calendarTable button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.demoSurface.datePopover {
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(640px, var(--radix-popover-content-available-height, calc(100dvh - 32px)));
+  overflow-y: auto;
+  padding: 16px;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+@media (max-width: 700px) {
+  .foundation {
+    padding: 16px;
+  }
+  .calendarHeader {
+    gap: 4px;
+  }
+  .calendarHeader strong {
+    order: -1;
+    flex-basis: 100%;
+  }
+  .calendarHeader > button:last-child {
+    margin-left: auto;
+  }
+}
+
+.figmaBreadcrumb {
+  --breadcrumb-font: 500 14px/20px "PingFang SC", sans-serif;
+  --breadcrumb-list-gap: 8px;
+  --breadcrumb-segment-gap: 8px;
+  --breadcrumb-muted: #717680;
+  --breadcrumb-current: #223b99;
+  padding: 24px;
+  background: white;
+  border: 1px solid #e9eaeb;
+  border-radius: 8px;
+}
+
+:global(:root[data-theme="dark"]) .reference[data-themed-reference] {
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .modalOverlay {
+  --csgclaw-ui-dialog-backdrop: rgb(34 38 47 / 70%);
+  backdrop-filter: blur(8px);
+}
+
+:global(:root[data-theme="dark"]) .demoSurface.modal {
+  --csgclaw-ui-panel: #0c0e12;
+  --csgclaw-ui-line: #22262f;
+  --csgclaw-ui-text: #f7f7f7;
+  --csgclaw-ui-muted: #94979c;
+  --csgclaw-ui-shadow: none;
+  --csgclaw-ui-gray-500: #61656c;
+  --csgclaw-ui-button-neutral-background: #0c0e12;
+  --csgclaw-ui-button-neutral-border: #373a41;
+  --button-neutral-text: #cecfd2;
+  --csgclaw-ui-primary-button-background: #3250bd;
+}
+
+:global(:root[data-theme="dark"]) .commandPopover {
+  --csgclaw-ui-popover-background: #0c0e12;
+  --csgclaw-ui-popover-border: #22262f;
+  --csgclaw-ui-input-background: #0c0e12;
+  --csgclaw-ui-input-border: #22262f;
+  --csgclaw-ui-input-placeholder: #85888e;
+  --csgclaw-ui-text: #f7f7f7;
+  --csgclaw-ui-muted: #94979c;
+  --csgclaw-ui-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .commandPopover [role="option"][data-highlighted] {
+  background: #22262f;
+  color: #f7f7f7;
+}
+
+:global(:root[data-theme="dark"]) .bars {
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .bars span {
+  background: #4d6ad6;
+}
+
+:global(:root[data-theme="dark"]) .bars small {
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"]) :is(.metric, .cta) {
+  background: #0c0e12;
+  border-color: #22262f;
+  color: #f7f7f7;
+}
+
+:global(:root[data-theme="dark"]) :is(.metric p, .cta p, .feed p, .feed small, .divider strong) {
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"]) :is(.metric span, .feed strong, .loading p) {
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .divider span {
+  background: #22262f;
+}
+
+:global(:root[data-theme="dark"]) :is(.feed li, .table th, .table td, .messages li) {
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .table th {
+  background: #13161b;
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"]) .demoSurface.drawer {
+  --csgclaw-ui-panel: #0c0e12;
+  --csgclaw-ui-line: #373a41;
+  --csgclaw-ui-text: #f7f7f7;
+  --csgclaw-ui-muted: #94979c;
+  --csgclaw-ui-shadow: none;
+  --csgclaw-ui-gray-500: #61656c;
+}
+
+:global(:root[data-theme="dark"]) .datePopover {
+  --csgclaw-ui-popover-background: #0c0e12;
+  --csgclaw-ui-popover-border: #373a41;
+  --csgclaw-ui-text: #cecfd2;
+  --csgclaw-ui-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .calendar {
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .calendarTable button:not([aria-pressed="true"]) {
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .calendarTable button[data-outside="true"]:not([aria-pressed="true"]) {
+  color: #85888e;
+}
+
+:global(:root[data-theme="dark"]) .calendarTable button:hover:not([aria-pressed="true"]) {
+  background: #22262f;
+  color: #ececed;
+}
+
+:global(:root[data-theme="dark"]) .figmaBreadcrumb {
+  --breadcrumb-muted: #94979c;
+  --breadcrumb-current: #cecfd2;
+  background: #0c0e12;
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .figmaBreadcrumb img[width="20"] {
+  content: url("./assets/dark-breadcrumbs-imgHomeLine.svg");
+}
+
+:global(:root[data-theme="dark"]) .figmaBreadcrumb img[width="16"] {
+  content: url("./assets/dark-breadcrumbs-imgChevronRight.svg");
+}
+
+:global(:root[data-theme="dark"]) .spinner img {
+  content: url("./assets/dark-loading-imgLoadingCircle.svg");
+}

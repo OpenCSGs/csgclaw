@@ -1,0 +1,30 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="176" height="101.429" viewBox="0 0 176 101.429" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="Cloud">
+<g id="Background">
+<use xlink:href="#stroke0_0_115" fill="#13161B"/>
+<mask id="stroke1_0_115" maskUnits="userSpaceOnUse" x="0" y="0" width="176" height="102" fill="black">
+<rect fill="white" width="176" height="102"/>
+<use xlink:href="#stroke0_0_115"/>
+</mask>
+<path d="M49.9354 21.9466C58.9448 9.27011 73.7495 1 90.4857 1C110.961 1 128.546 13.3784 136.164 31.0601C137.488 30.9072 138.835 30.8286 140.2 30.8286C159.42 30.8286 175 46.4091 175 65.6286C175 84.8481 159.42 100.429 140.2 100.429H40.7714C18.8063 100.429 1 82.6223 1 60.6571C1 38.692 18.8063 20.8857 40.7714 20.8857C43.9253 20.8857 46.9934 21.2528 49.9354 21.9466Z" stroke-width="2" stroke="#373A41" mask="url(#stroke1_0_115)"/>
+</g>
+<circle id="Circle" cx="40.7714" cy="60.6571" r="39.7714" fill="url(#paint0_linear_0_115)"/>
+<circle id="Circle_2" cx="90.4857" cy="50.7143" r="49.7143" fill="url(#paint1_linear_0_115)"/>
+<circle id="Circle_3" cx="140.2" cy="65.6286" r="34.8" fill="url(#paint2_linear_0_115)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_115" x1="10.2326" y1="34.3796" x2="80.5429" y2="100.429" gradientUnits="userSpaceOnUse">
+<stop stop-color="#373A41"/>
+<stop offset="0.350715" stop-color="#13161B"/>
+</linearGradient>
+<linearGradient id="paint1_linear_0_115" x1="52.3122" y1="17.8673" x2="140.2" y2="100.428" gradientUnits="userSpaceOnUse">
+<stop stop-color="#373A41"/>
+<stop offset="0.350715" stop-color="#13161B"/>
+</linearGradient>
+<linearGradient id="paint2_linear_0_115" x1="113.479" y1="42.6357" x2="175" y2="100.429" gradientUnits="userSpaceOnUse">
+<stop stop-color="#373A41"/>
+<stop offset="0.350715" stop-color="#13161B"/>
+</linearGradient>
+<path id="stroke0_0_115" d="M90.4857 1C73.7495 1 58.9448 9.27011 49.9354 21.9466C46.9934 21.2528 43.9253 20.8857 40.7714 20.8857C18.8063 20.8857 1 38.692 1 60.6571C1 82.6223 18.8063 100.429 40.7714 100.429H140.2C159.42 100.429 175 84.8481 175 65.6286C175 46.4091 159.42 30.8286 140.2 30.8286C138.835 30.8286 137.488 30.9072 136.164 31.0601C128.546 13.3784 110.961 1 90.4857 1Z" fill-rule="evenodd" clip-rule="evenodd"/>
+</defs>
+</svg>

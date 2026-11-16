@@ -10,7 +10,17 @@ import type { GlobalNoticeInput } from "./GlobalNoticeContext.js";
 
 type GlobalNoticeState = GlobalNoticeInput & { id: number };
 
-export function GlobalNoticeProvider({ children }: { children: ReactNode }) {
+export function GlobalNoticeProvider({
+  children,
+  noticeClassName,
+  viewportClassName,
+  closeIcon,
+}: {
+  children: ReactNode;
+  noticeClassName?: string;
+  viewportClassName?: string;
+  closeIcon?: ReactNode;
+}) {
   const nextID = useRef(0);
   const [notice, setNotice] = useState<GlobalNoticeState | null>(null);
   const showNotice = useCallback((input: GlobalNoticeInput) => {
@@ -27,27 +37,78 @@ export function GlobalNoticeProvider({ children }: { children: ReactNode }) {
         {notice ? (
           <RadixToast.Root
             key={notice.id}
-            className={classNames(styles["global-notice"], styles[notice.tone ?? "info"])}
+            className={classNames(
+              styles["global-notice"],
+              styles[notice.tone ?? "info"],
+              noticeClassName,
+            )}
             open
             onOpenChange={(open) => {
               if (!open) setNotice(null);
             }}
           >
-            <Icon className={styles["global-notice-icon"]} size={20} aria-hidden="true" />
-            <div className={styles["global-notice-content"]}>
+            {notice.icon ?? (
+              <Icon
+                className={styles["global-notice-icon"]}
+                size={20}
+                aria-hidden="true"
+              />
+            )}
+            <div
+              className={styles["global-notice-content"]}
+              data-notice-part="content"
+            >
               {notice.title ? (
-                <RadixToast.Title className={styles["global-notice-title"]}>{notice.title}</RadixToast.Title>
+                <RadixToast.Title
+                  className={styles["global-notice-title"]}
+                  data-notice-part="title"
+                >
+                  {notice.title}
+                </RadixToast.Title>
               ) : null}
-              <RadixToast.Description className={styles["global-notice-description"]}>
+              <RadixToast.Description
+                className={styles["global-notice-description"]}
+                data-notice-part="description"
+              >
                 {notice.message}
               </RadixToast.Description>
+              {notice.dismissLabel || notice.action ? (
+                <div
+                  data-notice-part="actions"
+                  className={styles["global-notice-actions"]}
+                >
+                  {notice.dismissLabel && (
+                    <RadixToast.Close type="button">
+                      {notice.dismissLabel}
+                    </RadixToast.Close>
+                  )}
+                  {notice.action && (
+                    <RadixToast.Action
+                      type="button"
+                      altText={notice.action.label}
+                      onClick={notice.action.onSelect}
+                    >
+                      {notice.action.label}
+                    </RadixToast.Action>
+                  )}
+                </div>
+              ) : null}
             </div>
-            <RadixToast.Close className={styles["global-notice-close"]} aria-label={notice.closeLabel}>
-              <X size={16} aria-hidden="true" />
+            <RadixToast.Close
+              className={styles["global-notice-close"]}
+              aria-label={notice.closeLabel}
+              data-notice-part="close"
+            >
+              {closeIcon ?? <X size={16} aria-hidden="true" />}
             </RadixToast.Close>
           </RadixToast.Root>
         ) : null}
-        <RadixToast.Viewport className={styles["global-notice-viewport"]} />
+        <RadixToast.Viewport
+          className={classNames(
+            styles["global-notice-viewport"],
+            viewportClassName,
+          )}
+        />
       </RadixToast.Provider>
     </GlobalNoticeContext.Provider>
   );

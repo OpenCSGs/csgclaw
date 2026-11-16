@@ -1,0 +1,266 @@
+.foundation {
+  --lab-component-title-font: var(--text-md-normal);
+  --lab-component-description-color: var(--gray-600);
+  min-width: 0;
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+:global(:root[data-theme="dark"]) .foundation {
+  --lab-component-description-color: var(--muted);
+}
+
+.foundation h2 {
+  font: var(--text-xl-medium);
+}
+.foundation p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+:where(.foundation) a {
+  color: var(--primary);
+}
+.eyebrow {
+  font: var(--text-sm-medium);
+  letter-spacing: 0.08em;
+}
+.notice {
+  margin-block: var(--space-5);
+  padding: var(--space-4);
+  border-inline-start: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+.controls {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-1);
+  margin-block: var(--space-2);
+}
+.controls > * {
+  width: max-content;
+}
+.section {
+  margin-top: var(--space-6);
+}
+.section h3 {
+  overflow-wrap: anywhere;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--space-4);
+}
+.item {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+}
+.item h4 {
+  font: var(--text-sm-medium);
+  margin-top: 0;
+}
+.item p {
+  font-size: 0.8rem;
+}
+.reference,
+.codeStage {
+  display: flex;
+  align-items: center;
+  min-height: 88px;
+  padding: var(--space-4);
+  overflow-x: auto;
+}
+.reference {
+  background: #fff;
+  border-radius: var(--radius-md);
+}
+.reference[data-dark-background="true"] {
+  background: #0c0e12;
+}
+.reference img,
+.codeStage img {
+  flex-shrink: 0;
+  max-width: none;
+}
+.reference {
+  font-synthesis: none;
+}
+.reference > * {
+  flex-shrink: 0;
+}
+.codeStage > * {
+  flex-shrink: 0;
+}
+.pending {
+  min-height: 88px;
+  padding: var(--space-4);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+}
+.item details {
+  margin-top: var(--space-4);
+}
+.item summary {
+  cursor: pointer;
+}
+.item summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .foundation {
+    padding: var(--space-3);
+  }
+}
+
+:global(:root[data-theme="dark"]) .reference {
+  background: #0c0e12;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="primary"] {
+  --lab-button-bg: #3250bd;
+  --lab-button-shadow: var(--shadow-xs);
+  --lab-button-border: transparent;
+  --lab-button-text: #fff;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="secondaryGray"] {
+  --lab-button-bg: #0c0e12;
+  --lab-button-shadow: var(--shadow-xs);
+  --lab-button-border: #373a41;
+  --lab-button-text: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="danger"] {
+  --lab-button-bg: #d92d20;
+  --lab-button-shadow: var(--shadow-xs);
+  --lab-button-border: transparent;
+  --lab-button-text: #fff;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="outlineDanger"] {
+  --lab-button-bg: #0c0e12;
+  --lab-button-shadow: var(--shadow-xs);
+  --lab-button-border: #f04438;
+  --lab-button-text: #f97066;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="linkColor"] {
+  --lab-button-text: #cecfd2;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is([data-figma-variant="tertiaryGray"], [data-figma-variant="linkGray"]) {
+  --lab-button-text: #94979c;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is([data-figma-variant="tertiaryDanger"], [data-figma-variant="linkDanger"]) {
+  --lab-button-text: #f97066;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(
+    .reference[data-figma-state="Hover"],
+    .codeButton:hover:not(:disabled)
+  )[data-figma-variant="primary"] {
+  --lab-button-bg: #4d6ad6;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(.reference[data-figma-state="Hover"], .codeButton:hover:not(:disabled)):is(
+    [data-figma-variant="secondaryGray"],
+    [data-figma-variant="tertiaryGray"]
+  ) {
+  --lab-button-bg: #22262f;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(.reference[data-figma-state="Hover"], .codeButton:hover:not(:disabled)):is(
+    [data-figma-variant="secondaryGray"],
+    [data-figma-variant="linkColor"]
+  ) {
+  --lab-button-text: #ececed;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(.reference[data-figma-state="Hover"], .codeButton:hover:not(:disabled)):is(
+    [data-figma-variant="tertiaryGray"],
+    [data-figma-variant="linkGray"]
+  ) {
+  --lab-button-text: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-state="Disabled"][data-figma-variant] {
+  --lab-button-border: #22262f;
+  --lab-button-text: #85888e;
+  --lab-button-shadow: none;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton)[data-figma-state="Disabled"]:is(
+    [data-figma-variant="primary"],
+    [data-figma-variant="danger"]
+  ) {
+  --lab-button-bg: #22262f;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(.reference[data-figma-state="Focused"], .codeButton:focus-visible) {
+  --lab-button-shadow: 0 0 0 2px #0c0e12, 0 0 0 4px #4d6ad6;
+}
+
+:global(:root[data-theme="dark"])
+  .codeStage
+  .codeButton[data-figma-variant]:is(:enabled, [data-figma-state="Disabled"], [data-figma-state="Loading"]) {
+  background-color: var(--lab-button-bg, var(--button-background));
+  border-color: var(--lab-button-border, var(--button-border));
+  color: var(--lab-button-text, var(--button-text));
+  box-shadow: var(--lab-button-shadow, var(--button-shadow));
+}
+
+:global(:root[data-theme="dark"]) .codeStage .codeButton[data-figma-variant]:hover:not(:disabled) {
+  border-color: var(--button-hover-border);
+}
+
+:global(:root[data-theme="dark"])
+  .codeStage
+  .codeButton:is([data-figma-variant="danger"], [data-figma-variant="outlineDanger"]):hover:not(:disabled) {
+  background-color: var(--button-hover-background);
+  color: var(--button-hover-text);
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="primary"] {
+  --lab-glyph-color: #6584f8;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="danger"] {
+  --lab-glyph-color: #fda29b;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(
+    [data-figma-variant="outlineDanger"],
+    [data-figma-variant="tertiaryDanger"],
+    [data-figma-variant="linkDanger"]
+  ) {
+  --lab-glyph-color: #f97066;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-state="Disabled"][data-figma-variant] {
+  --lab-glyph-color: #61656c;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton)[data-figma-state="Loading"][data-figma-variant="primary"] {
+  --lab-button-bg: #4d6ad6;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton)[data-figma-state="Loading"][data-figma-variant="secondaryGray"] {
+  --lab-button-bg: #22262f;
+}

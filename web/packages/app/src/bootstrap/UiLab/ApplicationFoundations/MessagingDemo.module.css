@@ -1,0 +1,26 @@
+.preview {
+  display: grid;
+  inline-size: min(100%, 1040px);
+  min-inline-size: 0;
+  justify-self: center;
+  container-type: inline-size;
+}
+.window {
+  min-inline-size: 0;
+  block-size: 540px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.preview > :global(.thread-panel) {
+  block-size: 540px;
+}
+@container (min-width: 760px) {
+  .preview[data-thread-open="true"] > .window {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .preview > :global(.thread-panel) {
+    grid-column: 2;
+    grid-row: 1;
+    inline-size: 320px;
+  }
+}

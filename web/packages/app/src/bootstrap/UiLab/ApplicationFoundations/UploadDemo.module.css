@@ -1,0 +1,177 @@
+.demo {
+  --upload-surface: #fff;
+  --upload-disabled: #fafafa;
+  --upload-line: #e9eaeb;
+  --upload-icon-line: #d5d7da;
+  --upload-track: #e9eaeb;
+  --upload-accent: #3250bd;
+  --upload-hover: #3250bd;
+  --upload-text: #414651;
+  --upload-muted: #535862;
+  --upload-success: #067647;
+  --upload-error: #b42318;
+  --upload-error-border: #f04438;
+  min-inline-size: 0;
+}
+:global(:root[data-theme="dark"]) .demo {
+  --upload-surface: #0c0e12;
+  --upload-disabled: #13161b;
+  --upload-line: #22262f;
+  --upload-icon-line: #373a41;
+  --upload-track: #373a41;
+  --upload-accent: #4d6ad6;
+  --upload-hover: #5271e3;
+  --upload-text: #cecfd2;
+  --upload-muted: #94979c;
+  --upload-success: #47cd89;
+  --upload-error: #f97066;
+  --upload-error-border: #f97066;
+}
+.preview {
+  inline-size: min(100%, 512px);
+  margin: var(--space-4) auto 0;
+}
+.preview[data-mobile="true"] {
+  inline-size: min(100%, 343px);
+}
+.dropzone {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  inline-size: 100%;
+  padding: 16px 24px;
+  border: 1px solid var(--upload-line);
+  border-radius: 12px;
+  background: var(--upload-surface);
+  color: var(--upload-muted);
+  text-align: center;
+  font: var(--text-sm-normal);
+  cursor: pointer;
+}
+.dropzone > * {
+  pointer-events: none;
+}
+.dropzone strong {
+  color: var(--upload-text);
+  font-weight: 500;
+}
+.dropzone small {
+  font-size: 12px;
+  line-height: 18px;
+}
+.dropzone:enabled:is(:hover, :focus-visible, [data-dragging="true"]) {
+  outline: 2px solid var(--upload-hover);
+  outline-offset: -2px;
+}
+.dropzone:disabled {
+  background: var(--upload-disabled);
+  cursor: not-allowed;
+}
+.dropzone:disabled strong {
+  color: var(--upload-muted);
+}
+.uploadIcon {
+  display: grid;
+  place-items: center;
+  inline-size: 40px;
+  block-size: 40px;
+  margin-block-end: 8px;
+  border: 1px solid var(--upload-icon-line);
+  border-radius: 8px;
+  background: var(--upload-surface);
+  box-shadow: var(--shadow-xs);
+}
+:global(:root[data-theme="dark"]) .uploadIcon img {
+  content: url("./assets/dark-file-upload-imgUploadCloud02.svg");
+}
+.queue {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 16px 0 0;
+  list-style: none;
+}
+.item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--upload-line);
+  border-radius: 12px;
+  background: var(--upload-surface);
+  color: var(--upload-text);
+  font: var(--text-sm-normal);
+}
+.item[data-display="fill"]:not([data-state="error"]):not([data-state="complete"]) {
+  background: linear-gradient(
+    to right,
+    var(--upload-disabled) var(--upload-progress),
+    var(--upload-surface) var(--upload-progress)
+  );
+}
+.item[data-state="error"] {
+  border-color: var(--upload-error-border);
+  box-shadow: inset 0 0 0 1px var(--upload-error-border);
+}
+.details {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.name {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.metadata,
+.state,
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.metadata {
+  flex-wrap: wrap;
+  color: var(--upload-muted);
+}
+.state {
+  border-inline-start: 1px solid var(--upload-line);
+  padding-inline-start: 6px;
+}
+.item[data-state="complete"] .state {
+  color: var(--upload-success);
+}
+.item[data-state="error"] .state,
+.error {
+  color: var(--upload-error);
+}
+.progress {
+  inline-size: 100%;
+  gap: 12px;
+}
+.progress progress {
+  appearance: none;
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--upload-track);
+  accent-color: var(--upload-accent);
+}
+.progress progress::-webkit-progress-bar {
+  border-radius: 9999px;
+  background: var(--upload-track);
+}
+.progress progress::-webkit-progress-value {
+  border-radius: 9999px;
+  background: var(--upload-accent);
+}
+.progress progress::-moz-progress-bar {
+  border-radius: 9999px;
+  background: var(--upload-accent);
+}
