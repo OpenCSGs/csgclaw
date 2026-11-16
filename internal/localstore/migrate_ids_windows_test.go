@@ -53,3 +53,32 @@ func TestCreateSiblingBackupWithLockedRuntimeLock(t *testing.T) {
 	}
 	assertMissing(t, filepath.Join(backupPath, runtimeLockFileName))
 }
+
+func TestCreateSiblingBackupWithUnreadableDSHSharedModule(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".csgclaw")
+	writeFile(t, filepath.Join(root, "config.toml"), "version = 1\n")
+	modules := filepath.Join("agents", "agent-bdcpxh", ".dsh", "home", "profiles", "node_modules")
+	path := filepath.Join(root, modules, "@agentclientprotocol", "sdk")
+	writeFile(t, path, "generated dependency")
+	name, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Deny shared reads so a backup that traverses the mirror fails on Windows.
+	handle, err := windows.CreateFile(name, windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { windows.CloseHandle(handle) })
+	if _, err := os.ReadFile(path); err == nil {
+		t.Fatal("fixture dependency is readable")
+	}
+	backup, err := CreateSiblingBackup(root, time.Now())
+	if err != nil {
+		t.Fatalf("generated dependency blocked backup: %v", err)
+	}
+	assertMissing(t, filepath.Join(backup, modules))
+	if _, err := os.Stat(filepath.Join(backup, "config.toml")); err != nil {
+		t.Fatal(err)
+	}
+}

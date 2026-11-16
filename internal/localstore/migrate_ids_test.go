@@ -25,6 +25,42 @@ func TestCreateSiblingBackupExcludesRuntimeLock(t *testing.T) {
 	assertMissing(t, filepath.Join(backupPath, runtimeLockFileName))
 }
 
+func TestSiblingBackupExcludesDSHSharedModuleFallback(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".csgclaw")
+	generated := filepath.Join("agents", "agent-bdcpxh", ".dsh", "home", "profiles", "node_modules")
+	writeFile(t, filepath.Join(root, generated, "@agentclientprotocol", "sdk", "package.json"), "generated dependency")
+	retained := []string{
+		"config.toml",
+		"state.json",
+		"agents/agent-bdcpxh/.dsh/home/profiles/acp/package.json",
+		"agents/agent-bdcpxh/.dsh/home/profiles/acp/cordis.patch.yml",
+		"agents/agent-bdcpxh/.dsh/home/profiles/acp/node_modules/custom-plugin/package.json",
+		"agents/agent-bdcpxh/.dsh/home/profiles/node_modules-custom/notes.txt",
+		"agents/agent-bdcpxh/.dsh/home/memories/memory_summary.md",
+		"agents/agent-bdcpxh/.dsh/workspace/node_modules/custom-plugin/package.json",
+		"agents/agent-bdcpxh/.codex/home/profiles/node_modules/notes.txt",
+		"agents/agent-bdcpxh/workspace/.dsh/home/profiles/node_modules/notes.txt",
+		"workspace/agents/agent-bdcpxh/.dsh/home/profiles/node_modules/notes.txt",
+	}
+	for _, rel := range retained {
+		writeFile(t, filepath.Join(root, filepath.FromSlash(rel)), "preserve "+rel)
+	}
+	backup, err := CreateSiblingBackup(root, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMissing(t, filepath.Join(backup, generated))
+	for _, rel := range retained {
+		data, err := os.ReadFile(filepath.Join(backup, filepath.FromSlash(rel)))
+		if err != nil || string(data) != "preserve "+rel {
+			t.Fatalf("backup lost %s: %q, %v", rel, data, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, generated, "@agentclientprotocol", "sdk", "package.json")); err != nil {
+		t.Fatalf("live dependency mirror changed: %v", err)
+	}
+}
+
 func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, ".csgclaw")
