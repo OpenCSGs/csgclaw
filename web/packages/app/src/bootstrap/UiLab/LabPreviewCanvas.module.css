@@ -1,0 +1,30 @@
+.previewCanvas {
+  --preview-surface: #f8f9fb;
+  --preview-dot: #dce0e7;
+  --preview-border: #e3e6eb;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  padding: var(--lab-preview-padding, clamp(16px, 4vw, 48px));
+  border: 1px solid var(--preview-border);
+  border-radius: 24px;
+  background-color: var(--preview-surface);
+  background-image: radial-gradient(circle, var(--preview-dot) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+@media (max-width: 700px) {
+  .previewCanvas {
+    border-radius: 16px;
+  }
+}
+
+:global(:root[data-theme="dark"]) .previewCanvas {
+  --preview-surface: #121212;
+  --preview-dot: #242424;
+  --preview-border: #262626;
+}
+
+.compact {
+  --lab-preview-padding: var(--space-4);
+}

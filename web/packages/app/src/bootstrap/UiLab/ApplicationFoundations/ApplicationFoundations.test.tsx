@@ -1,6 +1,6 @@
 import { selectLabOption } from "../selectLabOption.test-helper";
 import { LabView } from "../labViewContext";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ApplicationFoundations } from "./ApplicationFoundations";
@@ -79,30 +79,58 @@ describe("application component playgrounds", () => {
     await user.click(screen.getByRole("button", { name: "2025-01-15" }));
     expect(screen.getByText("当天没有日程。")).toBeVisible();
   });
-  it("validates messages and preserves multiline content", async () => {
+  it("sends messages through the production composer and resets the conversation", async () => {
     mount("messaging");
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(screen.getByText("请输入消息内容。")).toBeVisible();
-    await user.type(screen.getByRole("textbox", { name: "消息内容" }), "First{Enter}Second");
-    await user.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(screen.getByRole("textbox", { name: "消息内容" })).toHaveValue("");
-    expect(screen.getByText(/First\s+Second/)).toBeVisible();
-    expect(screen.getByRole("status")).toHaveTextContent("已发送 1");
+    const editor = screen.getByRole("textbox", { name: /输入消息/ });
+    const send = screen.getByRole("button", { name: "发送" });
+    expect(send).toBeDisabled();
+    await user.type(editor, "Message from UI Lab");
+    await user.click(send);
+    expect(screen.getByText("Message from UI Lab")).toBeVisible();
+    expect(editor).toBeEmptyDOMElement();
     await user.click(screen.getByRole("button", { name: "重置示例" }));
-    expect(screen.queryByText(/First\s+Second/)).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已发送 0");
+    expect(screen.queryByText("Message from UI Lab")).not.toBeInTheDocument();
   });
-  it("rejects invalid uploads and recovers with a valid local file", () => {
+  it("opens the production thread panel and sends a local reply", async () => {
+    mount("messaging");
+    const user = userEvent.setup();
+    const [reply] = screen.getAllByRole("button", { name: "在话题中回复" });
+    await user.click(reply);
+    const thread = within(screen.getByRole("complementary"));
+    await user.type(thread.getByRole("textbox", { name: "回复这个话题" }), "Reply from UI Lab");
+    await user.click(thread.getByRole("button", { name: "发送" }));
+    expect(thread.getByText("Reply from UI Lab")).toBeVisible();
+  });
+  it("replaces rejected files and completes a local upload", async () => {
     mount("file-upload");
+    const user = userEvent.setup();
     const input = screen.getByLabelText("选择文件");
     fireEvent.change(input, {
       target: { files: [new File(["x"], "invalid.exe", { type: "application/octet-stream" })] },
     });
     expect(screen.getByRole("alert")).toHaveTextContent("文件类型不支持");
+    await user.click(screen.getByRole("button", { name: "重新选择" }));
     fireEvent.change(input, { target: { files: [new File(["x"], "demo.png", { type: "image/png" })] } });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("demo.png");
+    const progress = screen.getByRole("progressbar", { name: "demo.png" });
+    await waitFor(() => expect(progress).toHaveValue(100), { timeout: 2500 });
+    await user.click(screen.getByRole("button", { name: "移除文件 demo.png" }));
+    expect(progress).not.toBeInTheDocument();
+  });
+  it("queues multiple dropped files and rejects drops while disabled", async () => {
+    mount("file-upload");
+    const user = userEvent.setup();
+    const target = screen.getByRole("button", { name: /点击上传/ });
+    const dataTransfer = {
+      files: [new File(["x"], "one.png", { type: "image/png" }), new File(["x"], "two.gif", { type: "image/gif" })],
+    };
+    fireEvent.drop(target, { dataTransfer });
+    expect(screen.getAllByRole("progressbar")).toHaveLength(2);
+    await selectLabOption(user, "上传区状态", "禁用");
+    expect(target).toBeDisabled();
+    fireEvent.drop(target, { dataTransfer });
+    expect(screen.getAllByRole("progressbar")).toHaveLength(2);
   });
   it("searches and selects a command using the keyboard", async () => {
     mount("command-menus");

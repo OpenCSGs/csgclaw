@@ -91,7 +91,11 @@
   margin: 0;
   font-size: 0.8rem;
 }
-.liveStage,
+.liveStage {
+  min-width: 0;
+  margin-block: var(--space-4);
+  overflow-x: auto;
+}
 .referenceStage {
   min-width: 0;
   margin-block: var(--space-4);
@@ -211,7 +215,7 @@
   }
 }
 
-:global(:root[data-theme="dark"]) :is(.liveStage, .referenceStage) {
+:global(:root[data-theme="dark"]) .referenceStage {
   background: #0c0e12;
 }
 

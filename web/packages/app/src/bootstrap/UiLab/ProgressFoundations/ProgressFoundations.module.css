@@ -65,7 +65,9 @@
 .item p {
   font-size: 0.8rem;
 }
-.liveStage,
+.liveStage {
+  min-width: 0;
+}
 .referenceStage,
 .circleStage {
   min-width: 0;
@@ -212,7 +214,7 @@
   }
 }
 
-:global(:root[data-theme="dark"]) :is(.liveStage, .referenceStage, .circleStage) {
+:global(:root[data-theme="dark"]) :is(.referenceStage, .circleStage) {
   background: #0c0e12;
 }
 

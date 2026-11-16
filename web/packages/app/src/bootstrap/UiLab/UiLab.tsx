@@ -1,3 +1,4 @@
+import canvasStyles from "./LabPreviewCanvas.module.css";
 import resetStyles from "./LabOptions.module.css";
 import { LabComponentHeading } from "./LabComponentHeading";
 import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
@@ -293,269 +294,285 @@ function UiLabContent() {
                   active={destination}
                   visible={isVisible(`${key}-foundations`)}
                 >
-                  <ApplicationFoundations kind={key} />
+                  <ApplicationFoundations kind={key} theme={theme} />
                 </UiLabPanel>
               ))}
               <UiLabPanel id="token-consumption" active={destination} visible={isVisible("token-consumption")}>
                 <section className={styles.card} id="token-consumption">
                   <h2>{labText("Turn token consumption")}</h2>
-                  {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map((model) => (
-                    <div key={model} className={`message-row ${messageLayoutStyles["message-row"]}`}>
-                      <div className={`message-card ${messageLayoutStyles["message-card"]}`}>
-                        <p>{labText("这是一轮已完成的回复。")}</p>
-                        <ConversationMessageActions
-                          className="message-hover-actions"
-                          content="这是一轮已完成的回复。"
-                          t={createTranslator(locale)}
-                          metadata={{
-                            csgclaw: {
-                              turn_progress: {
-                                status: "succeeded",
-                                usage: {
-                                  known: true,
-                                  model_id: model,
-                                  input_tokens: 1000,
-                                  output_tokens: 220,
-                                  total_tokens: 1220,
+                  <div className={canvasStyles.previewCanvas}>
+                    {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map((model) => (
+                      <div key={model} className={`message-row ${messageLayoutStyles["message-row"]}`}>
+                        <div className={`message-card ${messageLayoutStyles["message-card"]}`}>
+                          <p>{labText("这是一轮已完成的回复。")}</p>
+                          <ConversationMessageActions
+                            className="message-hover-actions"
+                            content="这是一轮已完成的回复。"
+                            t={createTranslator(locale)}
+                            metadata={{
+                              csgclaw: {
+                                turn_progress: {
+                                  status: "succeeded",
+                                  usage: {
+                                    known: true,
+                                    model_id: model,
+                                    input_tokens: 1000,
+                                    output_tokens: 220,
+                                    total_tokens: 1220,
+                                  },
                                 },
                               },
-                            },
-                          }}
-                        />
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </section>
               </UiLabPanel>
               <UiLabPanel id="secondary-gray" active={destination} visible={isVisible("secondary-gray")}>
                 <section className={styles.card} id="secondary-gray">
                   <h2>{labText("Secondary gray · Figma")}</h2>
-                  <p className={styles.intro}>
-                    {labText("Default, leading icon, disabled, loading, icon only and navigation.")}
-                  </p>
-                  {(["sm", "md", "lg", "xl", "2xl"] as const).map((size) => (
-                    <div key={size} className={styles.row} role="group" aria-label={`Secondary gray ${size}`}>
-                      <span>{size}</span>
-                      <Button size={size}>{labText("登录账号")}</Button>
-                      <Button size={size}>
-                        <Plus />
-                        {labText("新建智能体")}
-                      </Button>
-                      <Button size={size} disabled>
-                        {labText("登录账号")}
-                      </Button>
-                      <Button size={size} loading loadingLabel={`Saving ${size}`}>
-                        {labText("登录账号")}
-                      </Button>
-                      <IconButton size={size} icon={<Plus />} label={`Add ${size}`} />
-                      <LinkButton size={size} href="#selection-controls">
-                        {labText("View items")}
-                      </LinkButton>
-                    </div>
-                  ))}
+                  <div className={canvasStyles.previewCanvas}>
+                    <p className={styles.intro}>
+                      {labText("Default, leading icon, disabled, loading, icon only and navigation.")}
+                    </p>
+                    {(["sm", "md", "lg", "xl", "2xl"] as const).map((size) => (
+                      <div key={size} className={styles.row} role="group" aria-label={`Secondary gray ${size}`}>
+                        <span>{size}</span>
+                        <Button size={size}>{labText("登录账号")}</Button>
+                        <Button size={size}>
+                          <Plus />
+                          {labText("新建智能体")}
+                        </Button>
+                        <Button size={size} disabled>
+                          {labText("登录账号")}
+                        </Button>
+                        <Button size={size} loading loadingLabel={`Saving ${size}`}>
+                          {labText("登录账号")}
+                        </Button>
+                        <IconButton size={size} icon={<Plus />} label={`Add ${size}`} />
+                        <LinkButton size={size} href="#selection-controls">
+                          {labText("View items")}
+                        </LinkButton>
+                      </div>
+                    ))}
+                  </div>
                 </section>
               </UiLabPanel>
               <UiLabPanel id="buttons-and-fields" active={destination} visible={isVisible("buttons-and-fields")}>
                 <section className={styles.card} id="buttons-and-fields">
                   <h2>{labText("Buttons and fields")}</h2>
-                  <div className={styles.row}>
-                    <Button variant="primary">{labText("Primary")}</Button>
-                    <Button variant="secondaryGray">{labText("Secondary")}</Button>
-                    <Button variant="danger">{labText("Danger")}</Button>
-                    <Button disabled>{labText("Disabled")}</Button>
-                    <Button loading>{labText("Loading")}</Button>
-                    <LinkButton href="#selection-controls">{labText("View selection controls")}</LinkButton>
+                  <div className={canvasStyles.previewCanvas}>
+                    <div className={styles.row}>
+                      <Button variant="primary">{labText("Primary")}</Button>
+                      <Button variant="secondaryGray">{labText("Secondary")}</Button>
+                      <Button variant="danger">{labText("Danger")}</Button>
+                      <Button disabled>{labText("Disabled")}</Button>
+                      <Button loading>{labText("Loading")}</Button>
+                      <LinkButton href="#selection-controls">{labText("View selection controls")}</LinkButton>
+                    </div>
+                    <div className={styles.grid}>
+                      <Field
+                        label={labText("Name")}
+                        required
+                        hint={labText("Use a short display name")}
+                        error={error ? labText("Enter a name") : undefined}
+                      >
+                        <TextInput placeholder={labText("Example")} />
+                      </Field>
+                      <Field label={labText("Disabled input")}>
+                        <TextInput disabled value={labText("Read only")} />
+                      </Field>
+                      <Field label={labText("Instructions")}>
+                        <TextArea defaultValue={labText("A multiline field with its own component styles.")} />
+                      </Field>
+                    </div>
+                    <label className={styles.row}>
+                      <input type="checkbox" checked={error} onChange={(event) => setError(event.target.checked)} />
+                      {labText("Show validation errors")}
+                    </label>
+                    <FieldHelpTooltip
+                      summary={labText("Field help")}
+                      detail={labText(
+                        "This is the shared tooltip. It opens with pointer hover or keyboard focus and follows the viewport.",
+                      )}
+                    />
                   </div>
-                  <div className={styles.grid}>
-                    <Field
-                      label={labText("Name")}
-                      required
-                      hint={labText("Use a short display name")}
-                      error={error ? labText("Enter a name") : undefined}
-                    >
-                      <TextInput placeholder={labText("Example")} />
-                    </Field>
-                    <Field label={labText("Disabled input")}>
-                      <TextInput disabled value={labText("Read only")} />
-                    </Field>
-                    <Field label={labText("Instructions")}>
-                      <TextArea defaultValue={labText("A multiline field with its own component styles.")} />
-                    </Field>
-                  </div>
-                  <label className={styles.row}>
-                    <input type="checkbox" checked={error} onChange={(event) => setError(event.target.checked)} />
-                    {labText("Show validation errors")}
-                  </label>
-                  <FieldHelpTooltip
-                    summary={labText("Field help")}
-                    detail={labText(
-                      "This is the shared tooltip. It opens with pointer hover or keyboard focus and follows the viewport.",
-                    )}
-                  />
                 </section>
               </UiLabPanel>
               <UiLabPanel id="workspace-boundary" active={destination} visible={isVisible("workspace-boundary")}>
                 <section className={styles.card} id="workspace-boundary">
                   <h2>{labText("Workspace style boundary")}</h2>
-                  <div className={resetStyles.resetRow}>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setWorkspaceInput("");
-                        setShowDemoConversation(true);
-                      }}
-                    >
-                      {labText("重置示例")}
-                    </Button>
-                  </div>
-                  <div className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
-                    <Field label={labText("Workspace input")} error={error ? labText("Enter a value") : undefined}>
-                      <TextInput
-                        placeholder={labText("Component styles inside legacy workspace CSS")}
-                        value={workspaceInput}
-                        onChange={(event) => setWorkspaceInput(event.target.value)}
-                      />
-                    </Field>
-                    <div className={styles.row}>
-                      <Button variant="primary" disabled>
-                        {labText("Disabled primary")}
+                  <div className={canvasStyles.previewCanvas}>
+                    <div className={resetStyles.resetRow}>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setWorkspaceInput("");
+                          setShowDemoConversation(true);
+                        }}
+                      >
+                        {labText("重置示例")}
                       </Button>
-                      <Button variant="primary" loading>
-                        {labText("Saving")}
-                      </Button>
-                      <Checkbox aria-label={labText("Disabled checkbox")} checked disabled />
-                      <Switch aria-label={labText("Disabled switch")} checked disabled />
                     </div>
+                    <div className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
+                      <Field label={labText("Workspace input")} error={error ? labText("Enter a value") : undefined}>
+                        <TextInput
+                          placeholder={labText("Component styles inside legacy workspace CSS")}
+                          value={workspaceInput}
+                          onChange={(event) => setWorkspaceInput(event.target.value)}
+                        />
+                      </Field>
+                      <div className={styles.row}>
+                        <Button variant="primary" disabled>
+                          {labText("Disabled primary")}
+                        </Button>
+                        <Button variant="primary" loading>
+                          {labText("Saving")}
+                        </Button>
+                        <Checkbox aria-label={labText("Disabled checkbox")} checked disabled />
+                        <Switch aria-label={labText("Disabled switch")} checked disabled />
+                      </div>
+                    </div>
+                    <ConversationSection
+                      title={labText("Conversation button styles")}
+                      items={
+                        showDemoConversation
+                          ? [{ id: "ui-lab-room", title: "UI Lab conversation", members: [], messages: [] }]
+                          : []
+                      }
+                      activeConversationId="ui-lab-room"
+                      currentUserID="ui-lab-user"
+                      usersById={new Map()}
+                      locale={locale}
+                      t={createTranslator(locale)}
+                      onSelect={() => {}}
+                      onDelete={() => setShowDemoConversation(false)}
+                    />
                   </div>
-                  <ConversationSection
-                    title={labText("Conversation button styles")}
-                    items={
-                      showDemoConversation
-                        ? [{ id: "ui-lab-room", title: "UI Lab conversation", members: [], messages: [] }]
-                        : []
-                    }
-                    activeConversationId="ui-lab-room"
-                    currentUserID="ui-lab-user"
-                    usersById={new Map()}
-                    locale={locale}
-                    t={createTranslator(locale)}
-                    onSelect={() => {}}
-                    onDelete={() => setShowDemoConversation(false)}
-                  />
                 </section>
               </UiLabPanel>
               <UiLabPanel id="selection-controls" active={destination} visible={isVisible("selection-controls")}>
                 <section className={styles.card} id="selection-controls">
                   <h2>{labText("Selection controls")}</h2>
-                  <div className={resetStyles.resetRow}>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setSort("recent");
-                        setValue("model-1");
-                        setModel("qwen-3.5");
-                      }}
-                    >
-                      {labText("重置示例")}
+                  <div className={canvasStyles.previewCanvas}>
+                    <div className={resetStyles.resetRow}>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setSort("recent");
+                          setValue("model-1");
+                          setModel("qwen-3.5");
+                        }}
+                      >
+                        {labText("重置示例")}
+                      </Button>
+                    </div>
+                    <div className={styles.grid}>
+                      <Field label={labText("Sort order")}>
+                        <Select
+                          value={sort}
+                          onValueChange={setSort}
+                          options={[
+                            { value: "", label: labText("None") },
+                            { value: "recent", label: labText("Most recent") },
+                            { value: "name", label: labText("Name") },
+                          ]}
+                        />
+                      </Field>
+                      <Field
+                        label={labText("Search picker")}
+                        hint={labText("Try arrows, Enter, Escape and Tab")}
+                        error={error ? labText("Choose a model") : undefined}
+                      >
+                        <Combobox
+                          value={value}
+                          onValueChange={setValue}
+                          options={options}
+                          searchPlaceholder={labText("Search models")}
+                          emptyLabel={labText("No matching models")}
+                        />
+                      </Field>
+                      <Field label={labText("Disabled picker")}>
+                        <Combobox
+                          disabled
+                          value={value}
+                          options={options}
+                          searchPlaceholder={labText("Search disabled picker")}
+                        />
+                      </Field>
+                      <Field label={labText("Model")}>
+                        <ModelPicker
+                          providerID="opencsg"
+                          value={model}
+                          models={["auto", "qwen-3.5", "deepseek-v4", "a-model-with-a-long-name"]}
+                          onChange={setModel}
+                          placeholder={labText("Choose a model")}
+                          t={createTranslator(locale)}
+                        />
+                      </Field>
+                    </div>
+                    <output className={styles.output}>
+                      {labText("Selected: ")}
+                      {value}
+                    </output>
+                    <Button variant="secondaryGray" onClick={() => setValue("")}>
+                      {labText("Clear selection")}
                     </Button>
                   </div>
-                  <div className={styles.grid}>
-                    <Field label={labText("Sort order")}>
-                      <Select
-                        value={sort}
-                        onValueChange={setSort}
-                        options={[
-                          { value: "", label: labText("None") },
-                          { value: "recent", label: labText("Most recent") },
-                          { value: "name", label: labText("Name") },
-                        ]}
-                      />
-                    </Field>
-                    <Field
-                      label={labText("Search picker")}
-                      hint={labText("Try arrows, Enter, Escape and Tab")}
-                      error={error ? labText("Choose a model") : undefined}
-                    >
-                      <Combobox
-                        value={value}
-                        onValueChange={setValue}
-                        options={options}
-                        searchPlaceholder={labText("Search models")}
-                        emptyLabel={labText("No matching models")}
-                      />
-                    </Field>
-                    <Field label={labText("Disabled picker")}>
-                      <Combobox
-                        disabled
-                        value={value}
-                        options={options}
-                        searchPlaceholder={labText("Search disabled picker")}
-                      />
-                    </Field>
-                    <Field label={labText("Model")}>
-                      <ModelPicker
-                        providerID="opencsg"
-                        value={model}
-                        models={["auto", "qwen-3.5", "deepseek-v4", "a-model-with-a-long-name"]}
-                        onChange={setModel}
-                        placeholder={labText("Choose a model")}
-                        t={createTranslator(locale)}
-                      />
-                    </Field>
-                  </div>
-                  <output className={styles.output}>
-                    {labText("Selected: ")}
-                    {value}
-                  </output>
-                  <Button variant="secondaryGray" onClick={() => setValue("")}>
-                    {labText("Clear selection")}
-                  </Button>
                 </section>
               </UiLabPanel>
               <UiLabPanel id="reasoning-effort" active={destination} visible={isVisible("reasoning-effort")}>
                 <section className={styles.card} id="reasoning-effort">
                   <h2>{labText("Reasoning effort")}</h2>
-                  <div className={resetStyles.resetRow}>
-                    <Button size="sm" onClick={() => setReasoning("")}>
-                      {labText("重置示例")}
-                    </Button>
-                  </div>
-                  <div className={styles.reasoningPreview}>
-                    <ReasoningEffortPicker
-                      value={reasoning}
-                      agentEffort="high"
-                      onValueChange={setReasoning}
-                      onValueCommit={setReasoning}
-                      t={createTranslator(locale)}
-                    />
+                  <div className={canvasStyles.previewCanvas}>
+                    <div className={resetStyles.resetRow}>
+                      <Button size="sm" onClick={() => setReasoning("")}>
+                        {labText("重置示例")}
+                      </Button>
+                    </div>
+                    <div className={styles.reasoningPreview}>
+                      <ReasoningEffortPicker
+                        value={reasoning}
+                        agentEffort="high"
+                        onValueChange={setReasoning}
+                        onValueCommit={setReasoning}
+                        t={createTranslator(locale)}
+                      />
+                    </div>
                   </div>
                 </section>
               </UiLabPanel>
               <UiLabPanel id="dialogs-and-empty" active={destination} visible={isVisible("dialogs-and-empty")}>
                 <section className={styles.card} id="dialogs-and-empty">
-                  <PanelHeader>
-                    <h2>{labText("Dialog and empty state")}</h2>
+                  <h2>{labText("Dialog and empty state")}</h2>
+                  <div className={canvasStyles.previewCanvas}>
                     <Button onClick={() => setDialog(true)}>{labText("Open nested dialog")}</Button>
-                  </PanelHeader>
-                  <EmptyState
-                    title={labText("No items yet")}
-                    description={labText("Add an item to see it here.")}
-                    actions={<Button variant="secondaryGray">{labText("Add item")}</Button>}
-                  />
+                    <EmptyState
+                      title={labText("No items yet")}
+                      description={labText("Add an item to see it here.")}
+                      actions={<Button variant="secondaryGray">{labText("Add item")}</Button>}
+                    />
+                  </div>
                 </section>
                 <section className={styles.card}>
                   <h2>Cloud agent confirmation</h2>
-                  <Button onClick={() => setCloudPrivacyDialog(true)}>Preview cloud privacy dialog</Button>
+                  <div className={canvasStyles.previewCanvas}>
+                    <Button onClick={() => setCloudPrivacyDialog(true)}>Preview cloud privacy dialog</Button>
+                  </div>
                 </section>
                 <section className={styles.card}>
                   <h2>Cloud agent type avatars</h2>
-                  <div className={styles.row}>
-                    {Object.keys(CLOUD_AGENT_AVATARS).map((type) => (
-                      <div key={type} className={styles.cloudAvatarPreview}>
-                        <AgentAvatarContent avatar={cloudAgentAvatar(type)} alt={type} />
-                        <span>{type}</span>
-                      </div>
-                    ))}
+                  <div className={canvasStyles.previewCanvas}>
+                    <div className={styles.row}>
+                      {Object.keys(CLOUD_AGENT_AVATARS).map((type) => (
+                        <div key={type} className={styles.cloudAvatarPreview}>
+                          <AgentAvatarContent avatar={cloudAgentAvatar(type)} alt={type} />
+                          <span>{type}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </section>
                 {cloudPrivacyDialog ? (

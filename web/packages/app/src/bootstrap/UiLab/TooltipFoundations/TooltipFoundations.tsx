@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { LabOptions, LabOptionSelect } from "../LabOptions";
 import { LabComponentHeading } from "../LabComponentHeading";
@@ -106,7 +107,7 @@ export function TooltipFoundations() {
             "悬浮或 Tab 聚焦任一触发点查看提示；Escape 关闭。两侧帮助图标分别请求向左/向右显示，用于检查视口边缘的自动避让。",
           )}
         </p>
-        <div className={styles.previewStage}>
+        <div className={`${canvasStyles.previewCanvas} ${styles.previewStage}`}>
           <TooltipPreview {...previewProps} edge="left" />
           <TooltipPreview {...previewProps} />
           <TooltipPreview {...previewProps} edge="right" />

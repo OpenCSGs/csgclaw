@@ -31,8 +31,6 @@
 }
 .adaptive {
   container-type: inline-size;
-  padding-block: 24px;
-  background: white;
 }
 .sample {
   margin-block: 20px;
@@ -249,7 +247,7 @@
   }
 }
 
-:global(:root[data-theme="dark"]) :is(.adaptive, .scroll, .footer, .period) {
+:global(:root[data-theme="dark"]) :is(.scroll, .footer, .period) {
   background: #0c0e12;
   color: #cecfd2;
 }

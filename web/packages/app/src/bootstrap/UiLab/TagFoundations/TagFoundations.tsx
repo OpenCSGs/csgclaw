@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { LabOptions, LabOptionSelect } from "../LabOptions";
 import { LabComponentHeading } from "../LabComponentHeading";
@@ -116,7 +117,7 @@ export function TagFoundations() {
         <Field label={labText("标签文案")} hint={labText("最多 120 字；长文案省略显示，悬浮可查看完整内容。")}>
           <TextInput value={label} maxLength={120} onChange={(event) => setLabel(event.target.value)} />
         </Field>
-        <div className={styles.stage}>
+        <div className={`${canvasStyles.previewCanvas} ${styles.stage}`}>
           {removed ? (
             <p role="status">{labText("标签已移除")}</p>
           ) : (
@@ -153,7 +154,7 @@ export function TagFoundations() {
                   {item.checkbox ? labText("带复选框") : labText("不带复选框")} · {item.width} × {item.height}
                   {labText("px")}
                 </p>
-                <div className={styles.stage} inert>
+                <div className={`${canvasStyles.previewCanvas} ${styles.stage}`} inert>
                   <TagSample entry={item} />
                 </div>
                 <a

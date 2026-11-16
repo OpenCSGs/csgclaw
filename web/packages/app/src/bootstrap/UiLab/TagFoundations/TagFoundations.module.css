@@ -62,6 +62,8 @@
   padding: var(--space-5);
   margin-block: var(--space-4);
   overflow-x: auto;
+}
+.stage[inert] {
   background: #fff;
   border-radius: var(--radius-md);
 }
@@ -129,7 +131,7 @@
   }
 }
 
-:global(:root[data-theme="dark"]) .stage {
+:global(:root[data-theme="dark"]) .stage[inert] {
   background: #0c0e12;
 }
 

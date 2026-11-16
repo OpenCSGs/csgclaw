@@ -149,6 +149,7 @@ export function CalendarDemo() {
       </ul>
       {!events.some((event) => event.date === selected) && <p>{t("当天没有日程。")}</p>}
       <form
+        className={styles.calendarEventForm}
         onSubmit={(event) => {
           event.preventDefault();
           if (!title.trim()) {

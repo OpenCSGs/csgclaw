@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import { LabComponentHeading } from "../LabComponentHeading";
 import { DesignOnly, PreviewOnly } from "../LabView";
 import { useState } from "react";
@@ -8,13 +9,17 @@ import { HeaderDemo, NavigationDemo, BreadcrumbDemo, InlineCtaDemo, DividerDemo 
 import { ModalDemo, CommandDemo } from "./OverlayDemos";
 import { TableDemo, MetricDemo, ChartDemo, ActivityDemo } from "./DataDemos";
 import { DatePickerDemo, CalendarDemo } from "./DateDemos";
-import { LoadingDemo, EmptyDemo } from "./FeedbackDemos";
-import { MessagingDemo, UploadDemo, CodeDemo } from "./ContentDemos";
+import { LoadingDemo } from "./FeedbackDemos";
+import { EmptyDemo } from "./EmptyDemo";
+import { CodeDemo } from "./CodeDemo";
+import { UploadDemo } from "./UploadDemo";
+import { MessagingDemo } from "./MessagingDemo";
+import type { ResolvedThemeMode } from "@/shared/theme/theme";
 import { useLabTranslation } from "../LabLocale";
 import { AlertNotificationDemos } from "./AlertNotificationDemos";
 import inventory from "./figmaInventory.json";
 import styles from "./ApplicationFoundations.module.css";
-function Demo({ kind }: { kind: ApplicationKind }) {
+function Demo({ kind, theme }: { kind: ApplicationKind; theme: ResolvedThemeMode }) {
   switch (kind) {
     case "page-headers":
     case "card-headers":
@@ -37,7 +42,7 @@ function Demo({ kind }: { kind: ApplicationKind }) {
     case "activity-feeds":
       return <ActivityDemo />;
     case "messaging":
-      return <MessagingDemo />;
+      return <MessagingDemo theme={theme} />;
     case "tables":
       return <TableDemo />;
     case "breadcrumbs":
@@ -58,14 +63,15 @@ function Demo({ kind }: { kind: ApplicationKind }) {
       return <CodeDemo />;
   }
 }
-export function ApplicationFoundations({ kind }: { kind: ApplicationKind }) {
+export function ApplicationFoundations({ kind, theme = "light" }: { kind: ApplicationKind; theme?: ResolvedThemeMode }) {
   const { text: t } = useLabTranslation();
   const [revision, setRevision] = useState(0);
   const entry = applicationSections.find((section) => section.key === kind)!;
   const source = inventory.find((item) => item.key === kind)!;
   const preview = (
     <section
-      className={`${styles.previewCanvas} ${styles.liveStage} ${styles.demoSurface}${kind !== "breadcrumbs" ? ` ${styles.withReset}` : ""}`}
+      className={`${canvasStyles.previewCanvas} ${styles.liveStage}${kind === "messaging" ? "" : ` ${styles.demoSurface}`}${kind !== "breadcrumbs" ? ` ${styles.withReset}` : ""}`}
+      data-kind={kind}
       aria-label={`${t(entry.title + " · " + entry.zh)} · ${t("交互试用")}`}
     >
       {kind !== "breadcrumbs" && (
@@ -75,7 +81,7 @@ export function ApplicationFoundations({ kind }: { kind: ApplicationKind }) {
           </Button>
         </div>
       )}
-      <Demo key={revision} kind={kind} />
+      <Demo key={revision} kind={kind} theme={theme} />
     </section>
   );
   return (

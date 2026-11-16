@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { LabOptions, LabOptionSelect } from "../LabOptions";
 import { LabComponentHeading } from "../LabComponentHeading";
@@ -253,7 +254,7 @@ export function ButtonFoundations() {
                     {labText("现有代码 · ")}
                     {codeVariant(item)}
                   </p>
-                  <div className={styles.codeStage} data-dark-background={item.darkBackground}>
+                  <div className={`${canvasStyles.previewCanvas} ${canvasStyles.compact} ${styles.codeStage}`} data-dark-background={item.darkBackground}>
                     <CodeButton item={item} />
                   </div>
                   <DesignOnly>

@@ -1,12 +1,12 @@
 .demos,
 .section {
   display: grid;
-  justify-items: start;
   gap: 12px;
   min-width: 0;
 }
 
 .section {
+  justify-items: start;
   position: relative;
   width: 100%;
   --feedback-surface: #fff;

@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import { ThemeGlyph } from "../ThemeGlyph";
 import { applicationAsset, resolveAssetStyle } from "./assets";
 import { createElement, useState, type CSSProperties, type ReactNode } from "react";
@@ -97,7 +98,7 @@ export function FigmaReference({ kind }: { kind: ApplicationKind }) {
         </p>
         {open && (
           <div
-            className={`${styles.previewCanvas} ${styles.referenceScroll}`}
+            className={`${canvasStyles.previewCanvas} ${styles.referenceScroll}`}
             data-themed-reference={themed || undefined}
             tabIndex={0}
             role="region"

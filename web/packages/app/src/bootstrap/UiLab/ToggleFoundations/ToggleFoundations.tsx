@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { LabOptions, LabOptionSelect } from "../LabOptions";
 import { LabComponentHeading } from "../LabComponentHeading";
@@ -138,7 +139,7 @@ export function ToggleFoundations() {
             </Field>
           </div>
         )}
-        <div className={styles.liveStage}>
+        <div className={`${canvasStyles.previewCanvas} ${styles.liveStage}`}>
           <ToggleSample
             size={size}
             type={type}

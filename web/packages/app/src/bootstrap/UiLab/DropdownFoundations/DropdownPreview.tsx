@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { DesignOnly } from "../LabView";
 import { useState } from "react";
@@ -21,7 +22,7 @@ export function DropdownPreview() {
   const { text: t } = useLabTranslation();
   const [selected, setSelected] = useState("");
   return (
-    <div className={styles.preview}>
+    <div className={`${canvasStyles.previewCanvas} ${styles.preview}`}>
       <div className={resetStyles.resetRow}>
         <Button size="sm" onClick={() => setSelected("")}>
           {t("重置示例")}

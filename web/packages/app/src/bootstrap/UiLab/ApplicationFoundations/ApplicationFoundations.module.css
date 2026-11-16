@@ -32,7 +32,7 @@
   --button-font-weight: 500;
   font-family: "PingFang SC", sans-serif;
 }
-.liveStage p {
+.liveStage:not([data-kind="messaging"]) p {
   color: var(--muted);
   line-height: 1.6;
 }
@@ -76,20 +76,6 @@
 }
 .indexScroll small {
   color: var(--muted);
-}
-.previewCanvas {
-  --preview-surface: #f8f9fb;
-  --preview-dot: #dce0e7;
-  --preview-border: #e3e6eb;
-  box-sizing: border-box;
-  min-inline-size: 0;
-  max-inline-size: 100%;
-  padding: clamp(16px, 4vw, 48px);
-  border: 1px solid var(--preview-border);
-  border-radius: 24px;
-  background-color: var(--preview-surface);
-  background-image: radial-gradient(circle, var(--preview-dot) 1px, transparent 1px);
-  background-size: 20px 20px;
 }
 .liveStage {
   display: grid;
@@ -162,8 +148,7 @@
   min-width: min(100%, 180px);
 }
 .cta,
-.metric,
-.upload {
+.metric {
   padding: 24px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -318,45 +303,16 @@
     animation: none;
   }
 }
-.upload {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-}
-.messages {
-  display: grid;
-  gap: 16px;
-  padding: 0;
-  list-style: none;
-}
-.messages li {
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 0 8px 8px;
-  max-width: 85%;
-}
-.messages p {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.messages .sent {
-  margin-left: auto;
-  border-radius: 8px 0 8px 8px;
-  background: var(--control-selected-background);
-}
-.code {
-  margin: 0 0 16px;
-  padding: 20px;
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  font:
-    400 14px/20px ui-monospace,
-    monospace;
-}
 .calendar {
   width: 100%;
   max-width: 480px;
+}
+.calendarEventForm {
+  display: grid;
+  gap: var(--space-3);
+}
+.calendarEventForm > button {
+  justify-self: start;
 }
 .calendarHeader {
   display: flex;
@@ -438,9 +394,6 @@
   .foundation {
     padding: 16px;
   }
-  .previewCanvas {
-    border-radius: 16px;
-  }
   .calendarHeader {
     gap: 4px;
   }
@@ -463,12 +416,6 @@
   background: white;
   border: 1px solid #e9eaeb;
   border-radius: 8px;
-}
-
-:global(:root[data-theme="dark"]) .previewCanvas {
-  --preview-surface: #121212;
-  --preview-dot: #242424;
-  --preview-border: #262626;
 }
 
 :global(:root[data-theme="dark"]) .reference[data-themed-reference] {
@@ -521,13 +468,13 @@
   color: #94979c;
 }
 
-:global(:root[data-theme="dark"]) :is(.metric, .cta, .upload) {
+:global(:root[data-theme="dark"]) :is(.metric, .cta) {
   background: #0c0e12;
   border-color: #22262f;
   color: #f7f7f7;
 }
 
-:global(:root[data-theme="dark"]) :is(.metric p, .cta p, .upload p, .feed p, .feed small, .divider strong) {
+:global(:root[data-theme="dark"]) :is(.metric p, .cta p, .feed p, .feed small, .divider strong) {
   color: #94979c;
 }
 
@@ -546,15 +493,6 @@
 :global(:root[data-theme="dark"]) .table th {
   background: #13161b;
   color: #94979c;
-}
-
-:global(:root[data-theme="dark"]) :is(.messages li, .messages .sent) {
-  background: #13161b;
-  color: #cecfd2;
-}
-
-:global(:root[data-theme="dark"]) .messages li p {
-  color: #cecfd2;
 }
 
 :global(:root[data-theme="dark"]) .demoSurface.drawer {
@@ -607,23 +545,4 @@
 
 :global(:root[data-theme="dark"]) .spinner img {
   content: url("./assets/dark-loading-imgLoadingCircle.svg");
-}
-
-:global(:root[data-theme="dark"]) .upload img {
-  content: url("./assets/dark-file-upload-imgUploadCloud02.svg");
-}
-
-:global(:root[data-theme="dark"]) .emptyDemo {
-  --csgclaw-ui-text: #f7f7f7;
-  --csgclaw-ui-muted: #94979c;
-}
-
-:global(:root[data-theme="dark"]) .liveStage .emptyDemo p {
-  color: #94979c;
-}
-
-:global(:root[data-theme="dark"]) .code {
-  background: #0c0e12;
-  border-color: #22262f;
-  color: #f7f7f7;
 }

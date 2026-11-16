@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { LabOptions, LabOptionSelect } from "../LabOptions";
 import { LabComponentHeading } from "../LabComponentHeading";
@@ -82,7 +83,7 @@ export function ProgressFoundations() {
           valueText={`${value}%`}
           onValueChange={setValue}
         />
-        <div className={styles.liveStage}>
+        <div className={`${canvasStyles.previewCanvas} ${styles.liveStage}`}>
           <ProgressBar value={value} label={label} name={labText("任务完成进度")} />
         </div>
         <div className={styles.actions}>

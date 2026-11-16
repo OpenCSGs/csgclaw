@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { LabOptions, LabOptionSelect } from "../LabOptions";
 import { LabComponentHeading } from "../LabComponentHeading";
@@ -98,7 +99,7 @@ export function FooterFoundations() {
             />
           ))}
         </LabOptions>
-        <div className={styles.adaptive}>
+        <div className={`${canvasStyles.previewCanvas} ${styles.adaptive}`}>
           <SectionFooter
             layout={layout}
             breakpoint={breakpoint}

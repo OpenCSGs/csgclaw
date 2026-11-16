@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import { LabOptions, LabOptionSelect } from "../LabOptions";
 import { DesignOnly } from "../LabView";
 import { useState, type CSSProperties } from "react";
@@ -133,7 +134,7 @@ export function AlertNotificationDemos() {
     setVersion((previous) => previous + 1);
   }
   return (
-    <div className={styles.demos}>
+    <div className={`${canvasStyles.previewCanvas} ${styles.demos}`}>
       <LabOptions>
         <LabOptionSelect
           value={breakpoint}

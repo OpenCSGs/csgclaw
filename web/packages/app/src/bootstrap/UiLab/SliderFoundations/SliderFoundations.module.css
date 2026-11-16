@@ -18,18 +18,26 @@
   margin-block: var(--space-4);
 }
 .referenceCard {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   padding: var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   margin-block: var(--space-4);
 }
+.referenceCard > a {
+  align-self: flex-end;
+  margin-block-start: auto;
+}
 .controls {
   display: flex;
   gap: var(--space-3);
   flex-wrap: wrap;
 }
-.stage,
+.stage {
+  margin-block: var(--space-4);
+}
 .reference {
   padding: 60px 32px;
   background: white;
@@ -117,7 +125,7 @@
   }
 }
 
-:global(:root[data-theme="dark"]) :is(.stage, .reference) {
+:global(:root[data-theme="dark"]) .reference {
   background: #0c0e12;
 }
 

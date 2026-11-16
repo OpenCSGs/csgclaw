@@ -1,0 +1,30 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="114" height="66" viewBox="0 0 114 66" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="Cloud">
+<g id="Background">
+<use xlink:href="#stroke0_0_192" fill="#13161B"/>
+<mask id="stroke1_0_192" maskUnits="userSpaceOnUse" x="0" y="0" width="114" height="66" fill="black">
+<rect fill="white" width="114" height="66"/>
+<use xlink:href="#stroke0_0_192"/>
+</mask>
+<path d="M32.4987 14.4829C38.2978 6.32329 47.8273 1 58.6 1C71.7797 1 83.0984 8.9677 88.002 20.349C88.8543 20.2506 89.7213 20.2 90.6 20.2C102.971 20.2 113 30.2288 113 42.6C113 54.9712 102.971 65 90.6 65L26.6 65C12.4615 65 1 53.5385 1 39.4C1 25.2615 12.4615 13.8 26.6 13.8C28.6301 13.8 30.605 14.0363 32.4987 14.4829Z" stroke-width="2" stroke="#373A41" mask="url(#stroke1_0_192)"/>
+</g>
+<ellipse id="Circle" cx="26.6" cy="39.4" rx="25.6" ry="25.6" fill="url(#paint0_linear_0_192)"/>
+<circle id="Circle_2" cx="58.6" cy="33" r="32" fill="url(#paint1_linear_0_192)"/>
+<ellipse id="Circle_3" cx="90.6" cy="42.6" rx="22.4" ry="22.4" fill="url(#paint2_linear_0_192)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_192" x1="6.94285" y1="22.4857" x2="52.2" y2="65" gradientUnits="userSpaceOnUse">
+<stop stop-color="#373A41"/>
+<stop offset="0.350715" stop-color="#13161B"/>
+</linearGradient>
+<linearGradient id="paint1_linear_0_192" x1="34.0286" y1="11.8571" x2="90.6" y2="65" gradientUnits="userSpaceOnUse">
+<stop stop-color="#373A41"/>
+<stop offset="0.350715" stop-color="#13161B"/>
+</linearGradient>
+<linearGradient id="paint2_linear_0_192" x1="73.4" y1="27.8" x2="113" y2="64.9999" gradientUnits="userSpaceOnUse">
+<stop stop-color="#373A41"/>
+<stop offset="0.350715" stop-color="#13161B"/>
+</linearGradient>
+<path id="stroke0_0_192" d="M58.6 1C47.8273 1 38.2978 6.32329 32.4987 14.4829C30.605 14.0363 28.6301 13.8 26.6 13.8C12.4615 13.8 1 25.2615 1 39.4C1 53.5385 12.4615 65 26.6 65L90.6 65C102.971 65 113 54.9712 113 42.6C113 30.2288 102.971 20.2 90.6 20.2C89.7213 20.2 88.8543 20.2506 88.002 20.349C83.0984 8.9677 71.7797 1 58.6 1Z"/>
+</defs>
+</svg>

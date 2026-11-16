@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { LabOptions, LabOptionSelect } from "../LabOptions";
 import { LabComponentHeading } from "../LabComponentHeading";
@@ -129,7 +130,7 @@ export function InputFoundations() {
         </LabOptions>
         <p>{labText("点击或 Tab 聚焦，查看真实焦点；校验只在本地运行。输入内容在切换尺寸和状态时保留。")}</p>
         <div className={styles.liveGrid}>
-          <div className={styles.stage}>
+          <div className={`${canvasStyles.previewCanvas} ${canvasStyles.compact} ${styles.stage}`}>
             <InputSample
               size={size}
               state={mode === "disabled" ? "Disabled" : "Default"}
@@ -141,7 +142,7 @@ export function InputFoundations() {
               }}
             />
           </div>
-          <div className={styles.stage}>
+          <div className={`${canvasStyles.previewCanvas} ${canvasStyles.compact} ${styles.stage}`}>
             <InputSample
               multiline
               error={descriptionError ? labText(descriptionError) : undefined}

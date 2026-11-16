@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { LabOptions, LabOptionSelect } from "../LabOptions";
 import { LabComponentHeading } from "../LabComponentHeading";
@@ -101,7 +102,7 @@ export function SliderFoundations() {
             ]}
           />
         </LabOptions>
-        <div className={styles.stage}>
+        <div className={`${canvasStyles.previewCanvas} ${styles.stage}`}>
           <RangeSample
             values={values}
             label={label}

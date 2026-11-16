@@ -1,3 +1,4 @@
+import canvasStyles from "../LabPreviewCanvas.module.css";
 import resetStyles from "../LabOptions.module.css";
 import { LabComponentHeading } from "../LabComponentHeading";
 import { DesignOnly } from "../LabView";
@@ -37,7 +38,7 @@ function Foundation({
         </a>
         <p>{t(scope)}</p>
       </DesignOnly>
-      <div className={styles.stage}>{children}</div>
+      <div className={`${canvasStyles.previewCanvas} ${styles.stage}`}>{children}</div>
       <DesignOnly>
         <p>{t("当前为 UI Lab 基础样本；其他变体与完整像素验收待补充，尚未迁移生产页面。")}</p>
       </DesignOnly>
