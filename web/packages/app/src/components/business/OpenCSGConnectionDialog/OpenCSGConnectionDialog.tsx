@@ -19,12 +19,16 @@ import {
   AUTH_ENVIRONMENT_PRESETS,
   authEnvironmentDraftFromPreset,
   authEnvironmentLoginReady,
+  resolveAuthEnvironmentDraft,
 } from "@/models/authEnvironment";
 import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
+import { readStoredAuthCustomSites, saveStoredAuthCustomSite } from "@/shared/storage/authEnvironment";
 import styles from "./OpenCSGConnectionDialog.module.css";
 
 const CUSTOM_SITE = "custom";
+const SAVED_SITE_PREFIX = "saved:";
+const CATALOG_SITE_PREFIX = "catalog:";
 
 function customSiteDraft(url: string): AuthEnvironmentDraft {
   return { preset: "custom", opencsgBaseURL: url, csgHubBaseURL: "", aiGatewayBaseURL: "" };
@@ -63,17 +67,23 @@ export function OpenCSGConnectionDialog({
   const [manual, setManual] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [catalog, setCatalog] = useState<SiteCatalog>({ status: "loading" });
+  const [savedSites, setSavedSites] = useState(readStoredAuthCustomSites);
+  const [saveError, setSaveError] = useState(false);
   const siteLocale = locale === "zh" ? "zh" : "en";
   const sites = catalog.status === "ready" ? catalog.sites : [];
   const selectedSite = manual ? undefined : sites.find((site) => site.url === draft.opencsgBaseURL);
-  const showCustomField = manual || (!selectedSite && catalog.status !== "loading");
-  const ready = Boolean(selectedSite || showCustomField) && authEnvironmentLoginReady(draft);
+  const localSites = savedSites.filter((url) => !sites.some((site) => site.url === url));
+  const selectedSavedSite = manual ? undefined : localSites.find((url) => url === draft.opencsgBaseURL);
+  const showCustomField = manual || (!selectedSite && !selectedSavedSite && catalog.status !== "loading");
+  const ready = Boolean(selectedSite || selectedSavedSite || showCustomField) && authEnvironmentLoginReady(draft);
   const showCustomFieldError = showCustomField && customFieldTouched && !ready;
   const authenticationRequired = variant === "authentication-required";
 
   useEffect(() => {
     if (open && !previousOpenRef.current) {
       setDraft(environment);
+      setSavedSites(readStoredAuthCustomSites());
+      setSaveError(false);
       setManual(false);
       setCustomFieldTouched(false);
     }
@@ -97,16 +107,42 @@ export function OpenCSGConnectionDialog({
 
   function selectSite(value: string) {
     setCustomFieldTouched(false);
+    setSaveError(false);
     if (value === CUSTOM_SITE) {
       setManual(true);
-      setDraft(customSiteDraft(selectedSite ? "" : draft.opencsgBaseURL));
+      setDraft(customSiteDraft(selectedSite || selectedSavedSite ? "" : draft.opencsgBaseURL));
       return;
     }
-    const site = sites.find((item) => item.id === value);
+    const savedSite = localSites.find((url) => SAVED_SITE_PREFIX + url === value);
+    if (savedSite) {
+      setManual(false);
+      setDraft(customSiteDraft(savedSite));
+      return;
+    }
+    const site = sites.find((item) => CATALOG_SITE_PREFIX + item.id === value);
     if (!site) return;
     setManual(false);
     const preset = AUTH_ENVIRONMENT_PRESETS.find((item) => item.opencsgBaseURL === site.url);
     setDraft(preset ? authEnvironmentDraftFromPreset(preset.id) : customSiteDraft(site.url));
+  }
+
+  function saveCustomSite() {
+    if (!ready) return;
+    const url = resolveAuthEnvironmentDraft(draft).opencsgBaseURL;
+    try {
+      setSavedSites(saveStoredAuthCustomSite(draft));
+      const matchingSite = sites.find((site) => site.url === url);
+      if (matchingSite) {
+        selectSite(CATALOG_SITE_PREFIX + matchingSite.id);
+      } else {
+        setDraft(customSiteDraft(url));
+        setManual(false);
+        setSaveError(false);
+      }
+      document.getElementById(siteFieldID)?.focus();
+    } catch (_) {
+      setSaveError(true);
+    }
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -136,7 +172,15 @@ export function OpenCSGConnectionDialog({
             <label htmlFor={siteFieldID}>{t("csghubLoginEnvironment")}</label>
             <Select
               disabled={busy}
-              value={selectedSite?.id ?? (showCustomField ? CUSTOM_SITE : "")}
+              value={
+                selectedSite
+                  ? CATALOG_SITE_PREFIX + selectedSite.id
+                  : selectedSavedSite
+                    ? SAVED_SITE_PREFIX + selectedSavedSite
+                    : showCustomField
+                      ? CUSTOM_SITE
+                      : ""
+              }
               onValueChange={selectSite}
               triggerProps={{ id: siteFieldID }}
               triggerClassName={styles.siteTrigger}
@@ -150,11 +194,13 @@ export function OpenCSGConnectionDialog({
                       <small>{new URL(selectedSite.url).host}</small>
                     </span>
                   </span>
+                ) : selectedSavedSite ? (
+                  <span className={styles.siteOption}>{selectedSavedSite}</span>
                 ) : undefined
               }
               options={[
                 ...sites.map((site, index) => ({
-                  value: site.id,
+                  value: CATALOG_SITE_PREFIX + site.id,
                   textValue: site.locales[siteLocale].title,
                   label: (
                     <span className={styles.siteOption}>
@@ -164,6 +210,11 @@ export function OpenCSGConnectionDialog({
                   ),
                   description: new URL(site.url).host,
                   separatorAfter: index === sites.length - 1,
+                })),
+                ...localSites.map((url) => ({
+                  value: SAVED_SITE_PREFIX + url,
+                  textValue: url,
+                  label: <span className={styles.siteOption}>{url}</span>,
                 })),
                 { value: CUSTOM_SITE, label: t("csghubEnvCustom") },
               ]}
@@ -182,26 +233,35 @@ export function OpenCSGConnectionDialog({
           </div>
 
           {showCustomField ? (
-            <label className={styles.customField}>
-              <span>{t("csghubOpenCSGBaseURL")}</span>
-              <TextInput
-                disabled={busy}
-                aria-describedby={showCustomFieldError ? customFieldErrorID : undefined}
-                aria-invalid={showCustomFieldError || undefined}
-                value={draft.opencsgBaseURL}
-                placeholder="https://openeast.opencsg.com"
-                onChange={(event) => {
-                  setCustomFieldTouched(true);
-                  setManual(true);
-                  setDraft(customSiteDraft(event.currentTarget.value));
-                }}
-              />
-              {showCustomFieldError ? (
-                <span id={customFieldErrorID} className={styles.fieldError}>
-                  {t("csghubInvalidSiteURL")}
-                </span>
-              ) : null}
-            </label>
+            <div className={styles.customField}>
+              <label className={styles.customField}>
+                <span>{t("csghubOpenCSGBaseURL")}</span>
+                <TextInput
+                  disabled={busy}
+                  aria-describedby={showCustomFieldError ? customFieldErrorID : undefined}
+                  aria-invalid={showCustomFieldError || undefined}
+                  value={draft.opencsgBaseURL}
+                  placeholder="https://openeast.opencsg.com"
+                  onChange={(event) => {
+                    setCustomFieldTouched(true);
+                    setSaveError(false);
+                    setManual(true);
+                    setDraft(customSiteDraft(event.currentTarget.value));
+                  }}
+                />
+                {showCustomFieldError ? (
+                  <span id={customFieldErrorID} className={styles.fieldError}>
+                    {t("csghubInvalidSiteURL")}
+                  </span>
+                ) : null}
+              </label>
+              <div>
+                <Button variant="secondaryGray" size="sm" disabled={busy || !ready} onClick={saveCustomSite}>
+                  {t("csghubSaveCustomSite")}
+                </Button>
+              </div>
+              {saveError ? <InlineError>{t("csghubSaveCustomSiteFailed")}</InlineError> : null}
+            </div>
           ) : null}
 
           <p className={styles.returnHint}>

@@ -21,7 +21,10 @@ const sites = [
   locales: { en: { title, description: "" }, zh: { title, description: "" } },
 }));
 
-beforeEach(() => vi.mocked(fetchAuthLoginSites).mockResolvedValue(sites));
+beforeEach(() => {
+  window.localStorage.clear();
+  vi.mocked(fetchAuthLoginSites).mockResolvedValue(sites);
+});
 
 async function chooseSite(user: ReturnType<typeof userEvent.setup>, label: RegExp) {
   const picker = screen.getByRole("combobox", { name: "csghubLoginEnvironment" });
@@ -77,6 +80,50 @@ describe("OpenCSGConnectionDialog", () => {
     expect(onConnect).toHaveBeenCalledWith({
       preset: "custom",
       opencsgBaseURL: "https://east.example.com",
+      csgHubBaseURL: "",
+      aiGatewayBaseURL: "",
+    });
+  });
+
+  it("keeps multiple saved sites available after remounting, even without the catalog", async () => {
+    const user = userEvent.setup();
+    const onConnect = vi.fn();
+    const renderDialog = () =>
+      render(
+        <TooltipProvider delayDuration={0}>
+          <OpenCSGConnectionDialog
+            busy={false}
+            environment={defaultAuthEnvironmentDraft()}
+            locale="en"
+            open
+            t={t}
+            onConnect={onConnect}
+            onOpenChange={vi.fn()}
+          />
+        </TooltipProvider>,
+      );
+
+    const first = renderDialog();
+    await screen.findByText("OpenCSG Main Site");
+    for (const url of ["https://FIRST.example.com/team/?token=ignored#section", "https://second.example.com"]) {
+      await chooseSite(user, /csghubEnvCustom/);
+      await user.type(screen.getByRole("textbox", { name: /csghubOpenCSGBaseURL/ }), url);
+      await user.click(screen.getByRole("button", { name: "csghubSaveCustomSite" }));
+    }
+    expect(onConnect).not.toHaveBeenCalled();
+    expect(screen.getByRole("combobox")).toHaveTextContent("https://second.example.com");
+    first.unmount();
+
+    vi.mocked(fetchAuthLoginSites).mockRejectedValueOnce(new Error("unavailable"));
+    renderDialog();
+    await screen.findByText("csghubLoginSitesUnavailable");
+    await chooseSite(user, /https:\/\/second\.example\.com/);
+    await chooseSite(user, /https:\/\/first\.example\.com\/team$/);
+    await user.click(screen.getByRole("button", { name: "csghubConnectContinue" }));
+
+    expect(onConnect).toHaveBeenCalledWith({
+      preset: "custom",
+      opencsgBaseURL: "https://first.example.com/team",
       csgHubBaseURL: "",
       aiGatewayBaseURL: "",
     });
