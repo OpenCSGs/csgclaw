@@ -26,7 +26,7 @@ func sameCollaborationCreation(room Room, req CreateRoomRequest) bool {
 	if room.SourceTeamID != req.SourceTeamID {
 		return false
 	}
-	if !room.IsOnDemand() {
+	if !room.IsOnDemand() && !room.IsAutonomous() {
 		return true
 	}
 	requested := requestedWorkspaceDir(req.Configuration)
@@ -60,7 +60,7 @@ func (s *Service) RoomForCreationRequest(creatorID, requestID string) (Room, boo
 // Only provision directories at creation; loading legacy rooms must preserve
 // their existing per-agent workspaces and saved configuration.
 func (s *Service) ensureRoomWorkspace(room *Room) error {
-	if !room.IsOnDemand() || s.statePath == "" {
+	if (!room.IsOnDemand() && !room.IsAutonomous()) || s.statePath == "" {
 		return nil
 	}
 	if room.Configuration != nil && room.Configuration.WorkspaceDir != "" {

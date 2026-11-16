@@ -28,6 +28,7 @@ type AgentInterface interface {
 // AgentCreateRequest creates one desired Agent resource. Existing-resource
 // replacement is expressed through Update with a field mask.
 type AgentCreateRequest struct {
+	ActorID      string    `json:"-"`
 	ID           string    `json:"id,omitempty"`
 	Spec         AgentSpec `json:"spec"`
 	FromTemplate string    `json:"from_template,omitempty"`
@@ -53,6 +54,7 @@ type AgentListOptions struct {
 }
 
 type AgentUpdateRequest struct {
+	ActorID         string    `json:"-"`
 	Spec            AgentSpec `json:"spec"`
 	FieldMask       []string  `json:"field_mask,omitempty"`
 	ResourceVersion string    `json:"resource_version,omitempty"`
@@ -69,6 +71,8 @@ type AgentRecreateOptions struct {
 // Spec is desired state with Runtime credentials omitted; Status is the latest
 // observed state.
 type Agent struct {
+	CreatedBy       string      `json:"created_by,omitempty"`
+	NamedBy         string      `json:"named_by,omitempty"`
 	ArchivedAt      *time.Time  `json:"archived_at,omitempty"`
 	ArchivedBy      string      `json:"archived_by,omitempty"`
 	ID              string      `json:"id"`

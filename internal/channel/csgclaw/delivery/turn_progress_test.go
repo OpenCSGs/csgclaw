@@ -8,12 +8,14 @@ import (
 	"csgclaw/internal/channel"
 	"csgclaw/internal/im"
 	"csgclaw/internal/modelusage"
+	"csgclaw/internal/roomtask"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestLargeProgressPersistsWithoutBlockingOtherRooms(t *testing.T) {
@@ -79,6 +81,45 @@ func TestLargeProgressPersistsWithoutBlockingOtherRooms(t *testing.T) {
 				t.Fatal("restart lost answer or progress details")
 			}
 		})
+	}
+}
+
+func TestAutonomousFinalFollowsTheOriginalTaskTopic(t *testing.T) {
+	service := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "user",
+		Users:         []im.User{{ID: "user", Name: "User"}, {ID: "agent", Name: "Agent", Role: "agent"}},
+		Rooms:         []im.Room{{ID: "room", Title: "Room", Type: apitypes.RoomTypeAutonomous, Members: []string{"user", "agent"}}},
+	})
+	root, err := service.CreateMessage(im.CreateMessageRequest{RoomID: "room", SenderID: "user", Content: "Build a game"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetAutonomousTaskThreadResolver(func(roomID, sourceID string) string {
+		if roomID == "room" && sourceID == root.ID {
+			return root.ID
+		}
+		return ""
+	})
+	store, err := NewIMTranscriptStore(service, fixedParticipantResolver{item: apitypes.Participant{ID: "participant", ChannelUserRef: "agent"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn := channel.TurnContext{Autonomous: true, RoomID: "room", SourceMessageID: root.ID, ParticipantID: "participant", TurnID: "turn"}
+	progress := activity.TurnProgress{ID: "turn", Status: "running", Items: []activity.ProgressItem{{ID: "note", Kind: "commentary", Text: "I will read the room"}}}
+	if err := store.DeliverTurnProgress(t.Context(), turn, progress, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	progress.Status = "succeeded"
+	if err := store.DeliverTurnProgress(t.Context(), turn, progress, "The game is ready", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	topic, err := service.GetThread("room", root.ID)
+	if err != nil || len(topic.Replies) != 1 || topic.Replies[0].Content != "The game is ready" {
+		t.Fatalf("topic should contain the automatic final answer: %+v, %v", topic.Replies, err)
+	}
+	main, err := service.ListMessages("room")
+	if err != nil || len(main) != 1 || main[0].ID != root.ID {
+		t.Fatalf("room should retain only the source: %+v, %v", main, err)
 	}
 }
 
@@ -699,5 +740,162 @@ func TestProgressRetainsUnidentifiedCommentaryAtCompletion(t *testing.T) {
 	msg, progress := progressMessage(t, service)
 	if msg.Content != "Answer." || len(progress.Items) != 1 || progress.Items[0].Text != "Checking." {
 		t.Fatalf("answer=%q progress=%+v", msg.Content, progress.Items)
+	}
+}
+
+func TestProgressSilenceIsScopedToCollaboration(t *testing.T) {
+	for _, tc := range []struct {
+		name, chatType, taskID string
+		autonomous, private    bool
+	}{
+		{name: "autonomous", chatType: "group", autonomous: true, private: true},
+		{name: "on-demand task", chatType: "group", taskID: "task-1", private: true},
+		{name: "direct", chatType: "direct"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			renderer, service, turn := progressFixture(t)
+			turn.Autonomous = tc.autonomous
+			turn.ChatType = tc.chatType
+			turn.TaskID = tc.taskID
+			ctx := context.Background()
+			if err := renderer.Emit(ctx, turn, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Sequence: 1, Text: roomtask.AutonomousSilence}); err != nil {
+				t.Fatal(err)
+			}
+			if err := renderer.Complete(ctx, turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: roomtask.AutonomousSilence}); err != nil {
+				t.Fatal(err)
+			}
+			message, progress := progressMessage(t, service)
+			if progress.Status != "succeeded" || im.IsAgentActivityMessage(message) != tc.private ||
+				strings.Contains(message.Content, roomtask.AutonomousSilence) == tc.private {
+				t.Fatalf("unexpected delivery (want activity=%v): %+v", tc.private, message)
+			}
+		})
+	}
+}
+
+func TestAutonomousFinalReplyReturnsToConversation(t *testing.T) {
+	for _, tc := range []struct {
+		name, sent, answer string
+		thread, private    bool
+		recovered          bool
+	}{
+		{name: "peer without mention", answer: "🔧 Looks good"},
+		{name: "status after claim", sent: "I will check", answer: "Finished checking"},
+		{name: "already published", sent: "Done", answer: "Done", private: true},
+		{name: "explicit silence", answer: roomtask.AutonomousSilence, private: true},
+		{name: "waiting note followed by silence", answer: "No new attachments; waiting for the implementation.\n\n" + roomtask.AutonomousSilence, private: true},
+		{name: "waiting in a thread", answer: "Waiting for the file.\n" + roomtask.AutonomousSilence, thread: true, private: true},
+		{name: "waiting note recovered from runtime", answer: "Waiting for the file.\n" + roomtask.AutonomousSilence, private: true, recovered: true},
+		{name: "marker quoted in a reply", answer: "Use the " + roomtask.AutonomousSilence + " marker."},
+		{name: "marker in a code block", answer: "```xml\n" + roomtask.AutonomousSilence + "\n```"},
+		{name: "thread reply without mention", answer: "In thread", thread: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			renderer, service, turn := progressFixture(t)
+			peer, _, err := service.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "peer", Name: "Peer", Role: "worker"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			room, err := service.CreateRoom(im.CreateRoomRequest{Type: apitypes.RoomTypeAutonomous, Title: "Collaboration", CreatorID: "user", MemberIDs: []string{"agent", peer.ID}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			turn.RoomID = room.ID
+			turn.Autonomous = true
+			request := im.CreateMessageRequest{RoomID: room.ID, SenderID: peer.ID, Content: "Could you review this?"}
+			if tc.thread {
+				root, err := service.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "user", Content: "Review"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				turn.ThreadRootID = root.ID
+				request.RelatesTo = &im.MessageRelation{RelType: "m.thread", EventID: root.ID}
+			}
+			source, err := service.CreateMessage(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			turn.SourceMessageID = source.ID
+			if err := renderer.Start(ctx, turn); err != nil {
+				t.Fatal(err)
+			}
+			if tc.sent != "" {
+				if _, err := service.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "agent", Content: tc.sent, RelatesTo: request.RelatesTo}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := renderer.Emit(ctx, turn, agentengine.TurnEvent{Sequence: 1, Kind: agentengine.TurnEventTextDelta, Phase: "commentary", Text: "Checking"}); err != nil {
+				t.Fatal(err)
+			}
+			result := agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: tc.answer}
+			if tc.recovered {
+				result.Output = ""
+				result.RuntimeText = []agentengine.TurnEvent{{
+					Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: tc.answer, TextSnapshot: true,
+				}}
+			}
+			for range 2 {
+				if err := renderer.Complete(ctx, turn, result); err != nil {
+					t.Fatal(err)
+				}
+			}
+			page, err := service.PrepareUnread(room.ID, peer.ID, turn.ThreadRootID, 50, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var delivered int
+			for _, message := range page.Messages {
+				if message.ID == finalMessageID(turn) {
+					delivered++
+					if message.Content != tc.answer {
+						t.Fatalf("wrong reply: %q", message.Content)
+					}
+				}
+			}
+			want := 1
+			if tc.private {
+				want = 0
+			}
+			if delivered != want {
+				t.Fatalf("final reply appears %d times in the peer inbox, want %d", delivered, want)
+			}
+		})
+	}
+}
+
+func TestCollaborationToolDetailsKeepNativeArgumentsAndResults(t *testing.T) {
+	for _, schema := range []string{"codex", "dsh"} {
+		t.Run(schema, func(t *testing.T) {
+			input := map[string]any{"query": strings.Repeat("I", 500), "ack_token": "[redacted]"}
+			output := map[string]any{"text": strings.Repeat("O", 2000), "tail": "END"}
+			payload := map[string]any{"arguments": input, "result": output}
+			if schema == "dsh" {
+				payload = map[string]any{"rawInput": input, "content": output}
+			}
+			tool := agentengine.ToolActivity{Kind: "mcp_tool_call", Title: "messages_read", Status: "completed", InputSummary: "short input", OutputSummary: "short output", Payload: payload}
+			full := progressToolDetails(tool, nil, true)
+			if !strings.Contains(full.Input, strings.Repeat("I", 500)) || !strings.Contains(full.Output, "END") || full.Truncated || full.DetailsVersion != 1 {
+				t.Fatalf("lost full details: %+v", full)
+			}
+			direct := progressTool(tool, nil)
+			if direct.Input != "short input" || direct.Output != "short output" || direct.DetailsVersion != 0 {
+				t.Fatalf("single agent presentation changed: %+v", direct)
+			}
+			payload["result"] = map[string]any{"text": strings.Repeat("界", 30000)}
+			delete(payload, "content")
+			truncated := progressToolDetails(tool, nil, true)
+			if !truncated.Truncated || len(truncated.Output) > 64<<10 || !utf8.ValidString(truncated.Output) {
+				t.Fatal("missing safe truncation")
+			}
+		})
+	}
+}
+
+func TestCollaborationDetailProtectsEmbeddedCredentialsWithoutLosingLongResults(t *testing.T) {
+	text := `{"record_id":9007199254740993,"ack_token":"fixture-ack-secret","result":"` + strings.Repeat("A", 2048) + `"}`
+	detail := progressDetailJSON(map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}})
+	if strings.Contains(detail, "fixture-ack-secret") || !strings.Contains(detail, "[redacted]") || !strings.Contains(detail, "9007199254740993") || !strings.Contains(detail, strings.Repeat("A", 2048)) {
+		t.Fatal("credential protection or full detail preservation failed")
 	}
 }

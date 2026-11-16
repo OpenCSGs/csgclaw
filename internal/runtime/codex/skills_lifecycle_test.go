@@ -63,12 +63,10 @@ func TestRuntimeRestartPreservesHostSkillSnapshot(t *testing.T) {
 				writeSkill(skills, "custom", "agent custom\n")
 				writeSkill(hostSkills, "edited", "host update\n")
 				writeSkill(hostSkills, "new-host", "host added\n")
-				templateSkill := "agent-teams"
 				if agentID == agent.ManagerUserID {
-					templateSkill = "agent-creator"
-				}
-				if err := os.RemoveAll(filepath.Join(skills, templateSkill)); err != nil {
-					t.Fatal(err)
+					if err := os.RemoveAll(filepath.Join(skills, "agent-creator")); err != nil {
+						t.Fatal(err)
+					}
 				}
 
 				if operation == "restore" {
@@ -96,8 +94,10 @@ func TestRuntimeRestartPreservesHostSkillSnapshot(t *testing.T) {
 				}
 				assertRuntimeSkillFile(t, filepath.Join(skills, "edited", "SKILL.md"), "agent edit\n", 0o644)
 				assertRuntimeSkillFile(t, filepath.Join(skills, "custom", "SKILL.md"), "agent custom\n", 0o644)
-				if _, err := os.Stat(filepath.Join(skills, templateSkill, "SKILL.md")); err != nil {
-					t.Fatalf("模板技能未同步：%v", err)
+				if agentID == agent.ManagerUserID {
+					if _, err := os.Stat(filepath.Join(skills, "agent-creator", "SKILL.md")); err != nil {
+						t.Fatalf("模板技能未同步：%v", err)
+					}
 				}
 
 				if _, err := rt.Stop(context.Background(), handle); err != nil {

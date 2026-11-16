@@ -13,17 +13,23 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/channel"
+	"csgclaw/internal/dshcli"
 	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
+	runtimedsh "csgclaw/internal/runtime/dsh"
 	"csgclaw/internal/taskcore"
+	"csgclaw/internal/worklease"
 	"github.com/go-chi/chi/v5"
 )
 
 type roomScopeRuntimeRecords struct {
 	appTaskTestRecords
-	runtime *runtimecodex.Runtime
+	runtime agentruntime.Runtime
 }
 
 func (r roomScopeRuntimeRecords) Runtime(string) (agentruntime.Runtime, error) {
@@ -33,6 +39,127 @@ func (r roomScopeRuntimeRecords) Runtime(string) (agentruntime.Runtime, error) {
 type roomScopeBinary string
 
 func (b roomScopeBinary) Ensure(context.Context) (string, error) { return string(b), nil }
+
+func TestAppRoomToolScopeNativeDSHE2E(t *testing.T) {
+	binary := os.Getenv("CSGCLAW_TEST_DSH_BINARY")
+	if binary == "" {
+		t.Skip("set CSGCLAW_TEST_DSH_BINARY to run native DSH MCP")
+	}
+	h := newAppTaskTestHandler(t)
+	room, source := createAutonomousTaskFixture(t, h)
+	queued, queuedSource := createAutonomousTaskFixture(t, h)
+	h.SetParticipantService(participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID: "pt-dev", Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent,
+		ChannelUserRef: "user-dev", LifecycleStatus: participant.LifecycleStatusActive,
+	}})))
+	registry := worklease.NewRegistry(h.participant, h.im, worklease.NewBus())
+	h.participantWork = registry
+	for roomID, messageID := range map[string]string{room.ID: source.ID, queued.ID: queuedSource.ID} {
+		if _, err := registry.StartOrRenew(context.Background(), worklease.ParticipantWorkLease{
+			ParticipantID: "pt-dev", LeaseID: worklease.NewID(), RoomID: roomID,
+			RequestID: messageID, Kind: apitypes.ParticipantWorkKindAgentTurn,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.registerAppRoomTools("agent-dev")
+	var requests atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/agents/agent-dev/mcp", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer fixture-agent-token" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		h.apps.Handler("agent-dev").ServeHTTP(w, r)
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages json.RawMessage
+			Tools    []struct{ Function struct{ Name string } }
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		n := requests.Add(1)
+		if n == 2 && !strings.Contains(string(body.Messages), source.Content) {
+			t.Error("current DSH turn did not receive its unread message")
+		}
+		if n == 3 && !strings.Contains(string(body.Messages), "message operation must stay in the current collaboration room") {
+			t.Error("DSH turn was allowed to read the queued room")
+		}
+		delta := map[string]any{"role": "assistant", "content": "done"}
+		finish := "stop"
+		if n <= 2 {
+			var name string
+			for _, tool := range body.Tools {
+				if strings.HasSuffix(tool.Function.Name, "messages_read") {
+					name = tool.Function.Name
+					break
+				}
+			}
+			if name == "" {
+				t.Error("messages_read not advertised to DSH")
+				http.Error(w, "missing tool", http.StatusBadRequest)
+				return
+			}
+			target := room.ID
+			if n == 2 {
+				target = queued.ID
+			}
+			args, _ := json.Marshal(map[string]string{"room_id": target})
+			delta = map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{
+				"index": 0, "id": fmt.Sprintf("read-%d", n), "type": "function", "function": map[string]string{"name": name, "arguments": string(args)},
+			}}}
+			finish = "tool_calls"
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		emit := func(delta map[string]any, finish any) {
+			data, _ := json.Marshal(map[string]any{
+				"id": fmt.Sprintf("completion-%d", n), "object": "chat.completion.chunk",
+				"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}},
+			})
+			fmt.Fprintf(w, "data: %s\n\n", data)
+		}
+		emit(delta, nil)
+		emit(map[string]any{}, finish)
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	profile := agentruntime.Profile{ModelID: "fixture-model", BaseURL: server.URL + "/v1", APIKey: "fixture-model-token", Env: map[string]string{
+		"CSGCLAW_CALLER_AGENT_ID": "agent-dev", "CSGCLAW_BASE_URL": server.URL, "CSGCLAW_ACCESS_TOKEN": "fixture-agent-token",
+	}}
+	ref := runtimedsh.AgentRef{ID: "agent-dev", RuntimeID: "rt-agent-dev", Profile: profile}
+	home := t.TempDir()
+	rt := runtimedsh.New(runtimedsh.Dependencies{
+		ResolveBinary: func(context.Context) (dshcli.Info, error) {
+			return dshcli.Info{Path: binary, Version: dshcli.DefaultVersion}, nil
+		},
+		ResolveAgent: func(agentruntime.Handle) (runtimedsh.AgentRef, error) { return ref, nil },
+		AgentHome:    func(string) (string, error) { return home, nil },
+	})
+	defer rt.Close()
+	h.svc = roomScopeRuntimeRecords{appTaskTestRecords: h.svc.(appTaskTestRecords), runtime: rt}
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	if err := rt.Provision(ctx, agentruntime.ProvisionRequest{RuntimeID: ref.RuntimeID, AgentID: ref.ID, Profile: profile}); err != nil {
+		t.Fatal(err)
+	}
+	handle, err := rt.New(ctx, agentruntime.Spec{RuntimeID: ref.RuntimeID, AgentID: ref.ID, Profile: profile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation := contract.ConversationKey(roomToolConversation(t, room.ID, ""))
+	turn := channel.TurnContext{Autonomous: true, RoomID: room.ID, SourceMessageID: source.ID, ConversationKey: conversation}
+	result := rt.Conversation(handle.RuntimeID).Run(channel.WithTurnContext(ctx, turn), contract.TurnRequest{
+		ID: "turn-a", ConversationKey: conversation, Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "Read unread messages."}},
+	}, nil)
+	if result.Status != contract.TurnSucceeded || result.Output != "done" || requests.Load() != 3 {
+		t.Fatalf("DSH turn: %+v, model requests=%d", result, requests.Load())
+	}
+}
 
 // Force the three observed wrong choices through the real Codex MCP transport.
 // Model responses are local fixtures, so the result is independent of sampling.

@@ -38,6 +38,10 @@ type quietTurnFixture struct {
 }
 
 func startQuietTurn(t *testing.T) *quietTurnFixture {
+	return startQuietTurnWithContext(t, context.Background())
+}
+
+func startQuietTurnWithContext(t *testing.T, ctx context.Context) *quietTurnFixture {
 	t.Helper()
 	requests := make(quietTurnRequests, 8)
 	f := &quietTurnFixture{
@@ -52,7 +56,7 @@ func startQuietTurn(t *testing.T) *quietTurnFixture {
 	}
 	waiter.setTurnID("turn")
 	go func() {
-		f.response, f.err = f.manager.waitAppServerTurn(context.Background(), f.live, waiter)
+		f.response, f.err = f.manager.waitAppServerTurn(ctx, f.live, waiter)
 		close(f.done)
 	}()
 	synctest.Wait()

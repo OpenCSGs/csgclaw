@@ -41,6 +41,7 @@ func taskToolPayload(args, fields map[string]any) map[string]any {
 
 func (h *Handler) registerAppPlatformTaskTools(agentID string) {
 	h.registerAppRoomTaskTools(agentID)
+	h.registerAutonomousRoomTaskTools(agentID)
 	h.registerAppDirectTaskTools(agentID)
 	h.registerAppTeamTaskTools(agentID)
 }

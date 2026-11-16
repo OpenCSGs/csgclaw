@@ -174,3 +174,24 @@ it("disables new cloud tasks while work is pending and preserves the remote targ
   fireEvent.click(screen.getByRole("button", { name: "taskEntryNew" }));
   expect(screen.getByTestId("cloud-location")).toHaveTextContent("/new?cloud=agt_cloud");
 });
+
+it.each([false, true])("ignores legacy turn receipts and shows the autonomous pause state (%s)", (paused) => {
+  render(
+    <TaskConversationControls
+      conversation={{
+        ...conversation,
+        is_direct: false,
+        type: "autonomous",
+        autonomous_state: { source_id: "m", paused, receipts: Array.from({ length: 16 }, (_, i) => String(i)) },
+      }}
+      agents={[agent]}
+      participants={[]}
+      t={t}
+    />,
+  );
+  if (paused) {
+    expect(screen.getByRole("status")).toHaveTextContent("autonomousPaused");
+  } else {
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  }
+});

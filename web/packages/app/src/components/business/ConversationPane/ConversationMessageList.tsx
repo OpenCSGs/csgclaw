@@ -10,6 +10,7 @@ import conversationThreadsStyles from "./ConversationThreads.module.css";
 import { messageResources } from "@/models/conversationResources";
 import { useEventCallback } from "@/hooks/useEventCallback";
 import { emptyCompletedProgress } from "@/models/turnProgress";
+import { isAutonomousCoordinationNotice } from "@/models/agentActivity";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
 import { ImageGenerationStatus } from "./ImageGenerationStatus";
@@ -54,6 +55,7 @@ import type { VoidOrPromise } from "./types";
 import { VideoGenerationCard } from "./VideoGenerationCard";
 import { MessageTimeline, buildMessageTimelineItems, resolveMessageAgent } from "./MessageTimeline";
 import timelineStyles from "./MessageTimeline/MessageTimeline.module.css";
+import { collaborationTranscript, usesCollaborationTranscript } from "@/models/collaborationTranscript";
 
 export type ConversationMessageListProps = {
   agents?: AgentLike[];
@@ -138,10 +140,15 @@ const MessageListContent = memo(function MessageListContent({
   );
   const [memoryEnableState, setMemoryEnableState] = useState<"idle" | "busy" | "error">("idle");
   const [expandedLongMessages, setExpandedLongMessages] = useState<Record<string, boolean>>({});
-  const videoGroups = useMemo(() => groupVideoGenerationMessages(visibleMessages), [visibleMessages]);
+  const collaboration = usesCollaborationTranscript(conversation);
+  const transcript = useMemo(
+    () => (collaboration ? collaborationTranscript(visibleMessages) : { messages: visibleMessages, activities: [] }),
+    [collaboration, visibleMessages],
+  );
+  const videoGroups = useMemo(() => groupVideoGenerationMessages(transcript.messages), [transcript.messages]);
   const displayMessages = useMemo(
-    () => visibleMessages.filter((message) => !message.id || !videoGroups.childMessageIDs.has(message.id)),
-    [visibleMessages, videoGroups],
+    () => transcript.messages.filter((message) => !message.id || !videoGroups.childMessageIDs.has(message.id)),
+    [transcript.messages, videoGroups],
   );
 
   const timelineItems = useMemo(
@@ -182,7 +189,7 @@ const MessageListContent = memo(function MessageListContent({
               className={conversationMessageListStyles["emptyCard"]}
             />
           ))
-        ) : displayMessages.length === 0 ? (
+        ) : displayMessages.length === 0 && transcript.activities.length === 0 ? (
           <PanelEmptyState
             title={t("noVisibleMessages")}
             mark="#"
@@ -213,6 +220,7 @@ const MessageListContent = memo(function MessageListContent({
           }
           const authorName = user.role === "cloud" ? userDisplayName(message.sender_id, usersById) : user.name;
           const own = localIdentitiesMatch(message.sender_id, currentUserID);
+          const collapsible = own || collaboration;
           const isAdmin = user?.role === "admin";
           const messageAgent = resolveMessageAgent(agents, user, message.sender_id);
           const messageAgentRunning = isAgentAvailable(messageAgent);
@@ -273,15 +281,16 @@ const MessageListContent = memo(function MessageListContent({
                         key={`${message.id}:${theme}`}
                         content={message.content}
                         message={message}
+                        showTurnProgress={!collaboration}
                         progressControls={renderTurnControls?.(message)}
                         videoMessages={embeddedVideos}
                         actionBusy={messageActionBusy}
                         actionFeedback={messageActionFeedback}
-                        enableLongMessageCollapse={own}
-                        longMessageExpanded={own ? expandedLongMessages[messageStateKey] === true : undefined}
+                        enableLongMessageCollapse={collapsible}
+                        longMessageExpanded={collapsible ? expandedLongMessages[messageStateKey] === true : undefined}
                         onAction={onMessageAction}
                         onLongMessageExpandedChange={
-                          own
+                          collapsible
                             ? (expanded) =>
                                 setExpandedLongMessages((current) => ({
                                   ...current,
@@ -324,7 +333,7 @@ const MessageListContent = memo(function MessageListContent({
                         <span aria-hidden="true">{IconImage("rooms")}</span>
                         <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
                       </button>
-                      {latestThreadReply ? (
+                      {latestThreadReply && !isAutonomousCoordinationNotice(latestThreadReply) ? (
                         <button
                           type="button"
                           className={conversationThreadsStyles["thread-latest-reply"]}
@@ -352,6 +361,7 @@ const MessageListContent = memo(function MessageListContent({
                     </div>
                   ) : null}
                   <ConversationMessageActions
+                    showTokenUsage={!collaboration}
                     metadata={message.metadata}
                     className="message-hover-actions"
                     leading={renderMessageFooter?.(message)}

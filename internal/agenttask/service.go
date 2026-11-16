@@ -190,6 +190,9 @@ func (s *Service) Claim(input ClaimInput) (taskcore.Task, error) {
 	if s == nil || s.core == nil {
 		return taskcore.Task{}, fmt.Errorf("task core service is not configured")
 	}
+	if task, ok := s.core.Get(input.TaskID); !ok || task.AssignmentType != taskcore.AssignmentTypeAgent {
+		return taskcore.Task{}, taskcore.ErrTaskNotFound
+	}
 	task, err := s.core.Claim(taskcore.ClaimInput{
 		TaskID:        input.TaskID,
 		ParticipantID: strings.TrimSpace(input.ParticipantID),
@@ -197,15 +200,15 @@ func (s *Service) Claim(input ClaimInput) (taskcore.Task, error) {
 	if err != nil {
 		return taskcore.Task{}, err
 	}
-	if task.AssignmentType != taskcore.AssignmentTypeAgent {
-		return taskcore.Task{}, taskcore.ErrTaskNotFound
-	}
 	return task, nil
 }
 
 func (s *Service) Update(input UpdateInput) (taskcore.Task, error) {
 	if s == nil || s.core == nil {
 		return taskcore.Task{}, fmt.Errorf("task core service is not configured")
+	}
+	if task, ok := s.core.Get(input.TaskID); !ok || task.AssignmentType != taskcore.AssignmentTypeAgent {
+		return taskcore.Task{}, taskcore.ErrTaskNotFound
 	}
 	var (
 		task taskcore.Task
@@ -235,9 +238,6 @@ func (s *Service) Update(input UpdateInput) (taskcore.Task, error) {
 	}
 	if err != nil {
 		return taskcore.Task{}, err
-	}
-	if task.AssignmentType != taskcore.AssignmentTypeAgent {
-		return taskcore.Task{}, taskcore.ErrTaskNotFound
 	}
 	return task, nil
 }

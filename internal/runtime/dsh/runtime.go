@@ -108,14 +108,16 @@ type process struct {
 	extensionExecutables map[string]string
 	done                 chan struct{}
 
-	metadataMu    sync.Mutex
-	mu            sync.Mutex
-	active        map[string]*activeTurn
-	inFlightTurns int
-	ready         map[string]bool
+	metadataMu          sync.Mutex
+	mu                  sync.Mutex
+	active              map[string]*activeTurn
+	inFlightTurns       int
+	ready               map[string]bool
+	appMCPSessionTokens map[string]string
 }
 
 type activeTurn struct {
+	ctx              context.Context
 	tokenUsage       modelusage.Usage
 	tokenRequests    map[string]bool
 	diagnostic       *diagnostics.Record
@@ -273,6 +275,9 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 		if err := os.Remove(filepath.Join(layout.WorkspaceRoot, "AGENTS.md")); err != nil {
 			return fmt.Errorf("remove duplicate DSH workspace instructions: %w", err)
 		}
+	}
+	if err := writeStandingInstructions(root, agentID, req.AgentName, req.Profile.Env["CSGCLAW_CLI"]); err != nil {
+		return err
 	}
 	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), req.Profile); err != nil {
 		return err
@@ -434,6 +439,9 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	}
 	if meta.Sessions == nil {
 		meta.Sessions = map[string]string{}
+	}
+	if err := writeStandingInstructions(root, ref.ID, ref.Name, ref.Profile.Env["CSGCLAW_CLI"]); err != nil {
+		return agentruntime.StateUnknown, err
 	}
 	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), ref.Profile); err != nil {
 		return agentruntime.StateUnknown, err
@@ -1058,4 +1066,9 @@ func dshProviderSettings(profile agentruntime.Profile) map[string]any {
 	}
 	metadata := profile.ModelMetadata.Normalized()
 	return map[string]any{"protocol": "chat-completions", "baseURL": profile.BaseURL, "apiKeyEnv": llmAPIKeyEnvName, "models": []map[string]any{{"id": profile.ModelID, "inputModalities": inputModalities, "contextWindow": metadata.ContextWindow, "maxTokens": max(int64(1), min(int64(8192), metadata.ContextWindow/4))}}}
+}
+
+func writeStandingInstructions(root, id, name, cliPath string) error {
+	text := runtimeinstructions.StandingInstructions(id, name, cliPath)
+	return os.WriteFile(filepath.Join(root, "standing-instructions.txt"), []byte(text), 0600)
 }

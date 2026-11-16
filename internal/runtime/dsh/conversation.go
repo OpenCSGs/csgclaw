@@ -73,7 +73,7 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	}
 	diagnostics.From(ctx).RuntimeRef(sessionID, "", "")
 	finishPrepare()
-	turn := &activeTurn{diagnostic: diagnostics.From(ctx), request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
+	turn := &activeTurn{ctx: ctx, diagnostic: diagnostics.From(ctx), request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
 	turn.tokenUsage = modelusage.Usage{ModelID: proc.profile.ModelID}
 	proc.mu.Lock()
 	proc.active[sessionID] = turn
@@ -186,21 +186,22 @@ func (c *conversation) ensureSession(ctx context.Context, proc *process, request
 	if ready {
 		return sessionID, nil
 	}
+	mcpServers, token := proc.sessionMCPServers()
 	if exists {
 		var resumed sessionResult
-		if err := proc.client.call(ctx, "session/resume", map[string]any{"sessionId": sessionID, "cwd": proc.workspace, "mcpServers": proc.mcp}, &resumed, nil); err != nil {
+		if err := proc.client.call(ctx, "session/resume", map[string]any{"sessionId": sessionID, "cwd": proc.workspace, "mcpServers": mcpServers}, &resumed, nil); err != nil {
 			return "", &contract.TurnError{Code: contract.ErrorConversationNotResumable, Message: fmt.Sprintf("resume DSH session: %v", err)}
 		}
 		if err := configureSession(ctx, proc, sessionID, resumed.ConfigOptions); err != nil {
 			return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 		}
 		proc.mu.Lock()
-		proc.ready[sessionID] = true
+		proc.markSessionReadyLocked(sessionID, token)
 		proc.mu.Unlock()
 		return sessionID, nil
 	}
 	var created sessionResult
-	if err := proc.client.call(ctx, "session/new", map[string]any{"cwd": proc.workspace, "mcpServers": proc.mcp}, &created, nil); err != nil {
+	if err := proc.client.call(ctx, "session/new", map[string]any{"cwd": proc.workspace, "mcpServers": mcpServers}, &created, nil); err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: fmt.Sprintf("create DSH session: %v", err)}
 	}
 	if strings.TrimSpace(created.SessionID) == "" {
@@ -211,11 +212,21 @@ func (c *conversation) ensureSession(ctx context.Context, proc *process, request
 	}
 	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
 		meta.Sessions[key] = created.SessionID
-		proc.ready[created.SessionID] = true
+		proc.markSessionReadyLocked(created.SessionID, token)
 	}); err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
 	return created.SessionID, nil
+}
+
+func (p *process) markSessionReadyLocked(sessionID, token string) {
+	p.ready[sessionID] = true
+	if token != "" {
+		if p.appMCPSessionTokens == nil {
+			p.appMCPSessionTokens = make(map[string]string)
+		}
+		p.appMCPSessionTokens[sessionID] = token
+	}
 }
 
 func configureSession(ctx context.Context, proc *process, sessionID string, options []json.RawMessage) error {
@@ -353,6 +364,7 @@ func removeSessionBindings(ctx context.Context, proc *process, logicalKey, keep 
 			if proc.ready[id] {
 				active = append(active, id)
 				delete(proc.ready, id)
+				delete(proc.appMCPSessionTokens, id)
 			}
 			delete(meta.Sessions, key)
 		}

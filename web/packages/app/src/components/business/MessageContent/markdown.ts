@@ -2,8 +2,9 @@ import DOMPurify from "dompurify";
 import { Marked, marked } from "marked";
 import { parseCitationDocument, type CitationSource } from "@/models/citations";
 import type { MessageAttachment } from "@/models/attachments";
+import type { MessageMention } from "@/models/conversations";
 import { resolveImageAttachmentURL } from "./imageAttachments";
-import { decorateMentionMarkup } from "./messageMentionMarkup";
+import { decorateMentionMarkup, decorateResolvedMentionText } from "./messageMentionMarkup";
 import { escapeHTML } from "./mentions";
 
 marked.setOptions({
@@ -27,6 +28,7 @@ export function renderMarkdownWithCitations(
   content: unknown,
   citationLabel: (title: string) => string = (title) => `查看引用：${title}`,
   attachments: readonly MessageAttachment[] | null = null,
+  mentions?: readonly MessageMention[] | null,
 ): RenderedMarkdown {
   const citationDocument = parseCitationDocument(String(content ?? ""));
   const cited: RenderedCitation[] = [];
@@ -80,6 +82,7 @@ export function renderMarkdownWithCitations(
     ADD_ATTR: ["target", "rel", "class", "data-user-id", "data-citation-id", "aria-label"],
     USE_PROFILES: { html: true },
   });
+  if (mentions?.length) decorateResolvedMentionText(template.content, mentions);
   template.content.querySelectorAll("a[href]").forEach((link) => {
     link.setAttribute("target", "_blank");
     link.setAttribute("rel", "noopener noreferrer");

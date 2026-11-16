@@ -84,6 +84,12 @@
   min-width: 0;
   flex: 1;
 }
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .text strong {
   font: var(--text-xs-medium);
   overflow: hidden;

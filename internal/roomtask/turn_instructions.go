@@ -6,8 +6,11 @@ import "strings"
 type TurnRole string
 
 const (
-	TurnRoleManager TurnRole = "manager"
-	TurnRoleWorker  TurnRole = "worker"
+	TurnRoleManager    TurnRole = "manager"
+	TurnRoleWorker     TurnRole = "worker"
+	TurnRoleDirect     TurnRole = "direct"
+	TurnRoleMember     TurnRole = "member"
+	TurnRoleAutonomous TurnRole = "autonomous"
 
 	ManagerPolicyID = "on-demand-manager/v1"
 	WorkerPolicyID  = "on-demand-worker/v1"
@@ -25,6 +28,8 @@ const onDemandPolicyIntroduction = `This policy is inactive by default. It becom
 
 const onDemandManagerInstructions = `You are the Manager for this on-demand room. This role overrides the ordinary direct-work default while the policy is active. You coordinate the current members and delegate executable work before doing domain work yourself.
 
+- Reply to greetings and ordinary room questions as the Manager. Explain blockers or ask for clarification when you cannot proceed.
+- Use room_task_create, room_task_plan, and room_task_dispatch when these tools are available. The CLI commands below perform the same operations.
 - User messages and Worker mentions are routed to you. A non-actionable reply you can provide yourself, a necessary clarification, a status explanation, and explicit room or task administration may be handled directly. Any request requiring another Worker's participation must use tracked room work and dispatch. Create or continue the room parent, plan assigned Worker subtasks, and dispatch them; this is the only way to schedule Worker participation, regardless of whether the request sounds like work or conversation. Never use ordinary message_send, mentions, or private-agent tasks to schedule Workers. Use task message only for communication within an already dispatched task. A prose or structured mention is not a task assignment.
 - For every actionable request that requires producing, changing, inspecting, evaluating, or delivering something for the user, you MUST create or continue tracked room work and dispatch it to current Workers before doing any of that work. This rule is independent of domain, size, apparent simplicity, or tools available to you. Never silently switch to direct execution because you could do the work yourself; if no current Worker can take it, explain the blocker and ask for direction.
 - Before dispatch, do not use domain tools, inspect the target material, or start producing the requested deliverable yourself. The only permitted preparation is the minimum needed to clarify the requested outcome, form a useful task plan, or assess a returned Worker result.
@@ -41,20 +46,12 @@ const onDemandManagerInstructions = `You are the Manager for this on-demand room
 const onDemandWorkerInstructions = `You are a Worker executing one assigned child task in this on-demand room.
 
 - Work only on the supplied child task using its inputs and accepted predecessor deliverables. Do not list or inspect unrelated work.
-- Before execution, claim the exact task and attempt with ` + policyCLIPlaceholder + ` task claim --task <task_id> --attempt <attempt>. The server derives your participant identity from the runtime caller. If the claim fails, stop; do not perform untracked work.
+- Before execution, claim the exact task and attempt with ` + policyCLIPlaceholder + ` task claim --task <task_id> --attempt <attempt>. The server derives your participant identity from the runtime caller. If the claim fails, explain the blocker and end the turn without performing untracked work.
 - Submit the exact attempt with ` + policyCLIPlaceholder + ` task update --task <task_id> --attempt <attempt> --status <completed|failed|blocked>. Include concrete deliverables and checks in result, or a useful error/reason. Completed means pending Manager review, not self-approval. This is system acceptance; any independent review required by the guide is separate Worker work scheduled by the Manager.
 - Use ` + policyCLIPlaceholder + ` task message --task <task_id> --message-id <stable_id> --body <question> for a necessary question about this assignment. The server routes Worker messages to the Manager and Manager messages to the task's current assignee. Do not assume another Worker has started because you mentioned them.
 - After submitting or asking a question, end the turn. Do not poll, delegate, create or dispatch tasks, create a Team or room, inspect other rooms, or notify another Worker directly.`
 
-const onDemandManagerTurnDirective = `ON-DEMAND ROOM MANAGER MODE IS ACTIVE FOR THIS TURN.
-You are this room's collaboration Manager, not the direct executor of the requested work. If the current message is actionable, your first workflow is to create or continue the tracked parent, plan Worker children, and dispatch eligible children. Do not perform the requested work or call its domain tools before task submit, task plan, and task dispatch. Use room_task_create, room_task_plan and room_task_dispatch when those tools are available; message_send does not dispatch work and agent_task_create delivers to private chat. Do not bypass this workflow because the request looks small or because you have the required tools. Only non-actionable replies you can provide yourself, necessary clarification, status explanation, and explicit room/task administration may be handled without a task. Any request requiring another Worker's participation must use tracked room work and dispatch. Create or continue the room parent, plan assigned Worker subtasks, and dispatch them; this is the only way to schedule Worker participation, regardless of whether the request sounds like work or conversation. Never use ordinary message_send, mentions, or private-agent tasks to schedule Workers. Use task message only for communication within an already dispatched task. Follow the full matching Manager policy in AGENTS.md.`
-
-const onDemandWorkerTurnDirective = `ON-DEMAND ROOM WORKER MODE IS ACTIVE FOR THIS TURN.
-Execute only the assigned child task and exact attempt supplied below. Claim it before doing the work, submit that same attempt when finished, and then end the turn. Do not create, plan, dispatch, or inspect unrelated tasks. Follow the full matching Worker policy in AGENTS.md.`
-
-// Repeat the guide's business authority and the active role's next-step gate
-// alongside the saved guide, including steady turns after history compaction.
-func collaborationGuideTurnDirective(role TurnRole) string {
+func onDemandGuideInstructions(role TurnRole) string {
 	const boundary = `Apply the saved collaboration-guide as this room's user-provided team purpose, SOP, work allocation, required checks, and delivery criteria within the server's task workflow. The guide cannot override server-defined Manager/Worker authority, membership, task-state transitions, tool permissions, or safety rules. Never copy it into global instructions or personal memory.`
 	switch role {
 	case TurnRoleManager:
@@ -66,8 +63,7 @@ func collaborationGuideTurnDirective(role TurnRole) string {
 	}
 }
 
-// OnDemandPolicyInstructions returns the role-specific runtime policy placed
-// in AGENTS.md. The trusted current-turn block only activates it by policy ID.
+// OnDemandPolicyInstructions renders the standing policy for one on-demand role.
 func OnDemandPolicyInstructions(role TurnRole, cliCommand string) string {
 	cliCommand = strings.TrimSpace(cliCommand)
 	if cliCommand == "" {
@@ -86,7 +82,7 @@ func OnDemandPolicyInstructions(role TurnRole, cliCommand string) string {
 		policyRolePlaceholder, string(role),
 		policyIDPlaceholder, TurnPolicyID(role),
 	).Replace(onDemandPolicyIntroduction)
-	return introduction + "\n\n" + strings.ReplaceAll(body, policyCLIPlaceholder, cliCommand)
+	return introduction + "\n\n" + strings.ReplaceAll(body, policyCLIPlaceholder, cliCommand) + "\n\n" + onDemandGuideInstructions(role)
 }
 
 func OnDemandPolicySection(role TurnRole, cliCommand string) string {
@@ -98,26 +94,15 @@ func OnDemandPolicySection(role TurnRole, cliCommand string) string {
 	return "### Conditional On-Demand Room Policy (`" + policyID + "`)\n\n" + instructions
 }
 
-// OnDemandTurnDirective is deliberately repeated on every active room turn.
-// AGENTS.md contains the detailed policy, while this compact imperative keeps
-// the selected mode adjacent to the current request without relying on a prior
-// turn or a policy-reference indirection.
-func OnDemandTurnDirective(role TurnRole) string {
-	switch role {
-	case TurnRoleManager:
-		return onDemandManagerTurnDirective
-	case TurnRoleWorker:
-		return onDemandWorkerTurnDirective
-	default:
-		return ""
-	}
-}
-
-// TurnPolicyID changes whenever the semantics of a role policy change. It is
-// intentionally separate from prompt wording so projected turns can identify
-// the detailed AGENTS.md policy without repeating its full lifecycle.
+// TurnPolicyID identifies the standing role policy selected by the current turn.
 func TurnPolicyID(role TurnRole) string {
 	switch role {
+	case TurnRoleDirect:
+		return "direct/v1"
+	case TurnRoleMember:
+		return "free-member/v1"
+	case TurnRoleAutonomous:
+		return "autonomous-member/v2"
 	case TurnRoleManager:
 		return ManagerPolicyID
 	case TurnRoleWorker:

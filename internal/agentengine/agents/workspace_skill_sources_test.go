@@ -22,44 +22,39 @@ import (
 )
 
 func TestWorkspaceSkillSummariesRecognizeEmbeddedSources(t *testing.T) {
-	for _, kind := range []string{RuntimeKindCodex, RuntimeKindDSH, RuntimeKindDSH} {
-		t.Run(kind, func(t *testing.T) {
-			workspace, agent, root := newSkillSourceWorkspace(t, kind)
-			templateRoot, err := resolveRuntimeTemplateRoot(kind, RoleWorker)
-			if err != nil {
-				t.Fatal(err)
-			}
-			copySkillSourceFixture(t, root, "agent-teams", skillsystem.SkillSource{FS: templateembed.FS(), RootPath: path.Join(templateRoot, "skills", "agent-teams")})
-			copySkillSourceFixture(t, root, "csgclaw-self-diagnosis", systemSkillSourceFixture(t, "csgclaw-self-diagnosis"))
-			writeWorkspaceFileAt(t, root, "custom/SKILL.md", "# Custom skill\n", 0600)
-			before, err := skillinstall.BundleSHA256(filepath.Join(root, "agent-teams"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			assertSkillSourceSummaries(t, workspace, agent.ID, map[string]string{
-				"agent-teams": skillinstall.SourceBuiltin, "csgclaw-self-diagnosis": skillinstall.SourceBuiltin, "custom": skillinstall.SourceUnknown,
-			})
-			after, err := skillinstall.BundleSHA256(filepath.Join(root, "agent-teams"))
-			if err != nil || before != after {
-				t.Fatalf("summary changed template files: before=%s after=%s error=%v", before, after, err)
-			}
-			entries, err := os.ReadDir(root)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, entry := range entries {
-				if skillinstall.IsRecordsFile(entry.Name()) {
-					t.Fatal("summary created installation records")
-				}
-			}
-		})
+	workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindCodex, RoleManager)
+	const name = "agent-creator"
+	copySkillSourceFixture(t, root, name, skillsystem.SkillSource{
+		FS: templateembed.FS(), RootPath: path.Join(templateembed.CodexManagerRoot, "skills", name),
+	})
+	copySkillSourceFixture(t, root, "csgclaw-self-diagnosis", systemSkillSourceFixture(t, "csgclaw-self-diagnosis"))
+	writeWorkspaceFileAt(t, root, "custom/SKILL.md", "# Custom skill\n", 0600)
+	before, err := skillinstall.BundleSHA256(filepath.Join(root, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSkillSourceSummaries(t, workspace, agent.ID, map[string]string{
+		name: skillinstall.SourceBuiltin, "csgclaw-self-diagnosis": skillinstall.SourceBuiltin, "custom": skillinstall.SourceUnknown,
+	})
+	after, err := skillinstall.BundleSHA256(filepath.Join(root, name))
+	if err != nil || before != after {
+		t.Fatalf("summary changed template files: before=%s after=%s error=%v", before, after, err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if skillinstall.IsRecordsFile(entry.Name()) {
+			t.Fatal("summary created installation records")
+		}
 	}
 }
 
 func TestWorkspaceSkillSummariesPreserveRecordedSources(t *testing.T) {
 	for _, source := range []string{skillinstall.SourceMarket, skillinstall.SourceLocal, skillinstall.SourceBuiltin} {
 		t.Run(source, func(t *testing.T) {
-			workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindCodex)
+			workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindCodex, RoleWorker)
 			copySkillSourceFixture(t, root, "csgclaw-self-diagnosis", systemSkillSourceFixture(t, "csgclaw-self-diagnosis"))
 			if err := skillinstall.Update(root, "csgclaw-self-diagnosis", &skillinstall.Record{Source: source}, nil); err != nil {
 				t.Fatal(err)
@@ -83,7 +78,7 @@ func TestWorkspaceSkillSummariesPreserveRecordedSources(t *testing.T) {
 func TestWorkspaceSkillSummariesRequireCompleteBuiltinContent(t *testing.T) {
 	for _, change := range []string{"content", "extra", "missing", "symlink", "nonregular", "unreadable"} {
 		t.Run(change, func(t *testing.T) {
-			workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindDSH)
+			workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindDSH, RoleWorker)
 			name := "csgclaw-self-diagnosis"
 			copySkillSourceFixture(t, root, name, systemSkillSourceFixture(t, name))
 			auxiliary := filepath.Join(root, name, "agents", "openai.yaml")
@@ -136,15 +131,15 @@ func TestWorkspaceSkillSummariesRequireCompleteBuiltinContent(t *testing.T) {
 }
 
 func TestWorkspaceSkillSummariesUseCurrentRuntimeTemplate(t *testing.T) {
-	workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindDSH)
-	copySkillSourceFixture(t, root, "agent-teams", skillsystem.SkillSource{
-		FS: templateembed.FS(), RootPath: path.Join(templateembed.CodexWorkerRoot, "skills", "agent-teams"),
+	workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindDSH, RoleWorker)
+	copySkillSourceFixture(t, root, "agent-creator", skillsystem.SkillSource{
+		FS: templateembed.FS(), RootPath: path.Join(templateembed.CodexManagerRoot, "skills", "agent-creator"),
 	})
-	assertSkillSourceSummaries(t, workspace, agent.ID, map[string]string{"agent-teams": skillinstall.SourceUnknown})
+	assertSkillSourceSummaries(t, workspace, agent.ID, map[string]string{"agent-creator": skillinstall.SourceUnknown})
 }
 
 func TestWorkspaceSkillSummariesHandleDamagedRecordsAndCancellation(t *testing.T) {
-	workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindCodex)
+	workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindCodex, RoleWorker)
 	copySkillSourceFixture(t, root, "csgclaw-self-diagnosis", systemSkillSourceFixture(t, "csgclaw-self-diagnosis"))
 	writeWorkspaceFileAt(t, root, ".skillhub-lock.json", "{broken", 0600)
 	assertSkillSourceSummaries(t, workspace, agent.ID, map[string]string{"csgclaw-self-diagnosis": skillinstall.SourceBuiltin})
@@ -184,14 +179,14 @@ func (f cancelSkillReadFS) ReadFile(name string) ([]byte, error) {
 	return data, err
 }
 
-func newSkillSourceWorkspace(t *testing.T, kind string) (*WorkspaceService, Agent, string) {
+func newSkillSourceWorkspace(t *testing.T, kind, role string) (*WorkspaceService, Agent, string) {
 	t.Helper()
 	controller, err := NewController(testModelConfig(), config.ServerConfig{}, "", filepath.Join(t.TempDir(), "agents.json"), WithRuntime(fakeAgentRuntime{kind: kind}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = controller.Close() })
-	agent := Agent{ID: "agent-source", Name: "source", Role: RoleWorker, RuntimeKind: kind}
+	agent := Agent{ID: "agent-source", Name: "source", Role: role, RuntimeKind: kind}
 	controller.agents[agent.ID] = agent
 	layout, err := controller.AgentLayout(agent.ID)
 	if err != nil {
@@ -247,7 +242,7 @@ func assertSkillSourceSummaries(t *testing.T, workspace *WorkspaceService, agent
 func TestWorkspaceSkillSourceUnavailableFilesRemainUnknown(t *testing.T) {
 	root := t.TempDir()
 	agent := Agent{RuntimeKind: RuntimeKindDSH, Role: RoleWorker}
-	items := []skilllocal.SkillSummary{{Name: "agent-teams", Source: skillinstall.SourceUnknown}}
+	items := []skilllocal.SkillSummary{{Name: "agent-creator", Source: skillinstall.SourceUnknown}}
 	summaries, err := workspaceSkillSummaries(context.Background(), root, agent, items)
 	if err != nil || len(summaries) != 1 || summaries[0].Source != skillinstall.SourceUnknown {
 		t.Fatalf("missing bundle summary = %+v, %v", summaries, err)

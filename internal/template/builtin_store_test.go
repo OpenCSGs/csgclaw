@@ -92,8 +92,8 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 			t.Fatalf("FetchWorkspace(dsh-worker) copied empty %s", name)
 		}
 	}
-	if data, err := os.ReadFile(filepath.Join(dshWorkspace.Path, "skills", "agent-teams", "SKILL.md")); err != nil || len(data) == 0 {
-		t.Fatalf("ReadFile(dsh-worker/skills/agent-teams/SKILL.md) = %d bytes, %v", len(data), err)
+	if _, err := os.Stat(filepath.Join(dshWorkspace.Path, "skills", "agent-teams")); !os.IsNotExist(err) {
+		t.Fatalf("retired Team skill should be absent from the DSH template: %v", err)
 	}
 }
 

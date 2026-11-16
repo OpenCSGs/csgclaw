@@ -47,7 +47,7 @@ func NewService(core *taskcore.Service, roster func(string) (Roster, bool), send
 func (s *Service) List(roomID string) []taskcore.Task {
 	out := []taskcore.Task{}
 	for _, t := range s.core.ListGlobal() {
-		if t.AssignmentType == taskcore.AssignmentTypeRoom && (roomID == "" || t.RoomID == roomID) {
+		if t.AssignmentType == taskcore.AssignmentTypeRoom && t.RoomMode != taskcore.RoomModeAutonomous && (roomID == "" || t.RoomID == roomID) {
 			out = append(out, t)
 		}
 	}
@@ -55,7 +55,7 @@ func (s *Service) List(roomID string) []taskcore.Task {
 }
 func (s *Service) Get(roomID, id string) (taskcore.Task, bool) {
 	t, ok := s.core.Get(id)
-	return t, ok && t.AssignmentType == taskcore.AssignmentTypeRoom && t.RoomID == roomID
+	return t, ok && t.AssignmentType == taskcore.AssignmentTypeRoom && t.RoomMode != taskcore.RoomModeAutonomous && t.RoomID == roomID
 }
 
 // Resolve looks up a room task by its globally unique task id. Room-scoped
@@ -65,7 +65,7 @@ func (s *Service) Resolve(id string) (taskcore.Task, bool) {
 		return taskcore.Task{}, false
 	}
 	t, ok := s.core.Get(id)
-	return t, ok && t.AssignmentType == taskcore.AssignmentTypeRoom
+	return t, ok && t.AssignmentType == taskcore.AssignmentTypeRoom && t.RoomMode != taskcore.RoomModeAutonomous
 }
 func (s *Service) members(room string) (Roster, error) {
 	if s.roster == nil {

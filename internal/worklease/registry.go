@@ -570,8 +570,6 @@ func (r *Registry) ActiveCount(roomID, participantID string) int {
 	return len(r.activeBySubject[strings.TrimSpace(roomID)][participantID])
 }
 
-// ActiveRooms returns current execution scope, excluding expired leases even
-// before the janitor runs. Multiple rooms are deliberately not guessed between.
 // ActiveWork returns exact, unexpired leases for task-scoped stop control.
 func (r *Registry) ActiveWork(roomID string) []apitypes.ParticipantWorkUpdate {
 	r.mu.Lock()
@@ -585,6 +583,22 @@ func (r *Registry) ActiveWork(roomID string) []apitypes.ParticipantWorkUpdate {
 	return out
 }
 
+// ActiveWorkForParticipant returns one snapshot of the participant's active turns.
+func (r *Registry) ActiveWorkForParticipant(participantID string) []apitypes.ParticipantWorkUpdate {
+	participantID = r.canonicalParticipantID(participantID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := r.now()
+	var out []apitypes.ParticipantWorkUpdate
+	for _, lease := range r.activeByKey {
+		if lease.participantID == participantID && lease.expiresAt.After(now) {
+			out = append(out, r.updateFor(lease, apitypes.ParticipantWorkStateWorking, ""))
+		}
+	}
+	return out
+}
+
+// ActiveRooms returns current execution scope, excluding expired leases.
 func (r *Registry) ActiveRooms(participantID string) []string {
 	participantID = r.canonicalParticipantID(participantID)
 	r.mu.Lock()

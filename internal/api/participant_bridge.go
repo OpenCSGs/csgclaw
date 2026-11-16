@@ -88,7 +88,7 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 }
 
 func (h *Handler) participantDeliveryRoom(room im.Room, message im.Message) im.Room {
-	if room.NotifyAllAgents && h.isAgentSender(message.SenderID) {
+	if !room.IsAutonomous() && room.NotifyAllAgents && h.isAgentSender(message.SenderID) {
 		room.NotifyAllAgents = false
 	}
 	return room

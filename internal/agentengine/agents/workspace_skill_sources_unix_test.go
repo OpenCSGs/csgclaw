@@ -12,7 +12,7 @@ import (
 )
 
 func TestWorkspaceSkillSummariesRejectNamedPipe(t *testing.T) {
-	workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindCodex)
+	workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindCodex, RoleWorker)
 	name := "csgclaw-self-diagnosis"
 	copySkillSourceFixture(t, root, name, systemSkillSourceFixture(t, name))
 	file := filepath.Join(root, name, "agents", "openai.yaml")

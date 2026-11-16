@@ -475,17 +475,8 @@ func TestRefreshCodexHomeAgentsFileCreatesManagedFileWhenMissing(t *testing.T) {
 	if !strings.Contains(text, "Output File Delivery") || !strings.Contains(text, "`csgclaw_publish_file`") {
 		t.Fatalf("AGENTS.md = %q, want shared file publishing instructions", text)
 	}
-	for _, want := range []string{
-		"Conditional On-Demand Room Policy (`on-demand-worker/v1`)",
-		`room_type="on_demand", role="worker", and policy_id="on-demand-worker/v1"`,
-		"task claim --task <task_id>",
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("worker AGENTS.md missing conditional room policy %q in %q", want, text)
-		}
-	}
-	if strings.Contains(text, "on-demand-manager/v1") || strings.Contains(text, "task submit --room") {
-		t.Fatalf("worker AGENTS.md includes Manager-only room policy: %q", text)
+	if strings.Contains(text, "Conditional On-Demand Room Policy") {
+		t.Fatalf("worker AGENTS.md includes thread policy: %q", text)
 	}
 	if !strings.Contains(text, "END CSGCLAW-INSTRUCTIONS") {
 		t.Fatalf("AGENTS.md = %q, want instructions block end marker", text)
@@ -569,14 +560,6 @@ func TestRefreshCodexHomeAgentsFileAddsManagerConnectorRules(t *testing.T) {
 	}
 	text := string(raw)
 	for _, want := range []string{
-		"Conditional On-Demand Room Policy (`on-demand-manager/v1`)",
-		`room_type="on_demand", role="manager", and policy_id="on-demand-manager/v1"`,
-		"MUST create or continue tracked room work and dispatch it",
-		"independent of domain, size, apparent simplicity, or tools available to you",
-		"Before dispatch, do not use domain tools, inspect the target material, or start producing the requested deliverable yourself",
-		`"$CSGCLAW_CLI" task submit --room`,
-		"Managed Capability Boundary",
-		"They never authorize bypassing the on-demand room task workflow",
 		"GitHub Connector Access",
 		"/api/v1/agents/agent-manager/connectors/github/credential",
 		"X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY",
@@ -2498,7 +2481,7 @@ func TestRuntimeCreateDoesNotInstallManagerTemplateForWorker(t *testing.T) {
 	}
 }
 
-func TestRuntimeProvisionSeedsCodexWorkerTemplateSkills(t *testing.T) {
+func TestRuntimeProvisionSeedsCodexWorkerWithoutRetiredTeamSkill(t *testing.T) {
 	root := t.TempDir()
 	hostHome := t.TempDir()
 	t.Setenv("HOME", hostHome)
@@ -2531,13 +2514,9 @@ func TestRuntimeProvisionSeedsCodexWorkerTemplateSkills(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(workspaceRoot, "AGENTS.md")); err != nil {
 		t.Fatalf("worker workspace AGENTS.md missing: %v", err)
 	}
-	skillPath := filepath.Join(root, "agent-alice", ".codex", "home", "skills", "agent-teams", "SKILL.md")
-	raw, err := os.ReadFile(skillPath)
-	if err != nil {
-		t.Fatalf("read worker template skill: %v", err)
-	}
-	if !strings.Contains(string(raw), "agent-teams") {
-		t.Fatalf("worker template skill missing expected content:\n%s", string(raw))
+	skillPath := filepath.Join(root, "agent-alice", ".codex", "home", "skills", "agent-teams")
+	if _, err := os.Stat(skillPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retired Team skill stat = %v, want absent", err)
 	}
 }
 

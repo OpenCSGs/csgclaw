@@ -44,9 +44,9 @@ const (
 	appServerMaxUploadBytes            = 50 << 20
 )
 
-const appServerDeveloperInstructions = `- Base each new turn on the latest user message. Use earlier requests and attachments as context only when they are relevant to that message.
-- Do not resume unfinished work from earlier turns unless the latest user message asks to continue or clearly depends on that work. An unanswered or failed request does not authorize a retry.
-- When the latest user message is only a greeting, thanks, or acknowledgement, reply directly without using tools or inspecting earlier attachments.` +
+const appServerDeveloperInstructions = `- Base each new turn on the current message or event. Use earlier requests and attachments only when relevant to it.
+- Do not resume unfinished work from earlier turns unless the current message or event asks to continue or clearly depends on that work. An unanswered or failed request does not authorize a retry.
+- For a casual greeting, thanks, or acknowledgment, follow the current conversation policy and keep any reply short. Do not inspect earlier attachments or run unrelated tools.` +
 	"\n" + runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy
 
 var appServerStopTimeout = 3 * time.Second
@@ -908,12 +908,14 @@ func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, 
 }
 
 func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]any {
+	// Standing policy belongs to the native thread. Reapply on start/resume,
+	// not on ordinary turn/start; dynamic room facts travel in that turn's input.
 	spec.Profile = spec.Profile.Normalized()
 	params := map[string]any{
 		"cwd":                    spec.WorkspaceDir,
 		"persistExtendedHistory": true,
 		"experimentalRawEvents":  false,
-		"developerInstructions":  appServerDeveloperInstructions,
+		"developerInstructions":  threadDeveloperInstructions(spec),
 	}
 	if publishFiles {
 		// Native tools are immutable on resume; enforce the current mode in the call handler.
@@ -980,7 +982,7 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	params := map[string]any{
 		"threadId":              strings.TrimSpace(threadID),
 		"cwd":                   spec.WorkspaceDir,
-		"developerInstructions": appServerDeveloperInstructions,
+		"developerInstructions": threadDeveloperInstructions(spec),
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
@@ -993,6 +995,10 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 		params["permissions"] = readOnlyPermissionsProfile
 	}
 	return params
+}
+
+func threadDeveloperInstructions(spec SessionSpec) string {
+	return runtimeinstructions.StandingInstructions(spec.AgentID, spec.AgentName, spec.Profile.Env["CSGCLAW_CLI"]) + "\n\n" + appServerDeveloperInstructions
 }
 
 func appServerTurnStartParams(spec SessionSpec, threadID string, prompt string) map[string]any {
@@ -2230,6 +2236,13 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 	defer cancelRead()
 	var history <-chan map[string]any
 	var readVersion uint64
+	var updates appServerTurnUpdates
+	live.mu.Lock()
+	if !live.compactingThreads[waiter.threadID] {
+		updates.inputs = contract.TurnInputUpdatesFromContext(ctx)
+	}
+	live.mu.Unlock()
+	defer updates.stop()
 
 	finish := func(result appServerTurnResult) (PromptResponse, error) {
 		cancelRead()
@@ -2254,6 +2267,9 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			}
 			if result.progress || result.started {
 				quiet.Reset(quietTurnInterval)
+				if updates.waitCompaction {
+					updates.schedule()
+				}
 			}
 			if result.activity != "" {
 				now := time.Now()
@@ -2275,6 +2291,10 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			if result.success || result.err != nil {
 				return finish(result)
 			}
+		case <-updates.inputs.Ready:
+			updates.schedule()
+		case <-updates.due:
+			updates.flush(ctx, live, waiter)
 		case <-quiet.C:
 			quiet.Reset(quietTurnInterval)
 			if turnID := waiter.currentTurnID(); history == nil && turnID != "" && live.appClient != nil {

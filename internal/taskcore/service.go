@@ -484,6 +484,20 @@ func (s *Service) Get(taskID string) (Task, bool) {
 	return cloneTask(*task), true
 }
 
+func (s *Service) AutonomousTaskThread(roomID, sourceID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, root := range s.roots {
+		if root.RoomMode == RoomModeAutonomous && root.RoomID == roomID && root.SourceMessageID == sourceID {
+			if root.ThreadRootID != "" {
+				return root.ThreadRootID
+			}
+			return root.SourceMessageID
+		}
+	}
+	return ""
+}
+
 func (s *Service) ListGlobal() []Task {
 	s.mu.Lock()
 	defer s.mu.Unlock()

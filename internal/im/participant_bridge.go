@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/roomtask"
+	"csgclaw/internal/slashcommand"
 	"csgclaw/internal/taskmeta"
 	"encoding/json"
 	"fmt"
@@ -61,6 +62,7 @@ func (b *ParticipantBridge) ResourceInput(ctx context.Context, agentID, content 
 }
 
 type ParticipantEvent struct {
+	NotificationOnly  bool                        `json:"notification_only,omitempty"`
 	MemoryUserID      string                      `json:"-"`
 	MemoryText        string                      `json:"-"`
 	ResourceSelection *apitypes.ResourceSelection `json:"resource_selection,omitempty"`
@@ -86,6 +88,7 @@ type ParticipantEvent struct {
 }
 
 type ParticipantSender struct {
+	Role        string `json:"role,omitempty"`
 	ID          string `json:"id"`
 	Username    string `json:"username,omitempty"`
 	DisplayName string `json:"display_name,omitempty"`
@@ -467,7 +470,7 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 	threadRootID := threadRootID(message)
 	chatType := chatTypeForRoom(room)
 	mentions := mentionsForParticipant(message.Mentions, participantID)
-	mentioned := len(mentions) > 0 || (!room.IsDirect && room.NotifyAllAgents)
+	mentioned := len(mentions) > 0 || (!room.IsDirect && (room.NotifyAllAgents || room.IsAutonomous()))
 	if room.IsOnDemand() && canonicalIMUserID(participantID) == canonicalIMUserID(room.ManagerID) {
 		// Manager is the implicit addressee of human input. Preserve the actual
 		// message/mentions, but mark it addressed for downstream runtime routing.
@@ -479,7 +482,7 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 	}
 	text := textForParticipantEvent(message, participantID)
 	attempt := taskmeta.Attempt(message.Metadata)
-	return ParticipantEvent{
+	event := ParticipantEvent{
 		MemoryUserID:      message.MemoryUserID,
 		MemoryText:        message.Content,
 		ResourceSelection: apitypes.ResourceSelectionFromMetadata(message.Metadata),
@@ -494,6 +497,7 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 		ChatType:          chatType,
 		ThreadRootID:      threadRootID,
 		Sender: ParticipantSender{
+			Role:        sender.Role,
 			ID:          sender.ID,
 			Username:    sender.Name,
 			DisplayName: sender.Name,
@@ -521,6 +525,19 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 			},
 		},
 	}
+	cmd, commandOK, commandErr := slashcommand.Parse(strings.TrimSpace(text))
+	reset := commandErr == nil && commandOK && slashcommand.IsNewConversationCommand(cmd) && event.ResourceSelection == nil
+	if room.IsAutonomous() && !reset {
+		event.NotificationOnly = true
+		event.Text = ""
+		event.MemoryText = ""
+		event.MemoryUserID = ""
+		event.Attachments = nil
+		event.ResourceSelection = nil
+		event.ThreadContext = nil
+	}
+	return event
+
 }
 
 func roomExecutionTaskID(room Room, message Message) string {
@@ -734,7 +751,7 @@ func shouldNotifyParticipant(room Room, sender User, message Message, participan
 		taskID := taskmeta.ID(message.Metadata)
 		return taskID != "" && messageMentionsParticipant(message, participantID)
 	}
-	return room.IsDirect || room.NotifyAllAgents || messageMentionsParticipant(message, participantID)
+	return room.IsDirect || room.IsAutonomous() || room.NotifyAllAgents || messageMentionsParticipant(message, participantID)
 }
 
 func mentionsForParticipant(mentions []Mention, participantID string) []string {

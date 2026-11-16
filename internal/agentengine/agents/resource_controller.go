@@ -49,6 +49,7 @@ func WithTemplateMCPAvailability(ctx context.Context, service *mcp.Service, skip
 }
 
 func (f *Controller) Create(ctx context.Context, request contract.AgentCreateRequest) (contract.Agent, error) {
+	ctx = withIdentityActor(ctx, request.ActorID)
 	requested := request.Spec
 	spec := requested
 	spec = normalizeAgentSpec(spec)
@@ -254,6 +255,7 @@ func (f *Controller) List(ctx context.Context, options contract.AgentListOptions
 }
 
 func (f *Controller) Update(ctx context.Context, agentID string, request contract.AgentUpdateRequest) (contract.Agent, error) {
+	ctx = withIdentityActor(ctx, request.ActorID)
 	item, err := f.updateDesired(ctx, agentID, request.ResourceVersion, updateOptionsFor(request), func(current contract.AgentSpec) (contract.AgentSpec, error) {
 		return mergeAgentUpdate(current, request), nil
 	})
@@ -694,6 +696,9 @@ func (f *Controller) Delete(ctx context.Context, agentID string) error {
 }
 
 func (f *Controller) Recreate(ctx context.Context, agentID string, options contract.AgentRecreateOptions) (result contract.Agent, err error) {
+	if options.Update != nil {
+		ctx = withIdentityActor(ctx, options.Update.ActorID)
+	}
 	ctx, release, err := f.acquireAgentLifecycle(ctx, agentID)
 	if err != nil {
 		return result, err
@@ -1180,6 +1185,7 @@ func (f *Controller) convert(selected Agent) (contract.Agent, error) {
 		message = "agent is archived"
 	}
 	return contract.Agent{
+		CreatedBy: selected.CreatedBy, NamedBy: selected.NamedBy,
 		ArchivedAt:      selected.ArchivedAt,
 		ArchivedBy:      selected.ArchivedBy,
 		ID:              selected.ID,

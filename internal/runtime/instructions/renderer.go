@@ -3,7 +3,6 @@ package instructions
 import (
 	"bytes"
 	"csgclaw/internal/identity"
-	"csgclaw/internal/roomtask"
 	_ "embed"
 	"strings"
 	"text/template"
@@ -55,7 +54,7 @@ func ExtractUserInstructionsFromAgentsDocument(document string) string {
 }
 
 func RenderAgentsInstructionsBlock(instructions string) string {
-	return renderAgentsInstructionsBlock(instructions, "", `"$CSGCLAW_CLI"`, "")
+	return renderAgentsInstructionsBlock(instructions, "", companionCLICommand(""))
 }
 
 type RuntimeManagedInstructionsOptions struct {
@@ -69,17 +68,10 @@ func RenderRuntimeAgentsInstructionsBlock(agentID, instructions string) string {
 }
 
 func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions string, options RuntimeManagedInstructionsOptions) string {
-	command := `"$CSGCLAW_CLI"`
-	if path := strings.TrimSpace(options.CLIPath); path != "" {
-		command = "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
-	}
+	command := companionCLICommand(options.CLIPath)
 	managedInstructions := joinManagedInstructions(untrustedExtraContextInstructions, runtimeFilePublishingInstructions, RoomAttachmentInstructions(command), ResourceSelectionInstructions)
-	role := roomtask.TurnRoleWorker
-	if strings.TrimSpace(agentID) == identity.ManagerAgentID {
-		role = roomtask.TurnRoleManager
-		if !options.AgentMCP {
-			managedInstructions = joinManagedInstructions(managedInstructions, managerRuntimeConnectorInstructions)
-		}
+	if identity.CanonicalAgentID(agentID) == identity.ManagerAgentID && !options.AgentMCP {
+		managedInstructions = joinManagedInstructions(managedInstructions, managerRuntimeConnectorInstructions)
 	}
 	if options.AgentMCP {
 		managedInstructions = joinManagedInstructions(managedInstructions, agentMCPPlatformInstructions)
@@ -87,8 +79,7 @@ func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions strin
 	for _, fragment := range options.Extensions {
 		managedInstructions = joinManagedInstructions(managedInstructions, fragment)
 	}
-	policy := roomtask.OnDemandPolicySection(role, command)
-	return renderAgentsInstructionsBlock(instructions, managedInstructions, command, policy)
+	return renderAgentsInstructionsBlock(instructions, managedInstructions, command)
 }
 
 const untrustedExtraContextInstructions = `### Untrusted Extra Context
@@ -152,10 +143,9 @@ const agentMCPPlatformInstructions = `### Agent Platform Access
 - Before asking the user to choose an App, refresh apps_list and use its current available_app_counts and instances. This result replaces all previous App inventories in conversation history; do not list removed or unavailable instances.
 - If several Apps match, use an explicit App/account choice, resource URL or project identifier, or an established choice in the current task only when it uniquely identifies one installation. If the target remains ambiguous, list the matching App names and ask which one to use before calling their business tools. Do not choose the first installation, query all accounts, or reuse a choice from an unrelated task. An explicit request to query all matching Apps authorizes that scope.
 - If no matching App is connected and usable, use app_setup to help configure one. Never request an App name solely because the user omitted it, and never ask for raw credentials in chat.
-- Use rooms_list, room_get, messages_list, message_send, room_create and room_members_add for explicit room operations. Identity is supplied by the server.
-- Direct task notifications may use csgclaw-cli task claim/update; team notifications may use csgclaw-cli team task claim/update. These commands are restricted to this Agent's assigned work. Use a concrete team ID for team operations.
+- Use rooms_list, room_get, messages_list, messages_read, messages_ack, message_send, room_create and room_members_add for explicit room operations. Identity is supplied by the server.
 - An App connection is configured through app_setup and does not create a Feishu bot channel.
-- Follow the existing bundled Skills for Agent creation and Feishu channel setup, and the trusted on-demand room planning and dispatch policy.`
+- Follow the existing bundled Skills for Agent creation and Feishu channel setup, when those operations are requested.`
 
 func joinManagedInstructions(values ...string) string {
 	var parts []string
@@ -167,12 +157,7 @@ func joinManagedInstructions(values ...string) string {
 	return strings.Join(parts, "\n\n")
 }
 
-const managerRuntimeConnectorInstructions = `### Managed Capability Boundary
-
-- Capability-specific instructions below describe how to perform an operation only after the active conversation-mode policy permits direct execution.
-- They never authorize bypassing the on-demand room task workflow. In on-demand Manager mode, do not use a domain capability before required task planning and dispatch.
-
-### GitHub Connector Access
+const managerRuntimeConnectorInstructions = `### GitHub Connector Access
 
 - The Manager can request CSGClaw-managed connector credentials dynamically through the local CSGClaw API.
 - For GitHub repository, pull request, issue, or review workflows, request a fresh lease with ` + "`POST $CSGCLAW_BASE_URL/api/v1/agents/agent-manager/connectors/github/credential`" + ` using ` + "`Authorization: Bearer $CSGCLAW_ACCESS_TOKEN`" + ` and ` + "`X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY`" + `.
@@ -205,32 +190,25 @@ const managerRuntimeConnectorInstructions = `### Managed Capability Boundary
 - Do not search the web for a referenced upload, rely only on ` + "`find`" + ` in the current workspace, or request a re-upload until durable CSGClaw history has been checked.
 - Never print, echo, or include ` + "`CSGCLAW_ACCESS_TOKEN`" + ` or a capability token in tool output, logs, prompts, or responses.`
 
-func renderAgentsInstructionsBlock(instructions, managedInstructions, cliCommand, onDemandPolicy string) string {
+func renderAgentsInstructionsBlock(instructions, managedInstructions, cliCommand string) string {
 	instructions = strings.TrimSpace(instructions)
 	managedInstructions = strings.TrimSpace(managedInstructions)
-	onDemandPolicy = strings.TrimSpace(onDemandPolicy)
 	managedInstructions = strings.ReplaceAll(managedInstructions, "`csgclaw-cli ", "`"+cliCommand+" ")
 	managedInstructions = strings.ReplaceAll(managedInstructions, `"$CSGCLAW_CLI"`, cliCommand)
 	data := struct {
-		CLICommand             string
 		StartMarker            string
 		EndMarker              string
 		Instructions           string
 		HasInstructions        bool
 		ManagedInstructions    string
 		HasManagedInstructions bool
-		OnDemandPolicy         string
-		HasOnDemandPolicy      bool
 	}{
-		CLICommand:             cliCommand,
 		StartMarker:            agentsInstructionsBlockStart,
 		EndMarker:              agentsInstructionsBlockEnd,
 		Instructions:           instructions,
 		HasInstructions:        instructions != "",
 		ManagedInstructions:    managedInstructions,
 		HasManagedInstructions: managedInstructions != "",
-		OnDemandPolicy:         onDemandPolicy,
-		HasOnDemandPolicy:      onDemandPolicy != "",
 	}
 	var b bytes.Buffer
 	if err := parsedAgentsInstructionsBlockTemplate.Execute(&b, data); err != nil {

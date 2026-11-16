@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { groupVideoGenerationMessages, type IMMessage } from "./conversations";
+import {
+  groupVideoGenerationMessages,
+  mergeRoomMetadataUpdateInData,
+  roomType,
+  type IMMessage,
+  type IMConversation,
+} from "./conversations";
 
 describe("groupVideoGenerationMessages", () => {
   it("projects a persisted video task under its final manager message", () => {
@@ -25,5 +31,21 @@ describe("groupVideoGenerationMessages", () => {
     const grouped = groupVideoGenerationMessages([message]);
     expect(grouped.childMessageIDs.size).toBe(0);
     expect(grouped.childrenByParentID.size).toBe(0);
+  });
+});
+
+describe("autonomous room metadata", () => {
+  it("preserves the mode and updates the round status without replacing messages", () => {
+    const messages = [{ id: "m", content: "Keep history" }];
+    const room: IMConversation = { id: "r", type: "autonomous", members: [], messages };
+    const state = { source_id: "m", receipts: ["m:dev"], paused: true };
+    const next = mergeRoomMetadataUpdateInData(
+      { rooms: [room], users: [] },
+      { ...room, messages: [], autonomous_state: state },
+    );
+    expect(roomType(next.rooms[0])).toBe("autonomous");
+    expect(next.rooms[0].messages).toBe(messages);
+    expect(next.rooms[0].autonomous_state).toEqual(state);
+    expect(roomType({})).toBe("free");
   });
 });

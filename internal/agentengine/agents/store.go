@@ -72,6 +72,8 @@ type legacyWorker struct {
 }
 
 type persistedAgent struct {
+	CreatedBy          string                     `json:"created_by,omitempty"`
+	NamedBy            string                     `json:"named_by,omitempty"`
 	SkillStates        map[string]skill.State     `json:"skill_states,omitempty"`
 	ID                 string                     `json:"id"`
 	Name               string                     `json:"name"`
@@ -123,6 +125,7 @@ func (a persistedAgent) MarshalJSON() ([]byte, error) {
 		profile = compactPersistedProfile(a.AgentProfile)
 	}
 	out := map[string]any{
+		"created_by": a.CreatedBy, "named_by": a.NamedBy,
 		"id":         a.ID,
 		"name":       a.Name,
 		"role":       a.Role,
@@ -251,6 +254,7 @@ func newPersistedAgent(a Agent) persistedAgent {
 		updatedAt = a.CreatedAt.UTC()
 	}
 	return persistedAgent{
+		CreatedBy: a.CreatedBy, NamedBy: a.NamedBy,
 		ID:                 a.ID,
 		Name:               a.Name,
 		Description:        a.Description,
@@ -326,6 +330,7 @@ func (a persistedAgent) toAgent() Agent {
 	}
 	runtimeCfg := agentruntime.RuntimeConfigForKind(runtimeKind)
 	ag := Agent{
+		CreatedBy: a.CreatedBy, NamedBy: a.NamedBy,
 		ID:                a.ID,
 		Name:              a.Name,
 		Description:       a.Description,

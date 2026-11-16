@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/im"
 )
 
 type appAgentContextKey struct{}
@@ -146,6 +147,44 @@ func (h *Handler) authorizeAgentPlatformRoute(r *http.Request, agentID string) b
 	if len(parts) == 3 && parts[0] == "rooms" && parts[2] == "task-context" && r.Method == http.MethodGet {
 		return h.agentPlatformRoom(agentID, parts[1])
 	}
+	if p == "messages/unread" || p == "channels/csgclaw/messages/unread" {
+		if r.Method != http.MethodGet {
+			return false
+		}
+		query := r.URL.Query()
+		target := map[string]any{"room_id": query.Get("room_id"), "thread_root_id": query.Get("thread_root_id")}
+		if err := h.scopeUnboundAutonomousMessage(agentID, "messages_read", target); err != nil {
+			return false
+		}
+		roomID := platformText(target, "room_id")
+		if !h.agentPlatformRoom(agentID, roomID) {
+			return false
+		}
+		query.Set("room_id", roomID)
+		query.Set("thread_root_id", platformText(target, "thread_root_id"))
+		r.URL.RawQuery = query.Encode()
+		return true
+	}
+	if p == "messages/unread/ack" || p == "channels/csgclaw/messages/unread/ack" {
+		if r.Method != http.MethodPost {
+			return false
+		}
+		payload, ok := platformRequestBody(r)
+		if !ok {
+			return false
+		}
+		if err := h.scopeUnboundAutonomousMessage(agentID, "messages_ack", payload); err != nil {
+			return false
+		}
+		roomID := platformText(payload, "room_id")
+		actorID, _ := payload["participant_id"].(string)
+		actor := h.participantBridgeTargetForRoomMember(h.agentPlatformParticipant(agentID))
+		if (actorID != "" && !actor.matches(actorID)) || !h.agentPlatformRoom(agentID, roomID) {
+			return false
+		}
+		setPlatformRequestBody(r, payload)
+		return true
+	}
 	if p == "messages" || p == "channels/csgclaw/messages" {
 		if r.Method == http.MethodGet {
 			return h.agentPlatformRoom(agentID, r.URL.Query().Get("room_id"))
@@ -155,11 +194,23 @@ func (h *Handler) authorizeAgentPlatformRoute(r *http.Request, agentID string) b
 			if !ok {
 				return false
 			}
-			roomID, _ := payload["room_id"].(string)
 			sender, _ := payload["sender_id"].(string)
 			actor := h.participantBridgeTargetForRoomMember(h.agentPlatformParticipant(agentID))
 			if sender != "" && !actor.matches(sender) {
 				return false
+			}
+			target := map[string]any{"room_id": payload["room_id"]}
+			relation, _ := payload["relates_to"].(map[string]any)
+			if platformText(relation, "rel_type") == im.RelationTypeThread {
+				target["thread_root_id"] = relation["event_id"]
+			}
+			if err := h.scopeUnboundAutonomousMessage(agentID, "message_send", target); err != nil {
+				return false
+			}
+			roomID := platformText(target, "room_id")
+			payload["room_id"] = roomID
+			if threadRootID := platformText(target, "thread_root_id"); threadRootID != "" && (relation == nil || platformText(relation, "rel_type") == im.RelationTypeThread) {
+				payload["relates_to"] = map[string]string{"rel_type": im.RelationTypeThread, "event_id": threadRootID}
 			}
 			payload["sender_id"] = actor.bridgeID
 			setPlatformRequestBody(r, payload)

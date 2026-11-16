@@ -72,6 +72,7 @@ type Mention struct {
 type Message struct {
 	// Set by trusted ingress; prevents ineligible messages entering history learning.
 	MemoryExcluded  bool                `json:"-"`
+	RoomSequence    uint64              `json:"room_sequence,omitempty"`
 	MemoryUserID    string              `json:"-"`
 	ID              string              `json:"id"`
 	ClientMessageID string              `json:"client_message_id,omitempty"`
@@ -196,8 +197,9 @@ type EventPayload struct {
 type RoomType string
 
 const (
-	RoomTypeFree     RoomType = "free"
-	RoomTypeOnDemand RoomType = "on_demand"
+	RoomTypeFree       RoomType = "free"
+	RoomTypeOnDemand   RoomType = "on_demand"
+	RoomTypeAutonomous RoomType = "autonomous"
 )
 
 func NormalizeRoomType(value RoomType) RoomType {
@@ -211,6 +213,82 @@ func (room Room) IsOnDemand() bool {
 	return NormalizeRoomType(room.Type) == RoomTypeOnDemand
 }
 
+func (room Room) IsAutonomous() bool {
+	return !room.IsDirect && NormalizeRoomType(room.Type) == RoomTypeAutonomous
+}
+
+// AutonomousState is server-owned admission state, persisted with the room.
+// Read and notification watermarks are independent and isolated by member/thread.
+type AutonomousState struct {
+	SourceID string                      `json:"source_id"`
+	Receipts []string                    `json:"receipts,omitempty"`
+	Paused   bool                        `json:"paused,omitempty"`
+	Sequence uint64                      `json:"sequence,omitempty"`
+	Cursors  map[string]AutonomousCursor `json:"cursors,omitempty"`
+}
+
+type AutonomousCursor struct {
+	ReadThrough     uint64             `json:"read_through"`
+	NotifiedThrough uint64             `json:"notified_through"`
+	Page            *UnreadPageReceipt `json:"page,omitempty"`
+	LastAck         string             `json:"last_ack,omitempty"`
+}
+
+type UnreadPageReceipt struct {
+	Token     string    `json:"token"`
+	Through   uint64    `json:"through"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type UnreadNotification struct {
+	RoomID        string `json:"room_id"`
+	ParticipantID string `json:"participant_id"`
+	ThreadRootID  string `json:"thread_root_id,omitempty"`
+	Count         int    `json:"unread_count"`
+	Through       uint64 `json:"through"`
+}
+
+type UnreadMessage struct {
+	Message
+	Sender UnreadSender `json:"sender"`
+}
+
+func (m *UnreadMessage) UnmarshalJSON(data []byte) error {
+	// Decode both fields explicitly. The embedded Message decoder otherwise
+	// handles the entire object and drops the unread sender details.
+	var message Message
+	if err := json.Unmarshal(data, &message); err != nil {
+		return err
+	}
+	var details struct {
+		Sender UnreadSender `json:"sender"`
+	}
+	if err := json.Unmarshal(data, &details); err != nil {
+		return err
+	}
+	*m = UnreadMessage{Message: message, Sender: details.Sender}
+	return nil
+}
+
+type UnreadSender struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+type UnreadPage struct {
+	UnreadNotification
+	Messages []UnreadMessage `json:"messages"`
+	Root     *UnreadMessage  `json:"thread_root,omitempty"`
+	HasMore  bool            `json:"has_more"`
+	Token    string          `json:"ack_token,omitempty"`
+}
+type UnreadAck struct {
+	RoomID        string `json:"room_id"`
+	ParticipantID string `json:"participant_id,omitempty"`
+	ThreadRootID  string `json:"thread_root_id,omitempty"`
+	Token         string `json:"ack_token"`
+}
+
 // CloudAgentReference identifies a server-owned Relay connection, never credentials.
 type CloudAgentReference struct {
 	AgentID      string `json:"agent_id"`
@@ -222,6 +300,7 @@ type Room struct {
 	ContextUsageEpoch uint64                           `json:"context_usage_epoch,omitempty"`
 	ContextUsage      map[string]modelcap.ContextUsage `json:"context_usage,omitempty"`
 	CloudAgent        *CloudAgentReference             `json:"cloud_agent,omitempty"`
+	AutonomousState   *AutonomousState                 `json:"autonomous_state,omitempty"`
 	// CreationWorkspaceDir retains the requested path (empty means automatic).
 	// It is private persistence metadata used to validate creation retries.
 	CreationWorkspaceDir *string `json:"-"`

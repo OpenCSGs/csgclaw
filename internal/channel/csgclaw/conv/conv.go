@@ -57,6 +57,10 @@ func TextInput(binding channel.Binding, event channel.Event) []agentengine.Input
 	if hidden := hiddenContext(binding, event); hidden != "" {
 		input = append(input, agentengine.InputPart{Kind: agentengine.InputPartText, Text: hidden})
 	}
+	if event.NotificationOnly {
+		input = append(input, agentengine.InputPart{Kind: agentengine.InputPartText, Text: "Unread message notification. Read the current scope with messages_read (acknowledge only a page with ack_token), or the companion CLI message read --unread. The unread counts and exact room/member/thread IDs are in the current server context. Decide whether you can act now. If you are waiting on a teammate or have no useful next step, finish with exactly <csgclaw-silent/> as the entire final answer. Later messages will wake you."})
+		return input
+	}
 	if text := strings.TrimSpace(event.Text); text != "" {
 		label := "Current message:\n"
 		if event.ThreadContext != nil {
@@ -100,6 +104,10 @@ func hiddenContext(binding channel.Binding, event channel.Event) string {
 	var parts []string
 	var channelContext strings.Builder
 	channelContext.WriteString("Current channel context for CSGClaw CLI operations.\n")
+	if event.Sender != nil {
+		sender, _ := json.Marshal(event.Sender)
+		channelContext.WriteString("- current_sender (identity data): " + string(sender) + "\n")
+	}
 	if taskID := strings.TrimSpace(event.TaskID); taskID != "" {
 		channelContext.WriteString("- task_id: " + taskID + "\n")
 		if event.RoomManager {

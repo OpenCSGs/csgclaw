@@ -1,5 +1,5 @@
 import agentQuestionComposerStyles from "./AgentQuestionComposer.module.css";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, CircleHelp, Clock3, LockKeyhole, Pencil, X } from "lucide-react";
 import { InlineError, TextInput, Button, IconButton } from "@/components/ui";
 import { questionOptions } from "@/models/agentActivity";
@@ -12,10 +12,12 @@ export function AgentQuestionComposer({
   mode,
   t,
   usersById,
+  statusSlot,
 }: {
   mode: QuestionAnswerMode;
   t: TranslateFn;
   usersById?: UsersById;
+  statusSlot?: ReactNode;
 }) {
   if (mode.pending.length === 0) {
     return null;
@@ -26,6 +28,7 @@ export function AgentQuestionComposer({
         className={`${agentQuestionComposerStyles["question-composer"]} question-chooser`}
         aria-label={t("questionChooseRequest")}
       >
+        {statusSlot}
         <div className={agentQuestionComposerStyles["question-composer-heading"]}>
           <CircleHelp aria-hidden="true" size={18} />
           <strong>{t("questionSeveralWaiting", { count: mode.pending.length })}</strong>
@@ -70,6 +73,7 @@ export function AgentQuestionComposer({
 
   return (
     <section className={agentQuestionComposerStyles["question-composer"]} aria-label={t("questionAnswerMode")}>
+      {statusSlot}
       <header className={agentQuestionComposerStyles["question-composer-header"]}>
         <h2>{question.question}</h2>
         <nav

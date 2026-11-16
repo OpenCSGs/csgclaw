@@ -1,9 +1,13 @@
 package dsh
 
 // The native ACP adapter does not project compaction lifecycle events. This
-// small managed plugin forwards those existing events without owning compaction.
-const contextBridgeModule = `export const name = 'csgclaw-context';
+// managed plugin adds CSGClaw's standing instructions and forwards those events.
+const contextBridgeModule = `import {readFileSync} from 'node:fs';
+export const inject = ['systemPrompt'];
+export const name = 'csgclaw-context';
 export function apply(ctx) {
+  ctx.systemPrompt.section({name: 'csgclaw:standing-instructions', order: 9400, interpolate: false,
+    text: () => readFileSync(new URL('./standing-instructions.txt', import.meta.url), 'utf8')});
   ctx.on('agent/error', ({agent, error}) => {
     for (let e = error, depth = 0; e && depth < 8; e = e.cause, depth++) {
       if (e.code === 'CONTEXT_WINDOW_EXCEEDED') {

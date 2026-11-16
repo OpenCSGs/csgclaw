@@ -223,6 +223,16 @@ func (c *Client) ListMessagesByChannel(ctx context.Context, channel, roomID stri
 	return messages, nil
 }
 
+func (c *Client) ReadUnreadMessages(ctx context.Context, roomID, participantID, thread string, limit int, peek bool) (apitypes.UnreadPage, error) {
+	query := url.Values{"room_id": {roomID}, "participant_id": {participantID}, "thread_root_id": {thread}, "limit": {fmt.Sprint(limit)}, "peek": {fmt.Sprint(peek)}}
+	var page apitypes.UnreadPage
+	err := c.GetJSON(ctx, "/api/v1/channels/csgclaw/messages/unread?"+query.Encode(), &page)
+	return page, err
+}
+func (c *Client) AcknowledgeUnreadMessages(ctx context.Context, request apitypes.UnreadAck) error {
+	return c.DoJSON(ctx, http.MethodPost, "/api/v1/channels/csgclaw/messages/unread/ack", request, nil)
+}
+
 func (c *Client) AddRoomMemberByChannel(ctx context.Context, channel string, req apitypes.AddRoomMembersRequest) (apitypes.Room, error) {
 	var updated apitypes.Room
 	path, err := memberCreatePath(channel, req.RoomID)

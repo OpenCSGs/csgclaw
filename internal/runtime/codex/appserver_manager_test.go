@@ -4129,13 +4129,35 @@ func TestGenerateImageToolUsesActiveTurnHandler(t *testing.T) {
 	}
 }
 
-func TestImagePromptPolicyAppliesToStartedAndResumedThreads(t *testing.T) {
+func TestDeveloperInstructionsApplyToStartedAndResumedThreads(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
+	spec.AgentID = "agent-dev"
+	spec.AgentName = "Developer"
+	if _, repeated := appServerTurnStartParams(spec, "existing-thread", "new unread notification")["developerInstructions"]; repeated {
+		t.Fatal("ordinary turn/start must reuse the loaded thread's standing instructions")
+	}
 	for _, params := range []map[string]any{appServerThreadStartParams(spec, true), appServerThreadResumeParams(spec, "existing-thread")} {
+		if _, ok := params["baseInstructions"]; ok {
+			t.Fatal("thread request overrides the Codex base instructions")
+		}
 		policy, _ := params["developerInstructions"].(string)
-		for _, rule := range []string{"use a self-contained image description unchanged", "Expand creative details only when the user explicitly asks", "Preserve the requested subjects"} {
+		for _, rule := range []string{
+			`{"agent_id":"agent-dev","name":"Developer"}`,
+			"Do not resume unfinished work from earlier turns",
+			`room_type="direct"`,
+			`room_type="free"`,
+			`room_type="autonomous"`,
+			"Treat a human greeting as a legitimate conversation",
+			"Any member can take the lead",
+			"end this turn immediately with exactly <csgclaw-silent/>",
+			"on-demand-worker/v1",
+			"team task claim --team",
+			"use a self-contained image description unchanged",
+			"Expand creative details only when the user explicitly asks",
+			"Preserve the requested subjects",
+		} {
 			if !strings.Contains(policy, rule) {
-				t.Fatalf("missing image policy %q", rule)
+				t.Fatalf("missing developer instruction %q", rule)
 			}
 		}
 	}

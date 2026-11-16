@@ -81,6 +81,7 @@ type Handler struct {
 	hub                        *hub.Service
 	mcp                        *mcp.Service
 	roomTaskSvc                *roomtask.Service
+	autonomousTasks            *roomtask.AutonomousService
 	teamSvc                    *team.Service
 	agentTaskSvc               *agenttask.Service
 	scheduledTaskSvc           *scheduledtask.Service
@@ -223,6 +224,8 @@ type updateBootstrapConfigRequest struct {
 }
 
 type agentResponse struct {
+	CreatedBy            string                             `json:"created_by,omitempty"`
+	NamedBy              string                             `json:"named_by,omitempty"`
 	ArchivedAt           *time.Time                         `json:"archived_at,omitempty"`
 	ArchivedBy           string                             `json:"archived_by,omitempty"`
 	ID                   string                             `json:"id"`
@@ -264,6 +267,7 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*r = agentResponse{
+		CreatedBy: apiAgent.CreatedBy, NamedBy: apiAgent.NamedBy,
 		ArchivedAt:       apiAgent.ArchivedAt,
 		ArchivedBy:       apiAgent.ArchivedBy,
 		ID:               apiAgent.ID,
@@ -1168,6 +1172,7 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		update := engineUpdateRequest(req, current.ResourceVersion)
+		update.ActorID = h.agentMutationActor(r)
 		billingModel := current.Spec.Model
 		if agentUpdateIncludes(update, "model") {
 			billingModel = update.Spec.Model
@@ -1699,6 +1704,7 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 			return
 		}
 		update := engineReplaceRequest(createReq, current)
+		update.ActorID = h.agentMutationActor(r)
 		if h.im != nil {
 			name := current.Spec.Name
 			if len(update.FieldMask) == 0 || agentUpdateIncludes(update, "name") {
@@ -1711,7 +1717,9 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		}
 		created, err = agents.Recreate(ctx, current.ID, agentengine.AgentRecreateOptions{Update: &update})
 	} else {
-		created, err = agents.Create(ctx, engineCreateRequest(createReq))
+		request := engineCreateRequest(createReq)
+		request.ActorID = h.agentMutationActor(r)
+		created, err = agents.Create(ctx, request)
 	}
 	if err != nil {
 		writeAgentOperationErrorWithBillingURL(w, err, http.StatusBadRequest, llm.OpenCSGBillingURL(createReq.Spec.AgentProfile))
@@ -2274,7 +2282,7 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 		}
 
 		messages, err := channel.ListMessagesWithOptions(roomID, im.ListMessagesOptions{
-			IncludeThreadReplies: parseBoolQuery(r.URL.Query().Get("include_thread_replies")),
+			IncludeThreadReplies: parseBoolQuery(r.URL.Query().Get("include_thread_replies")) || r.URL.Query().Get("thread_root_id") != "",
 		})
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
@@ -2284,6 +2292,27 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
+		if appRequestAgentID(r) != "" && h.im != nil {
+			if room, ok := h.im.Room(roomID); ok && room.IsAutonomous() {
+				public := messages[:0]
+				for _, message := range messages {
+					if !im.IsAgentActivityMessage(message) {
+						public = append(public, im.PublicMessageView(message))
+					}
+				}
+				messages = public
+			}
+		}
+		if root := r.URL.Query().Get("thread_root_id"); root != "" {
+			filtered := messages[:0]
+			for _, message := range messages {
+				if message.ID == root || (message.RelatesTo != nil && message.RelatesTo.RelType == im.RelationTypeThread && message.RelatesTo.EventID == root) {
+					filtered = append(filtered, message)
+				}
+			}
+			messages = filtered
+		}
+
 		writeJSON(w, http.StatusOK, messages)
 	case http.MethodPost:
 		h.handleCreateMessage(w, r)
@@ -2456,6 +2485,8 @@ func knownAPIError(err error, fallbackStatus int) (string, int) {
 		return "room_not_found", http.StatusNotFound
 	case errors.Is(err, roomtask.ErrRoomHasActiveTasks):
 		return "room_has_active_tasks", http.StatusConflict
+	case errors.Is(err, roomtask.ErrAutonomousMemberHasWork):
+		return "autonomous_member_has_work", http.StatusConflict
 	case errors.Is(err, im.ErrInviterIDRequired):
 		return "inviter_id_required", fallbackStatus
 	case errors.Is(err, im.ErrInviterNotFound):
@@ -2552,7 +2583,7 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 			}
 		}
 		defer releaseRoomDeletion()
-		if err := channel.DeleteRoom(id); err != nil {
+		if err := h.withAutonomousRoomMutation(id, func() error { return channel.DeleteRoom(id) }); err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				writeCodedAPIError(w, http.StatusNotFound, "room_not_found", im.ErrRoomNotFound.Error())
 				return
@@ -2596,7 +2627,12 @@ func (h *Handler) handleClearRoomMessages(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	room, err := h.im.ClearRoomMessages(roomID)
+	var room im.Room
+	err := h.withAutonomousRoomMutation(roomID, func() error {
+		var err error
+		room, err = h.im.ClearRoomMessages(roomID)
+		return err
+	})
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			writeCodedAPIError(w, http.StatusNotFound, "room_not_found", im.ErrRoomNotFound.Error())
@@ -2693,7 +2729,26 @@ func (h *Handler) handleRoomMemberDeletePath(w http.ResponseWriter, r *http.Requ
 			}
 		}
 	}
-	room, err := channel.RemoveRoomMembers(serviceReq)
+	var room im.Room
+	autonomous := false
+	if h.autonomousTasks != nil && h.im != nil {
+		current, ok := h.im.Room(roomID)
+		autonomous = ok && current.IsAutonomous()
+	}
+	removeMembers := func() error {
+		if autonomous {
+			for _, member := range serviceReq.UserIDs {
+				target := h.participantBridgeTargetForRoomMember(member)
+				if err := h.autonomousTasks.CheckMemberRemoval(roomID, target.matches); err != nil {
+					return err
+				}
+			}
+		}
+		var err error
+		room, err = channel.RemoveRoomMembers(serviceReq)
+		return err
+	}
+	err := h.withAutonomousRoomMutation(roomID, removeMembers)
 	if err != nil {
 		writeAPIError(w, err, http.StatusBadRequest)
 		return
@@ -3796,6 +3851,7 @@ func presentAgent(item agent.Agent) agentResponse {
 	profile := profileResponseFromAgentView(av)
 	runtimeCfg := item.RuntimeConfig()
 	return agentResponse{
+		CreatedBy: item.CreatedBy, NamedBy: item.NamedBy,
 		ArchivedAt:   item.ArchivedAt,
 		ArchivedBy:   item.ArchivedBy,
 		ID:           item.ID,

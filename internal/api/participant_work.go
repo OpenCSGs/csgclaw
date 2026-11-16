@@ -166,12 +166,23 @@ func (h *Handler) stopParticipantWork(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "room_id, request_id, and a valid lease_id are required", http.StatusBadRequest)
 		return
 	}
+	var pauseSource string
+	var autonomous bool
+	if h.im != nil {
+		pauseSource, autonomous = h.im.AutonomousPauseWatermark(request.RoomID)
+	}
 	stopCtx, cancel := context.WithTimeout(r.Context(), participantTurnStopTimeout)
 	defer cancel()
 	response, err := controller.RequestStop(stopCtx, participantID, request)
 	if err != nil {
 		h.writeParticipantWorkError(w, err)
 		return
+	}
+	if autonomous {
+		if err := h.im.PauseAutonomousRoom(request.RoomID, pauseSource); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	writeJSON(w, http.StatusAccepted, response)
 }
