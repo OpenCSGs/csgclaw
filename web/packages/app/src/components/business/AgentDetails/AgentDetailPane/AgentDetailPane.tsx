@@ -204,6 +204,7 @@ export type AgentDetailPaneProps = {
   noticeTone?: AgentNoticeTone;
   notifierWebhookPublicOrigin?: string;
   onDelete: (item: AgentLike, returnFocus?: HTMLElement | null) => VoidOrPromise;
+  onRequestPermanentDelete?: (item: AgentLike, trigger: HTMLButtonElement | null) => void;
   onCheckDelete?: (item: AgentLike) => Promise<{ message: string; onResolve?: () => void } | null>;
   onDraftChange?: (draft: AgentDraft) => void;
   onInvite: AgentActionHandler;
@@ -366,6 +367,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onUpgrade,
     onRecreate,
     onDelete,
+    onRequestPermanentDelete,
     onInvite,
     onDismissNotice,
     onOpenDM,
@@ -1011,6 +1013,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 onStop={onStop}
                 onInvite={onInvite}
                 onDelete={onDelete}
+                onRequestPermanentDelete={onRequestPermanentDelete}
+                saving={saving}
                 relayPublication={
                   !agentSandboxEnabled(item) && (runtimeKind === "codex" || runtimeKind === "dsh")
                     ? relayPublication
@@ -2766,6 +2770,7 @@ type AgentActionsMenuProps = {
   isManager: boolean;
   item: AgentLike;
   onDelete: AgentDetailPaneProps["onDelete"];
+  onRequestPermanentDelete?: AgentDetailPaneProps["onRequestPermanentDelete"];
   onInvite: AgentActionHandler;
   onPublish?: (target: AgentTemplatePublishTarget) => VoidOrPromise;
   onStart: AgentActionHandler;
@@ -2774,6 +2779,7 @@ type AgentActionsMenuProps = {
   publishBusy: boolean;
   publishDisabled: boolean;
   running: boolean;
+  saving: boolean;
   t: TranslateFn;
   upgradeNeeded: boolean;
 };
@@ -2786,6 +2792,7 @@ function AgentActionsMenu({
   incomplete,
   isManager,
   running,
+  saving,
   upgradeNeeded,
   canPublishLocal,
   canPublishCommunity,
@@ -2795,10 +2802,12 @@ function AgentActionsMenu({
   onStop,
   onInvite,
   onDelete,
+  onRequestPermanentDelete,
   onPublish,
   relayPublication,
 }: AgentActionsMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const notification = isNotificationBotAgent(item);
   const hasOtherActions = SHOW_AGENT_LIFECYCLE_ACTIONS || canPublishLocal || !isManager;
 
   const renderMenu = (relayAction?: React.ReactNode) => (
@@ -2856,18 +2865,24 @@ function AgentActionsMenu({
         {!isManager ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              danger={isNotificationBotAgent(item)}
-              disabled={busy}
-              onSelect={() => onDelete(item, triggerRef.current)}
-            >
-              {isNotificationBotAgent(item) ? (
+            <DropdownMenuItem danger={notification} disabled={busy} onSelect={() => onDelete(item, triggerRef.current)}>
+              {notification ? (
                 <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
               ) : (
                 <Archive aria-hidden="true" size={15} strokeWidth={2} />
               )}
-              <span>{t(isNotificationBotAgent(item) ? "agentDelete" : "agentArchive")}</span>
+              <span>{t(notification ? "agentDelete" : "agentArchive")}</span>
             </DropdownMenuItem>
+            {!notification && onRequestPermanentDelete && (
+              <DropdownMenuItem
+                danger
+                disabled={busy || saving}
+                onSelect={() => onRequestPermanentDelete(item, triggerRef.current)}
+              >
+                <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
+                <span>{t("agentDeleteAction")}</span>
+              </DropdownMenuItem>
+            )}
           </>
         ) : null}
       </DropdownMenuContent>

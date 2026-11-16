@@ -26,6 +26,7 @@ import {
   fetchAgentSkillSummaries,
   finalizeFeishuRegistrationRequest,
   patchNotificationBotRequest,
+  permanentlyDeleteAgent,
   runAgentActionRequest,
   setAgentResourceEnabled,
   startFeishuRegistrationRequest,
@@ -278,14 +279,10 @@ function isAgentNameConflictError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
   }
-  const status = Number((error as { status?: unknown }).status);
-  if (status === 409) {
-    return true;
-  }
-  const message = String((error as { message?: unknown }).message || "")
-    .trim()
-    .toLowerCase();
-  return message.includes("agent name") && message.includes("already exists");
+  const code = apiErrorCode(error);
+  if (code) return code === "agent_name_conflict";
+  // Older servers return plain text for this conflict.
+  return /^(?:agent )?name ".+" already exists$/i.test(apiErrorMessage(error, "").trim());
 }
 
 function splitAgentNameSuffix(name: string): { baseName: string; nextIndex: number } {
@@ -2235,7 +2232,11 @@ export function useAgentController({
     } catch (err) {
       setAgentProgress((current) => (current ? { ...current, status: "failed" } : current));
       if (!(requiresOpenCSGAuthentication && handleOpenCSGAuthenticationError(err))) {
-        setAgentError(errorMessage(err, t("agentActionFailed")));
+        setAgentError(
+          isCreate && !isNotification && isAgentNameConflictError(err)
+            ? t("agentCreateNameConflict", { name: String(agentDraft.name || "").trim() })
+            : errorMessage(err, t("agentActionFailed")),
+        );
         setAgentBillingURL(apiErrorBillingURL(err));
       }
     } finally {
@@ -2245,6 +2246,43 @@ export function useAgentController({
 
   async function checkAgentDelete(): Promise<{ message: string; onResolve?: () => void } | null> {
     return null;
+  }
+
+  function finishAgentRemoval(item: AgentLike, archived: boolean) {
+    if (!item.id) return;
+    onAgentDeleted?.(item);
+    if (activePane.type !== WorkspacePaneTypes.agent || activePane.id !== item.id) return;
+    const fallbackAgent = agentSelectionAfterDelete(agentItems, item.id);
+    if (!fallbackAgent) return;
+    selectAgent(fallbackAgent, { replace: true });
+    showAgentPageNotice(
+      t(archived ? "agentArchivedAndSwitched" : "agentDeletedAndSwitched", {
+        deleted: String(item.name || item.id),
+        selected: String(fallbackAgent.name || fallbackAgent.id),
+      }),
+      "success",
+      5000,
+      fallbackAgent.id,
+    );
+  }
+
+  async function confirmPermanentDeletion(item: AgentLike, name: string): Promise<void> {
+    const id = item.id;
+    if (!id) throw new Error(t("agentActionFailed"));
+    const busyKey = `${id}:delete`;
+    if (!claimAgentAction(id, busyKey)) throw new Error(t("agentActionFailed"));
+    try {
+      await permanentlyDeleteAgent(id, name);
+      finishAgentRemoval(item, false);
+      await Promise.allSettled([
+        refreshAgents(),
+        refreshWorkspaceBootstrap(),
+        queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.teams() }),
+        queryClient.invalidateQueries({ queryKey: ["archived-agents"] }),
+      ]);
+    } finally {
+      releaseAgentAction(id, busyKey);
+    }
   }
 
   async function runAgentAction(item: AgentLike | null | undefined, action: AgentAction): Promise<void> {
@@ -2308,22 +2346,7 @@ export function useAgentController({
         }
         if (isNotificationBotAgent(item)) await deleteAgentLikeRequest(item);
         else await archiveAgent(item.id);
-        onAgentDeleted?.(item);
-        if (activePane.type === WorkspacePaneTypes.agent && activePane.id === item.id) {
-          const fallbackAgent = agentSelectionAfterDelete(agentItems, item.id);
-          if (fallbackAgent) {
-            selectAgent(fallbackAgent, { replace: true });
-            showAgentPageNotice(
-              t(isNotificationBotAgent(item) ? "agentDeletedAndSwitched" : "agentArchivedAndSwitched", {
-                deleted: String(item.name || item.id),
-                selected: String(fallbackAgent.name || fallbackAgent.id),
-              }),
-              "success",
-              5000,
-              fallbackAgent.id,
-            );
-          }
-        }
+        finishAgentRemoval(item, !deletingNotificationBot);
       } else {
         updatedAgent = await runAgentActionRequest(item.id, action);
       }
@@ -3063,6 +3086,7 @@ export function useAgentController({
       onUpgrade: (item: AgentLike | null | undefined) => runAgentAction(item, "upgrade"),
       onDelete: (item: AgentLike | null | undefined) => runAgentAction(item, "delete"),
       onCheckDelete: checkAgentDelete,
+      onPermanentDelete: confirmPermanentDeletion,
       onInvite: inviteAgentToRoom,
       onOpenDM: openAgentDirectMessage,
       onStartFeishuConnect: startFeishuConnect,

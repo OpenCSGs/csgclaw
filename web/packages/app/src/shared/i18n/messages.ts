@@ -86,7 +86,6 @@ export const messages = {
     relayUnpublishDescription: "下架后，此智能体将停止接收社区请求。重新发布后可恢复。",
     relayCancelPublication: "取消发布并清理",
     relayCancelPublicationDescription: "取消自动发布或未完成的注册，并清理已有注册。清理失败时可重试。",
-    relay_unpublish_required: "请先下架或取消智能体发布，再删除本地智能体。",
     relayUnpublish: "从社区下架",
     relayUnpublishing: "下架中…",
     relayOnline: "在线",
@@ -2998,6 +2997,8 @@ export const messages = {
     agentStateArchived: "已归档",
     agentStateDeleted: "已删除",
     agentDelete: "删除",
+    agentDeleteAction: "删除智能体",
+    agentCreateNameConflict: "智能体名称“{name}”已存在，请返回「档案」步骤修改名称后重试。",
     agentDeleteBlockedTitle: "暂时无法删除该智能体",
     agentDeleteTeamBlocked: "该智能体仍被 {count} 个团队使用，请先在团队中移除它，然后再删除。",
     agentDeleteWorkingBlocked: "该智能体有任务正在执行，请等待任务结束或停止任务后再删除。",
@@ -3309,6 +3310,7 @@ export const messages = {
       cloud: "云端",
     },
     errors: {
+      relay_unpublish_required: "请先下架或取消智能体发布，再删除本地智能体。",
       agent_archived: "该智能体已归档，请先在设置中恢复。",
       agent_delete_requires_archive_management: "请在归档管理中确认删除智能体。",
       agent_identity_deleted: "智能体信息已失效，请重新创建。",
@@ -3568,7 +3570,6 @@ export const messages = {
     relayCancelPublication: "Cancel publication and clean up",
     relayCancelPublicationDescription:
       "Cancel queued or incomplete publication and clean up existing registrations. Retry if cleanup fails.",
-    relay_unpublish_required: "Unpublish or cancel publication before deleting this local agent.",
     relayUnpublish: "Unpublish from community",
     relayUnpublishing: "Unpublishing…",
     relayOnline: "Online",
@@ -6590,6 +6591,9 @@ export const messages = {
     agentStateArchived: "Archived",
     agentStateDeleted: "Deleted",
     agentDelete: "Delete",
+    agentDeleteAction: "Delete agent",
+    agentCreateNameConflict:
+      'The agent name "{name}" is already in use. Return to the Profile step, change the name, and try again.',
     agentDeleteBlockedTitle: "This agent cannot be deleted yet",
     agentDeleteTeamBlocked: "Teams using this agent: {count}. Remove it from these teams before deleting it.",
     agentDeleteWorkingBlocked:
@@ -6923,6 +6927,7 @@ export const messages = {
       cloud: "Cloud",
     },
     errors: {
+      relay_unpublish_required: "Unpublish or cancel publication before deleting this local agent.",
       agent_archived: "This agent is archived. Restore it in Settings before use.",
       agent_delete_requires_archive_management: "Confirm agent deletion in archive management.",
       agent_identity_deleted: "The agent information is no longer valid. Please create the agent again.",

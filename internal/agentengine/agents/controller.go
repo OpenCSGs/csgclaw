@@ -2280,7 +2280,7 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 		return Agent{}, fmt.Errorf("agent id %q not found", id)
 	}
 	if nameExists {
-		return Agent{}, fmt.Errorf("agent name %q already exists", name)
+		return Agent{}, fmt.Errorf("agent name %q %w", name, identity.ErrNameExists)
 	}
 	switch {
 	case runtimeName == "":
@@ -2416,7 +2416,7 @@ func (s *Controller) persistStartingWorker(ctx context.Context, id, name, descri
 	}
 	if s.hasNameLockedExcept(name, id) {
 		s.mu.Unlock()
-		return fmt.Errorf("agent name %q already exists", name)
+		return fmt.Errorf("agent name %q %w", name, identity.ErrNameExists)
 	}
 
 	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, runtimeOptions, mcpServers, runtimeCredentials, runtimeInitShell, agentruntime.Info{
@@ -2476,7 +2476,7 @@ func (s *Controller) persistCreatedWorker(ctx context.Context, id, name, descrip
 	}
 	if s.hasNameLockedExcept(name, id) {
 		s.mu.Unlock()
-		return Agent{}, fmt.Errorf("agent name %q already exists", name)
+		return Agent{}, fmt.Errorf("agent name %q %w", name, identity.ErrNameExists)
 	}
 
 	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, createRuntimeExt, mcpServers, runtimeCredentials, runtimeInitShell, info)

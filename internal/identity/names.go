@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
@@ -8,6 +9,8 @@ import (
 )
 
 const MaxMentionNameRunes = 64
+
+var ErrNameExists = errors.New("already exists")
 
 func ValidateMentionName(name string) error {
 	name = strings.TrimSpace(name)

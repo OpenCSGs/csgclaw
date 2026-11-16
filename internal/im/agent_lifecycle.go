@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"csgclaw/internal/identity"
 )
 
 var ErrAgentIdentityDeleted = errors.New("agent identity was deleted; use a new ID")
@@ -53,7 +55,7 @@ func (s *Service) validateAgentUserLocked(id, name string) error {
 	}
 	if name != "" {
 		if existingID, ok := s.byName[strings.ToLower(name)]; ok && existingID != id {
-			return fmt.Errorf("name %q already exists", name)
+			return fmt.Errorf("name %q %w", name, identity.ErrNameExists)
 		}
 	}
 	return nil

@@ -14,12 +14,24 @@ import {
 } from "@/components/ui";
 import { isNotificationBotAgent, agentDeleteConfirmationMessage } from "@/models/agents";
 import type { AgentLike } from "@/models/agents";
+import { AgentDeleteDialog } from "./AgentDeleteDialog";
 import { AgentDetailPane } from "../AgentDetailPane";
 import type { AgentDetailPaneHandle, AgentDetailPaneProps } from "../AgentDetailPane";
 import { NotificationParticipantDetailPane } from "../NotificationParticipantDetailPane";
 import styles from "./AgentView.module.css";
 
-export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>(function AgentView(props, ref) {
+type AgentViewProps = AgentDetailPaneProps & {
+  onPermanentDelete?: (item: AgentLike, name: string) => Promise<void>;
+};
+
+export const AgentView = forwardRef<AgentDetailPaneHandle, AgentViewProps>(function AgentView(
+  { onPermanentDelete, ...props },
+  ref,
+) {
+  const [permanentDeletion, setPermanentDeletion] = useState<{
+    item: AgentLike;
+    trigger: HTMLButtonElement | null;
+  } | null>(null);
   const [deletePendingAgent, setDeletePendingAgent] = useState<AgentLike | null>(null);
   const [deleteBlock, setDeleteBlock] = useState<{ message: string; onResolve?: () => void } | null>(null);
   const [deleteChecking, setDeleteChecking] = useState(false);
@@ -35,6 +47,7 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
 
   useEffect(() => {
     setDeletePendingAgent(null);
+    setPermanentDeletion(null);
     deleteRequest.current += 1;
     setDeleteBlock(null);
     setDeleteChecking(false);
@@ -82,7 +95,24 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
       {isNotificationBotAgent(props.item) ? (
         <NotificationParticipantDetailPane {...sharedProps} />
       ) : (
-        <AgentDetailPane ref={ref} {...sharedProps} />
+        <AgentDetailPane
+          ref={ref}
+          {...sharedProps}
+          onRequestPermanentDelete={
+            onPermanentDelete ? (item, trigger) => setPermanentDeletion({ item, trigger }) : undefined
+          }
+        />
+      )}
+      {permanentDeletion && permanentDeletion.item.id === props.item?.id && onPermanentDelete && (
+        <AgentDeleteDialog
+          key={permanentDeletion.item.id}
+          name={String(permanentDeletion.item.name || permanentDeletion.item.id)}
+          t={props.t}
+          portalContainer={props.dialogPortalContainer}
+          returnFocus={permanentDeletion.trigger}
+          onClose={() => setPermanentDeletion(null)}
+          onConfirm={(name) => onPermanentDelete(permanentDeletion.item, name)}
+        />
       )}
       <DialogRoot
         open={Boolean(deletePendingAgent)}

@@ -97,39 +97,8 @@ func (h *Handler) setAgentArchived(w http.ResponseWriter, r *http.Request, archi
 	// Even a runtime stop failure can leave the durable archive flag in place.
 	// Schedules and UI must reflect that disabled state, and retries are safe.
 	if archived && h.agentLifecycleState(id) == "archived" {
-		if h.scheduledTaskSvc != nil {
-			if pauseErr := h.scheduledTaskSvc.DisableAgent(id); pauseErr != nil && err == nil {
-				err = pauseErr
-			}
-		}
-		if h.agentTaskSvc != nil {
-			if cancelErr := h.agentTaskSvc.CancelAgentTasks(id); cancelErr != nil && err == nil {
-				err = cancelErr
-			}
-		}
-		if h.roomTaskSvc != nil {
-			actors := []string{id}
-			for _, userID := range userIDs {
-				actors = append(actors, userID)
-			}
-			if legacyID := h.legacyAgentChatUserID(id); legacyID != "" {
-				actors = append(actors, agent.ParticipantIDForAgent("", id))
-			}
-			if h.participant != nil {
-				for _, p := range h.participant.List(participant.ListOptions{AgentID: id}) {
-					actors = append(actors, p.ID, p.ChannelUserRef)
-				}
-			}
-			if cancelErr := h.roomTaskSvc.CancelAgentTasks(actors); cancelErr != nil && err == nil {
-				err = cancelErr
-			}
-			if h.autonomousTasks != nil {
-				if releaseErr := h.autonomousTasks.ReleaseOwner(func(owner string) bool {
-					return slices.Contains(actors, owner)
-				}); releaseErr != nil && err == nil {
-					err = releaseErr
-				}
-			}
+		if pauseErr := h.pauseAgentWork(id, userIDs); err == nil {
+			err = pauseErr
 		}
 	}
 	if h.im != nil {
@@ -158,6 +127,40 @@ func (h *Handler) setAgentArchived(w http.ResponseWriter, r *http.Request, archi
 		return
 	}
 	writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, item))
+}
+
+func (h *Handler) pauseAgentWork(id string, userIDs []string) error {
+	var err error
+	if h.scheduledTaskSvc != nil {
+		err = h.scheduledTaskSvc.DisableAgent(id)
+	}
+	if h.agentTaskSvc != nil {
+		if cancelErr := h.agentTaskSvc.CancelAgentTasks(id); err == nil {
+			err = cancelErr
+		}
+	}
+	if h.roomTaskSvc != nil {
+		actors := append([]string{id}, userIDs...)
+		if h.legacyAgentChatUserID(id) != "" {
+			actors = append(actors, agent.ParticipantIDForAgent("", id))
+		}
+		if h.participant != nil {
+			for _, p := range h.participant.List(participant.ListOptions{AgentID: id}) {
+				actors = append(actors, p.ID, p.ChannelUserRef)
+			}
+		}
+		if cancelErr := h.roomTaskSvc.CancelAgentTasks(actors); err == nil {
+			err = cancelErr
+		}
+		if h.autonomousTasks != nil {
+			if releaseErr := h.autonomousTasks.ReleaseOwner(func(owner string) bool {
+				return slices.Contains(actors, owner)
+			}); err == nil {
+				err = releaseErr
+			}
+		}
+	}
+	return err
 }
 
 type agentArchiveImpact struct {
@@ -205,13 +208,9 @@ func (h *Handler) handleAgentArchiveImpact(w http.ResponseWriter, r *http.Reques
 	}
 	writeJSON(w, http.StatusOK, impact)
 }
-func (h *Handler) validateArchivedDelete(r *http.Request, id string) error {
-	item, err := h.agentEngine.Agents().Get(r.Context(), id, agentengine.AgentGetOptions{})
-	if err != nil {
-		return &agentengine.TurnError{Code: agentengine.ErrorAgentNotFound, Message: "agent not found"}
-	}
-	if item.ArchivedAt == nil {
-		return fmt.Errorf("archive the agent before deleting it")
+func validateAgentDelete(r *http.Request, item agentengine.Agent) error {
+	if item.Spec.Role == agentengine.AgentRoleManager || item.ID == agent.ManagerUserID {
+		return fmt.Errorf("manager cannot be deleted")
 	}
 	var input struct {
 		Name string `json:"name"`

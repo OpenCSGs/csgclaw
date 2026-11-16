@@ -3805,6 +3805,38 @@ describe("useAgentController", () => {
     expect(result.current.agentItems.find((agent) => agent.id === workerAgent.id)?.avatar).toBe(nextAvatar);
   });
 
+  it("explains how to fix an occupied agent name in the creation wizard", async () => {
+    const translate = createTranslator("en");
+    vi.mocked(createBotRequest).mockRejectedValueOnce({
+      status: 409,
+      code: "agent_name_conflict",
+      message: 'name "Review" already exists',
+    });
+    const { result } = renderHook(() => useAgentControllerHarness({ agents: [oldAgent], t: translate }).controller, {
+      wrapper: createWrapper(),
+    });
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+    act(() => {
+      const modal = result.current.agentProfileModalProps!;
+      modal.onAgentDraftChange({
+        ...modal.agentDraft,
+        from_template: "",
+        name: "Review",
+        model_provider_id: "codex",
+        model_id: "gpt-5.5",
+      });
+    });
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+    expect(result.current.agentProfileModalProps?.agentError).toBe(
+      'The agent name "Review" is already in use. Return to the Profile step, change the name, and try again.',
+    );
+    expect(result.current.agentProfileModalProps?.agentDraft.name).toBe("Review");
+  });
+
   it("retries template worker creation with a suffixed name when the template name already exists", async () => {
     const duplicateError: ApiError = {
       status: 409,
