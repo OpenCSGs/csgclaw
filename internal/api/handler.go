@@ -54,6 +54,7 @@ import (
 )
 
 type Handler struct {
+	compactionMu               sync.Mutex
 	browserMu                  sync.Mutex
 	browser                    *browser.Service
 	agentArchiveMu             sync.Mutex

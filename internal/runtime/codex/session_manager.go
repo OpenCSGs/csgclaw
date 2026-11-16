@@ -22,6 +22,7 @@ type liveSession struct {
 	stopErr               error
 	telemetry             *nativeTelemetry
 	compactingThreads     map[string]bool
+	compactionUsageReady  map[string]bool
 	contextUsage          map[string]modelcap.ContextUsage
 	threadModels          map[string]contract.TurnModel
 	mu                    sync.Mutex

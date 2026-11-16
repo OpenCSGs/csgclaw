@@ -22,7 +22,7 @@ import (
 )
 
 func TestContextUsageNativeDSHE2E(t *testing.T) {
-	for _, mode := range []string{"diagnostics", "usage", "auto_compact", "overflow", "disabled", "overflow_failure", "cold_resume"} {
+	for _, mode := range []string{"diagnostics", "usage", "manual_compact", "auto_compact", "overflow", "disabled", "overflow_failure", "cold_resume"} {
 		t.Run(mode, func(t *testing.T) { testContextNativeDSH(t, mode) })
 	}
 }
@@ -53,7 +53,7 @@ func testContextNativeDSH(t *testing.T, mode string) {
 	}))
 	defer server.Close()
 	profile := agentruntime.Profile{BaseURL: server.URL + "/v1", APIKey: "fixture-key", ModelID: "fixture-model", ModelMetadata: modelcap.Resolve("api", server.URL, "fixture-model", modelcap.Metadata{}, modelcap.Metadata{ContextWindow: 32768})}
-	if mode == "disabled" {
+	if mode == "disabled" || mode == "manual_compact" {
 		disabled := false
 		profile.AutoCompact = &disabled
 	}
@@ -74,6 +74,10 @@ func testContextNativeDSH(t *testing.T, mode string) {
 		t.Fatalf("%v\n%s", err, log)
 	}
 
+	var memory *contract.RuntimeMemory
+	if mode == "manual_compact" {
+		memory = &contract.RuntimeMemory{Binding: "fixture"}
+	}
 	var snapshot *modelcap.ContextUsage
 	sawCompaction := false
 	previousSession := ""
@@ -81,7 +85,7 @@ func testContextNativeDSH(t *testing.T, mode string) {
 	if mode == "overflow" || mode == "overflow_failure" || mode == "cold_resume" {
 		turns = 2
 	}
-	if mode == "auto_compact" || mode == "disabled" {
+	if mode == "auto_compact" || mode == "disabled" || mode == "manual_compact" {
 		turns = 5
 	}
 	for i := 0; i < turns; i++ {
@@ -98,7 +102,7 @@ func testContextNativeDSH(t *testing.T, mode string) {
 			}
 		}
 		text := "Reply done."
-		if mode == "auto_compact" || mode == "disabled" {
+		if mode == "auto_compact" || mode == "disabled" || mode == "manual_compact" {
 			text += strings.Repeat("context fixture token ", 1500)
 		}
 		input := []contract.InputPart{{Kind: contract.InputPartText, Text: text}}
@@ -111,7 +115,7 @@ func testContextNativeDSH(t *testing.T, mode string) {
 			ctx = diagnostics.WithRecord(ctx, diagnostic)
 		}
 		callsBefore := requests.Load()
-		result := rt.Conversation(h.RuntimeID).Run(ctx, contract.TurnRequest{ID: contract.TurnID(fmt.Sprintf("turn-%d", i)), ConversationKey: "room:test", Input: input}, contract.EventSinkFunc(func(_ context.Context, e contract.TurnEvent) error {
+		result := rt.Conversation(h.RuntimeID).Run(ctx, contract.TurnRequest{ID: contract.TurnID(fmt.Sprintf("turn-%d", i)), ConversationKey: "room:test", RuntimeMemory: memory, Input: input}, contract.EventSinkFunc(func(_ context.Context, e contract.TurnEvent) error {
 			if e.Activity != nil && e.Activity.Kind == modelusage.Kind {
 				consumption, _ = e.Activity.Payload.(modelusage.Usage)
 			}
@@ -158,6 +162,25 @@ func testContextNativeDSH(t *testing.T, mode string) {
 	}
 	if mode == "cold_resume" && snapshot.SessionID != previousSession {
 		t.Fatalf("cold resume changed session: %q -> %q", previousSession, snapshot.SessionID)
+	}
+
+	if mode == "manual_compact" {
+		calls := requests.Load()
+		result, err := rt.Conversation(h.RuntimeID).(contract.ConversationCompactor).Compact(ctx, contract.CompactRequest{ConversationKey: "room:test", Usage: *snapshot})
+		if err != nil || result.Status != "completed" {
+			log, _ := os.ReadFile(filepath.Join(root, "agent", hostStateDirName, stderrFileName))
+			t.Fatalf("manual compaction: %+v %v\n%s", result, err, log)
+		}
+		if requests.Load() != calls+1 {
+			t.Fatalf("manual compaction accidentally sent a regular prompt: %d -> %d", calls, requests.Load())
+		}
+		if result.Usage == nil || result.Usage.SessionID != snapshot.SessionID || result.Usage.UsedTokens == nil {
+			t.Fatalf("missing native count: %+v", result)
+		}
+		next := rt.Conversation(h.RuntimeID).Run(ctx, contract.TurnRequest{ID: "after-compact", ConversationKey: "room:test", RuntimeMemory: memory, Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "Continue after manual compaction"}}}, nil)
+		if next.Status != contract.TurnSucceeded {
+			t.Fatalf("next turn: %+v", next)
+		}
 	}
 	t.Logf("native DSH calls=%d compaction=%v used=%d", requests.Load(), sawCompaction, *snapshot.UsedTokens)
 }

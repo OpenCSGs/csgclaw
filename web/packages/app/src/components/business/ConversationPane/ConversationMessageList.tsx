@@ -1,3 +1,5 @@
+import { messageCompaction } from "@/models/contextCompaction";
+import { ContextCompactionCard } from "@/components/business/ContextCompactionCard";
 import { Button } from "@/components/ui";
 import { useConversationMemory, conversationMemoryAgent } from "./useConversationMemory";
 import memoryStyles from "./ConversationMemory.module.css";
@@ -202,6 +204,8 @@ const MessageListContent = memo(function MessageListContent({
           const previousMessage = displayMessages[index - 1];
           const showDivider = shouldShowMessageDateDivider(previousMessage, message);
 
+          const compaction = messageCompaction(message);
+          if (compaction) return <ContextCompactionCard key={message.id} operation={compaction} t={t} />;
           if (isEventMessage(message)) {
             return (
               <Fragment key={message.id || `event-${index}`}>

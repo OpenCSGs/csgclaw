@@ -249,6 +249,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Route("/{id}", func(r chi.Router) {
 				r.Patch("/", h.updateRoom)
 				r.Delete("/", h.deleteRoom)
+				r.Post("/context:compact", h.compactRoomContext)
 				r.Get("/browsers", h.handleRoomBrowsers)
 				r.Post("/browsers", h.handleRoomBrowsers)
 				r.Get("/browsers/{browser_id}", h.handleRoomBrowsers)

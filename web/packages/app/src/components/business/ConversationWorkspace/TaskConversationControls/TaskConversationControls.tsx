@@ -1,3 +1,4 @@
+import { conversationCompacting } from "@/models/contextCompaction";
 import { useNavigate } from "react-router-dom";
 import { pathForNewCloudTask } from "@/models/routing";
 import { hasPendingCloudTask } from "@/models/cloudTasks";
@@ -19,6 +20,7 @@ export function TaskConversationControls({
   t,
   onNewTask,
   cloudSendDisabled = false,
+  onCompactingChange,
 }: {
   conversation: IMConversation;
   participants: ConversationWorkingParticipant[];
@@ -26,6 +28,7 @@ export function TaskConversationControls({
   t: TranslateFn;
   onNewTask?: (agentID?: string, configuration?: TaskConfiguration) => void;
   cloudSendDisabled?: boolean;
+  onCompactingChange?: (busy: boolean) => void;
 }) {
   const controller = useOptionalWorkspaceControllerContext();
   const entry = controller?.taskEntry;
@@ -49,7 +52,11 @@ export function TaskConversationControls({
           )}
           configuration={conversation.configuration}
           directoryLocked
-          disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}
+          disabled={
+            conversationCompacting(conversation) ||
+            entry?.isWorking(conversation.id) ||
+            entry?.busyID === conversation.id
+          }
           onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
         />
       ) : null}
@@ -80,6 +87,7 @@ export function TaskConversationControls({
       ) : null}
       <ConversationContextUsage
         key={`usage:${conversation.id}`}
+        onCompactingChange={onCompactingChange}
         conversation={conversation}
         participants={participants}
         agents={agents}

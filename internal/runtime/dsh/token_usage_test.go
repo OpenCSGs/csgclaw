@@ -26,7 +26,7 @@ func TestContextBridgeIncludesCompactionUsage(t *testing.T) {
 	script := contextBridgeModule + `
 const handlers = new Map();
 let standing;
-apply({systemPrompt: {section: (section) => { standing = section; }}, on: (name, handler) => handlers.set(name, handler)});
+apply({effect: () => {}, systemPrompt: {section: (section) => { standing = section; }}, on: (name, handler) => handlers.set(name, handler)});
 const policy = standing.text();
 for (const rule of ['Developer', 'room_type="autonomous"', 'end this turn immediately with exactly <csgclaw-silent/>', 'on-demand-worker/v1', "'/runtime/csgclaw-cli' team task claim"]) {
   if (!policy.includes(rule)) throw new Error('missing standing rule: ' + rule);

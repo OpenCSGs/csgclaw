@@ -301,32 +301,34 @@ function UiLabContent() {
                 <section className={styles.card} id="token-consumption">
                   <h2>{labText("Turn token consumption")}</h2>
                   <div className={canvasStyles.previewCanvas}>
-                    {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map((model) => (
-                      <div key={model} className={`message-row ${messageLayoutStyles["message-row"]}`}>
-                        <div className={`message-card ${messageLayoutStyles["message-card"]}`}>
-                          <p>{labText("这是一轮已完成的回复。")}</p>
-                          <ConversationMessageActions
-                            className="message-hover-actions"
-                            content="这是一轮已完成的回复。"
-                            t={createTranslator(locale)}
-                            metadata={{
-                              csgclaw: {
-                                turn_progress: {
-                                  status: "succeeded",
-                                  usage: {
-                                    known: true,
-                                    model_id: model,
-                                    input_tokens: 1000,
-                                    output_tokens: 220,
-                                    total_tokens: 1220,
+                    {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map(
+                      (model) => (
+                        <div key={model} className={`message-row ${messageLayoutStyles["message-row"]}`}>
+                          <div className={`message-card ${messageLayoutStyles["message-card"]}`}>
+                            <p>{labText("这是一轮已完成的回复。")}</p>
+                            <ConversationMessageActions
+                              className="message-hover-actions"
+                              content="这是一轮已完成的回复。"
+                              t={createTranslator(locale)}
+                              metadata={{
+                                csgclaw: {
+                                  turn_progress: {
+                                    status: "succeeded",
+                                    usage: {
+                                      known: true,
+                                      model_id: model,
+                                      input_tokens: 1000,
+                                      output_tokens: 220,
+                                      total_tokens: 1220,
+                                    },
                                   },
                                 },
-                              },
-                            }}
-                          />
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ),
+                    )}
                   </div>
                 </section>
               </UiLabPanel>

@@ -24,6 +24,12 @@ func cloneContextUsage(values map[string]modelcap.ContextUsage) map[string]model
 // rewriting the transcript or retaining per-turn history.
 // It is called for accepted main-conversation reports, not work heartbeats.
 func (s *Service) RecordContextUsage(roomID, userID string, usage modelcap.ContextUsage) (uint64, error) {
+	return s.recordContextUsage(roomID, userID, usage, nil)
+}
+func (s *Service) RecordCompactedContextUsage(roomID, userID string, usage modelcap.ContextUsage, epoch uint64) (uint64, error) {
+	return s.recordContextUsage(roomID, userID, usage, &epoch)
+}
+func (s *Service) recordContextUsage(roomID, userID string, usage modelcap.ContextUsage, epoch *uint64) (uint64, error) {
 	if !usage.Valid() {
 		return 0, ErrInvalidContextUsage
 	}
@@ -32,6 +38,9 @@ func (s *Service) RecordContextUsage(roomID, userID string, usage modelcap.Conte
 	room, ok := s.rooms[roomID]
 	if !ok {
 		return 0, ErrRoomNotFound
+	}
+	if epoch != nil && room.ContextUsageEpoch != *epoch {
+		return room.ContextUsageEpoch, ErrCompactionConflict
 	}
 	userID = s.resolveRoomUserIDLocked(userID)
 	if !slices.Contains(room.Members, userID) {
@@ -58,6 +67,16 @@ func (s *Service) RecordContextUsage(roomID, userID string, usage modelcap.Conte
 			room.ContextUsage = previous
 			return 0, err
 		}
+	}
+	if err := s.reconcileCompactionUsageLocked(room, userID, usage); err != nil {
+		return room.ContextUsageEpoch, err
+	}
+	if epoch != nil {
+		snapshot := *room
+		snapshot.Messages = nil
+		snapshot.Threads = nil
+		snapshot.ContextUsage = cloneContextUsage(room.ContextUsage)
+		s.publishRoomEventLocked(EventTypeRoomUpdated, snapshot)
 	}
 	return room.ContextUsageEpoch, nil
 }

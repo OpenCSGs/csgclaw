@@ -63,7 +63,13 @@ function Demo({ kind, theme }: { kind: ApplicationKind; theme: ResolvedThemeMode
       return <CodeDemo />;
   }
 }
-export function ApplicationFoundations({ kind, theme = "light" }: { kind: ApplicationKind; theme?: ResolvedThemeMode }) {
+export function ApplicationFoundations({
+  kind,
+  theme = "light",
+}: {
+  kind: ApplicationKind;
+  theme?: ResolvedThemeMode;
+}) {
   const { text: t } = useLabTranslation();
   const [revision, setRevision] = useState(0);
   const entry = applicationSections.find((section) => section.key === kind)!;
