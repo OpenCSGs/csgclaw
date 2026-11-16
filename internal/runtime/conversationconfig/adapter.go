@@ -60,3 +60,24 @@ func failed(ctx context.Context, err error) contract.TurnResult {
 	}
 	return contract.TurnResult{Status: status, Error: &contract.TurnError{Code: code, Message: err.Error()}}
 }
+
+// Compact shares the process configuration gate and never waits behind work.
+func (a *Adapter) Compact(ctx context.Context, req contract.CompactRequest) (contract.CompactResult, error) {
+	a.Coordinator.once.Do(func() { a.Coordinator.gate = make(chan struct{}, 1) })
+	select {
+	case a.Coordinator.gate <- struct{}{}:
+	default:
+		return contract.CompactResult{Status: "busy"}, nil
+	}
+	defer func() { <-a.Coordinator.gate }()
+	if a.Prepare != nil {
+		if err := a.Prepare(ctx, contract.TurnRequest{ConversationKey: req.ConversationKey, RoomConfiguration: req.RoomConfiguration}); err != nil {
+			return contract.CompactResult{}, err
+		}
+	}
+	c, ok := a.RuntimeConversation.(contract.ConversationCompactor)
+	if !ok {
+		return contract.CompactResult{Status: "unsupported"}, nil
+	}
+	return c.Compact(ctx, req)
+}

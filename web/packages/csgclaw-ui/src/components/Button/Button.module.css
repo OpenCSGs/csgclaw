@@ -160,7 +160,7 @@
   outline: none;
   box-shadow: var(--button-shadow), var(--button-ring);
 }
-.btn:disabled {
+.btn:disabled:not(.btn-loading) {
   border-color: var(--csgclaw-ui-button-disabled-border);
   background: var(--csgclaw-ui-button-disabled-background);
   color: var(--csgclaw-ui-input-text-disabled);
@@ -174,15 +174,10 @@
     .btn-link-gray,
     .btn-link-color,
     .btn-link-danger
-  ):disabled {
+  ):disabled:not(.btn-loading) {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
-}
-.btn.btn-loading.btn-primary:disabled {
-  border-color: var(--csgclaw-ui-button-primary-border);
-  background: var(--csgclaw-ui-primary-button-background);
-  color: var(--csgclaw-ui-on-primary);
 }
 .btn.btn-loading:disabled {
   cursor: wait;
@@ -206,19 +201,10 @@
   width: 100%;
   height: 100%;
 }
-.btn.btn-loading .btn-content {
-  visibility: hidden;
-}
-.btn-loading-overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
 .btn-loading-spinner {
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: var(--csgclaw-ui-radius-full);

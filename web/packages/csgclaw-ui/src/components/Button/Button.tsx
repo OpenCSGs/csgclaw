@@ -114,6 +114,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       typeof children === "string" || typeof children === "number"
         ? String(children)
         : undefined;
+    const pendingLabel =
+      loadingLabel === undefined
+        ? Children.toArray(children).filter(
+            (child) => typeof child === "string" || typeof child === "number",
+          )
+        : loadingLabel;
 
     return (
       <button
@@ -133,7 +139,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         aria-label={
           ariaLabel ??
-          (loading ? loadingAccessibleLabel || childAccessibleLabel : undefined)
+          (loading && iconOnly
+            ? loadingAccessibleLabel || childAccessibleLabel
+            : undefined)
         }
         aria-busy={ariaBusy ?? (loading ? true : undefined)}
         {...props}
@@ -144,16 +152,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             legacyClassName("btn-content"),
           )}
         >
-          {buttonContent(children, variant, iconOnly)}
+          {loading ? (
+            <>
+              <span
+                className={styles["btn-loading-spinner"]}
+                aria-hidden="true"
+              />
+              {!iconOnly ? buttonContent(pendingLabel, variant) : null}
+            </>
+          ) : (
+            buttonContent(children, variant, iconOnly)
+          )}
         </span>
-        {loading ? (
-          <span className={styles["btn-loading-overlay"]} aria-hidden="true">
-            <span
-              className={styles["btn-loading-spinner"]}
-              aria-hidden="true"
-            />
-          </span>
-        ) : null}
       </button>
     );
   },

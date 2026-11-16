@@ -83,3 +83,30 @@ func TestContextUsagePersistsWithoutRewritingTranscripts(t *testing.T) {
 		t.Fatal("cleared room lost its usage boundary after restart")
 	}
 }
+
+func TestCompactedUsageEventIsAnIndependentMetadataSnapshot(t *testing.T) {
+	bus := NewBus()
+	svc := NewServiceFromBootstrapWithBus(Bootstrap{CurrentUserID: "user-admin", Users: []User{{ID: "user-admin"}, {ID: "user-worker"}}, Rooms: []Room{{ID: "r", Members: []string{"user-admin", "user-worker"}, Messages: []Message{{ID: "keep", SenderID: "user-admin", Content: "Keep transcript"}}}}}, bus)
+	events, cancel := bus.Subscribe()
+	defer cancel()
+	used := int64(3000)
+	usage := modelcap.ContextUsage{SessionID: "s", ModelID: "m", UsedTokens: &used, ContextWindow: 100000, ContextSource: "default"}
+	if _, err := svc.RecordCompactedContextUsage("r", "user-worker", usage, 0); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-events:
+		if event.Type != EventTypeRoomUpdated || event.Room == nil || len(event.Room.Messages) != 0 || len(event.Room.Threads) != 0 {
+			t.Fatalf("not a metadata update: %+v", event)
+		}
+		used = 9000
+		if _, err := svc.RecordCompactedContextUsage("r", "user-worker", usage, 0); err != nil {
+			t.Fatal(err)
+		}
+		if *event.Room.ContextUsage["user-worker"].UsedTokens != 3000 {
+			t.Fatal("queued event mutated after publication")
+		}
+	default:
+		t.Fatal("no realtime context event")
+	}
+}

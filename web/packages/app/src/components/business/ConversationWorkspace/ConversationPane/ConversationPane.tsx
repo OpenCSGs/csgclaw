@@ -1,3 +1,4 @@
+import { conversationCompacting } from "@/models/contextCompaction";
 import { conversationMemoryAgent } from "@/components/business/ConversationPane/useConversationMemory";
 import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
 import { CollaborationStatus } from "@/components/business/ConversationPane/CollaborationStatus";
@@ -338,7 +339,9 @@ function ConversationPaneContent({
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
   const [deleteRoomBusy, setDeleteRoomBusy] = useState(false);
   const [deleteRoomError, setDeleteRoomError] = useState("");
-  const composerDisabled = Boolean(composerDisabledReason);
+  const [compactionSubmission, setCompactionSubmission] = useState("");
+  const compacting = conversationCompacting(conversation) || compactionSubmission === conversation.id;
+  const composerDisabled = Boolean(composerDisabledReason) || compacting;
   const collaboration = usesCollaborationTranscript(conversation);
   const autonomous = collaboration && conversation.type === RoomTypes.autonomous;
   const mainMessages = useMemo(
@@ -699,7 +702,7 @@ function ConversationPaneContent({
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}
           composerDisabled={composerDisabled}
-          composerDisabledReason={composerDisabledReason}
+          composerDisabledReason={compacting ? t("contextCompacting") : composerDisabledReason}
           composerError={composerError}
           draftSegments={draftSegments}
           draftText={draftText}
@@ -729,6 +732,7 @@ function ConversationPaneContent({
               t={t}
               onNewTask={onNewTask}
               cloudSendDisabled={composerDisabled}
+              onCompactingChange={(busy) => setCompactionSubmission(busy ? conversation.id : "")}
             />
           }
           hideWorkingContextUsage

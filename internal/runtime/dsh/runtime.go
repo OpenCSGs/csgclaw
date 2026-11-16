@@ -658,6 +658,7 @@ func (r *Runtime) waitProcess(proc *process) {
 		delete(r.processes, proc.meta.RuntimeID)
 	}
 	r.mu.Unlock()
+	_ = os.Remove(filepath.Join(proc.root, "context-control.json"))
 	close(proc.done)
 }
 

@@ -3638,6 +3638,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return rpcResult(msg["id"], map[string]any{"threadId": "engine-thread"}), true
 			case "turn/start":
 				awaitingTool = true
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "engine-thread", "turn": map[string]any{"id": "turn-publish"}})
 				writeRPCServerRequest(t, 9010, "item/tool/call", map[string]any{
 					"threadId": "engine-thread", "turnId": "turn-publish", "callId": "call-publish", "tool": appServerPublishFileToolName,
 					"arguments": map[string]any{"path": "reports/result.pdf", "name": "result.pdf", "mimeType": "application/pdf"},

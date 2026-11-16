@@ -105,3 +105,15 @@ export function modelOverridesEqual(
       .sort(([a], [b]) => String(a).localeCompare(String(b)));
   return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
 }
+
+// Prefer durable reports on ties; a completed turn's old lease must not mask a
+// newer room snapshot delivered by compaction.
+export function latestContextUsage(active?: ContextUsage, saved?: ContextUsage): ContextUsage | undefined {
+  if (!active) return saved;
+  if (!saved) return active;
+  return (Date.parse(active.updated_at) || 0) > (Date.parse(saved.updated_at) || 0) ? active : saved;
+}
+export function formatContextAmount(tokens: number): string {
+  const unit = contextUnit(tokens);
+  return `${(tokens / (unit === "M" ? 1_000_000 : 1_000)).toLocaleString(undefined, { maximumFractionDigits: 2 })}${unit === "M" ? "M" : " K"}`;
+}

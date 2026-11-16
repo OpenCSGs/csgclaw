@@ -81,3 +81,29 @@ func TestContextUsageKeepsConfiguredCeilingAcrossSnapshots(t *testing.T) {
 		}
 	}
 }
+
+func TestCompactionCompletionKeepsRecomputedOccupancy(t *testing.T) {
+	m := newAppServerManager(managerDeps{EventSink: &recordingSink{}})
+	live := &liveSession{spec: SessionSpec{Profile: agentruntime.Profile{ModelID: "m", ModelMetadata: modelcap.Resolved{ContextWindow: 100000, ContextSource: "user"}}}}
+	report := func(total, input, output float64) {
+		m.publishContextUsage("r", live, "s", map[string]any{"tokenUsage": map[string]any{"last": map[string]any{"totalTokens": total, "inputTokens": input, "outputTokens": output}}}, "")
+	}
+	report(50000, 49000, 1000)
+	m.publishContextUsage("r", live, "s", nil, "item/started")
+	m.publishContextUsage("r", live, "s", nil, "item/started")
+	report(45000, 44000, 1000) // Summary request consumption is not post-compaction occupancy.
+	report(29000, 0, 0)        // Native recompute, before item/completed and turn/completed.
+	for _, method := range []string{"item/completed", "item/completed", "snapshot"} {
+		m.publishContextUsage("r", live, "s", nil, method)
+		usage := live.contextUsage["s"]
+		if usage.UsedTokens == nil || *usage.UsedTokens != 29000 || usage.Compacting || !usage.Estimated {
+			t.Fatalf("%s erased recomputed occupancy: %+v", method, usage)
+		}
+	}
+	m.publishContextUsage("r", live, "s", nil, "item/started")
+	report(28000, 27000, 1000)
+	m.publishContextUsage("r", live, "s", nil, "item/completed")
+	if live.contextUsage["s"].UsedTokens != nil {
+		t.Fatal("a later compaction reused the previous compaction's report")
+	}
+}

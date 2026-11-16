@@ -360,11 +360,18 @@ func NewServiceFromPathWithBus(path string, bus *Bus) (*Service, error) {
 	if err := sessionAttachmentStore(path).recoverPendingBatches(); err != nil {
 		return nil, fmt.Errorf("recover session attachments: %w", err)
 	}
+	recoveredCompactions := false
 	for i := range state.Rooms {
 		interruptSavedTurnProgress(state.Rooms[i].Messages)
+		recoveredCompactions = interruptSavedCompactions(state.Rooms[i].Messages) || recoveredCompactions
 	}
 	svc := NewServiceFromBootstrapWithBus(state, bus)
 	svc.statePath = path
+	if recoveredCompactions {
+		if err := svc.saveLocked(); err != nil {
+			return nil, err
+		}
+	}
 	return svc, nil
 }
 

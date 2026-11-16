@@ -1,24 +1,108 @@
+.root {
+  margin-left: auto;
+  flex-shrink: 0;
+}
 .panel {
-  width: min(296px, calc(100vw - 48px));
-  max-height: min(480px, calc(var(--radix-tooltip-content-available-height, 100vh) - 16px));
-  pointer-events: auto;
-  overflow-y: auto;
-  margin: 0;
-  padding: 0;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(480px, var(--radix-popover-content-available-height, 75vh));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 12px;
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.header > strong {
+  margin-right: auto;
+  font-size: 14px;
+}
+.list {
   list-style: none;
-  display: grid;
-  gap: var(--space-2);
+  overflow-y: auto;
+  padding: 0 12px;
+  margin: 0;
+  min-height: 0;
 }
-.panel li {
+.list > li {
+  padding: 10px 0;
   min-width: 0;
-  overflow-wrap: anywhere;
 }
-.panel li + li {
+.list > li + li {
   border-top: 1px solid var(--line);
-  padding-top: var(--space-2);
+}
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 .name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.amount {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.meterRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0;
+}
+.meter {
+  flex: 1;
+  width: 0;
+  height: 5px;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  accent-color: var(--primary);
+}
+.meter::-webkit-progress-bar {
+  background: var(--line);
+}
+.meter::-webkit-progress-value {
+  background: var(--primary);
+}
+.actionHint {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.model {
+  color: var(--muted);
+  font-size: 12px;
+}
+.muted {
   display: block;
-  margin-bottom: var(--space-1);
-  color: var(--text);
+  margin-top: 4px;
+  color: var(--muted);
+}
+.notice,
+.error {
+  margin: 8px 12px;
+  color: var(--muted);
+}
+.error {
+  color: var(--danger, var(--text));
+}
+.spinner {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }

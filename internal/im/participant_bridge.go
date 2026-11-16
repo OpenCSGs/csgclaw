@@ -718,7 +718,7 @@ func onDemandHumanMessage(room Room, sender User, message Message) bool {
 }
 
 func shouldNotifyParticipant(room Room, sender User, message Message, participantID string) bool {
-	if IsAgentActivityMessage(message) {
+	if IsAgentActivityMessage(message) || MessageCompaction(message) != nil {
 		return false
 	}
 	userID := userIDForParticipantID(participantID)

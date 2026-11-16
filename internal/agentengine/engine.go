@@ -66,7 +66,8 @@ type turnIdentity struct {
 }
 
 type conversationControl struct {
-	done chan struct{}
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 type interactionState uint8
@@ -909,6 +910,11 @@ func (e *Engine) emitDetached(identity conversationIdentity, turn *activeTurn, s
 // interruptAgent cancels every active conversation, including image/video generation.
 func (e *Engine) interruptAgent(agentID string) {
 	e.mu.Lock()
+	for identity, control := range e.controls {
+		if agentidentity.CanonicalAgentID(identity.agentID) == agentID && control.cancel != nil {
+			control.cancel()
+		}
+	}
 	for identity, turn := range e.active {
 		if agentidentity.CanonicalAgentID(identity.agentID) == agentID {
 			turn.cancel()

@@ -1,3 +1,4 @@
+import { newerCompactionMessage } from "./contextCompaction";
 import {
   isNotificationBotAgent,
   partitionWorkspaceAgentItems,
@@ -7,7 +8,7 @@ import {
 import { resourceMessageText } from "./conversationResources";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { newerProgressMessage } from "@/models/turnProgress";
-import { normalizeContextUsage, type ContextUsage } from "@/models/modelMetadata";
+import { normalizeContextUsage, latestContextUsage, type ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
 import {
   isToolDeliveryMessage,
@@ -1230,6 +1231,10 @@ export function isAgentRosterEvent(event: IMServerEvent | null | undefined): boo
 
 // HTTP snapshots carry the server's transcript order. Messages received over SSE
 // after the snapshot was taken remain at the end, with newer progress preserved.
+export function newerConversationMessage(previous: IMMessage, incoming: IMMessage): IMMessage {
+  return newerCompactionMessage(previous, newerProgressMessage(previous, incoming));
+}
+
 export function mergeConversationMessageSnapshot(
   current: IMData | null,
   roomID: string,
@@ -1247,7 +1252,7 @@ export function mergeConversationMessageSnapshot(
     if (isThreadReply(message) || (message.id && seen.has(message.id))) continue;
     if (message.id) seen.add(message.id);
     const previous = message.id ? existing.get(message.id) : undefined;
-    let merged = previous ? newerProgressMessage(previous, message) : message;
+    let merged = previous ? newerConversationMessage(previous, message) : message;
     // Progress revisions do not version thread summaries or attachments. Accept
     // the server values unless that field changed locally while fetching.
     const before = beforeRequest.get(message.id);
@@ -1285,7 +1290,7 @@ function mergeMessageIntoTimeline(messages: readonly IMMessage[], message: IMMes
   }
 
   const existing = messages[existingIndex];
-  const merged = newerProgressMessage(existing, message);
+  const merged = newerConversationMessage(existing, message);
   const previousTime = Date.parse(existing.created_at || "");
   const nextTime = Date.parse(merged.created_at || "");
   if (Number.isFinite(previousTime) && Number.isFinite(nextTime) && nextTime > previousTime) {
@@ -1387,25 +1392,24 @@ export function upsertConversationInData<T extends IMData | null | undefined>(
   const previous = current.rooms.find((item) => item.id === conversation.id);
   const existing = Boolean(previous);
   let normalized = normalizeRoom(conversation);
-  const previousEpoch = previous?.context_usage_epoch ?? 0;
-  const incomingEpoch = normalized.context_usage_epoch ?? 0;
-  if (previous && previousEpoch >= incomingEpoch) {
-    const usage: Record<string, ContextUsage> = previousEpoch > incomingEpoch ? {} : { ...normalized.context_usage };
-    for (const [id, snapshot] of Object.entries(previous.context_usage ?? {})) {
-      const incoming = usage[id];
-      if (
-        previousEpoch > incomingEpoch ||
-        !incoming ||
-        Date.parse(snapshot.updated_at) > Date.parse(incoming.updated_at)
-      )
-        usage[id] = snapshot;
-    }
-    normalized = normalizeRoom({ ...normalized, context_usage_epoch: previousEpoch, context_usage: usage });
-  }
+  normalized = normalizeRoom({ ...normalized, ...mergeRoomContextUsage(previous, normalized) });
   const rooms = existing
     ? current.rooms.map((item) => (item.id === conversation.id ? normalized : item))
     : [normalized, ...current.rooms];
   return { ...current, rooms: sortConversations(rooms) };
+}
+
+function mergeRoomContextUsage(previous: IMConversation | undefined, incoming: IMConversation) {
+  const previousEpoch = previous?.context_usage_epoch ?? 0;
+  const incomingEpoch = incoming.context_usage_epoch ?? 0;
+  if (incomingEpoch < previousEpoch)
+    return { context_usage_epoch: previousEpoch, context_usage: previous?.context_usage };
+  if (incomingEpoch > previousEpoch)
+    return { context_usage_epoch: incomingEpoch, context_usage: incoming.context_usage };
+  const usage = { ...previous?.context_usage };
+  for (const [id, snapshot] of Object.entries(incoming.context_usage ?? {}))
+    usage[id] = latestContextUsage(usage[id], snapshot)!;
+  return { context_usage_epoch: incomingEpoch, context_usage: usage };
 }
 
 export function mergeRoomMetadataUpdateInData<T extends IMData | null | undefined>(
@@ -1424,6 +1428,7 @@ export function mergeRoomMetadataUpdateInData<T extends IMData | null | undefine
     item.id === conversation.id
       ? {
           ...item,
+          ...mergeRoomContextUsage(item, conversation),
           title: conversation.title,
           custom_title: Boolean(conversation.custom_title),
           archived: Boolean(conversation.archived),
