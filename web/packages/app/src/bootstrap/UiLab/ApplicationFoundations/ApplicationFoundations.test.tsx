@@ -1,3 +1,5 @@
+import { selectLabOption } from "../selectLabOption.test-helper";
+import { LabView } from "../labViewContext";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -24,7 +26,7 @@ describe("application component playgrounds", () => {
   it("runs a notification action and dismisses the toast", async () => {
     render(<ApplicationFoundations kind="alerts" />);
     const user = userEvent.setup();
-    await user.click(screen.getByRole("radio", { name: "移动端" }));
+    await selectLabOption(user, "设计断点", "移动端");
     await user.click(screen.getByRole("button", { name: "触发警告通知" }));
     expect(screen.getByText("项目已取消发布", { exact: true })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "撤销操作" }));
@@ -122,12 +124,30 @@ describe("application component playgrounds", () => {
     await user.type(screen.getByRole("searchbox", { name: "筛选设计节点" }), "not-a-node");
     expect(await screen.findByText("未找到匹配节点。")).toBeVisible();
   });
-  it("opens breadcrumb interactions and navigates collapsed ancestors with the keyboard", async () => {
+  it("shows the interaction and Figma references in their respective views", () => {
+    const { rerender } = render(
+      <LabView.Provider value="preview">
+        <ApplicationFoundations kind="page-headers" />
+      </LabView.Provider>,
+    );
+    expect(screen.getByRole("button", { name: "重置示例" })).toBeVisible();
+    expect(screen.queryByText("Figma 原尺寸参考")).not.toBeInTheDocument();
+    rerender(
+      <LabView.Provider value="design">
+        <ApplicationFoundations kind="page-headers" />
+      </LabView.Provider>,
+    );
+    expect(screen.queryByRole("button", { name: "重置示例" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看 Figma 设计来源 ↗" })).toBeVisible();
+    expect(screen.getByText("Figma 原尺寸参考")).toBeVisible();
+    expect(screen.getByText(/设计节点索引/)).toBeVisible();
+  });
+  it("shows breadcrumb interactions directly and navigates collapsed ancestors with the keyboard", async () => {
     render(<ApplicationFoundations kind="breadcrumbs" />);
     const user = userEvent.setup();
-    expect(screen.getByText("设计交互", { selector: "summary" }).closest("details")).toHaveAttribute("open");
     expect(screen.queryByRole("region", { name: "Figma 原尺寸参考" })).not.toBeInTheDocument();
     const trigger = screen.getByRole("button", { name: "查看上级路径" });
+    expect(trigger).toBeVisible();
     await user.click(trigger);
     await user.keyboard("{ArrowDown}{Enter}");
     expect(screen.getByRole("status")).toHaveTextContent("当前位置：工作区");

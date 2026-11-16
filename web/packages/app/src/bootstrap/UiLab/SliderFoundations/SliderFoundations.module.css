@@ -10,10 +10,14 @@
   color: var(--muted);
   line-height: 1.6;
 }
-.foundation a {
+:where(.foundation) a {
   color: var(--primary);
 }
 .demo {
+  min-width: 0;
+  margin-block: var(--space-4);
+}
+.referenceCard {
   min-width: 0;
   padding: var(--space-4);
   border: 1px solid var(--line);

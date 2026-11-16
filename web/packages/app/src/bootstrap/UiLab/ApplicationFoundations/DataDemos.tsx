@@ -1,6 +1,7 @@
+import { LabOptionSelect } from "../LabOptions";
 import { applicationAsset } from "./assets";
 import { useState } from "react";
-import { Button, Checkbox, Field, SegmentedControl, TextInput } from "@/components/ui";
+import { Button, Checkbox, Field, TextInput } from "@/components/ui";
 import { useLabTranslation } from "../LabLocale";
 import styles from "./ApplicationFoundations.module.css";
 const people = [
@@ -74,7 +75,7 @@ export function MetricDemo() {
   const value = period === "day" ? 2000 : 14000;
   return (
     <>
-      <SegmentedControl
+      <LabOptionSelect
         label={t("统计周期")}
         value={period}
         onChange={setPeriod}
@@ -97,7 +98,7 @@ export function ChartDemo() {
   const values = period === "week" ? [45, 80, 55, 90, 65, 75, 60] : [70, 50, 95, 60, 85, 40, 75];
   return (
     <>
-      <SegmentedControl
+      <LabOptionSelect
         label={t("图表周期")}
         value={period}
         onChange={setPeriod}

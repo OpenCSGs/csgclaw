@@ -1,3 +1,4 @@
+import { selectLabOption } from "../selectLabOption.test-helper";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -20,8 +21,8 @@ describe("CheckboxFoundations", () => {
     expect(demo.getByRole("checkbox", { name: "邮件通知" })).not.toBeChecked();
     await user.click(demo.getByRole("checkbox", { name: "声音提醒" }));
     expect(all).toBePartiallyChecked();
-    await user.click(screen.getByRole("radio", { name: "sm · 16px" }));
-    await user.click(demo.getByRole("radio", { name: "禁用" }));
+    await selectLabOption(user, "复选框尺寸", "sm · 16px");
+    await selectLabOption(user, "复选框禁用状态", "禁用");
     expect(all).toBeDisabled();
     expect(demo.getByRole("checkbox", { name: "声音提醒" })).toBeDisabled();
     expect(demo.getByRole("status")).toHaveTextContent("已选择 1 / 3 项 · 半选（已禁用）");
@@ -39,10 +40,10 @@ describe("CheckboxFoundations", () => {
     await user.clear(title);
     await user.type(title, "选择全部方式");
     expect(demo.getByRole("checkbox", { name: "选择全部方式" })).toBePartiallyChecked();
-    await user.click(demo.getByRole("radio", { name: "隐藏说明" }));
+    await selectLabOption(user, "复选框辅助说明", "隐藏说明");
     expect(demo.getByRole("checkbox", { name: "选择全部方式" })).not.toHaveAttribute("aria-describedby");
     expect(screen.getAllByRole("link", { name: "查看设计节点 ↗" })).toHaveLength(8);
-    await user.click(screen.getByRole("radio", { name: "仅复选框" }));
+    await selectLabOption(user, "复选框文字", "仅复选框");
     expect(screen.getAllByRole("link", { name: "查看设计节点 ↗" })).toHaveLength(12);
     expect(screen.getByRole("heading", { name: "禁用 · 半选" })).toBeVisible();
     expect(demo.getByRole("checkbox", { name: "选择全部方式" })).toBePartiallyChecked();

@@ -1,3 +1,4 @@
+import { selectLabOption } from "../selectLabOption.test-helper";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -24,10 +25,10 @@ describe("Figma section footers", () => {
     const { container } = render(<FooterFoundations />);
     const user = userEvent.setup();
     const demo = within(screen.getByRole("region", { name: "区块页脚交互试用" }));
-    await user.click(demo.getByRole("checkbox", { name: "按钮组" }));
+    await selectLabOption(user, "按钮组", "隐藏");
     expect(demo.queryByLabelText("30 天")).not.toBeInTheDocument();
     expect(container.querySelectorAll('[data-node-id] [aria-label="时间范围"]')).toHaveLength(4);
-    await user.click(demo.getByRole("checkbox", { name: "操作按钮" }));
+    await selectLabOption(user, "操作按钮", "隐藏");
     expect(demo.queryByRole("button", { name: "主要" })).not.toBeInTheDocument();
   });
   it("selects ranges with the keyboard and retains selection when changing the footer variant", async () => {
@@ -38,8 +39,8 @@ describe("Figma section footers", () => {
     await user.keyboard("{ArrowRight} ");
     expect(demo.getByRole("radio", { name: "30 天" })).toBeChecked();
     expect(demo.getByRole("status")).toHaveTextContent("30 天");
-    await user.click(demo.getByRole("radio", { name: "卡片" }));
-    await user.click(demo.getByRole("radio", { name: "移动端" }));
+    await selectLabOption(user, "页脚类型", "卡片");
+    await selectLabOption(user, "设计断点", "移动端");
     expect(demo.getByRole("radio", { name: "30 天" })).toBeChecked();
   });
 });

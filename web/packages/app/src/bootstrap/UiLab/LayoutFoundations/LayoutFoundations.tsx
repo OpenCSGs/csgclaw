@@ -1,3 +1,5 @@
+import { LabComponentHeading } from "../LabComponentHeading";
+import { DesignOnly } from "../LabView";
 import { useLabTranslation } from "../LabLocale";
 import { useState } from "react";
 import { SegmentedControl } from "@/components/ui";
@@ -28,15 +30,19 @@ export function LayoutFoundations() {
   return (
     <section id="layout-foundations" className={styles.foundation} aria-labelledby="layout-title">
       <p className={styles.eyebrow}>{labText("FOUNDATIONS / 设计基础")}</p>
-      <h2 id="layout-title">{labText("Spacing, radius & grids · 间距、圆角与网格")}</h2>
+      <LabComponentHeading sectionId="layout-foundations" titleId="layout-title">
+        {labText("Spacing, radius & grids · 间距、圆角与网格")}
+      </LabComponentHeading>
       <p>
         {labText("Figma 参数快照 · ")}
         {snapshot.captured}
         {labText(" · 32 级标尺 / 17 级语义间距 / 11 级圆角 / 8 种网格")}
       </p>
-      <a href={snapshot.source} target="_blank" rel="noreferrer">
-        {labText("查看 Figma 布局设计来源 ↗")}
-      </a>
+      <DesignOnly>
+        <a href={snapshot.source} target="_blank" rel="noreferrer">
+          {labText("查看 Figma 布局设计来源 ↗")}
+        </a>
+      </DesignOnly>
       <div className={styles.notice}>
         <strong>{labText("先建立映射，再迁移组件")}</strong>
         <p>
@@ -104,13 +110,15 @@ export function LayoutFoundations() {
             )}
           </p>
           <p>{labText("本预览展示列网格；设计稿额外的行网格和边距辅助层未叠加。")}</p>
-          <a
-            href={`${snapshot.source.split("?")[0]}?node-id=${grid.node.replace(":", "-")}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {labText("查看当前网格节点 ↗")}
-          </a>
+          <DesignOnly>
+            <a
+              href={`${snapshot.source.split("?")[0]}?node-id=${grid.node.replace(":", "-")}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {labText("查看当前网格节点 ↗")}
+            </a>
+          </DesignOnly>
         </div>
       ) : (
         <div className={styles.section}>

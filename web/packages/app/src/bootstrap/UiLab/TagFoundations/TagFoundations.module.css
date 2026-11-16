@@ -13,7 +13,7 @@
   color: var(--muted);
   line-height: 1.6;
 }
-.foundation a {
+:where(.foundation) a {
   color: var(--primary);
 }
 .eyebrow {
@@ -37,9 +37,7 @@
   width: max-content;
 }
 .demo {
-  padding: var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
+  min-width: 0;
   margin-block: var(--space-5);
 }
 .grid {

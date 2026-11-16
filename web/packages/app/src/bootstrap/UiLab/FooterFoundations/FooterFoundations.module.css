@@ -10,14 +10,11 @@
   color: var(--muted);
   line-height: 1.6;
 }
-.foundation a {
+:where(.foundation) a {
   color: var(--primary);
 }
 .playground {
   margin-block: 24px;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
 }
 .controls {
   display: flex;
@@ -249,9 +246,6 @@
 @media (max-width: 700px) {
   .foundation {
     padding: 16px;
-  }
-  .playground {
-    padding: 12px;
   }
 }
 

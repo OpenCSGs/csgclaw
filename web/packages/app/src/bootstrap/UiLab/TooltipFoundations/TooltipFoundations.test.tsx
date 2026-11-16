@@ -1,3 +1,4 @@
+import { selectLabOption } from "../selectLabOption.test-helper";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -29,14 +30,14 @@ describe("TooltipFoundations", () => {
       </TooltipProvider>,
     );
     const user = userEvent.setup();
-    await user.click(screen.getByRole("radio", { name: "带说明" }));
+    await selectLabOption(user, "气泡内容", "带说明");
     const title = screen.getByRole("textbox", { name: "提示标题" });
     await user.clear(title);
     await user.type(title, "权限说明");
     const description = screen.getByRole("textbox", { name: "提示说明" });
     await user.clear(description);
     await user.type(description, "只有管理员可以修改设置。");
-    await user.click(screen.getByRole("radio", { name: "右侧" }));
+    await selectLabOption(user, "箭头位置", "右侧");
     screen.getByRole("button", { name: "悬浮或聚焦查看提示" }).focus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent("权限说明 只有管理员可以修改设置。");
     expect(screen.getAllByRole("link", { name: "查看设计节点 ↗" })).toHaveLength(7);

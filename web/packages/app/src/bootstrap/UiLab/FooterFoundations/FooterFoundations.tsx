@@ -1,5 +1,9 @@
+import resetStyles from "../LabOptions.module.css";
+import { LabOptions, LabOptionSelect } from "../LabOptions";
+import { LabComponentHeading } from "../LabComponentHeading";
+import { DesignOnly } from "../LabView";
 import { useState } from "react";
-import { Button, Checkbox, SegmentedControl } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { useLabTranslation } from "../LabLocale";
 import { SectionFooter, type FooterLayout, type FooterBreakpoint } from "./SectionFooter";
 import styles from "./FooterFoundations.module.css";
@@ -25,55 +29,75 @@ export function FooterFoundations() {
   const [action, setAction] = useState("");
   return (
     <section id="footer-foundations" className={styles.foundation} aria-labelledby="footer-foundations-title">
-      <h2 id="footer-foundations-title">{t("Section footers · 区块页脚")}</h2>
+      <LabComponentHeading sectionId="footer-foundations" titleId="footer-foundations-title">
+        {t("Section footers · 区块页脚")}
+      </LabComponentHeading>
       <p>{t("区块页脚集中放置当前表单或内容区域的辅助操作与主要操作。")}</p>
-      <a href={`${file}?node-id=3275-371793`} target="_blank" rel="noreferrer">
-        {t("查看 Figma 设计来源 ↗")}
-      </a>
-      <p>
-        {t(
-          "已实现全部 8 个页脚变体：Section / Card、按钮组开关、Desktop / Mobile。文字使用 PingFang SC 500，14/20px；按钮高 40px，圆角 8px。",
-        )}
-      </p>
+      <DesignOnly>
+        <a href={`${file}?node-id=3275-371793`} target="_blank" rel="noreferrer">
+          {t("查看 Figma 设计来源 ↗")}
+        </a>
+        <p>
+          {t(
+            "已实现全部 8 个页脚变体：Section / Card、按钮组开关、Desktop / Mobile。文字使用 PingFang SC 500，14/20px；按钮高 40px，圆角 8px。",
+          )}
+        </p>
+      </DesignOnly>
       <section className={styles.playground} aria-label={t("区块页脚交互试用")}>
-        <h3>{t("交互试用")}</h3>
-        <div className={styles.controls}>
-          <SegmentedControl
+        <div className={resetStyles.resetRow}>
+          <Button
+            size="sm"
+            onClick={() => {
+              setLayout("Section");
+              setBreakpoint("Desktop");
+              setGroup(true);
+              setDivider(true);
+              setSecondary(true);
+              setActions(true);
+              setAction("");
+            }}
+          >
+            {t("重置示例")}
+          </Button>
+        </div>
+        <LabOptions>
+          <LabOptionSelect
             label={t("页脚类型")}
             value={layout}
-            onChange={setLayout}
+            onChange={(value) => setLayout(value === "Card" ? "Card" : "Section")}
             options={[
               { value: "Section", label: t("Section") },
               { value: "Card", label: t("Card") },
             ]}
           />
-          <SegmentedControl
+          <LabOptionSelect
             label={t("设计断点")}
             value={breakpoint}
-            onChange={setBreakpoint}
+            onChange={(value) => setBreakpoint(value === "Mobile" ? "Mobile" : "Desktop")}
             options={[
               { value: "Desktop", label: t("Desktop") },
               { value: "Mobile", label: t("Mobile") },
             ]}
           />
-        </div>
-        <div className={styles.controls}>
+
           {[
             { label: "按钮组", checked: group, set: setGroup },
             { label: "分隔线", checked: divider, set: setDivider },
             { label: "了解更多", checked: secondary, set: setSecondary },
             { label: "操作按钮", checked: actions, set: setActions },
           ].map((option) => (
-            <label className={styles.option} key={option.label}>
-              <Checkbox
-                checked={option.checked}
-                onCheckedChange={(value) => option.set(value === true)}
-                aria-label={t(option.label)}
-              />
-              {t(option.label)}
-            </label>
+            <LabOptionSelect
+              key={option.label}
+              label={t(option.label)}
+              value={option.checked ? "yes" : "no"}
+              onChange={(value) => option.set(value === "yes")}
+              options={[
+                { value: "yes", label: t("显示") },
+                { value: "no", label: t("隐藏") },
+              ]}
+            />
           ))}
-        </div>
+        </LabOptions>
         <div className={styles.adaptive}>
           <SectionFooter
             layout={layout}
@@ -85,51 +109,39 @@ export function FooterFoundations() {
             onAction={setAction}
           />
         </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setLayout("Section");
-            setBreakpoint("Desktop");
-            setGroup(true);
-            setDivider(true);
-            setSecondary(true);
-            setActions(true);
-            setAction("");
-          }}
-        >
-          {t("重置示例")}
-        </Button>
         <p role="status">
           {action ? `${t("已触发")}：${t(action)}` : t("可切换时间范围并点击操作，反馈显示在页脚外部。")}
         </p>
       </section>
-      <h3>{t("完整设计变体")}</h3>
-      <p>{t("原尺寸样本保留 1216px / 688px 宽度，窄屏在样本容器内滚动；交互试用区会在更窄空间自动换行。")}</p>
-      {variants.map((variant) => (
-        <article key={variant.id} className={styles.sample}>
-          <header>
-            <h4>
-              {t(variant.layout)} · {t(variant.breakpoint)} · {t(variant.group ? "带按钮组" : "无按钮组")}
-            </h4>
-            <a href={`${file}?node-id=${variant.id.replace(":", "-")}`} target="_blank" rel="noreferrer">
-              {variant.id} ↗
-            </a>
-            <small>
-              {variant.breakpoint === "Desktop" ? 1216 : 688} × {variant.height}px
-            </small>
-          </header>
-          <div className={styles.scroll} role="region" tabIndex={0} aria-label={`${t("原尺寸页脚")} ${variant.id}`}>
-            <div className={styles.canvas} data-width={variant.breakpoint} data-node-id={variant.id}>
-              <SectionFooter
-                layout={variant.layout}
-                breakpoint={variant.breakpoint}
-                buttonGroup={variant.group}
-                onAction={setAction}
-              />
+      <DesignOnly>
+        <h3>{t("完整设计变体")}</h3>
+        <p>{t("原尺寸样本保留 1216px / 688px 宽度，窄屏在样本容器内滚动；交互试用区会在更窄空间自动换行。")}</p>
+        {variants.map((variant) => (
+          <article key={variant.id} className={styles.sample}>
+            <header>
+              <h4>
+                {t(variant.layout)} · {t(variant.breakpoint)} · {t(variant.group ? "带按钮组" : "无按钮组")}
+              </h4>
+              <a href={`${file}?node-id=${variant.id.replace(":", "-")}`} target="_blank" rel="noreferrer">
+                {variant.id} ↗
+              </a>
+              <small>
+                {variant.breakpoint === "Desktop" ? 1216 : 688} × {variant.height}px
+              </small>
+            </header>
+            <div className={styles.scroll} role="region" tabIndex={0} aria-label={`${t("原尺寸页脚")} ${variant.id}`}>
+              <div className={styles.canvas} data-width={variant.breakpoint} data-node-id={variant.id}>
+                <SectionFooter
+                  layout={variant.layout}
+                  breakpoint={variant.breakpoint}
+                  buttonGroup={variant.group}
+                  onAction={setAction}
+                />
+              </div>
             </div>
-          </div>
-        </article>
-      ))}
+          </article>
+        ))}
+      </DesignOnly>
     </section>
   );
 }

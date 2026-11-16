@@ -1,3 +1,5 @@
+import { LabComponentHeading } from "../LabComponentHeading";
+import { DesignOnly } from "../LabView";
 import { useLabTranslation } from "../LabLocale";
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
@@ -60,15 +62,19 @@ export function TypographyFoundations() {
   return (
     <section id="typography-foundations" className={styles.foundation} aria-labelledby="typography-title">
       <p className={styles.eyebrow}>{labText("FOUNDATIONS / 设计基础")}</p>
-      <h2 id="typography-title">{labText("Typography · 排版")}</h2>
+      <LabComponentHeading sectionId="typography-foundations" titleId="typography-title">
+        {labText("Typography · 排版")}
+      </LabComponentHeading>
       <p>
         {labText("Figma 样式快照 · ")}
         {reference.captured}
         {labText(" · 11 个字号层级 / 44 个文字样式")}
       </p>
-      <a href={reference.source} target="_blank" rel="noreferrer">
-        {labText("查看 Figma Typography 设计来源 ↗")}
-      </a>
+      <DesignOnly>
+        <a href={reference.source} target="_blank" rel="noreferrer">
+          {labText("查看 Figma Typography 设计来源 ↗")}
+        </a>
+      </DesignOnly>
       <div className={styles.notice}>
         <strong>{labText("实际样式与页面说明存在差异")}</strong>
         <p>

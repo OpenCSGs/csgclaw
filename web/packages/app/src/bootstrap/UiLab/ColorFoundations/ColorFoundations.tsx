@@ -1,3 +1,5 @@
+import { LabComponentHeading } from "../LabComponentHeading";
+import { DesignOnly } from "../LabView";
 import { useLabTranslation } from "../LabLocale";
 import { useState } from "react";
 import type { CSSProperties } from "react";
@@ -69,7 +71,9 @@ export function ColorFoundations() {
     <section id="design-foundations" className={styles.foundation} aria-labelledby="color-title">
       <header>
         <p className={styles.eyebrow}>{labText("FOUNDATIONS / 设计基础")}</p>
-        <h2 id="color-title">{labText("Colors · 颜色")}</h2>
+        <LabComponentHeading sectionId="design-foundations" titleId="color-title">
+          {labText("Colors · 颜色")}
+        </LabComponentHeading>
         <p>
           {labText("Figma 变量快照 · ")}
           {palette.captured} · {primitiveEntries.length}
@@ -79,9 +83,11 @@ export function ColorFoundations() {
           {Object.keys(utility).length}
           {labText(" 个工具色")}
         </p>
-        <a href={palette.source} target="_blank" rel="noreferrer">
-          {labText("查看 Figma Colors 设计来源 ↗")}
-        </a>
+        <DesignOnly>
+          <a href={palette.source} target="_blank" rel="noreferrer">
+            {labText("查看 Figma Colors 设计来源 ↗")}
+          </a>
+        </DesignOnly>
       </header>
       <div className={styles.notice}>
         <strong>{labText("变量值优先，差异保留待确认")}</strong>

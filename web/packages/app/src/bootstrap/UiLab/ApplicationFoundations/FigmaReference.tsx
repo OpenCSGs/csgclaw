@@ -84,7 +84,7 @@ export function FigmaReference({ kind }: { kind: ApplicationKind }) {
     <>
       <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
         <summary>{t("Figma 原尺寸参考")}</summary>
-        <p>{t("以下为设计节点的静态结构参考，保留原始文案与尺寸；可在容器内滚动。可在上方交互试用区操作组件。")}</p>
+        <p>{t("静态参考保留设计节点的原始文案和尺寸，可在画布内滚动查看。")}</p>
         <p>
           {reference.nodeId} ·{" "}
           <a

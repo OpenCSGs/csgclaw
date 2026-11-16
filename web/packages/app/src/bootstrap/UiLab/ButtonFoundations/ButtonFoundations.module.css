@@ -1,4 +1,6 @@
 .foundation {
+  --lab-component-title-font: var(--text-md-normal);
+  --lab-component-description-color: var(--gray-600);
   min-width: 0;
   margin-block: var(--space-6);
   padding: var(--space-5);
@@ -6,6 +8,10 @@
   border-radius: var(--radius-xl);
   background: var(--panel);
 }
+:global(:root[data-theme="dark"]) .foundation {
+  --lab-component-description-color: var(--muted);
+}
+
 .foundation h2 {
   font: var(--text-xl-medium);
 }
@@ -13,7 +19,7 @@
   color: var(--muted);
   line-height: 1.6;
 }
-.foundation a {
+:where(.foundation) a {
   color: var(--primary);
 }
 .eyebrow {

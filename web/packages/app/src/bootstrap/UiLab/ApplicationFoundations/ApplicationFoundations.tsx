@@ -1,3 +1,5 @@
+import { LabComponentHeading } from "../LabComponentHeading";
+import { DesignOnly, PreviewOnly } from "../LabView";
 import { useState } from "react";
 import { Button, LinkButton } from "@/components/ui";
 import { applicationSections, type ApplicationKind } from "./registry";
@@ -61,48 +63,45 @@ export function ApplicationFoundations({ kind }: { kind: ApplicationKind }) {
   const [revision, setRevision] = useState(0);
   const entry = applicationSections.find((section) => section.key === kind)!;
   const source = inventory.find((item) => item.key === kind)!;
+  const preview = (
+    <section
+      className={`${styles.previewCanvas} ${styles.liveStage} ${styles.demoSurface}${kind !== "breadcrumbs" ? ` ${styles.withReset}` : ""}`}
+      aria-label={`${t(entry.title + " · " + entry.zh)} · ${t("交互试用")}`}
+    >
+      {kind !== "breadcrumbs" && (
+        <div className={styles.canvasReset}>
+          <Button size="sm" onClick={() => setRevision((value) => value + 1)}>
+            {t("重置示例")}
+          </Button>
+        </div>
+      )}
+      <Demo key={revision} kind={kind} />
+    </section>
+  );
   return (
     <section id={`${kind}-foundations`} className={styles.foundation} aria-labelledby={`${kind}-title`}>
-      <header className={styles.heading}>
-        <h2 id={`${kind}-title`}>{t(`${entry.title} · ${entry.zh}`)}</h2>
-        <LinkButton
-          className={styles.sourceButton}
-          variant="primary"
-          href={`https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=${source.pageId.replace(":", "-")}`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {t("查看 Figma 设计来源 ↗")}
-        </LinkButton>
-      </header>
+      <LabComponentHeading
+        sectionId={`${kind}-foundations`}
+        titleId={`${kind}-title`}
+        designAction={
+          <LinkButton
+            className={styles.sourceButton}
+            variant="primary"
+            href={`https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=${source.pageId.replace(":", "-")}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("查看 Figma 设计来源 ↗")}
+          </LinkButton>
+        }
+      >
+        {t(`${entry.title} · ${entry.zh}`)}
+      </LabComponentHeading>
       <p>{t(entry.description)}</p>
-      {kind === "alerts" ? (
-        <AlertNotificationDemos />
-      ) : (
-        <>
-          <p>{t("本页已收录一个代表性设计节点与交互试用。完整变体矩阵及生产页面迁移尚待验收。")}</p>
-          <details open>
-            <summary>{t(kind === "breadcrumbs" ? "设计交互" : "交互试用")}</summary>
-            {kind !== "breadcrumbs" && (
-              <p>{t("试用区使用本地示例数据，不连接业务服务。设计原始文案与尺寸见设计参考。")}</p>
-            )}
-            <section
-              className={`${styles.previewCanvas} ${styles.liveStage} ${styles.demoSurface}`}
-              aria-label={`${t(entry.title + " · " + entry.zh)} · ${t("交互试用")}`}
-            >
-              {kind !== "breadcrumbs" && (
-                <div className={styles.actions}>
-                  <Button size="sm" onClick={() => setRevision((value) => value + 1)}>
-                    {t("重置示例")}
-                  </Button>
-                </div>
-              )}
-              <Demo key={revision} kind={kind} />
-            </section>
-          </details>
-          <FigmaReference kind={kind} />
-        </>
-      )}
+      <PreviewOnly>{kind === "alerts" ? <AlertNotificationDemos /> : preview}</PreviewOnly>
+      <DesignOnly>
+        <FigmaReference kind={kind} />
+      </DesignOnly>
     </section>
   );
 }

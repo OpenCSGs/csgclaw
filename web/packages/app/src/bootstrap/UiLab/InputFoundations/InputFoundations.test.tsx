@@ -1,3 +1,4 @@
+import { selectLabOption } from "../selectLabOption.test-helper";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -15,13 +16,13 @@ describe("InputFoundations", () => {
     expect(email).toHaveAttribute("aria-invalid", "true");
     expect(email).toHaveAccessibleDescription("请输入有效邮箱，例如 name@example.com。");
     expect(description).toHaveAccessibleDescription("请输入描述。");
-    await user.click(demo.getByRole("radio", { name: "sm · 40px" }));
-    await user.click(demo.getByRole("radio", { name: "禁用" }));
+    await selectLabOption(user, "输入框尺寸", "sm · 40px");
+    await selectLabOption(user, "输入框状态", "禁用");
     expect(email).toHaveValue("invalid");
     expect(email).toBeDisabled();
     expect(description).toBeDisabled();
     expect(demo.getByRole("button", { name: "校验示例" })).toBeDisabled();
-    await user.click(demo.getByRole("radio", { name: "正常" }));
+    await selectLabOption(user, "输入框状态", "正常");
     await user.clear(email);
     await user.type(email, "name@example.com");
     await user.type(description, "第一行{Enter}第二行");

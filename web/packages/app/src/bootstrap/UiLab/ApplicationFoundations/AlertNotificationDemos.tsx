@@ -1,5 +1,7 @@
+import { LabOptions, LabOptionSelect } from "../LabOptions";
+import { DesignOnly } from "../LabView";
 import { useState, type CSSProperties } from "react";
-import { Button, DismissibleAlert, GlobalNoticeProvider, SegmentedControl, useGlobalNotice } from "@/components/ui";
+import { Button, DismissibleAlert, GlobalNoticeProvider, useGlobalNotice } from "@/components/ui";
 import { useLabTranslation } from "../LabLocale";
 import alertInfo from "./alert-assets/alert-info.svg";
 import alertWarning from "./alert-assets/alert-warning.svg";
@@ -80,12 +82,16 @@ function NotificationPreview({ mobile }: { mobile: boolean }) {
       <h3>{t("全局通知")}</h3>
       <p>{t("触发通知以体验自动消失、关闭和后续操作。")}</p>
       <div className={styles.controls}>
-        <a href={figma(mobile ? "1135-914" : "1135-591")} target="_blank" rel="noreferrer">
-          {t("品牌通知设计稿")}
-        </a>
-        <a href={figma(mobile ? "1135-2294" : "1135-2309")} target="_blank" rel="noreferrer">
-          {t("警告通知设计稿")}
-        </a>
+        <DesignOnly>
+          <a href={figma(mobile ? "1135-914" : "1135-591")} target="_blank" rel="noreferrer">
+            {t("品牌通知设计稿")}
+          </a>
+        </DesignOnly>
+        <DesignOnly>
+          <a href={figma(mobile ? "1135-2294" : "1135-2309")} target="_blank" rel="noreferrer">
+            {t("警告通知设计稿")}
+          </a>
+        </DesignOnly>
       </div>
       <GlobalNoticeProvider
         key={String(mobile)}
@@ -128,39 +134,43 @@ export function AlertNotificationDemos() {
   }
   return (
     <div className={styles.demos}>
-      <SegmentedControl
-        value={breakpoint}
-        onChange={(value) => {
-          setBreakpoint(value);
-          if (value === "mobile" && variant === "default") setVariant("warning");
-          reset();
-        }}
-        label={t("设计断点")}
-        options={[
-          { value: "desktop", label: t("桌面端") },
-          { value: "mobile", label: t("移动端") },
-        ]}
-      />
+      <LabOptions>
+        <LabOptionSelect
+          value={breakpoint}
+          onChange={(value) => {
+            setBreakpoint(value);
+            if (value === "mobile" && variant === "default") setVariant("warning");
+            reset();
+          }}
+          label={t("设计断点")}
+          options={[
+            { value: "desktop", label: t("桌面端") },
+            { value: "mobile", label: t("移动端") },
+          ]}
+        />
+        <LabOptionSelect
+          value={variant}
+          onChange={(value) => {
+            setVariant(value);
+            reset();
+          }}
+          label={t("提醒样式")}
+          options={[
+            { value: "warning", label: t("浮动警告") },
+            ...(!mobile ? [{ value: "default", label: t("浮动默认") }] : []),
+            { value: "banner", label: t("通栏警告") },
+          ]}
+        />
+      </LabOptions>
       <section className={styles.section}>
         <h3>{t("行内提醒")}</h3>
         <div className={styles.controls}>
-          <SegmentedControl
-            value={variant}
-            onChange={(value) => {
-              setVariant(value);
-              reset();
-            }}
-            label={t("提醒样式")}
-            options={[
-              { value: "warning", label: t("浮动警告") },
-              ...(!mobile ? [{ value: "default", label: t("浮动默认") }] : []),
-              { value: "banner", label: t("通栏警告") },
-            ]}
-          />
           <Button onClick={reset}>{t("重新显示提醒")}</Button>
-          <a href={figma(source)} target="_blank" rel="noreferrer">
-            {t("提醒设计稿")}
-          </a>
+          <DesignOnly>
+            <a href={figma(source)} target="_blank" rel="noreferrer">
+              {t("提醒设计稿")}
+            </a>
+          </DesignOnly>
         </div>
         <div className={styles.alertStage} data-mobile={mobile} data-banner={banner}>
           {!dismissed && (

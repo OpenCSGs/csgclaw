@@ -1,3 +1,4 @@
+import navigationStyles from "../ApplicationNavigation.module.css";
 import { applicationAsset } from "./assets";
 import { useState } from "react";
 import { Breadcrumb, Button, Field, PanelHeader, TextInput } from "@/components/ui";
@@ -62,6 +63,7 @@ export function NavigationDemo() {
           ["概览", "项目", "任务", "设置"].map((label) => (
             <Button
               key={label}
+              className={navigationStyles.item}
               variant="tertiaryGray"
               aria-current={view === label ? "page" : undefined}
               onClick={() => setView(label)}

@@ -1,3 +1,6 @@
+import resetStyles from "../LabOptions.module.css";
+import { LabComponentHeading } from "../LabComponentHeading";
+import { DesignOnly } from "../LabView";
 import { ThemeGlyph } from "../ThemeGlyph";
 import { useState, type ReactNode } from "react";
 import { Tabs } from "radix-ui";
@@ -24,14 +27,20 @@ function Foundation({
   const { text: t } = useLabTranslation();
   return (
     <section id={id} className={styles.foundation} aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`}>{t(title)}</h2>
+      <LabComponentHeading sectionId={id} titleId={`${id}-title`}>
+        {t(title)}
+      </LabComponentHeading>
       <p>{t(description)}</p>
-      <a href={`${file}?node-id=${node}`} target="_blank" rel="noreferrer">
-        {t("查看 Figma 设计来源 ↗")}
-      </a>
-      <p>{t(scope)}</p>
+      <DesignOnly>
+        <a href={`${file}?node-id=${node}`} target="_blank" rel="noreferrer">
+          {t("查看 Figma 设计来源 ↗")}
+        </a>
+        <p>{t(scope)}</p>
+      </DesignOnly>
       <div className={styles.stage}>{children}</div>
-      <p>{t("当前为 UI Lab 基础样本；其他变体与完整像素验收待补充，尚未迁移生产页面。")}</p>
+      <DesignOnly>
+        <p>{t("当前为 UI Lab 基础样本；其他变体与完整像素验收待补充，尚未迁移生产页面。")}</p>
+      </DesignOnly>
     </section>
   );
 }
@@ -59,6 +68,11 @@ export function TabsFoundations() {
       node="43-0"
       scope="已对齐 sm 下划线选项卡：32px 高、14/20px Medium、12px 间距、2px 品牌色指示线。其他类型与尺寸待补充。"
     >
+      <div className={resetStyles.resetRow}>
+        <Button size="sm" onClick={() => setTab("0")}>
+          {t("重置示例")}
+        </Button>
+      </div>
       <Tabs.Root value={tab} onValueChange={setTab}>
         <Tabs.List className={styles.tabs} aria-label={t("设置选项卡")}>
           {tabNames.map((name, i) => (
@@ -75,9 +89,6 @@ export function TabsFoundations() {
           </Tabs.Content>
         ))}
       </Tabs.Root>
-      <Button size="sm" onClick={() => setTab("0")}>
-        {t("重置示例")}
-      </Button>
     </Foundation>
   );
 }
@@ -93,6 +104,17 @@ export function PaginationFoundations() {
       node="225-7288"
       scope="已对齐 40px 页码、8px 方形圆角与圆形页码、14/20px Regular、2px 页码间距。移动端采用换行演示；其他分页布局与圆点变体待补充。"
     >
+      <div className={resetStyles.resetRow}>
+        <Button
+          size="sm"
+          onClick={() => {
+            setPage(1);
+            setCircle(false);
+          }}
+        >
+          {t("重置示例")}
+        </Button>
+      </div>
       <label className={styles.choice}>
         <input type="checkbox" checked={circle} onChange={(e) => setCircle(e.target.checked)} />
         {t("圆形页码")}
@@ -129,15 +151,6 @@ export function PaginationFoundations() {
           <ThemeGlyph src="ui-lab/figma/navigation/arrow-right.svg" />
         </Button>
       </nav>
-      <Button
-        size="sm"
-        onClick={() => {
-          setPage(1);
-          setCircle(false);
-        }}
-      >
-        {t("重置示例")}
-      </Button>
       <p role="status">
         {t("当前页")} {page} / 5
       </p>

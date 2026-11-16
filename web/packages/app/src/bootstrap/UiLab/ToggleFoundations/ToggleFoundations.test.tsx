@@ -1,3 +1,4 @@
+import { selectLabOption } from "../selectLabOption.test-helper";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -16,10 +17,10 @@ describe("ToggleFoundations", () => {
     await user.keyboard(" ");
     expect(toggle).not.toBeChecked();
     await user.click(toggle);
-    await user.click(screen.getByRole("radio", { name: "Slim" }));
-    await user.click(screen.getByRole("radio", { name: "sm" }));
+    await selectLabOption(user, "开关类型", "Slim");
+    await selectLabOption(user, "开关尺寸", "sm");
     expect(toggle).toBeChecked();
-    await user.click(demo.getByRole("radio", { name: "禁用" }));
+    await selectLabOption(user, "开关禁用状态", "禁用");
     expect(toggle).toBeDisabled();
     await user.click(demo.getByText("记住我"));
     expect(toggle).toBeChecked();
@@ -36,9 +37,9 @@ describe("ToggleFoundations", () => {
     await user.clear(label);
     await user.type(label, "开启通知");
     expect(demo.getByRole("switch", { name: "开启通知" })).toBeInTheDocument();
-    await user.click(demo.getByRole("radio", { name: "隐藏说明" }));
+    await selectLabOption(user, "开关辅助说明", "隐藏说明");
     expect(demo.getByRole("switch", { name: "开启通知" })).not.toHaveAttribute("aria-describedby");
-    await user.click(screen.getByRole("radio", { name: "仅开关" }));
+    await selectLabOption(user, "开关文字", "仅开关");
     expect(demo.getByRole("switch", { name: "切换示例" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "查看设计节点 ↗" })).toHaveLength(8);
     expect(screen.getByRole("heading", { name: "聚焦 · 开启" })).toBeInTheDocument();

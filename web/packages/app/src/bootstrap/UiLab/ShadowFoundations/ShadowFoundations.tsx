@@ -1,3 +1,5 @@
+import { LabComponentHeading } from "../LabComponentHeading";
+import { DesignOnly } from "../LabView";
 import { useLabTranslation } from "../LabLocale";
 import { useState } from "react";
 import type { CSSProperties } from "react";
@@ -18,15 +20,19 @@ export function ShadowFoundations() {
   return (
     <section id="shadow-foundations" className={styles.foundation} aria-labelledby="shadow-title">
       <p className={styles.eyebrow}>{labText("FOUNDATIONS / 设计基础")}</p>
-      <h2 id="shadow-title">{labText("Shadows · 阴影与焦点环")}</h2>
+      <LabComponentHeading sectionId="shadow-foundations" titleId="shadow-title">
+        {labText("Shadows · 阴影与焦点环")}
+      </LabComponentHeading>
       <p>
         {labText("Figma 效果快照 · ")}
         {snapshot.captured}
         {labText(" · 7 级阴影 / 7 种焦点环组合")}
       </p>
-      <a href={snapshot.source} target="_blank" rel="noreferrer">
-        {labText("查看 Figma Shadows 设计来源 ↗")}
-      </a>
+      <DesignOnly>
+        <a href={snapshot.source} target="_blank" rel="noreferrer">
+          {labText("查看 Figma Shadows 设计来源 ↗")}
+        </a>
+      </DesignOnly>
       <div className={styles.notice}>
         <strong>{labText("参考效果与现有 token 对照")}</strong>
         <p>

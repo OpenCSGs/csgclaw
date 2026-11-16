@@ -47,9 +47,10 @@ export const labGroups = [
   },
 ] as const;
 
-export type LabSectionId = (typeof labGroups)[number]["items"][number]["id"];
+export const labCatalogId = "components";
+export type LabSectionId = typeof labCatalogId | (typeof labGroups)[number]["items"][number]["id"];
 
 export function sectionFromHash(hash: string): LabSectionId {
   const id = hash.replace(/^#/, "");
-  return labGroups.flatMap((group) => [...group.items]).find((item) => item.id === id)?.id ?? "design-foundations";
+  return labGroups.flatMap((group) => [...group.items]).find((item) => item.id === id)?.id ?? labCatalogId;
 }

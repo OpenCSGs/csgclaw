@@ -1,3 +1,5 @@
+import resetStyles from "../LabOptions.module.css";
+import { DesignOnly } from "../LabView";
 import { useState } from "react";
 import {
   Button,
@@ -20,13 +22,20 @@ export function DropdownPreview() {
   const [selected, setSelected] = useState("");
   return (
     <div className={styles.preview}>
-      <a
-        href="https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=3281-383089"
-        target="_blank"
-        rel="noreferrer"
-      >
-        {t("查看下拉菜单设计稿")}
-      </a>
+      <div className={resetStyles.resetRow}>
+        <Button size="sm" onClick={() => setSelected("")}>
+          {t("重置示例")}
+        </Button>
+      </div>
+      <DesignOnly>
+        <a
+          href="https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=3281-383089"
+          target="_blank"
+          rel="noreferrer"
+        >
+          {t("查看下拉菜单设计稿")}
+        </a>
+      </DesignOnly>
       <div className={styles.row}>
         <DropdownMenuRoot>
           <DropdownMenuTrigger asChild>
@@ -51,9 +60,6 @@ export function DropdownPreview() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenuRoot>
-        <Button size="sm" onClick={() => setSelected("")}>
-          {t("重置示例")}
-        </Button>
         <span role="status">{selected && t(selected)}</span>
       </div>
     </div>

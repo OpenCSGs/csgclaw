@@ -1,3 +1,4 @@
+import { selectLabOption } from "../selectLabOption.test-helper";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -12,7 +13,7 @@ describe("ProgressFoundations", () => {
     expect(progress).toHaveAttribute("aria-valuenow", "40");
     await user.click(demo.getByRole("button", { name: "从零开始" }));
     expect(progress).toHaveAttribute("aria-valuenow", "0");
-    await user.click(screen.getByRole("radio", { name: "顶部浮动标签" }));
+    await selectLabOption(user, "进度标签位置", "顶部浮动标签");
     expect(progress).toHaveAttribute("aria-valuenow", "0");
     const slider = demo.getByRole("slider", { name: "任务进度" });
     slider.focus();
@@ -31,7 +32,7 @@ describe("ProgressFoundations", () => {
     render(<ProgressFoundations />);
     const user = userEvent.setup();
     expect(screen.getAllByRole("link", { name: "查看设计节点 ↗" })).toHaveLength(11);
-    await user.click(screen.getByRole("radio", { name: "无标签" }));
+    await selectLabOption(user, "进度标签位置", "无标签");
     expect(screen.getByRole("heading", { name: "无标签 · 0%" })).toBeVisible();
     await user.click(screen.getByRole("radio", { name: "圆环与半圆" }));
     expect(screen.getAllByRole("link", { name: "查看设计节点 ↗" })).toHaveLength(5);

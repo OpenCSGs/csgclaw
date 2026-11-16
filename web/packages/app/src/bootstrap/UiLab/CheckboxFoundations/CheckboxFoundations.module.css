@@ -43,7 +43,6 @@
   flex-shrink: 0;
   width: max-content;
 }
-.demo,
 .item {
   min-width: 0;
   padding: var(--space-4);
@@ -51,6 +50,7 @@
   border-radius: var(--radius-xl);
 }
 .demo {
+  min-width: 0;
   margin-block: var(--space-5);
 }
 .fields,

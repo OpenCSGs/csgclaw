@@ -1,8 +1,12 @@
+import resetStyles from "../LabOptions.module.css";
+import { LabOptions, LabOptionSelect } from "../LabOptions";
+import { LabComponentHeading } from "../LabComponentHeading";
+import { DesignOnly } from "../LabView";
 import { ThemeGlyph } from "../ThemeGlyph";
 import { useLabTranslation } from "../LabLocale";
 import { useState } from "react";
 import type { CSSProperties } from "react";
-import { Button, SegmentedControl } from "@/components/ui";
+import { Button } from "@/components/ui";
 import type { ButtonSize, ButtonVariant } from "@/components/ui";
 import snapshot from "../figmaButtons.json";
 import styles from "./ButtonFoundations.module.css";
@@ -92,7 +96,7 @@ function ReferenceButton({ item }: { item: Entry }) {
   );
 }
 
-function CodeButton({ item, onClick }: { item: Entry; onClick: () => void }) {
+function CodeButton({ item }: { item: Entry }) {
   const { text: labText } = useLabTranslation();
 
   if (item.size === "xs") return <p>{labText("现有 Button 无 xs 尺寸，待映射")}</p>;
@@ -111,7 +115,6 @@ function CodeButton({ item, onClick }: { item: Entry; onClick: () => void }) {
       loading={item.state === "Loading"}
       loadingLabel={labText("Submitting...")}
       aria-label={`${labText("代码样本")} ${item.family} ${item.hierarchy} ${item.state} ${item.darkBackground ? labText("深色") : labText("普通")}`}
-      onClick={onClick}
     >
       {image && item.state !== "Loading" && <ThemeGlyph src={image} />}
       {!item.iconOnly && labText("Button CTA")}
@@ -128,7 +131,6 @@ export function ButtonFoundations() {
   const [family, setFamily] = useState("standard");
   const [size, setSize] = useState("md");
   const [shape, setShape] = useState("text");
-  const [clicks, setClicks] = useState(0);
   const available = snapshot.entries.filter((item) => item.family === family);
   const sizes = [...new Set(available.map((item) => item.size))].sort(
     (a, b) => ["xs", "sm", "md", "lg", "xl"].indexOf(a) - ["xs", "sm", "md", "lg", "xl"].indexOf(b),
@@ -140,42 +142,58 @@ export function ButtonFoundations() {
   const hierarchies = [...new Set(items.map((item) => item.hierarchy))];
   return (
     <section id="button-foundations" className={styles.foundation} aria-labelledby="button-foundations-title">
-      <p className={styles.eyebrow}>{labText("COMPONENTS / 设计组件")}</p>
-      <h2 id="button-foundations-title">{labText("Buttons · 按钮")}</h2>
+      <LabComponentHeading sectionId="button-foundations" titleId="button-foundations-title">
+        {labText("Buttons · 按钮")}
+      </LabComponentHeading>
       <p lang={locale === "zh" ? "zh-CN" : "en"}>{labText("Buttons communicate actions that users can take.")}</p>
-      <p>
-        {labText("Figma 快照 · ")}
-        {snapshot.captured} · {snapshot.entries.length}
-        {labText(" 个变体索引 / ")}
-        {verifiedCount}
-        {labText(" 个已读取样式")}
-      </p>
-      <a href={snapshot.source} target="_blank" rel="noreferrer">
-        {labText("查看 Figma Buttons 设计来源 ↗")}
-      </a>
-      <div className={styles.notice}>
-        <strong>{labText("参考矩阵与现有组件对照")}</strong>
+      <DesignOnly>
         <p>
-          {labText(
-            "每个变体包含 Figma 状态参考和可操作的代码样本。将鼠标移入、按下按钮或用 Tab 聚焦，即可查看对应状态。",
-          )}
+          {labText("Figma 快照 · ")}
+          {snapshot.captured} · {snapshot.entries.length}
+          {labText(" 个变体索引 / ")}
+          {verifiedCount}
+          {labText(" 个已读取样式")}
         </p>
-        <p>{labText("按钮参考保留 Figma 的原始图标和尺寸，已核验的颜色随主题切换。")}</p>
-        <p>
-          {labText(
-            "已同步：sm/md/lg/xl 高度 36/40/44/48px，普通按钮圆角 8px，加载态显示转圈与文案。Secondary 映射到 secondaryGray。设计参考已更新为 PingFang SC Medium 500；现有代码样本继续使用生产 Button 字体 token，便于对照。阴影及完整主题映射仍需验收。",
-          )}
-        </p>
-        <p>
-          {labText("Figma 调用额度已达上限，其余 ")}
-          {snapshot.entries.length - verifiedCount}
-          {labText(
-            " 项仅记录节点和尺寸，待读取样式。共享 Button 已同步确认的通用尺寸、圆角和加载行为；社交登录、商店徽章不在本次范围。",
-          )}
-        </p>
+        <a href={snapshot.source} target="_blank" rel="noreferrer">
+          {labText("查看 Figma Buttons 设计来源 ↗")}
+        </a>
+        <div className={styles.notice}>
+          <strong>{labText("参考矩阵与现有组件对照")}</strong>
+          <p>
+            {labText(
+              "每个变体包含 Figma 状态参考和可操作的代码样本。将鼠标移入、按下按钮或用 Tab 聚焦，即可查看对应状态。",
+            )}
+          </p>
+          <p>{labText("按钮参考保留 Figma 的原始图标和尺寸，已核验的颜色随主题切换。")}</p>
+          <p>
+            {labText(
+              "已同步：sm/md/lg/xl 高度 36/40/44/48px，普通按钮圆角 8px，加载态显示转圈与文案。Secondary 映射到 secondaryGray。设计参考已更新为 PingFang SC Medium 500；现有代码样本继续使用生产 Button 字体 token，便于对照。阴影及完整主题映射仍需验收。",
+            )}
+          </p>
+          <p>
+            {labText("Figma 调用额度已达上限，其余 ")}
+            {snapshot.entries.length - verifiedCount}
+            {labText(
+              " 项仅记录节点和尺寸，待读取样式。共享 Button 已同步确认的通用尺寸、圆角和加载行为；社交登录、商店徽章不在本次范围。",
+            )}
+          </p>
+        </div>
+      </DesignOnly>
+      <div className={resetStyles.resetRow}>
+        <Button
+          variant="secondaryGray"
+          size="md"
+          onClick={() => {
+            setFamily("standard");
+            setSize("md");
+            setShape("text");
+          }}
+        >
+          {labText("重置示例")}
+        </Button>
       </div>
-      <div className={styles.controls}>
-        <SegmentedControl
+      <LabOptions>
+        <LabOptionSelect
           label={labText("Button family")}
           value={family}
           options={families.map((item) => ({ ...item, label: labText(item.label) }))}
@@ -184,18 +202,16 @@ export function ButtonFoundations() {
             setSize(value === "utility" ? "sm" : "md");
           }}
         />
-      </div>
-      <div className={styles.controls}>
-        <SegmentedControl
+
+        <LabOptionSelect
           label={labText("Button size")}
           value={size}
           onChange={setSize}
           options={sizes.map((value) => ({ value, label: value }))}
         />
-      </div>
-      {(family === "standard" || family === "destructive") && (
-        <div className={styles.controls}>
-          <SegmentedControl
+
+        {(family === "standard" || family === "destructive") && (
+          <LabOptionSelect
             label={labText("Button content")}
             value={shape}
             onChange={setShape}
@@ -204,27 +220,8 @@ export function ButtonFoundations() {
               { value: "icon", label: labText("仅图标") },
             ]}
           />
-        </div>
-      )}
-      <Button
-        size="sm"
-        onClick={() => {
-          setFamily("standard");
-          setSize("md");
-          setShape("text");
-          setClicks(0);
-        }}
-      >
-        {labText("重置示例")}
-      </Button>
-      <p role="status">
-        {labText("当前 ")}
-        {items.length}
-        {labText(" 个变体，已读取 ")}
-        {items.filter((item) => item.verified).length}
-        {labText(" 个 · 代码样本已点击 ")}
-        {clicks} {labText("次")}
-      </p>
+        )}
+      </LabOptions>
       {hierarchies.map((hierarchy) => (
         <section className={styles.section} key={hierarchy} aria-label={hierarchy}>
           <h3>
@@ -244,45 +241,49 @@ export function ButtonFoundations() {
                     {labText(stateLabels[item.state])} · {item.state}
                     {item.darkBackground ? labText(" · 深色背景") : ""}
                   </h4>
-                  <p>
-                    {labText("Figma · ")}
-                    {item.width} × {item.height}
-                    {labText("px")}
-                  </p>
-                  <ReferenceButton item={item} />
+                  <DesignOnly>
+                    <p>
+                      {labText("Figma · ")}
+                      {item.width} × {item.height}
+                      {labText("px")}
+                    </p>
+                    <ReferenceButton item={item} />
+                  </DesignOnly>
                   <p>
                     {labText("现有代码 · ")}
                     {codeVariant(item)}
                   </p>
                   <div className={styles.codeStage} data-dark-background={item.darkBackground}>
-                    <CodeButton item={item} onClick={() => setClicks((n) => n + 1)} />
+                    <CodeButton item={item} />
                   </div>
-                  <details>
-                    <summary>{labText("参数与来源")}</summary>
-                    <p>
-                      {labText("节点 ")}
-                      {item.id}
-                    </p>
-                    {item.reference && (
+                  <DesignOnly>
+                    <details>
+                      <summary>{labText("参数与来源")}</summary>
                       <p>
-                        {labText("圆角 ")}
-                        {item.reference.radius}
-                        {labText(" · 间距 ")}
-                        {item.reference.gap}
-                        {labText(" · 字号 / 行高 ")}
-                        {item.reference.fontSize} / {item.reference.lineHeight}
-                        {labText(" · 原始内边距 X / Y ")}
-                        {item.reference.paddingX} / {item.reference.paddingY}
+                        {labText("节点 ")}
+                        {item.id}
                       </p>
-                    )}
-                    <a
-                      href={`${snapshot.source.split("?")[0]}?node-id=${item.id.replace(":", "-")}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {labText("查看此变体 ↗")}
-                    </a>
-                  </details>
+                      {item.reference && (
+                        <p>
+                          {labText("圆角 ")}
+                          {item.reference.radius}
+                          {labText(" · 间距 ")}
+                          {item.reference.gap}
+                          {labText(" · 字号 / 行高 ")}
+                          {item.reference.fontSize} / {item.reference.lineHeight}
+                          {labText(" · 原始内边距 X / Y ")}
+                          {item.reference.paddingX} / {item.reference.paddingY}
+                        </p>
+                      )}
+                      <a
+                        href={`${snapshot.source.split("?")[0]}?node-id=${item.id.replace(":", "-")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {labText("查看此变体 ↗")}
+                      </a>
+                    </details>
+                  </DesignOnly>
                 </article>
               ))}
           </div>

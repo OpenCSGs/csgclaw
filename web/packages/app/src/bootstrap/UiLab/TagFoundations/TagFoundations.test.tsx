@@ -1,3 +1,4 @@
+import { selectLabOption } from "../selectLabOption.test-helper";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -24,9 +25,9 @@ describe("TagFoundations", () => {
     await user.clear(screen.getByRole("textbox", { name: "标签文案" }));
     await user.type(screen.getByRole("textbox", { name: "标签文案" }), "产品设计");
     expect(within(screen.getByRole("region", { name: "标签交互试用" })).getByText("产品设计")).toBeVisible();
-    await user.click(screen.getByRole("radio", { name: "lg" }));
-    await user.click(screen.getByRole("radio", { name: "头像" }));
-    await user.click(screen.getByRole("radio", { name: "计数" }));
+    await selectLabOption(user, "标签尺寸", "lg");
+    await selectLabOption(user, "标签图标", "头像");
+    await selectLabOption(user, "标签操作", "计数");
     expect(
       within(screen.getByRole("article", { name: "Avatar Count 带复选框" })).getByText("样式待读取"),
     ).toBeVisible();

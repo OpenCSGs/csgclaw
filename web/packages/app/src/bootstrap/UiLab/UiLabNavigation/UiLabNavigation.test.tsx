@@ -31,6 +31,7 @@ describe("UI Lab directory", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(sectionFromHash("#input-foundations")).toBe("input-foundations");
     expect(sectionFromHash("#selection-controls")).toBe("selection-controls");
-    expect(sectionFromHash("#unknown")).toBe("design-foundations");
+    expect(sectionFromHash("#unknown")).toBe("components");
+    expect(sectionFromHash("")).toBe("components");
   });
 });

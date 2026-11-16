@@ -6,16 +6,6 @@
   border-radius: var(--radius-xl);
   background: var(--panel);
 }
-.heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-.heading h2 {
-  margin: 0;
-}
 .sourceButton {
   margin-inline-start: auto;
 }
@@ -23,7 +13,7 @@
   color: var(--muted);
   line-height: 1.6;
 }
-.foundation a:not(.sourceButton) {
+:where(.foundation) a:where(:not(.sourceButton)) {
   color: var(--primary);
 }
 .foundation details {
@@ -108,6 +98,16 @@
   min-block-size: 320px;
   margin-block-start: 16px;
 }
+.withReset {
+  position: relative;
+  padding-block-start: calc(var(--space-6) + 36px + var(--space-3));
+}
+
+.canvasReset {
+  position: absolute;
+  inset-block-start: calc(var(--space-6) - 1px);
+  inset-inline-end: calc(var(--space-6) - 1px);
+}
 .referenceScroll {
   display: flex;
   block-size: clamp(320px, 62vw, 640px);
@@ -156,10 +156,6 @@
   align-items: stretch;
   width: 240px;
   max-width: 100%;
-}
-.navigationDemo nav [aria-current="page"] {
-  background: var(--control-selected-background);
-  color: var(--accent-text);
 }
 .navigationDemo > section {
   flex: 1;
@@ -476,11 +472,6 @@
 }
 
 :global(:root[data-theme="dark"]) .reference[data-themed-reference] {
-  color: #cecfd2;
-}
-
-:global(:root[data-theme="dark"]) .navigationDemo nav [aria-current="page"] {
-  background: #22262f;
   color: #cecfd2;
 }
 
