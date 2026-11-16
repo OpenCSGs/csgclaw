@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveRestore, Trash2 } from "lucide-react";
-import { deleteArchivedAgent, fetchArchivedAgents, restoreAgent } from "@/api/agents";
+import { permanentlyDeleteAgent, fetchArchivedAgents, restoreAgent } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import { resolveAgentAvatarSource, type AgentLike } from "@/models/agents";
 import type { TranslateFn, UsersById } from "@/models/conversations";
@@ -60,7 +60,7 @@ export function ArchivedAgents({
     setBusy(true);
     setError("");
     try {
-      if (selection.deleting) await deleteArchivedAgent(selection.agent.id, name);
+      if (selection.deleting) await permanentlyDeleteAgent(selection.agent.id, name);
       else await restoreAgent(selection.agent.id);
       setNotice(t(selection.deleting ? "archivedAgentDeleted" : "archivedAgentRestored"));
       setSelection(null);

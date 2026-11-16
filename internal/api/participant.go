@@ -5,6 +5,7 @@ import (
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/identity"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/mcp"
@@ -97,6 +98,11 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			slog.LogAttrs(r.Context(), slog.LevelWarn, "create participant failed", attrs...)
 			if errors.Is(err, feishubind.ErrBotAppIDConflict) {
 				h.writeFeishuBotAppInfoError(w, err)
+				return
+			}
+			if channelName == participant.ChannelCSGClaw && req.Type == participant.TypeAgent &&
+				req.AgentBinding.Mode == participant.BindingModeCreate && errors.Is(err, identity.ErrNameExists) {
+				writeCodedAPIError(w, http.StatusConflict, "agent_name_conflict", err.Error())
 				return
 			}
 			billingURL := ""

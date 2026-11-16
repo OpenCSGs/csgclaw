@@ -626,6 +626,6 @@ export function restoreAgent(id: string): Promise<AgentLike> {
 export function fetchArchivedAgents(): Promise<AgentLike[]> {
   return get("api/v1/agents?archived=true&include_participants=true");
 }
-export function deleteArchivedAgent(id: string, name: string): Promise<void> {
+export function permanentlyDeleteAgent(id: string, name: string): Promise<void> {
   return del(`api/v1/agents/${encodeURIComponent(id)}`, { json: { name } });
 }

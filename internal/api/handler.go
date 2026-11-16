@@ -1194,15 +1194,16 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		h.agentArchiveMu.Lock()
 		defer h.agentArchiveMu.Unlock()
-		if err := h.validateArchivedDelete(r, id); err != nil {
-			if agentengine.ErrorCodeOf(err) == agentengine.ErrorAgentNotFound {
-				writeAgentGetError(w, err)
-				return
-			}
+		item, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{})
+		if err != nil {
+			writeAgentGetError(w, err)
+			return
+		}
+		if err := validateAgentDelete(r, item); err != nil {
 			writeAgentOperationError(w, err, http.StatusBadRequest)
 			return
 		}
-		id = agent.CanonicalID(id)
+		id = item.ID
 		if h.relayManager != nil {
 			release, err := h.relayManager.GuardAgentDeletion(id)
 			if err != nil {
@@ -1211,10 +1212,22 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			}
 			defer release()
 		}
+		// Use the archive execution gate to stop active work before purging.
+		// Direct deletion emits only the deletion notice.
+		if item.ArchivedAt == nil {
+			_, err = agents.SetArchived(r.Context(), id, true)
+			if err != nil && h.agentLifecycleState(id) != "archived" {
+				writeAgentOperationError(w, err, http.StatusBadRequest)
+				return
+			}
+		}
+		if pauseErr := h.pauseAgentWork(id, h.agentChatUserIDs(id)); err != nil || pauseErr != nil {
+			writeAgentOperationError(w, errors.Join(err, pauseErr), http.StatusInternalServerError)
+			return
+		}
 		// Resolve a verified legacy identity before deletion removes the agent
 		// record. Participant-backed identities are retired by DeleteAgent.
 		legacyUserID := h.legacyAgentChatUserID(id)
-		var err error
 		if h.participant != nil {
 			_, err = h.participant.DeleteAgent(r.Context(), id)
 		} else {

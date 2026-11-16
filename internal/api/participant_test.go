@@ -244,7 +244,7 @@ func TestCreateCSGClawAgentParticipantViaAPIReturnsConflictForDuplicateAgentName
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusConflict, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `agent name "generic-assistant-lite" already exists`) {
+	if !strings.Contains(rec.Body.String(), `"code":"agent_name_conflict"`) {
 		t.Fatalf("body = %q, want duplicate agent name error", rec.Body.String())
 	}
 }
