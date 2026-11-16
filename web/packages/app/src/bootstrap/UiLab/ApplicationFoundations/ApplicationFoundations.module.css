@@ -28,8 +28,6 @@
   font-weight: 500;
 }
 .demoSurface {
-  --button-font-family: "PingFang SC", sans-serif;
-  --button-font-weight: 500;
   font-family: "PingFang SC", sans-serif;
 }
 .liveStage:not([data-kind="messaging"]) p {

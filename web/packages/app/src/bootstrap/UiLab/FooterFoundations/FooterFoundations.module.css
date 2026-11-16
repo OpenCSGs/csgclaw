@@ -66,8 +66,6 @@
   width: 688px;
 }
 .footer {
-  --button-font-family: "PingFang SC", sans-serif;
-  --button-font-weight: 500;
   --btn-font-weight: 500;
   --radius-md: 8px;
   display: flex;

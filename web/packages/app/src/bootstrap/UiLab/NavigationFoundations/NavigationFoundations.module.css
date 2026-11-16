@@ -14,8 +14,6 @@
   color: var(--primary);
 }
 .stage {
-  --button-font-family: "PingFang SC", sans-serif;
-  --button-font-weight: 500;
   --primary-button-background: #3250bd;
   --primary-button-hover-background: #223b99;
   --on-primary: #fff;

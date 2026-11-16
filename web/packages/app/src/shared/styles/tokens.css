@@ -644,10 +644,6 @@
 /* Shared control state roles. */
 
 :root {
-  /* Button typography and text colors from the verified Figma export.
-     Keep these separate from general type weights and the legacy gray palette. */
-  --button-font-family: "MiSans", var(--font-family-text);
-  --button-font-weight: 380;
   --button-disabled-text: #a4a7ae;
   --button-danger-text: var(--error-600);
   --button-danger-hover-text: var(--error-700);

@@ -48,7 +48,7 @@ Boxed buttons and standard icon buttons use the confirmed Figma sm/md/lg/xl heig
 
 Loading disables activation, sets `aria-busy`, and displays a 20px spinner alongside `loadingLabel`. Without a loading label, plain child text is retained; supply a localized `loadingLabel` for composed labels. Icon buttons render only the spinner and keep their accessible label. Explicit `loadingLabel={null}` requests a spinner-only text button; provide an accessible name. Loading colors retain the variant's theme roles instead of using disabled colors.
 
-Button typography uses the dedicated `--button-font-family` (MiSans with the existing system fallback) and `--button-font-weight: 380` from the verified Figma Medium style. Synthetic weight/style is disabled. No MiSans font binary is bundled, so glyph fidelity still depends on local font availability. Button-specific gray, destructive, hover and disabled text roles match the light export without changing general text tokens; dark roles retain the existing product theme mapping until design modes are verified.
+Buttons use the shared UI text font stack, which starts with PingFang SC, and the shared medium font weight by default. Size variants can override the weight. Synthetic weight and style are disabled. Button-specific gray, destructive, hover and disabled text roles match the light export without changing general text tokens; dark roles retain the existing product theme mapping until design modes are verified.
 
 ## Breadcrumb
 
