@@ -51,6 +51,15 @@
   cursor: pointer;
 }
 
+.list[data-resource-kind="connector"] .option {
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.list[data-resource-kind="connector"] .option + .option {
+  margin-block-start: 4px;
+}
+
 .option > svg {
   flex-shrink: 0;
 }
@@ -99,6 +108,23 @@
   width: 100%;
   color: var(--muted);
   font-size: 12px;
+}
+
+.list[data-resource-kind="connector"] .copy {
+  column-gap: 8px;
+}
+
+.list[data-resource-kind="connector"] .copy strong {
+  font: var(--text-sm-medium);
+}
+
+.list[data-resource-kind="connector"] :is(.description, .reason) {
+  font: var(--text-xs-normal);
+}
+
+.list[data-resource-kind="connector"] .option:disabled {
+  opacity: 1;
+  color: var(--muted);
 }
 
 .footer {

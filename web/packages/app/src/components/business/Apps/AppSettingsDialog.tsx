@@ -605,6 +605,11 @@ function SecretInput({ t, ...props }: ComponentProps<typeof TextInput> & { t: Tr
   return (
     <div className={styles.secretInput}>
       <TextInput {...props} type={visible ? "text" : "password"} />
+      {!visible && props.value ? (
+        <span className={styles.secretMask} aria-hidden="true">
+          ••••••••
+        </span>
+      ) : null}
       <Button
         variant="tertiaryGray"
         size="sm"

@@ -667,8 +667,26 @@ fieldset.fields {
   flex-direction: column;
   gap: 8px;
 }
-.cliStatus > [role="status"] {
+.cliNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+  color: var(--text-secondary);
+  font: var(--text-sm-normal);
+}
+.cliNotice > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--primary);
+}
+.cliNotice > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .cliFooter {
   justify-content: space-between;
@@ -817,17 +835,33 @@ fieldset.fields {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-500) 24%, transparent);
 }
 .secretInput {
-  --input-padding-md: 10px 42px 10px 14px;
   display: flex;
   align-items: center;
   position: relative;
 }
-.secretInput input {
+.secretInput input[data-csg-control] {
   width: 100%;
+  min-width: 0;
+  padding-inline-end: 48px;
+}
+.secretInput:has(.secretMask) input:not(:focus) {
+  color: transparent;
+}
+.secretMask {
+  position: absolute;
+  inset-inline-start: 14px;
+  color: var(--text);
+  letter-spacing: 0.12em;
+  pointer-events: none;
+}
+.secretInput:has(input:focus) .secretMask {
+  display: none;
 }
 .secretInput > button {
   position: absolute;
-  right: 4px;
+  inset-inline-end: 4px;
+  width: 36px;
+  padding-inline: 0;
 }
 .probeResult {
   display: flex;

@@ -126,7 +126,14 @@ export function ConversationResourcePicker({
       }}
     >
       <section ref={pickerRef} className={styles.picker} style={{ maxHeight: pickerMaxHeight }} aria-label={label}>
-        <div id={listID} role="listbox" aria-label={label} aria-busy={resource.loading} className={styles.list}>
+        <div
+          id={listID}
+          role="listbox"
+          aria-label={label}
+          aria-busy={resource.loading}
+          className={styles.list}
+          data-resource-kind={kind}
+        >
           {resource.items.map((item, index) => {
             const key = resourceKey(item);
             const disabled = !available.includes(item);
