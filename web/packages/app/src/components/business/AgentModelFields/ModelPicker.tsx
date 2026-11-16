@@ -7,6 +7,7 @@ export type ModelPickerProps = {
   value: string;
   providerID?: string;
   models: readonly string[];
+  modelBadges?: (model: string) => readonly string[];
   disabled?: boolean;
   required?: boolean;
   placeholder: string;
@@ -20,6 +21,7 @@ export function ModelPicker({
   value,
   providerID = "",
   models,
+  modelBadges,
   disabled,
   required,
   placeholder,
@@ -32,7 +34,7 @@ export function ModelPicker({
   const modelLabel = (model: string, showBadge = true) => (
     <ModelOptionLabel
       model={isAuto(model) ? t("modelProviderAutoName") : model}
-      badge={isAuto(model) && showBadge ? t("modelProviderAutoBadge") : undefined}
+      badges={showBadge ? (isAuto(model) ? [t("modelProviderAutoBadge")] : modelBadges?.(model)) : undefined}
       title={isAuto(model) ? t("modelProviderAutoRouteHint") : undefined}
       showAvatar={false}
     />

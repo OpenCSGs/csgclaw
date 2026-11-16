@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Field, Select } from "@/components/ui";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
 import {
@@ -16,6 +17,9 @@ export type AgentModelFieldsProps = {
   modelID: string;
   models: readonly string[];
   busy?: boolean;
+  deferModelSelection?: boolean;
+  modelHint?: ReactNode;
+  modelSaveError?: string;
   onPatch: (patch: Partial<AgentDraft>) => void;
   onRequireOpenCSGAuth: () => boolean;
   t: TranslateFn;
@@ -27,6 +31,9 @@ export function AgentModelFields({
   modelID,
   models,
   busy = false,
+  deferModelSelection = false,
+  modelHint,
+  modelSaveError,
   onPatch,
   onRequireOpenCSGAuth,
   t,
@@ -34,10 +41,10 @@ export function AgentModelFields({
   providerOptions = providerOptions.filter(
     (option) =>
       !option.disabled &&
-      option.models.some((model) => !option.imageModels?.includes(model) && !option.videoModels?.includes(model)),
+      ((deferModelSelection && (option.id === providerID || option.models.length === 0)) ||
+        option.models.some((model) => !option.imageModels?.includes(model) && !option.videoModels?.includes(model))),
   );
   const selectedProvider = providerOptions.find((option) => option.id === providerID);
-  const modelChoices = modelID && !models.includes(modelID) ? [modelID, ...models] : [...models];
   return (
     <>
       <Field required label={t("profileModelProvider")}>
@@ -61,7 +68,7 @@ export function AgentModelFields({
             onPatch({
               provider: providerNameForProviderID(provider.id),
               model_provider_id: provider.id,
-              model_id: defaultModelIDForProvider(provider.id, provider.models),
+              model_id: deferModelSelection ? "" : defaultModelIDForProvider(provider.id, provider.models),
             });
           }}
           options={providerOptions.map((option) => ({
@@ -82,11 +89,11 @@ export function AgentModelFields({
           }))}
         />
       </Field>
-      <Field required label={t("profileModel")}>
+      <Field required label={t("profileModel")} hint={modelHint} error={modelSaveError}>
         <ConnectedModelPicker
           selectionLabel="model"
           placeholder={t(providerID ? "profileSelectModel" : "profileProviderSelectFirst")}
-          providers={selectedProvider ? [{ ...selectedProvider, models: modelChoices }] : []}
+          providers={selectedProvider ? [{ ...selectedProvider, models: [...models] }] : []}
           providerID={providerID}
           modelID={modelID}
           disabled={busy || !selectedProvider || selectedProvider.disabled || !models.length}

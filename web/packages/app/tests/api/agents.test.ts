@@ -11,7 +11,7 @@ import {
   fetchAgentMCPServers,
   fetchAgentProfileModels,
   startFeishuRegistrationRequest,
-  updateAgentMemoryEnabled,
+  updateAgentMemory,
 } from "@/api/agents";
 
 function mockFetch(): Mock<typeof fetch> {
@@ -39,7 +39,7 @@ describe("agents API", () => {
         api_key: "previous-test-key",
         headers: { "X-Previous": "previous" },
       }),
-    ).resolves.toEqual({ models: ["new-model"] });
+    ).resolves.toEqual({ models: ["new-model"], providerStatus: "connected" });
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
       "api/v1/model-providers/new-provider/check",
       expect.objectContaining({ method: "POST", body: "{}" }),
@@ -158,14 +158,14 @@ describe("agents API", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await fetchAgentMemoryDocument("u-manager");
-    await updateAgentMemoryEnabled("u-manager", false);
+    await updateAgentMemory("u-manager", 7, { enabled: false });
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, "api/v1/agents/u-manager/memory", expect.anything());
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "api/v1/agents/u-manager/memory",
       expect.objectContaining({
-        body: JSON.stringify({ enabled: false }),
+        body: JSON.stringify({ revision: 7, enabled: false }),
         method: "PUT",
       }),
     );
@@ -218,7 +218,9 @@ describe("资源启用请求", () => {
         new Response("[]", { headers: { "content-type": "application/json", ETag: '"version-2"' } }),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ enabled: false }), { headers: { "content-type": "application/json" } }),
+        new Response(JSON.stringify({ revision: 7, enabled: false }), {
+          headers: { "content-type": "application/json" },
+        }),
       );
     vi.stubGlobal("fetch", fetchMock);
     await setAgentResourceEnabled("agent-1", kind, "reviewer", false);

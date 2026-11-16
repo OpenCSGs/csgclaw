@@ -27,17 +27,17 @@ type VideoGenerationTask struct {
 }
 
 type videoGenerationKey struct{}
-type VideoGenerationHandler func(context.Context, string, string, modelprovider.VideoGenerationOptions) error
+type VideoGenerationHandler func(context.Context, string, string, modelprovider.VideoGenerationOptions, ...int) error
 
 func WithVideoGenerationHandler(ctx context.Context, handler VideoGenerationHandler) context.Context {
 	return context.WithValue(ctx, videoGenerationKey{}, handler)
 }
-func GenerateVideo(ctx context.Context, id, prompt string, options modelprovider.VideoGenerationOptions) error {
+func GenerateVideo(ctx context.Context, id, prompt string, options modelprovider.VideoGenerationOptions, references ...int) error {
 	handler, ok := ctx.Value(videoGenerationKey{}).(VideoGenerationHandler)
 	if !ok || handler == nil {
 		return fmt.Errorf("video generation is unavailable in this conversation")
 	}
-	return handler(ctx, id, prompt, options)
+	return handler(ctx, id, prompt, options, references...)
 }
 func CloneVideoGenerationTask(task VideoGenerationTask) VideoGenerationTask {
 	task.Model = modelprovider.CloneVideoGeneration(task.Model)

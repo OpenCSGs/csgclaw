@@ -1,0 +1,42 @@
+.updated {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  color: var(--success-700);
+  background: var(--success-background);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+:global([data-theme="dark"]) .updated {
+  color: var(--success-400);
+}
+
+.updated svg {
+  width: 12px;
+  height: 12px;
+}
+
+.forget {
+  border: 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.forget:hover,
+.forget:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.enable {
+  display: flex;
+  justify-content: center;
+  padding-block: 4px;
+}

@@ -147,6 +147,8 @@ func Run(opts Options) error {
 		}()
 	}
 	handler := newHandler(opts)
+	closeMemory := startAgentMemory(runCtx, opts, handler)
+	defer closeMemory()
 	if err := handler.MigrateSessionWorkspaces(); err != nil {
 		_ = listener.Close()
 		return fmt.Errorf("migrate session workspace attachments: %w", err)
@@ -156,6 +158,7 @@ func Run(opts Options) error {
 		return fmt.Errorf("initialize relay: %w", err)
 	}
 	defer handler.CloseRelay()
+	defer handler.CloseBrowser()
 	if opts.AppsStatePath != "" {
 		if err := handler.EnableConnectors(opts.AppsStatePath); err != nil {
 			_ = listener.Close()

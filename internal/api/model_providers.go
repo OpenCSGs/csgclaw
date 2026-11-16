@@ -117,6 +117,7 @@ func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
 		provider.Models = checked.Models
 		provider.ModelMetadata = checked.ModelMetadata
 		provider.ImageModels = checked.ImageModels
+		provider.ImageMetadata = checked.ImageMetadata
 		provider.VideoModels = checked.VideoModels
 		provider.VisionModels = checked.VisionModels
 		provider.ModelSource = checked.ModelSource

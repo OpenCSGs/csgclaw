@@ -77,7 +77,7 @@ function buttonContent(
   variant: ButtonVariant,
   iconOnly = false,
 ) {
-  if (variant.startsWith("link") || iconOnly) return children;
+  if (variant !== "secondaryGray" || iconOnly) return children;
   return Children.map(children, (child) =>
     typeof child === "string" || typeof child === "number" ? (
       <span className={styles["btn-label"]}>{child}</span>
@@ -114,15 +114,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       typeof children === "string" || typeof children === "number"
         ? String(children)
         : undefined;
-    const plainChildren = Children.toArray(children).filter(
-      (child) => typeof child === "string" || typeof child === "number",
-    );
-    const loadingContent =
-      loadingLabel === undefined
-        ? plainChildren.length
-          ? plainChildren
-          : children
-        : loadingLabel;
 
     return (
       <button
@@ -142,12 +133,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         aria-label={
           ariaLabel ??
-          (loading
-            ? (loadingAccessibleLabel ??
-              (iconOnly || loadingContent == null || loadingContent === false
-                ? childAccessibleLabel
-                : undefined))
-            : undefined)
+          (loading ? loadingAccessibleLabel || childAccessibleLabel : undefined)
         }
         aria-busy={ariaBusy ?? (loading ? true : undefined)}
         {...props}
@@ -158,16 +144,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             legacyClassName("btn-content"),
           )}
         >
-          {loading ? (
+          {buttonContent(children, variant, iconOnly)}
+        </span>
+        {loading ? (
+          <span className={styles["btn-loading-overlay"]} aria-hidden="true">
             <span
               className={styles["btn-loading-spinner"]}
               aria-hidden="true"
             />
-          ) : null}
-          {loading
-            ? !iconOnly && buttonContent(loadingContent, variant)
-            : buttonContent(children, variant, iconOnly)}
-        </span>
+          </span>
+        ) : null}
       </button>
     );
   },

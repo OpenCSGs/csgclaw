@@ -39,7 +39,10 @@ func (s *ModelConfiguration) GenerateVideo(ctx context.Context, ref *modelprovid
 		if len(via) >= 5 {
 			return http.ErrUseLastResponse
 		}
-		if len(via) > 0 && !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
+		if len(via) > 0 && (!strings.EqualFold(req.URL.Host, via[0].URL.Host) || req.URL.Scheme != via[0].URL.Scheme) {
+			if options.Reference != nil && req.Method == http.MethodPost {
+				return http.ErrUseLastResponse
+			}
 			req.Header.Del("Authorization")
 			for name := range profile.Headers {
 				req.Header.Del(name)

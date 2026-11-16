@@ -573,10 +573,12 @@ func TestDecodeRuntimeOptionsPermissionMode(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{name: "empty defaults to workspace", want: PermissionModeWorkspaceWrite},
+		{name: "empty defaults to full access", want: PermissionModeDangerFullAccess},
+		{name: "blank defaults to full access", raw: map[string]any{PermissionModeOptionKey: " "}, want: PermissionModeDangerFullAccess},
+		{name: "explicit workspace", raw: map[string]any{PermissionModeOptionKey: PermissionModeWorkspaceWrite}, want: PermissionModeWorkspaceWrite},
 		{name: "read only", raw: map[string]any{PermissionModeOptionKey: " read-only "}, want: PermissionModeReadOnly},
 		{name: "full access", raw: map[string]any{PermissionModeOptionKey: PermissionModeDangerFullAccess}, want: PermissionModeDangerFullAccess},
-		{name: "legacy executable ignored", raw: map[string]any{"executable_path": "/opt/dsh"}, want: PermissionModeWorkspaceWrite},
+		{name: "legacy executable ignored", raw: map[string]any{"executable_path": "/opt/dsh"}, want: PermissionModeDangerFullAccess},
 		{name: "invalid", raw: map[string]any{PermissionModeOptionKey: "auto"}, wantErr: true},
 		{name: "non string", raw: map[string]any{PermissionModeOptionKey: true}, wantErr: true},
 	}
@@ -643,6 +645,10 @@ func TestRuntimeConfigChangeDropsPersistedSessionMappings(t *testing.T) {
 	if changed || legacySessions["room-legacy"] != "session-legacy" {
 		t.Fatalf("legacy default permission sessions = %v, changed = %v", legacySessions, changed)
 	}
+	reset, changed = sessionsForRuntimeConfig(legacy, PermissionModeDangerFullAccess, defaultWorkspace, defaultWorkspace)
+	if !changed || len(reset) != 0 {
+		t.Fatalf("legacy sessions after enabling full access = %v, changed = %v; want empty reset", reset, changed)
+	}
 	reset, changed = sessionsForRuntimeConfig(persisted, PermissionModeWorkspaceWrite, otherWorkspace, defaultWorkspace)
 	if !changed || len(reset) != 0 {
 		t.Fatalf("changed workspace sessions = %v, changed = %v; want empty reset", reset, changed)
@@ -662,7 +668,7 @@ func TestRuntimeOptionsSchemaExposesPermissionModes(t *testing.T) {
 			break
 		}
 	}
-	if schema == nil || schema.DefaultValue != PermissionModeWorkspaceWrite || len(schema.Choices) != 3 {
+	if schema == nil || schema.DefaultValue != PermissionModeDangerFullAccess || len(schema.Choices) != 3 {
 		t.Fatalf("permission mode schema = %#v", schema)
 	}
 	if schema.Choices[0].Value != PermissionModeWorkspaceWrite || schema.Choices[1].Value != PermissionModeReadOnly || schema.Choices[2].Value != PermissionModeDangerFullAccess {

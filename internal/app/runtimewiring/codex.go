@@ -37,8 +37,9 @@ func WithCodexRuntime() agent.ControllerOption {
 				}
 				return models
 			},
-			ResolveRoomProfile: s.TaskRuntimeProfile,
-			BinaryProvider:     codexcli.Provider{},
+			ResolveRoomProfile:  s.TaskRuntimeProfile,
+			DisableNativeMemory: true,
+			BinaryProvider:      codexcli.Provider{},
 			MaterializeMCPServers: func(ctx context.Context, servers map[string]any) (map[string]any, error) {
 				return s.MaterializeRuntimeMCPServers(ctx, agent.RuntimeKindCodex, servers)
 			},

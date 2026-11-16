@@ -8,7 +8,6 @@ import (
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/modelusage"
-	"csgclaw/internal/processgroup"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -155,11 +154,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		// Keep completed-turn exports timely; this does not block the turn itself.
 		cmd.Env = append(cmd.Env, "OTEL_BSP_SCHEDULE_DELAY=1000")
 	}
-	logStartOffset := int64(0)
-	if info, err := stderrFile.Stat(); err == nil {
-		logStartOffset = info.Size()
-	}
-	cmd.Stderr = stderrFile
+
 	if sysProcAttr := newSessionSysProcAttr(); sysProcAttr != nil {
 		cmd.SysProcAttr = sysProcAttr
 	}
@@ -178,7 +173,8 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		return nil, fmt.Errorf("codex app-server stdout pipe: %w", err)
 	}
 	cmd.Stdout = stdoutWriter
-	if err := processgroup.Start(cmd); err != nil {
+	workerLog, err := diagnostics.StartWithStderr(cmd, stderrFile, "codex", spec.RuntimeID)
+	if err != nil {
 		_ = stdoutWriter.Close()
 		_ = stdout.Close()
 		_ = stdin.Close()
@@ -189,10 +185,10 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 
 	_ = stdoutWriter.Close()
 
-	diagnosticObserver := diagnostics.NewRuntimeObserver(spec.StderrPath, spec.RuntimeID, cmd.Process.Pid, logStartOffset, stderrFile)
+	diagnosticObserver := workerLog.Observer
 	diagnosticObserver.Bind(ctx)
 	defer diagnosticObserver.End(ctx)
-	logger := slog.New(diagnostics.NewServerLogHandler(stderrFile, slog.LevelInfo, nil))
+	logger := slog.New(diagnostics.NewServerLogHandler(workerLog, slog.LevelInfo, nil))
 	appClient := newAppServerClient(stdin, logger)
 	conversationSessions := cloneConversationSessions(spec.ConversationSessions)
 	if conversationSessions == nil {
@@ -210,7 +206,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		mcpCatalogRevision:    spec.MCPCatalogRevision,
 		cmd:                   cmd,
 		stdin:                 stdin,
-		stderr:                stderrFile,
+		stderr:                workerLog,
 		done:                  make(chan struct{}),
 		spec:                  spec,
 		appClient:             appClient,
@@ -340,7 +336,7 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 	}
 	if live.cmd != nil && live.cmd.Process != nil {
 		if err := stopProcess(live.cmd.Process.Pid); err != nil {
-			return err
+			return fmt.Errorf("stop tracked app-server pid=%d: %w", live.cmd.Process.Pid, err)
 		}
 	}
 
@@ -351,7 +347,10 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 		live.mu.Lock()
 		stopErr := live.stopErr
 		live.mu.Unlock()
-		return stopErr
+		if stopErr != nil {
+			return fmt.Errorf("cleanup tracked app-server pid=%d: %w", live.cmd.Process.Pid, stopErr)
+		}
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timeout.C:
@@ -408,19 +407,25 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
-	selectedModel, err := live.resolveTurnModel(req.Model)
+	spec := roomThreadSpec(ctx, live.spec)
+	model := req.Model
+	if _, scoped := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); scoped && model == nil {
+		selected := turnModelFromProfile(spec.Profile)
+		model = &selected
+	}
+	selectedModel, err := live.resolveTurnModel(model)
 	if err != nil {
 		return PromptResponse{}, err
 	}
 
 	live.diagnosticObserver.Bind(ctx)
 	defer live.diagnosticObserver.End(ctx)
-	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": live.spec.WorkspaceDir, "stderr_path": live.spec.StderrPath, "profile": live.spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
-	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
+	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": spec.WorkspaceDir, "stderr_path": spec.StderrPath, "profile": spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
+	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(spec.WorkspaceDir, "AGENTS.md"), filepath.Join(spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
 	diagnostics.From(ctx).Capture("runtime.turn_model", selectedModel)
 	diagnostics.From(ctx).RuntimeInfo("codex", selectedModel.ModelID)
 	live.appClient.logInfoContext(ctx, "model request configuration", "model", selectedModel.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
-	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, req.Model != nil)
+	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, model != nil)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
@@ -428,6 +433,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	waiter.mu.Lock()
 	waiter.diagnostic = diagnostics.From(ctx)
 	waiter.textOnlyUserInput = req.TextOnlyUserInput
+	waiter.streamReasoningSummary = req.StreamReasoningSummary
 	waiter.mu.Unlock()
 	defer func() { live.removeAppServerTurnWaiter(sessionID, waiter) }()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
@@ -437,7 +443,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		live.clearAppServerTurnContext(sessionID, waiter)
 	}()
 
-	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
+	params := appServerTurnStartParamsForContext(ctx, live.spec, sessionID, promptInput, req.ClientUserMessageID)
 	applyTurnModelParams(params, selectedModel)
 	turnStartAt := time.Now()
 	live.appClient.logDebugContext(ctx, "codex app-server turn start request",
@@ -527,6 +533,11 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 	conversationKey = strings.TrimSpace(conversationKey)
 	if conversationKey == "" {
 		return strings.TrimSpace(live.session.SessionID), nil
+	}
+
+	logicalKey := contract.LogicalRuntimeSessionKey(conversationKey)
+	if err := m.removeConversationBindings(live, logicalKey, conversationKey); err != nil {
+		return "", err
 	}
 
 	live.mu.Lock()
@@ -692,34 +703,51 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 		return err
 	}
 
+	return m.removeConversationBindings(live, conversationKey, "")
+}
+
+func (m *appServerManager) removeConversationBindings(live *liveSession, logicalKey, keep string) error {
 	live.conversationPersistMu.Lock()
 	defer live.conversationPersistMu.Unlock()
+	type binding struct {
+		key, sessionID    string
+		loaded, publishes bool
+	}
 	live.mu.Lock()
-	sessionID := strings.TrimSpace(live.conversationSessions[conversationKey])
-	delete(live.conversationSessions, conversationKey)
-	wasLoaded := live.loadedConversations[conversationKey]
-	delete(live.loadedConversations, conversationKey)
-	wasFilePublishing := live.filePublishingThreads[sessionID]
-	delete(live.filePublishingThreads, sessionID)
+	var removed []binding
+	for key, sessionID := range live.conversationSessions {
+		if key == keep || contract.LogicalRuntimeSessionKey(key) != logicalKey {
+			continue
+		}
+		removed = append(removed, binding{key, sessionID, live.loadedConversations[key], live.filePublishingThreads[sessionID]})
+		delete(live.conversationSessions, key)
+		delete(live.loadedConversations, key)
+		delete(live.filePublishingThreads, sessionID)
+	}
+	if len(removed) == 0 {
+		live.mu.Unlock()
+		return nil
+	}
 	conversations := cloneConversationSessions(live.conversationSessions)
-	filePublishingConversations := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
+	filePublishing := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
 	live.mu.Unlock()
-	if err := m.persistConversationSessions(live, conversations, filePublishingConversations); err != nil {
+	if err := m.persistConversationSessions(live, conversations, filePublishing); err != nil {
 		live.mu.Lock()
-		if sessionID != "" {
-			live.conversationSessions[conversationKey] = sessionID
-			live.loadedConversations[conversationKey] = wasLoaded
-			live.filePublishingThreads[sessionID] = wasFilePublishing
+		for _, item := range removed {
+			live.conversationSessions[item.key] = item.sessionID
+			live.loadedConversations[item.key] = item.loaded
+			live.filePublishingThreads[item.sessionID] = item.publishes
 		}
 		live.mu.Unlock()
 		return err
 	}
-
-	if m.deps.Permission != nil && sessionID != "" {
-		m.deps.Permission.CancelSession(runtimeID, sessionID)
-	}
-	if m.deps.UserInput != nil && sessionID != "" {
-		m.deps.UserInput.CancelSession(runtimeID, sessionID)
+	for _, item := range removed {
+		if m.deps.Permission != nil {
+			m.deps.Permission.CancelSession(live.spec.RuntimeID, item.sessionID)
+		}
+		if m.deps.UserInput != nil {
+			m.deps.UserInput.CancelSession(live.spec.RuntimeID, item.sessionID)
+		}
 	}
 	return nil
 }
@@ -745,6 +773,23 @@ func (m *appServerManager) persistConversationSessions(
 	return m.deps.OnConversationSessionsChange(live.session, conversations, filePublishing)
 }
 
+func (m *appServerManager) persistSessionMetadata(session *Session, save func(*Session) error) error {
+	live := m.liveSession(session.RuntimeID)
+	if live == nil || !live.session.StartedAt.Equal(session.StartedAt) {
+		return fmt.Errorf("Codex runtime %q changed before persisting session metadata", session.RuntimeID)
+	}
+	live.conversationPersistMu.Lock()
+	defer live.conversationPersistMu.Unlock()
+	if m.liveSession(session.RuntimeID) != live {
+		return fmt.Errorf("Codex runtime %q changed before persisting session metadata", session.RuntimeID)
+	}
+	live.mu.Lock()
+	session.ConversationSessions = cloneConversationSessions(live.conversationSessions)
+	session.FilePublishingConversations = filePublishingConversationsForThreads(session.ConversationSessions, live.filePublishingThreads)
+	live.mu.Unlock()
+	return save(session)
+}
+
 func (m *appServerManager) ensureLiveSession(ctx context.Context, handle SessionHandle) (*liveSession, error) {
 	runtimeID := strings.TrimSpace(handle.RuntimeID)
 	if runtimeID == "" {
@@ -752,6 +797,14 @@ func (m *appServerManager) ensureLiveSession(ctx context.Context, handle Session
 	}
 	if live := m.liveSession(runtimeID); live != nil {
 		return live, nil
+	}
+	// A room-scoped turn acquired a lease on the process during preparation.
+	// A crashed process can only be recovered by the next preparation, with
+	// the base Agent settings for the default thread.
+	if ctx != nil {
+		if _, scoped := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); scoped {
+			return nil, os.ErrNotExist
+		}
 	}
 	if m.deps.HydrateSession == nil {
 		return nil, os.ErrNotExist
@@ -830,7 +883,7 @@ func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSe
 }
 
 func (m *appServerManager) startThread(ctx context.Context, live *liveSession, publishFiles bool) (string, error) {
-	params := appServerThreadStartParams(live.spec, publishFiles)
+	params := roomThreadParams(ctx, appServerThreadStartParams(roomThreadSpec(ctx, live.spec), publishFiles))
 	raw, err := live.appClient.request(ctx, "thread/start", params)
 	if err != nil {
 		return "", err
@@ -839,7 +892,7 @@ func (m *appServerManager) startThread(ctx context.Context, live *liveSession, p
 }
 
 func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, threadID string) (string, error) {
-	params := appServerThreadResumeParams(live.spec, threadID)
+	params := roomThreadParams(ctx, appServerThreadResumeParams(roomThreadSpec(ctx, live.spec), threadID))
 	raw, err := live.appClient.request(ctx, "thread/resume", params)
 	if err != nil {
 		return "", err
@@ -944,6 +997,14 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 
 func appServerTurnStartParams(spec SessionSpec, threadID string, prompt string) map[string]any {
 	return appServerTurnStartParamsWithInput(spec, threadID, []map[string]any{{"type": "text", "text": prompt}}, "")
+}
+
+func appServerTurnStartParamsForContext(ctx context.Context, spec SessionSpec, threadID string, input []map[string]any, clientUserMessageID string) map[string]any {
+	params := appServerTurnStartParamsWithInput(roomThreadSpec(ctx, spec), threadID, input, clientUserMessageID)
+	if room, ok := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); ok {
+		params["cwd"] = room.WorkspaceDir
+	}
+	return params
 }
 
 func appServerTurnStartParamsWithInput(spec SessionSpec, threadID string, input []map[string]any, clientUserMessageID string) map[string]any {
@@ -1103,7 +1164,9 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 			return appServerDynamicToolResponse(false, "image generation is unavailable in read-only mode"), nil
 		}
 		var args struct {
-			Prompt string `json:"prompt"`
+			Prompt          string `json:"prompt"`
+			ReferenceImages []int  `json:"reference_images"`
+			modelprovider.ImageGenerationOptions
 		}
 		if json.Unmarshal(params.Arguments, &args) != nil {
 			return appServerDynamicToolResponse(false, "invalid image generation arguments"), nil
@@ -1112,7 +1175,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if !ok {
 			return appServerDynamicToolResponse(false, "image generation requires an active turn"), nil
 		}
-		if err := contract.GenerateImage(ctx, params.CallID, args.Prompt); err != nil {
+		if err := contract.GenerateImage(ctx, params.CallID, args.Prompt, args.ReferenceImages, args.ImageGenerationOptions); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "Image generated and delivered to the current conversation. Do not generate again or publish another copy. Continue responding using the original chat model."), nil
@@ -1122,9 +1185,10 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 			return appServerDynamicToolResponse(false, "video generation is unavailable in read-only mode"), nil
 		}
 		var args struct {
-			Prompt  string `json:"prompt"`
-			Size    string `json:"size"`
-			Seconds int    `json:"seconds"`
+			Prompt          string `json:"prompt"`
+			Size            string `json:"size"`
+			Seconds         int    `json:"seconds"`
+			ReferenceImages []int  `json:"reference_images"`
 		}
 		if json.Unmarshal(params.Arguments, &args) != nil {
 			return appServerDynamicToolResponse(false, "invalid video generation arguments"), nil
@@ -1133,7 +1197,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if !ok {
 			return appServerDynamicToolResponse(false, "video generation requires an active turn"), nil
 		}
-		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds}); err != nil {
+		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds}, args.ReferenceImages...); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "Video generation was submitted. Briefly acknowledge submission without describing a transient status such as still generating, downloading, completed, or delivered. The attached task card is the source of truth and updates automatically. Do not publish another copy."), nil
@@ -1150,7 +1214,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if !ok {
 			return appServerDynamicToolResponse(false, "file upload is unavailable outside an active turn"), nil
 		}
-		if err := uploadAppServerWorkspaceFile(uploadCtx, live.spec, args); err != nil {
+		if err := uploadAppServerWorkspaceFile(uploadCtx, roomThreadSpec(uploadCtx, live.spec), args); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "File uploaded successfully. Continue by calling the MCP parse tool with its file ID."), nil
@@ -1480,13 +1544,24 @@ func appServerPromptInput(req PromptRequest) ([]map[string]any, error) {
 		return nil, fmt.Errorf("prompt input is required")
 	}
 	input := make([]map[string]any, 0, len(req.Prompt))
+	appendText := func(text string) {
+		// Codex concatenates separate text inputs without adding a separator.
+		// Keep logical prompt blocks distinct, as appServerPromptText does,
+		// while retaining the position of native image inputs.
+		if len(input) > 0 && input[len(input)-1]["type"] == "text" {
+			previous := input[len(input)-1]
+			previous["text"] = previous["text"].(string) + "\n\n" + text
+			return
+		}
+		input = append(input, map[string]any{"type": "text", "text": text})
+	}
 	for _, block := range req.Prompt {
 		switch {
 		case block.Text != nil:
 			if strings.TrimSpace(block.Text.Text) == "" {
 				return nil, fmt.Errorf("prompt text is required")
 			}
-			input = append(input, map[string]any{"type": "text", "text": block.Text.Text})
+			appendText(block.Text.Text)
 		case block.LocalImage != nil:
 			path := strings.TrimSpace(block.LocalImage.Path)
 			if path == "" {
@@ -1498,7 +1573,7 @@ func appServerPromptInput(req PromptRequest) ([]map[string]any, error) {
 			if text == "" {
 				return nil, fmt.Errorf("prompt resource is empty")
 			}
-			input = append(input, map[string]any{"type": "text", "text": text})
+			appendText(text)
 		default:
 			return nil, fmt.Errorf("unsupported prompt content block for codex app-server")
 		}
@@ -1548,6 +1623,8 @@ type appServerTurnWaiter struct {
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
 	progressSequence         uint64
+	streamReasoningSummary   bool
+	reasoningSummaries       map[string]*appServerReasoningSummary
 	structuredOutputBoundary bool
 	textOnlyUserInput        bool
 }
@@ -1936,6 +2013,24 @@ func (w *appServerTurnWaiter) wake(result appServerTurnResult) {
 	case w.ch <- result:
 	default:
 	}
+}
+
+func (w *appServerTurnWaiter) reasoningStream(turnID string) (active, summary bool) {
+	if w == nil {
+		return false, false
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if !w.accepted || (turnID != "" && w.turnID != turnID) {
+		return false, false
+	}
+	if _, ended := w.terminalResults[w.turnID]; ended {
+		return false, false
+	}
+	if _, ended := w.terminalResults[""]; ended {
+		return false, false
+	}
+	return true, w.streamReasoningSummary
 }
 
 func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter {
@@ -2421,6 +2516,9 @@ func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSess
 	reader.drain()
 	cleanupErr := stopProcessTree(live.cmd.Process.Pid)
 	<-stdoutDone
+	if live.stderr != nil {
+		live.stderr.Drain()
+	}
 	live.mu.Lock()
 	live.stopErr = cleanupErr
 	live.mu.Unlock()
@@ -2532,13 +2630,23 @@ func redactSecretishLine(line string) string {
 func appServerGenerateImageToolSpec() map[string]any {
 	return map[string]any{
 		"name":        "csgclaw_generate_image",
-		"description": "Generate one image from the user's requested description using this Agent's configured image generation model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile; do not retry automatically.",
-		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."}}, "required": []string{"prompt"}, "additionalProperties": false},
+		"description": "Generate or edit one image from the user's requested description and optional reference images using this Agent's configured image generation model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile; do not retry automatically.",
+		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"reference_images": appServerReferenceImagesSchema(modelprovider.MaxImageEditReferences), "size": map[string]any{"type": "string", "description": "Output dimensions supported by the configured image model, for example 1024x1024."}, "resolution": map[string]any{"type": "string", "description": "Provider-specific resolution tier. Use only when required by the configured provider and the supported tier is known."}, "prompt": map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."}}, "required": []string{"prompt"}, "additionalProperties": false},
 	}
 }
 
 func appServerGenerateVideoToolSpec() map[string]any {
-	return map[string]any{"name": "csgclaw_generate_video", "description": "Generate one video using this Agent's configured video model and deliver it to the conversation. Omit size or seconds unless the user explicitly supplied them; CSGClaw applies the selected model's advertised defaults and validates explicit values.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string"}, "size": map[string]any{"type": "string", "description": "Optional provider-advertised size value. Do not convert it to width x height or guess a value."}, "seconds": map[string]any{"type": "integer", "minimum": 1, "description": "Optional requested duration. Omit when the user did not specify one."}}, "required": []string{"prompt"}, "additionalProperties": false}}
+	return map[string]any{"name": "csgclaw_generate_video", "description": "Generate one video with an optional first-frame reference image using this Agent's configured video model and deliver it to the conversation. Omit size or seconds unless the user explicitly supplied them; CSGClaw applies the selected model's advertised defaults and validates explicit values.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"reference_images": appServerReferenceImagesSchema(1), "prompt": map[string]any{"type": "string"}, "size": map[string]any{"type": "string", "description": "Optional provider-advertised size value. Do not convert it to width x height or guess a value."}, "seconds": map[string]any{"type": "integer", "minimum": 1, "description": "Optional requested duration. Omit when the user did not specify one."}}, "required": []string{"prompt"}, "additionalProperties": false}}
+}
+
+func appServerReferenceImagesSchema(maxItems int) map[string]any {
+	return map[string]any{
+		"type":        "array",
+		"description": "Indices of the attached images the user wants to use as references. Use the numbered image labels in the current turn. Omit for text-only generation.",
+		"items":       map[string]any{"type": "integer", "minimum": 1},
+		"uniqueItems": true,
+		"maxItems":    maxItems,
+	}
 }
 
 // Explicit per-thread values override settings retained by cold-resumed threads.

@@ -1,6 +1,7 @@
 package apitypes
 
 import (
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/taskconfig"
 	"encoding/json"
 	"io"
@@ -31,20 +32,21 @@ type LegacyBot struct {
 }
 
 type User struct {
-	AgentState   string        `json:"agent_state,omitempty"`
-	AgentID      string        `json:"agent_id,omitempty"`
-	DeletedAt    *time.Time    `json:"deleted_at,omitempty"`
-	ID           string        `json:"id"`
-	Name         string        `json:"name"`
-	Description  string        `json:"description,omitempty"`
-	Locale       string        `json:"locale,omitempty"`
-	Role         string        `json:"role"`
-	Avatar       string        `json:"avatar"`
-	IsOnline     bool          `json:"is_online"`
-	LastSeen     string        `json:"last_seen,omitempty"`
-	AccentHex    string        `json:"accent_hex"`
-	Participants []Participant `json:"participants,omitempty"`
-	CreatedAt    time.Time     `json:"created_at,omitempty"`
+	LegacyNotifier bool          `json:"legacy_notifier,omitempty"`
+	AgentState     string        `json:"agent_state,omitempty"`
+	AgentID        string        `json:"agent_id,omitempty"`
+	DeletedAt      *time.Time    `json:"deleted_at,omitempty"`
+	ID             string        `json:"id"`
+	Name           string        `json:"name"`
+	Description    string        `json:"description,omitempty"`
+	Locale         string        `json:"locale,omitempty"`
+	Role           string        `json:"role"`
+	Avatar         string        `json:"avatar"`
+	IsOnline       bool          `json:"is_online"`
+	LastSeen       string        `json:"last_seen,omitempty"`
+	AccentHex      string        `json:"accent_hex"`
+	Participants   []Participant `json:"participants,omitempty"`
+	CreatedAt      time.Time     `json:"created_at,omitempty"`
 }
 
 type CreateUserRequest struct {
@@ -68,6 +70,9 @@ type Mention struct {
 }
 
 type Message struct {
+	// Set by trusted ingress; prevents ineligible messages entering history learning.
+	MemoryExcluded  bool                `json:"-"`
+	MemoryUserID    string              `json:"-"`
 	ID              string              `json:"id"`
 	ClientMessageID string              `json:"client_message_id,omitempty"`
 	SenderID        string              `json:"sender_id"`
@@ -112,6 +117,7 @@ type MessageAttachmentUpload struct {
 }
 
 type CreateMessageRequest struct {
+	MemoryUserID      string             `json:"-"`
 	ResourceSelection *ResourceSelection `json:"-"`
 	// ResolveAttachments lazily opens referenced files after completed-send deduplication.
 	ResolveAttachments func() ([]MessageAttachmentUpload, error) `json:"-"`
@@ -213,7 +219,9 @@ type CloudAgentReference struct {
 }
 
 type Room struct {
-	CloudAgent *CloudAgentReference `json:"cloud_agent,omitempty"`
+	ContextUsageEpoch uint64                           `json:"context_usage_epoch,omitempty"`
+	ContextUsage      map[string]modelcap.ContextUsage `json:"context_usage,omitempty"`
+	CloudAgent        *CloudAgentReference             `json:"cloud_agent,omitempty"`
 	// CreationWorkspaceDir retains the requested path (empty means automatic).
 	// It is private persistence metadata used to validate creation retries.
 	CreationWorkspaceDir *string `json:"-"`

@@ -1,3 +1,4 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { PanelEmptyState } from "@/components/business/PanelEmptyState";
 import { EntityPane } from "@/components/business/EntityDetail";
 import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
@@ -1467,7 +1468,10 @@ export function HubDetailPane({
                             <BookOpen size={16} strokeWidth={2} />
                           </ResourceFeaturedIcon>
                           <span className={skillResourceStyles["hub-skill-card-copy"]}>
-                            <span className={skillResourceStyles["hub-skill-card-title"]}>{item.name}</span>
+                            <span className={skillResourceStyles["hub-skill-card-title"]}>
+                              {item.name}
+                              {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+                            </span>
                             <span className={skillResourceStyles["hub-skill-card-description"]}>
                               {item.description || item.name}
                             </span>
@@ -1591,6 +1595,7 @@ export function HubDetailPane({
                           <span className={skillResourceStyles["hub-skill-card-copy"]}>
                             <span className={skillResourceStyles["hub-skill-card-title"]}>
                               {template.display_name?.trim() || hubTemplateFullName(template)}
+                              {template.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
                               {listPublication ? (
                                 <StatusBadge kind="tag">
                                   {listPublication.publication?.revision

@@ -3,6 +3,7 @@ import generatedMediaStyles from "./GeneratedMedia.module.css";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { retryImageGenerationRequest } from "@/api/im";
+import { localizeAPIError } from "@/shared/i18n";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
 
 export function ImageGenerationStatus({ message, roomID, t }: { message: IMMessage; roomID?: string; t: TranslateFn }) {
@@ -55,7 +56,7 @@ export function ImageGenerationStatus({ message, roomID, t }: { message: IMMessa
       const result = await retryImageGenerationRequest(String(message.id ?? ""), roomID || String(route?.RoomID ?? ""));
       if (result.status !== "succeeded") setError(result.error?.message || t("imageRetryFailed"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("imageRetryFailed"));
+      setError(localizeAPIError(err, t, t("imageRetryFailed")));
     } finally {
       setBusy(false);
     }
@@ -79,7 +80,7 @@ export function ImageGenerationStatus({ message, roomID, t }: { message: IMMessa
           {t(state === "delivery_failed" ? "imageRetryDelivery" : "imageRegenerate")}
         </Button>
       ) : null}
-      {error && !(retryable && detailMessage) ? <span role="alert">{error}</span> : null}
+      {error ? <span role="alert">{error}</span> : null}
       <details className={generatedMediaStyles["image-generation-prompt"]}>
         <summary>{t("imageViewPrompt")}</summary>
         <p>{String(task.prompt ?? message.content ?? "")}</p>

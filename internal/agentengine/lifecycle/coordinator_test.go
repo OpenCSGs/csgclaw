@@ -86,3 +86,36 @@ func TestCanceledMutationWaitAndDrainReopenAdmission(t *testing.T) {
 	}
 	release()
 }
+
+func TestMutationPreparationValidatesBeforeDrainAndRunsForNestedUpdates(t *testing.T) {
+	c := &Coordinator{}
+	releaseExecution, err := c.Execution(context.Background(), "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer releaseExecution()
+	invalid := errors.New("invalid stop request")
+	if _, _, err := c.MutationPrepare(context.Background(), "a", func(context.Context) error { return invalid }); !errors.Is(err, invalid) {
+		t.Fatalf("invalid preparation waited for execution: %v", err)
+	}
+	admission, err := c.Execution(context.Background(), "a")
+	if err != nil {
+		t.Fatalf("failed preparation left admission closed: %v", err)
+	}
+	admission()
+	releaseExecution()
+	ctx, release, err := c.MutationPrepare(context.Background(), "a", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	prepared := false
+	_, nestedRelease, err := c.MutationPrepare(ctx, "a", func(context.Context) error { prepared = true; return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	nestedRelease()
+	if !prepared {
+		t.Fatal("nested resource update skipped preparation")
+	}
+}

@@ -75,7 +75,7 @@ func platformToolFailure(err error) *mcp.CallToolResult {
 // Use the native turn's persisted conversation binding, never an Agent's latest
 // room: one Agent may coordinate several rooms concurrently.
 func (h *Handler) scopeAppPlatformRoomTool(agentID, name string, request *mcp.CallToolRequest, args map[string]any) error {
-	if name != "agent_task_create" && name != "message_send" && !strings.HasPrefix(name, "room_task") {
+	if name != "agent_task_create" && name != "message_send" && !strings.HasPrefix(name, "room_task") && !strings.HasPrefix(name, "browser_") {
 		return nil
 	}
 	if request.Params.Meta["x-codex-turn-metadata"] == nil {
@@ -104,10 +104,25 @@ func (h *Handler) scopeAppPlatformRoomConversation(agentID, name, conversation s
 	if !ok {
 		return nil
 	}
-	scope, _, _ = strings.Cut(scope, ":")
+	scope, tail, _ := strings.Cut(scope, ":")
 	roomID, err := url.QueryUnescape(scope)
 	if err != nil {
 		return fmt.Errorf("invalid room conversation binding")
+	}
+	if strings.HasPrefix(name, "browser_") {
+		args["room_id"] = roomID
+		if name == "browser_screenshot" {
+			args["thread_root_id"] = ""
+			if root, ok := strings.CutPrefix(tail, "thread:"); ok {
+				root, _, _ = strings.Cut(root, ":")
+				thread, err := url.QueryUnescape(root)
+				if err != nil {
+					return fmt.Errorf("invalid browser thread binding")
+				}
+				args["thread_root_id"] = thread
+			}
+		}
+		return nil
 	}
 	roster, ok := h.roomSchedulingContext(roomID)
 	if !ok {
@@ -228,6 +243,7 @@ func (h *Handler) registerAppPlatformTools(agentID string) {
 	h.appPlatformAgents[agentID] = a.Role
 	h.registerAppIdentityTools(agentID)
 	h.registerAppRoomTools(agentID)
+	h.registerBrowserTools(agentID)
 	h.registerAppPlatformTaskTools(agentID)
 	if a.RuntimeKind == agent.RuntimeKindCodex {
 		h.registerAppFileTools(agentID)

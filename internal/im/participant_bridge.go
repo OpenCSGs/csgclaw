@@ -61,6 +61,8 @@ func (b *ParticipantBridge) ResourceInput(ctx context.Context, agentID, content 
 }
 
 type ParticipantEvent struct {
+	MemoryUserID      string                      `json:"-"`
+	MemoryText        string                      `json:"-"`
 	ResourceSelection *apitypes.ResourceSelection `json:"resource_selection,omitempty"`
 	RoomManager       bool                        `json:"room_manager,omitempty"`
 	TaskAttempt       int                         `json:"task_attempt,omitempty"`
@@ -478,6 +480,8 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 	text := textForParticipantEvent(message, participantID)
 	attempt := taskmeta.Attempt(message.Metadata)
 	return ParticipantEvent{
+		MemoryUserID:      message.MemoryUserID,
+		MemoryText:        message.Content,
 		ResourceSelection: apitypes.ResourceSelectionFromMetadata(message.Metadata),
 		RoomManager:       room.IsOnDemand() && canonicalIMUserID(participantID) == canonicalIMUserID(room.ManagerID),
 		TaskAttempt:       attempt,

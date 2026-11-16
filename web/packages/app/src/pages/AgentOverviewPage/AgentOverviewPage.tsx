@@ -1,10 +1,13 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { resolveTeamAvatarMembers, teamMemberIDs, teamStatusLabel } from "@/models/tasks";
-import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Cloud, ExternalLink, List, LoaderCircle, LogIn, Plus, Search } from "lucide-react";
 import { apiErrorCode } from "@/api/client";
 import { Button, LinkButton, PanelHeader, EmptyState, TextInput } from "@/components/ui";
 import { AgentAvatarContent, AgentAvatarImage } from "@/components/business/AgentAvatar";
+import { EntityPinHeading, EntityPinRow } from "@/components/business/EntityPinRow";
+import { entityPinKey, partitionPinned, usePinnedEntities, type Pinnable } from "@/hooks/workspace/usePinnedEntities";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { useWorkspaceHubTemplateQuery, useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
@@ -108,7 +111,8 @@ export function AgentOverviewPage() {
   const requestedTab = searchParams.get("tab");
   const plazaTab = requestedTab === "plaza";
   const cloudID = searchParams.get("cloud") || "";
-  const plaza = useCloudAgents(controller.sidebarProps?.authStatus);
+  const pins = usePinnedEntities(controller.sidebarProps?.currentUserID ?? "");
+  const plaza = useCloudAgents(controller.sidebarProps?.authStatus, true, undefined, plazaTab);
   const selectedCloudAgent = plaza.agents.find((agent) => agent.id === cloudID);
   const templatesTab = requestedTab === "templates" || requestedTab === "market";
   const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";
@@ -116,6 +120,7 @@ export function AgentOverviewPage() {
   const activeID = controller.ready ? controller.activePane.id : "";
   const templateFilter = searchParams.get("filter") === "personal" ? "personal" : "official";
   const [listOpen, setListOpen] = useState(false);
+  const [pinnedExpanded, setPinnedExpanded] = useState(true);
   const listToggleRef = useRef<HTMLButtonElement>(null);
   const closeList = () => {
     setListOpen(false);
@@ -177,10 +182,7 @@ export function AgentOverviewPage() {
       templateInGroup(item, templateFilter === "official" ? "official" : "mine", templateUsername),
   );
   const cloudTemplates = shownTemplates.filter((item) => item.source?.kind === "remote");
-  const orderedTemplates =
-    templateFilter === "personal"
-      ? [...shownTemplates.filter((item) => item.source?.kind !== "remote"), ...cloudTemplates]
-      : shownTemplates;
+  const orderedTemplates = [...shownTemplates.filter((item) => item.source?.kind !== "remote"), ...cloudTemplates];
   const templatesLoading = templatesQuery.isLoading && !templates.length;
   const templatesFailed = templatesQuery.isError && !templates.length;
   const templateEmptyTitle = query.trim()
@@ -209,6 +211,207 @@ export function AgentOverviewPage() {
     closeList();
     props.onSelectAgent(item);
   };
+  type Row = Pinnable & { name: string; content: ReactNode; cloudTemplate?: boolean };
+  const templateRows = templatesTab
+    ? orderedTemplates.map(
+        (item): Row => ({
+          kind: "template",
+          id: item.id || "",
+          name: item.display_name?.trim() || item.name || item.id || "",
+          cloudTemplate: item.source?.kind === "remote",
+          content: (
+            <button
+              type="button"
+              ref={selectedTemplateID === item.id ? selectedTemplateRef : undefined}
+              aria-current={selectedTemplateID === item.id ? "true" : undefined}
+              className={styles.row}
+              onClick={() => {
+                controller.hubViewProps?.onSelectTemplateInPlace(item);
+                navigate({ search: agentTemplatesSearch(item.id || "", templateFilter) });
+                closeList();
+              }}
+            >
+              <span className={styles.avatar} aria-hidden="true">
+                <AgentAvatarImage avatar={templateAvatar(item) || defaultAgentAvatar()} />
+              </span>
+              <span className={styles.identity}>
+                <span className={styles.templateName}>
+                  <strong>{item.display_name?.trim() || item.name || item.id}</strong>{" "}
+                  {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+                  {templateFilter === "personal" && item.source?.kind === "remote" ? (
+                    <span className={styles.cloudTag}>{t("iaTemplateCloudTag")}</span>
+                  ) : null}
+                </span>
+                <small>{item.description}</small>
+              </span>
+            </button>
+          ),
+        }),
+      )
+    : [];
+  const agentRows: Row[] =
+    !templatesTab && !plazaTab
+      ? [
+          ...(filter === "all" || filter === "agents"
+            ? agents.map(
+                (item): Row => ({
+                  kind: "agent",
+                  id: item.id || "",
+                  name: item.name || "",
+                  content: (
+                    <button
+                      type="button"
+                      aria-current={activeID === item.id ? "true" : undefined}
+                      className={styles.row}
+                      onClick={() => chooseAgent(item)}
+                    >
+                      <span className={styles.avatar}>
+                        <AgentAvatarContent avatar={item.avatar} fallback={item.name?.slice(0, 1) || "A"} />
+                      </span>
+                      <span className={styles.identity}>
+                        <span className={styles.rowName}>
+                          <strong>{item.name}</strong>
+                          <span
+                            className={styles.agentStatus}
+                            data-available={isAgentAvailable(item)}
+                            role="img"
+                            aria-label={agentAvailabilityStatusLabel(item, t)}
+                            title={agentAvailabilityStatusLabel(item, t)}
+                          />
+                        </span>
+                        <small>{agentRoleLabel(item, t)}</small>
+                      </span>
+                    </button>
+                  ),
+                }),
+              )
+            : []),
+          ...(filter === "all" || filter === "cloud"
+            ? filterCloudAgents(plaza.agents, query).map(
+                (item): Row => ({
+                  kind: "cloud",
+                  id: item.id,
+                  name: item.name,
+                  content: (
+                    <button
+                      type="button"
+                      aria-current={cloudID === item.id ? "true" : undefined}
+                      className={styles.row}
+                      onClick={() => {
+                        closeList();
+                        navigate({
+                          pathname: pathForPane({ type: WorkspacePaneTypes.agent }),
+                          search: cloudAgentSearch(item.id),
+                        });
+                      }}
+                    >
+                      <span className={styles.avatar}>
+                        <AgentAvatarContent avatar={item.avatar} fallback={item.name.slice(0, 1)} />
+                      </span>
+                      <span className={styles.identity}>
+                        <span className={styles.rowName}>
+                          <strong>{item.name}</strong>
+                          <span
+                            className={styles.agentStatus}
+                            data-available={item.status === "online"}
+                            role="img"
+                            aria-label={t(item.status === "online" ? "agentPlazaOnline" : "agentPlazaOffline")}
+                          />
+                          <span className={styles.cloudTag}>{t("agentPlazaCloud")}</span>
+                        </span>
+                        <small>{item.description}</small>
+                      </span>
+                    </button>
+                  ),
+                }),
+              )
+            : []),
+          ...(filter === "all" || filter === "teams"
+            ? teams.map(
+                (item): Row => ({
+                  kind: "team",
+                  id: item.id,
+                  name: item.title,
+                  content: (
+                    <button
+                      type="button"
+                      aria-current={activeID === item.id ? "true" : undefined}
+                      className={styles.row}
+                      onClick={() => {
+                        closeList();
+                        props.onSelectTeam(item);
+                      }}
+                    >
+                      <RoomAvatar
+                        members={resolveTeamAvatarMembers(item, props.workerAgentItems, props.usersById)}
+                        size={28}
+                        showCountBadge={false}
+                      />
+                      <span className={styles.identity}>
+                        <span className={styles.rowName}>
+                          <strong>{item.title}</strong>
+                          <span className={styles.teamBadge}>{t("iaAgentsTeamBadge")}</span>
+                        </span>
+                        <small>
+                          {t("iaAgentsTeamSummary", {
+                            count: teamMemberIDs(item).length,
+                            status: teamStatusLabel(item.status, t),
+                          })}
+                        </small>
+                      </span>
+                    </button>
+                  ),
+                }),
+              )
+            : []),
+        ]
+      : [];
+
+  function renderPinned(rows: Row[], showCloudHeading = false) {
+    const remoteRows = rows.filter((row) => row.cloudTemplate);
+    const { pinned, rest } = partitionPinned(
+      rows.filter((row) => !row.cloudTemplate),
+      pins.order,
+    );
+    const pinnedKeys = new Set(pins.order);
+    const renderRow = (row: Row, isPinned: boolean) => (
+      <EntityPinRow
+        key={entityPinKey(row)}
+        name={row.name}
+        pinned={isPinned}
+        t={t}
+        onToggle={() => {
+          if (!isPinned) setPinnedExpanded(true);
+          pins.toggle(row);
+        }}
+      >
+        {row.content}
+      </EntityPinRow>
+    );
+    return [
+      ...(pinned.length
+        ? [
+            <EntityPinHeading
+              key="pinned-heading"
+              expanded={pinnedExpanded}
+              onToggle={() => setPinnedExpanded((expanded) => !expanded)}
+              t={t}
+            />,
+          ]
+        : []),
+      ...(pinnedExpanded ? pinned.map((row) => renderRow(row, true)) : []),
+      ...rest.map((row) => renderRow(row, false)),
+      ...(showCloudHeading && remoteRows.length
+        ? [
+            <h3 className={styles.cloudTemplatesHeading} key="cloud-heading">
+              {t("iaTemplatesCloudOnly", { count: remoteRows.length })}
+            </h3>,
+          ]
+        : []),
+      ...remoteRows.map((row) => renderRow(row, pinnedKeys.has(entityPinKey(row)))),
+    ];
+  }
+
   return (
     <section className={styles.page}>
       <PanelHeader className={styles.header}>
@@ -279,6 +482,8 @@ export function AgentOverviewPage() {
       ) : plazaTab ? (
         <AgentPlaza
           agents={plaza.catalog}
+          probeAvailability
+          loginKey={controller.sidebarProps?.authStatus?.logged_in_at || ""}
           addedIDs={plaza.addedIDs}
           t={t}
           onAdd={(id) => {
@@ -309,6 +514,7 @@ export function AgentOverviewPage() {
                   value={query}
                   onChange={(event) => {
                     const query = event.target.value;
+                    if (query.trim()) setPinnedExpanded(true);
                     setListState((state) => ({ ...state, query }));
                   }}
                 />
@@ -364,39 +570,7 @@ export function AgentOverviewPage() {
                       </Button>
                     </div>
                   ) : null}
-                  {orderedTemplates.map((item) => (
-                    <Fragment key={item.id}>
-                      {templateFilter === "personal" && item === cloudTemplates[0] ? (
-                        <h3 className={styles.cloudTemplatesHeading}>
-                          {t("iaTemplatesCloudOnly", { count: cloudTemplates.length })}
-                        </h3>
-                      ) : null}
-                      <button
-                        type="button"
-                        ref={selectedTemplateID === item.id ? selectedTemplateRef : undefined}
-                        aria-current={selectedTemplateID === item.id ? "true" : undefined}
-                        className={`${styles.row} ${selectedTemplateID === item.id ? styles.active : ""}`}
-                        onClick={() => {
-                          controller.hubViewProps?.onSelectTemplateInPlace(item);
-                          navigate({ search: agentTemplatesSearch(item.id || "", templateFilter) });
-                          closeList();
-                        }}
-                      >
-                        <span className={styles.avatar} aria-hidden="true">
-                          <AgentAvatarImage avatar={templateAvatar(item) || defaultAgentAvatar()} />
-                        </span>
-                        <span className={styles.identity}>
-                          <span className={styles.templateName}>
-                            <strong>{item.display_name?.trim() || item.name || item.id}</strong>{" "}
-                            {templateFilter === "personal" && item.source?.kind === "remote" ? (
-                              <span className={styles.cloudTag}>{t("iaTemplateCloudTag")}</span>
-                            ) : null}
-                          </span>
-                          <small>{item.description}</small>
-                        </span>
-                      </button>
-                    </Fragment>
-                  ))}
+                  {renderPinned(templateRows, templateFilter === "personal")}
                   {templateFilter === "personal" && authed && !cloudTemplates.length ? (
                     <>
                       <h3 className={styles.cloudTemplatesHeading}>{t("iaTemplatesCloudOnly", { count: 0 })}</h3>
@@ -449,100 +623,7 @@ export function AgentOverviewPage() {
                   ) : null}
                 </>
               ) : (
-                <>
-                  {filter === "all" || filter === "agents"
-                    ? agents.map((item) => (
-                        <button
-                          type="button"
-                          key={item.id}
-                          className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
-                          onClick={() => chooseAgent(item)}
-                        >
-                          <span className={styles.avatar}>
-                            <AgentAvatarContent avatar={item.avatar} fallback={item.name?.slice(0, 1) || "A"} />
-                          </span>
-                          <span className={styles.identity}>
-                            <span className={styles.rowName}>
-                              <strong>{item.name}</strong>
-                              <span
-                                className={styles.agentStatus}
-                                data-available={isAgentAvailable(item)}
-                                role="img"
-                                aria-label={agentAvailabilityStatusLabel(item, t)}
-                                title={agentAvailabilityStatusLabel(item, t)}
-                              />
-                            </span>
-                            <small>{agentRoleLabel(item, t)}</small>
-                          </span>
-                        </button>
-                      ))
-                    : null}
-                  {filter === "all" || filter === "cloud"
-                    ? filterCloudAgents(plaza.agents, query).map((item) => (
-                        <button
-                          type="button"
-                          key={item.id}
-                          aria-current={cloudID === item.id ? "true" : undefined}
-                          className={`${styles.row} ${cloudID === item.id ? styles.active : ""}`}
-                          onClick={() => {
-                            closeList();
-                            navigate({
-                              pathname: pathForPane({ type: WorkspacePaneTypes.agent }),
-                              search: cloudAgentSearch(item.id),
-                            });
-                          }}
-                        >
-                          <span className={styles.avatar}>
-                            <AgentAvatarContent avatar={item.avatar} fallback={item.name.slice(0, 1)} />
-                          </span>
-                          <span className={styles.identity}>
-                            <span className={styles.rowName}>
-                              <strong>{item.name}</strong>
-                              <span
-                                className={styles.agentStatus}
-                                data-available={item.status === "online"}
-                                role="img"
-                                aria-label={t(item.status === "online" ? "agentPlazaOnline" : "agentPlazaOffline")}
-                              />
-                              <span className={styles.cloudTag}>{t("agentPlazaCloud")}</span>
-                            </span>
-                            <small>{item.description}</small>
-                          </span>
-                        </button>
-                      ))
-                    : null}
-                  {filter === "all" || filter === "teams"
-                    ? teams.map((item) => (
-                        <button
-                          type="button"
-                          key={item.id}
-                          className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
-                          onClick={() => {
-                            closeList();
-                            props.onSelectTeam(item);
-                          }}
-                        >
-                          <RoomAvatar
-                            members={resolveTeamAvatarMembers(item, props.workerAgentItems, props.usersById)}
-                            size={28}
-                            showCountBadge={false}
-                          />
-                          <span className={styles.identity}>
-                            <span className={styles.rowName}>
-                              <strong>{item.title}</strong>
-                              <span className={styles.teamBadge}>{t("iaAgentsTeamBadge")}</span>
-                            </span>
-                            <small>
-                              {t("iaAgentsTeamSummary", {
-                                count: teamMemberIDs(item).length,
-                                status: teamStatusLabel(item.status, t),
-                              })}
-                            </small>
-                          </span>
-                        </button>
-                      ))
-                    : null}
-                </>
+                <>{renderPinned(agentRows)}</>
               )}
             </div>
           </aside>

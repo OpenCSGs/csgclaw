@@ -10,6 +10,7 @@ import {
   DialogBody,
   DialogFooter,
   TextInput,
+  Tooltip,
 } from "@/components/ui";
 import { pickLocalDirectoryPath } from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
 import { readTaskDirectories, rememberTaskDirectory } from "@/shared/storage/taskDirectories";
@@ -89,13 +90,11 @@ export function TaskDirectoryPicker({
   }
   if (locked)
     return (
-      <span
-        className={styles.lockedDirectory}
-        aria-label={t("iaWorkdirTitle")}
-        title={`${effective || automaticHint} · ${t("iaWorkdirLocked")}`}
-      >
-        {label}
-      </span>
+      <Tooltip content={`${effective || automaticLabel} · ${t("iaWorkdirLocked")}`} contentProps={{ side: "top" }}>
+        <span className={styles.lockedDirectory} aria-label={t("iaWorkdirTitle")} tabIndex={0}>
+          {label}
+        </span>
+      </Tooltip>
     );
   const directories = [...new Set([value, defaultDirectory, ...paths].filter(Boolean))];
   return (
@@ -112,7 +111,8 @@ export function TaskDirectoryPicker({
         size="sm"
         selectedLabel={<span className={styles.directoryLabel}>{label}</span>}
         triggerClassName={styles.directoryTrigger}
-        triggerProps={{ "aria-label": t("iaWorkdirTitle"), title: effective || automaticHint }}
+        triggerProps={{ "aria-label": t("iaWorkdirTitle") }}
+        triggerTooltip={effective || automaticHint}
         contentClassName={styles.directoryMenu}
         contentProps={{ side: "top", align: "start" }}
         searchPlaceholder={t("iaWorkdirSearch")}
@@ -121,14 +121,19 @@ export function TaskDirectoryPicker({
           {
             value: "",
             alwaysVisible: true,
-            separatorAfter: true,
             textValue: automaticLabel,
             label: (
               <span className={styles.directoryLabel}>
                 <House size={18} />
                 <span>
                   {automaticLabel}
-                  <small>{defaultDirectory || automaticHint}</small>
+                  {defaultDirectory ? (
+                    <small className={styles.pathTail} title={defaultDirectory}>
+                      <bdi dir="auto">{defaultDirectory}</bdi>
+                    </small>
+                  ) : (
+                    <small>{automaticHint}</small>
+                  )}
                 </span>
               </span>
             ),
@@ -142,7 +147,9 @@ export function TaskDirectoryPicker({
                 <Folder size={18} />
                 <span>
                   {directoryName(path)}
-                  <small>{path}</small>
+                  <small className={styles.pathTail} title={path}>
+                    <bdi dir="auto">{path}</bdi>
+                  </small>
                 </span>
               </span>
             ),

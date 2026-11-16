@@ -1,17 +1,26 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { fetchConversationResourceBatch } from "@/api/agentResources";
 import { MemoryRouter, useNavigate } from "react-router-dom";
 import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
+import { fetchWorkspaceDirectory } from "@/api/chatFiles";
 import { StartTaskPage } from "@/pages/StartTaskPage/StartTaskPage";
 import type { IMConversation, LocaleCode } from "@/models/conversations";
 import { createTranslator } from "@/shared/i18n";
 import { fetchRelayCatalog } from "@/api/relay";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
-import { CLOUD_AGENTS_STORAGE_KEY, TASK_EXAMPLES_HIDDEN_STORAGE_KEY } from "@/shared/storage/keys";
+import {
+  CLOUD_AGENTS_STORAGE_KEY,
+  PINNED_ENTITIES_STORAGE_KEY,
+  TASK_EXAMPLES_HIDDEN_STORAGE_KEY,
+} from "@/shared/storage/keys";
 
+vi.mock("@/api/chatFiles", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/chatFiles")>()),
+  fetchWorkspaceDirectory: vi.fn().mockResolvedValue({ entries: [] }),
+}));
 vi.mock("@/api/agentResources", () => ({ fetchConversationResourceBatch: vi.fn() }));
 vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/api/im", () => ({ sendMessageRequest: vi.fn() }));
@@ -283,7 +292,7 @@ describe("StartTaskPage task preparation", () => {
     );
     expect(open).not.toHaveBeenCalled();
     expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("  检查代码  ");
-    fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    fireEvent.click(screen.getByRole("button", { name: "retrySend" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(room));
     expect(create).toHaveBeenCalledTimes(1);
     const sends = vi.mocked(sendMessageRequest).mock.calls;
@@ -365,6 +374,117 @@ describe("new task member mentions", () => {
       .mockReset()
       .mockResolvedValue({} as never),
   );
+
+  it("preserves a pasted participant mention as a structured reference", async () => {
+    setup("/new?agent=u-worker");
+    const user = userEvent.setup();
+    const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    await user.click(editor);
+    await user.paste("Review\r\n@Worker please");
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() =>
+      expect(sendMessageRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ content: 'Review\n<at user_id="worker">Worker</at> please' }),
+      ),
+    );
+  });
+
+  it("browses a workspace directory with Tab and references a child file", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, path) => ({
+      entries:
+        path === "docs"
+          ? [{ name: "guide.md", path: "docs/guide.md", type: "file" }]
+          : [{ name: "docs", path: "docs", type: "dir" }],
+    }));
+    try {
+      const user = userEvent.setup();
+      setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "Review @docs");
+      await screen.findByRole("option", { name: /docs/ });
+      await user.keyboard("{Tab}");
+      expect(editor).toHaveValue("Review @");
+      await screen.findByRole("option", { name: /guide.md/ });
+      await user.keyboard("{Enter}");
+      await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+      await waitFor(() =>
+        expect(sendMessageRequest).toHaveBeenCalledWith(
+          expect.objectContaining({
+            file_references: [expect.objectContaining({ path: "docs/guide.md" })],
+          }),
+        ),
+      );
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
+  it("shows an empty directory and allows keyboard navigation back", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, path) => ({
+      entries: path ? [] : [{ name: "docs", path: "docs", type: "dir" }],
+    }));
+    try {
+      const user = userEvent.setup();
+      const { create } = setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "Review @docs");
+      await screen.findByRole("option", { name: /docs/ });
+      await user.keyboard("{Tab}");
+      expect(await screen.findByText("agentWorkspaceEmpty")).toBeVisible();
+      expect(screen.getByText("docs/")).toBeVisible();
+      await user.keyboard("{Enter}");
+      expect(create).not.toHaveBeenCalled();
+      await user.keyboard("{ArrowLeft}");
+      expect(await screen.findByRole("option", { name: /docs/ })).toBeVisible();
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
+  it.each(["click", "keyboard"])("retries a failed shared directory request via %s", async (activation) => {
+    vi.mocked(fetchWorkspaceDirectory).mockRejectedValue(new Error("unreadable"));
+    try {
+      setup("/new?team=team-1", "test-model", { configuration: { workspace_dir: "/shared-project" } });
+      const user = userEvent.setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "@");
+      expect(await screen.findByText("chatWorkspaceFilesLoadFailed")).toBeVisible();
+      expect(screen.getByRole("option", { name: /Manager/ })).toBeVisible();
+      const retry = screen.getByRole("button", { name: "retry" });
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+        entries: [{ name: "guide.md", path: "guide.md", type: "file" }],
+      });
+      if (activation === "keyboard") {
+        await user.tab();
+        expect(retry).toHaveFocus();
+        await user.keyboard("{Enter}");
+      } else {
+        await user.click(retry);
+      }
+      expect(await screen.findByRole("option", { name: /guide.md/ })).toBeVisible();
+      expect(editor).toHaveFocus();
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
+  it("groups team members and files from the selected shared workspace", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+      entries: [{ name: "guide.md", path: "guide.md", type: "file" }],
+    });
+    try {
+      setup("/new?team=team-1", "test-model", { configuration: { workspace_dir: "/shared-project" } });
+      const user = userEvent.setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "@");
+      expect(screen.getByText("chatMentionPeople")).toBeVisible();
+      expect(await screen.findByText("chatMentionFiles")).toBeVisible();
+      expect(screen.getByRole("option", { name: /guide.md/ })).toBeVisible();
+      expect(fetchWorkspaceDirectory).toHaveBeenCalledWith("u-manager", "", expect.anything(), "", "/shared-project");
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
 
   it("selects a team member without submitting and sends a structured participant reference", async () => {
     const user = userEvent.setup();
@@ -529,11 +649,10 @@ describe("collaboration directory selection", () => {
         managerDirectory: "/manager-private",
         configuration: { workspace_dir },
       });
-      expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute(
-        "title",
-        workspace_dir || "collaborationWorkdirAutomaticHint",
-      );
-      expect(screen.queryByTitle("/manager-private")).not.toBeInTheDocument();
+      fireEvent.focus(screen.getByLabelText("iaWorkdirTitle"));
+      const tooltip = await screen.findByRole("tooltip");
+      expect(tooltip).toHaveTextContent(workspace_dir || "collaborationWorkdirAutomaticHint");
+      expect(tooltip).not.toHaveTextContent("/manager-private");
       fireEvent.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
       await waitFor(() => expect(open).toHaveBeenCalled());
       expect(create).toHaveBeenCalledWith(expect.objectContaining({ configuration: { workspace_dir } }));
@@ -613,4 +732,145 @@ describe("cloud task targets", () => {
     await userEvent.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
     expect(await screen.findByRole("button", { name: /合同条款审阅/ })).toBeDisabled();
   });
+});
+
+it("replaces draft files and references when the working directory changes", async () => {
+  vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, _path, _signal, _room, dir) => ({
+    entries: [
+      {
+        name: dir === "/new-project" ? "new.md" : "old.md",
+        path: dir === "/new-project" ? "new.md" : "old.md",
+        type: "file",
+      },
+    ],
+  }));
+  vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
+  const user = userEvent.setup();
+  setup("/new", "test-model", { configuration: { workspace_dir: "/old-project" } });
+  await user.click(screen.getByRole("button", { name: "chatSideExpand" }));
+  await user.click(screen.getByRole("button", { name: /chatWorkspaceFiles/ }));
+  const oldFile = await screen.findByRole("button", { name: /^old.md/ });
+  await user.click(screen.getByRole("button", { name: "chatFileReference old.md" }));
+  const prompt = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+  expect(prompt).toHaveValue("@old.md ");
+  await user.click(oldFile);
+  expect(screen.getByRole("tab", { name: "old.md" })).toBeInTheDocument();
+  await user.click(screen.getByRole("combobox", { name: "iaWorkdirTitle" }));
+  await user.click(screen.getByRole("button", { name: "iaWorkdirManual" }));
+  const directory = screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" });
+  await user.clear(directory);
+  await user.type(directory, "/new-project");
+  await user.click(screen.getByRole("button", { name: "taskConfigurationApply" }));
+  expect(screen.queryByRole("tab", { name: "old.md" })).not.toBeInTheDocument();
+  expect(prompt).toHaveValue("");
+  expect(await screen.findByRole("button", { name: /^new.md/ })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "chatSideCollapse" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "chatSideExpand" })).toHaveFocus());
+  await user.type(prompt, "Review @new");
+  expect(prompt).toHaveValue("Review @new");
+  await screen.findByRole("option", { name: /new.md/ });
+  await user.keyboard("{Enter}");
+  await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+  await waitFor(() =>
+    expect(sendMessageRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        content: 'Review @"new.md"',
+        file_references: [{ source: "workspace", agent_id: "u-manager", path: "new.md" }],
+      }),
+    ),
+  );
+  vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+});
+
+it("moves pinned targets above groups without selecting them and preserves the order after remount", async () => {
+  const user = userEvent.setup();
+  const key = `${PINNED_ENTITIES_STORAGE_KEY}:${location.pathname}:user-admin`;
+  try {
+    const first = setup();
+    const openPicker = () => user.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
+    const pinAction = (target: string, action: "iaPin" | "iaUnpin") =>
+      within(screen.getByText(target, { exact: true }).closest("li")!).getByRole("button", { name: action });
+    await openPicker();
+    await user.click(pinAction("Worker", "iaPin"));
+    await user.click(pinAction("Team", "iaPin"));
+    expect(screen.getByRole("button", { name: /iaTargetLabel.*Manager/ })).toBeInTheDocument();
+    first.unmount();
+
+    setup();
+    await openPicker();
+    const team = pinAction("Team", "iaUnpin");
+    const worker = pinAction("Worker", "iaUnpin");
+    expect(team.compareDocumentPosition(worker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const heading = screen.getByRole("button", { name: "iaPinned", expanded: true });
+    await user.click(heading);
+    expect(team).not.toBeInTheDocument();
+    expect(worker).not.toBeInTheDocument();
+    await user.click(heading);
+    expect(pinAction("Worker", "iaUnpin")).toBeVisible();
+    await user.click(pinAction("Team", "iaUnpin"));
+    expect(pinAction("Team", "iaPin")).toBeInTheDocument();
+  } finally {
+    localStorage.removeItem(key);
+  }
+});
+
+it("selects a slash skill from the shared picker and shows the connector logo", async () => {
+  vi.mocked(fetchConversationResourceBatch).mockResolvedValue({
+    items: [{ source: "skill", type: "skill", id: "feishu-docs", name: "feishu-docs", available: true, enabled: true }],
+    total: 1,
+    list_revision: "r",
+    has_more: false,
+  });
+  vi.mocked(sendMessageRequest)
+    .mockReset()
+    .mockResolvedValue({} as never);
+  const { create } = setup();
+  const user = userEvent.setup();
+  const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+  await user.click(editor);
+  await user.paste("/fei");
+  const option = await screen.findByRole("option", { name: /feishu-docs/ });
+  expect(option.querySelector("img")).toHaveAttribute("src", "icons/feishu.png");
+  await user.keyboard("{Enter}");
+  expect(create).not.toHaveBeenCalled();
+  expect(editor).toHaveValue("");
+  await user.type(editor, "Summarize the document");
+  await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+  await waitFor(() =>
+    expect(sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "Summarize the document",
+        resource_refs: [{ source: "skill", id: "feishu-docs" }],
+      }),
+    ),
+  );
+});
+
+it("shows pasted and dropped attachment drafts and sends restored files only once", async () => {
+  vi.mocked(sendMessageRequest)
+    .mockReset()
+    .mockResolvedValue({} as never);
+  const { create } = setup();
+  const user = userEvent.setup();
+  const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+  const pasted = new File(["image data"], "image.png", { type: "image/png" });
+  const dropped = new File(["notes"], "notes.md", { type: "text/markdown" });
+  fireEvent.paste(editor, { clipboardData: { files: [pasted], getData: () => "" } });
+  fireEvent.drop(editor, { dataTransfer: { files: [pasted, dropped] } });
+  const strip = screen.getByRole("list", { name: "attachments" });
+  expect(within(strip).getAllByRole("listitem")).toHaveLength(2);
+  expect(screen.getByRole("alert")).toHaveTextContent("attachmentDuplicate");
+  await user.click(within(strip).getAllByRole("button", { name: "removeAttachmentNamed" })[0]);
+  expect(within(strip).getAllByRole("listitem")).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "undo" }));
+  expect(within(strip).getAllByRole("listitem")).toHaveLength(2);
+  expect(create).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+  await waitFor(() =>
+    expect(sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "", attachments: [pasted, dropped] }),
+      expect.objectContaining({ signal: expect.any(AbortSignal), onUploadProgress: expect.any(Function) }),
+    ),
+  );
 });

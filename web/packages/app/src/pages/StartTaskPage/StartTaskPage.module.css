@@ -3,16 +3,28 @@
   grid-row: 1 / -1;
   min-height: 0;
   height: 100%;
-  overflow-y: auto;
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
   background: var(--panel);
   color: var(--text);
   --input-text-placeholder: var(--muted);
 }
+.main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+}
+.panelToggle {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 12px;
+}
 .inner {
   width: min(880px, 100%);
+  min-width: 0;
   padding: 44px 32px 56px;
   margin: auto;
   display: flex;
@@ -24,6 +36,7 @@
   align-items: center;
   gap: 8px;
   text-align: center;
+  overflow-wrap: anywhere;
   margin-bottom: 22px;
 }
 .head h1 {
@@ -48,6 +61,7 @@
   position: relative;
 }
 .composer {
+  container: start-task-composer / inline-size;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--input-border);
@@ -86,12 +100,31 @@
   box-shadow: none;
   animation: none;
 }
+.slashPopover {
+  width: min(560px, var(--radix-popover-trigger-width), var(--radix-popover-content-available-width));
+  --slash-picker-available-width: 100%;
+}
+.mentionStatus {
+  padding: 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 12px;
+  background: var(--input-background);
+  box-shadow: var(--shadow-xs);
+  overflow-wrap: anywhere;
+}
 .mentionPopover .mentions {
   position: static;
   width: 100%;
   max-height: min(240px, var(--radix-popover-content-available-height));
   margin: 0;
   animation: none;
+}
+.peopleAndFiles > [role="option"] {
+  min-height: 40px;
+  padding: 6px 8px;
+}
+.peopleAndFiles > [role="option"] + [role="option"] {
+  margin-block-start: 4px;
 }
 .draft:not([hidden]) {
   display: flex;
@@ -101,9 +134,15 @@
   min-height: 148px;
   padding: 16px 16px 8px;
 }
-.page .composer .input {
+.promptEditor {
+  position: relative;
   flex: 1;
   min-width: 120px;
+}
+.page .composer .input {
+  display: block;
+  width: 100%;
+  min-width: 0;
   min-height: 116px;
   padding: 0;
   border: 0;
@@ -115,6 +154,40 @@
   font-size: 15.5px;
   line-height: 25px;
   resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  scrollbar-gutter: stable;
+}
+.promptMirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.page .composer .promptEditor[data-highlighted] textarea {
+  position: relative;
+  color: transparent;
+  caret-color: var(--text);
+}
+.promptEditor[data-highlighted] textarea::selection {
+  color: transparent;
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+.fileMention {
+  color: var(--primary);
+}
+@media (forced-colors: active) {
+  .promptMirror {
+    display: none;
+  }
+  .page .composer .promptEditor[data-highlighted] textarea {
+    color: CanvasText;
+    caret-color: auto;
+  }
+  .promptEditor[data-highlighted] textarea::selection {
+    color: HighlightText;
+    background: Highlight;
+  }
 }
 .page .composer .input:focus {
   outline: none;
@@ -129,8 +202,6 @@
   padding: 4px 10px 8px;
 }
 .cloudActions {
-  --composer-send-control-size: 44px;
-  --composer-send-icon-size: 20px;
   justify-content: flex-end;
 }
 .addButton {
@@ -139,23 +210,12 @@
   flex: 0 0 auto;
   align-self: center;
 }
-.page .actions .send {
-  border-radius: 50%;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  min-height: 28px;
-  padding: 0;
-}
-.files {
-  list-style: none;
-  margin: 0;
-  padding: 0 12px;
-}
-.files li {
+.attachmentFeedback {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 .preset {
@@ -205,12 +265,21 @@
   color: var(--muted);
   font-size: 12px;
 }
+.examples > span {
+  flex-shrink: 0;
+}
 .chips {
   display: flex;
+  flex: 1;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 8px;
 }
 .chip {
+  min-width: 0;
+  max-width: 100%;
+  text-align: start;
+  overflow-wrap: anywhere;
   padding: 5px 12px 5px 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -225,6 +294,7 @@
   cursor: pointer;
 }
 .chip svg {
+  flex-shrink: 0;
   color: var(--primary);
 }
 .chip:hover {
@@ -233,6 +303,7 @@
   background: var(--primary-soft);
 }
 .examplesClose {
+  flex: 0 0 24px;
   border: 0;
   background: transparent;
   color: var(--muted);

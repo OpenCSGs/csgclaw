@@ -8,7 +8,7 @@ export type ChatSideTab =
   | { id: string; kind: "files" }
   | { id: string; kind: "activity"; entryID?: string }
   | { id: string; kind: "tasks" }
-  | { id: string; kind: "browser"; url: string }
+  | { id: string; kind: "browser"; url: string; browserID?: string }
   | {
       id: string;
       kind: "file";
@@ -85,7 +85,7 @@ export function closeChatSideTab(state: ChatSideState, id: string): ChatSideStat
 
 export function serializeChatSideState(state: ChatSideState): string {
   const tabs = state.tabs
-    .filter((tab) => tab.kind !== "file" || !tab.draft)
+    .filter((tab) => (tab.kind !== "file" || !tab.draft) && (tab.kind !== "browser" || !tab.browserID))
     .map((tab) => {
       if (tab.kind === "sources") return { ...tab, cited: undefined };
       return tab;

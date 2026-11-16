@@ -13,6 +13,7 @@ import styles from "./PendingTurnReplies.module.css";
 // in the message timeline, then let the matching progress message replace it.
 export function PendingTurnReplies({
   participants,
+  stoppableInComposer,
   agents,
   usersById,
   t,
@@ -20,6 +21,7 @@ export function PendingTurnReplies({
   onStop,
 }: {
   participants: readonly ConversationWorkingParticipant[];
+  stoppableInComposer?: ConversationWorkingParticipant;
   agents: AgentLike[];
   usersById: UsersById;
   t: TranslateFn;
@@ -57,7 +59,7 @@ export function PendingTurnReplies({
               hideContextUsage
               t={t}
               onAction={onAction}
-              onStop={onStop}
+              onStop={participant === stoppableInComposer ? undefined : onStop}
             />
           </div>
         </div>

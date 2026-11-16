@@ -2,6 +2,20 @@
 
 This document describes the repository build, test, and release commands.
 
+## Bundled Codex version
+
+The bundled Codex CLI is pinned to `0.167.1` in `scripts/codex-cli-version.txt`.
+Shell, PowerShell, Docker, and release builds download the same version from `/codex-cli/v<version>/<filename>` and verify `scripts/codex-cli-checksums.txt` before installing the runtime.
+`CODEX_CLI_DOWNLOAD_BASE_URL` overrides the mirror root (default `https://csgclaw.opencsg.com/codex-cli`), not the version or checksum.
+To upgrade, upload all six official platform packages into the mirror's `v<version>/` directory, verify their SHA-256 digests against the upstream release, then update the version and checksums together in source control.
+Builds install the complete official Codex package, preserving its helper binaries, metadata, and resources beside `bin/`.
+Linux command execution requires the packaged `bwrap`; copying only the main Codex executable is insufficient.
+A CSGClaw source upgrade therefore determines the bundled Codex upgrade; builds never resolve `latest`.
+
+CSGClaw explicitly selects the same v1 memory pipeline for fresh and existing Codex agents, with dual-write and dedicated memory tools disabled.
+This preserves the current memory document, template, and runtime recreation behavior while using the upgraded Codex runtime.
+Stable upstream defaults such as shell snapshots remain available without adding version-dependent UI or controls.
+
 ## Default build
 
 ```bash
@@ -95,6 +109,11 @@ csgclaw/
     csgclaw[.exe]
     csgclaw-cli[.exe]            # companion CLI for the release host platform
     codex[.exe]                  # bundled Codex CLI for the release host platform
+    codex-code-mode-host[.exe]
+    codex-exec-server[.exe]
+  codex-package.json
+  codex-resources/               # includes Linux bwrap and Windows sandbox helpers
+  codex-path/
 ```
 
 The canonical CSGClaw-platform-to-Codex-artifact mapping is in
@@ -116,7 +135,17 @@ in [`scripts/release-platforms.txt`](../../scripts/release-platforms.txt).
 | `make desktop-oss-upload-packages VERSION=<version> DESKTOP_OSS_TARGETS=<os-arch>` | Upload only the selected immutable desktop packages without changing OSS channel JSON |
 | `make release` | Build the configured cross-platform release bundles |
 
-Release CI uses `.github/workflows/release.yml` and `.gitlab/ci.yml`. GitHub tag pushes keep the full release path: they attach the server/CLI bundles and native desktop installers to the matching GitHub Release, then publish the complete server/CLI bundle matrix, the two macOS DMGs, the Windows x64 installer, and native Electron update feeds to the beta or release OSS channel. A manual GitHub workflow run accepts only an alpha version matching `vX.Y.Z-alpha.N` and one `desktop_target`; it builds that desktop target, uploads its immutable packages without changing `downloads.json`, `RELEASES`, or `RELEASES.json`, and shows the download URLs in the Actions summary. GitLab keeps its existing SSH upload to `https://csgclaw.opencsg.com/releases/<tag>/` and publishes the CSGClaw product image. Its desktop jobs are optional manual builds: successful installers remain GitLab artifacts for one day and are not uploaded to the public release directory. GitLab macOS and Windows desktop jobs require native runners tagged `csgclaw-macos-arm64`, `csgclaw-macos-amd64`, and `csgclaw-windows-amd64`.
+Release CI uses `.github/workflows/release.yml` and `.gitlab/ci.yml`.
+GitHub tag pushes keep the full release path: they attach the server/CLI bundles and native desktop installers to the matching GitHub Release, then publish the complete server/CLI bundle matrix, the two macOS DMGs, the Windows x64 installer, and native Electron update feeds to the beta or release OSS channel.
+Without `recovery_run_id`, a manual GitHub workflow run accepts only an alpha version matching `vX.Y.Z-alpha.N` and one `desktop_target`; it builds that desktop target, uploads its immutable packages without changing `downloads.json`, `RELEASES`, or `RELEASES.json`, and shows the download URLs in the Actions summary.
+GitLab keeps its existing SSH upload to `https://csgclaw.opencsg.com/releases/<tag>/` and publishes the CSGClaw product image.
+Its desktop jobs are optional manual builds: successful installers remain GitLab artifacts for one day and are not uploaded to the public release directory.
+GitLab macOS and Windows desktop jobs require native runners tagged `csgclaw-macos-arm64`, `csgclaw-macos-amd64`, and `csgclaw-windows-amd64`.
+
+To recover a failed beta release with exactly one failed desktop build, run the same workflow with the existing beta tag as `version`, the failed `desktop_target`, and its original `recovery_run_id`.
+Recovery verifies the tag commit, successful source jobs, and unexpired artifact IDs, rebuilds the selected desktop from that original commit, and combines it with the successful packages for GitHub Release and OSS channel publication.
+Source artifacts are retained for one day, so start recovery before they expire.
+Windows checksum regression checks run under Windows PowerShell and PowerShell 7; CI invokes the packaging script directly in its PowerShell 7 host.
 
 Desktop installers use names such as `csgclaw-desktop_v0.4.3_darwin_arm64.dmg`. The ordinary `desktop-package` target keeps the macOS ad-hoc and Windows unsigned defaults when credentials are absent. The strict local macOS target requires a Developer ID identity plus complete notarization credentials and fails instead of emitting a partial signature. It reuses the same Forge package target and asset collector as CI while leaving the established GitHub workflow unchanged; it writes only under `desktop/out/local/` and never uploads to OSS. GitHub Release CI configures channel-isolated Electron feeds under `channels/<channel>/updates/`; the desktop checks in the background and only prompts after the native package has downloaded.
 

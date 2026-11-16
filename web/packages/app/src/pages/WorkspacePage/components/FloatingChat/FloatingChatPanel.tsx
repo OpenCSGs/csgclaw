@@ -1,3 +1,4 @@
+import { conversationMemoryAgent } from "@/components/business/ConversationPane/useConversationMemory";
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import chatPanelStyles from "@/components/business/ConversationPane/ChatPanel.module.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -230,6 +231,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
 
   const threadPanel = activeThreadRootID ? (
     <Conversation.ThreadPanel
+      memoryAgentID={conversationMemoryAgent(conversation, agents, currentUserID, usersById)}
       currentUserID={currentUserID}
       resourceAgentID={resourceAgentID}
       onPickResources={onPickThreadResources}

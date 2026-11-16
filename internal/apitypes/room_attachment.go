@@ -17,6 +17,7 @@ type RoomAttachment struct {
 
 type RoomAttachmentListOptions struct {
 	Query     string
+	Sort      string
 	MessageID string
 	From      int
 	Limit     int

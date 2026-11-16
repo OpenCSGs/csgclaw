@@ -1,13 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createTranslator } from "@/shared/i18n";
-import { fetchCloudAgentTemplate } from "@/api/relay";
+import { fetchCloudAgentTemplate, fetchRelayCatalog } from "@/api/relay";
 import { createQueryWrapper } from "../../../../../tests/helpers/queryClient";
 import { cloudAgentFixture } from "../../../../../tests/helpers/cloudAgentFixture";
 import { AgentPlaza, AgentPlazaMetadata, CloudAgentDetail } from "./AgentPlaza";
 
-vi.mock("@/api/relay", () => ({ fetchCloudAgentTemplate: vi.fn() }));
+vi.mock("@/api/relay", () => ({ fetchCloudAgentTemplate: vi.fn(), fetchRelayCatalog: vi.fn() }));
 
 it("passes the authorized template repository to the shared profile renderer", async () => {
   vi.mocked(fetchCloudAgentTemplate).mockResolvedValue({ repo_path: "alice/writing-template" });
@@ -58,6 +58,7 @@ describe("cloud directory availability", () => {
         onAdd={vi.fn()}
         onOpen={vi.fn()}
       />,
+      { wrapper: createQueryWrapper().wrapper },
     );
     expect(screen.getByText(label)).toBeVisible();
     expect(screen.queryByText(status === "online" ? "离线" : "在线")).not.toBeInTheDocument();
@@ -81,6 +82,7 @@ describe("cloud directory availability", () => {
           onAdd={onAdd}
           onOpen={vi.fn()}
         />,
+        { wrapper: createQueryWrapper().wrapper },
       );
       await user.click(screen.getByRole("button", { name: scope }));
       await user.type(screen.getByRole("textbox", { name: search }), "not found");
@@ -161,6 +163,7 @@ it.each(["private", "public"] as const)(
         onAdd={onAdd}
         onOpen={vi.fn()}
       />,
+      { wrapper: createQueryWrapper().wrapper },
     );
     await user.click(screen.getByRole("button", { name: "我的" }));
     expect(screen.getByRole("heading", { name: agent.name })).toBeVisible();
@@ -169,3 +172,34 @@ it.each(["private", "public"] as const)(
     expect(onAdd).toHaveBeenCalledWith(agent.id);
   },
 );
+
+it("probes only the first batch until the user loads more", async () => {
+  const agents = Array.from({ length: 14 }, (_, index) => ({
+    ...cloudAgentFixture[0],
+    id: `agent-${index}`,
+    name: `Agent ${index}`,
+  }));
+  vi.mocked(fetchRelayCatalog).mockResolvedValue([]);
+  render(
+    <AgentPlaza
+      agents={agents}
+      addedIDs={[]}
+      probeAvailability
+      t={createTranslator("en")}
+      onAdd={vi.fn()}
+      onOpen={vi.fn()}
+    />,
+    { wrapper: createQueryWrapper().wrapper },
+  );
+  await waitFor(() => expect(fetchRelayCatalog).toHaveBeenCalledTimes(1));
+  expect(fetchRelayCatalog).toHaveBeenNthCalledWith(
+    1,
+    expect.any(AbortSignal),
+    undefined,
+    agents.slice(0, 12).map((agent) => agent.id),
+  );
+  expect(screen.queryByRole("heading", { name: "Agent 12" })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Load more" }));
+  await waitFor(() => expect(fetchRelayCatalog).toHaveBeenCalledTimes(2));
+  expect(fetchRelayCatalog).toHaveBeenNthCalledWith(2, expect.any(AbortSignal), undefined, ["agent-12", "agent-13"]);
+});

@@ -162,7 +162,8 @@ export function localizeAPIErrorWithDiagnostics(error: unknown, t: TranslateFn, 
     "code" in error &&
     (error.code === "template_cloud_cleanup_pending" ||
       error.code === "template_cloud_publish_timeout" ||
-      error.code === "template_publish_file_too_large")
+      error.code === "template_publish_file_too_large" ||
+      error.code === "template_publish_total_too_large")
   )
     return summary;
   if (!error || typeof error !== "object") return summary;

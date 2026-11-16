@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/modelprovider"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,11 +24,28 @@ import (
 )
 
 func TestAppServerManagerStartFailureIncludesRedactedStderrTail(t *testing.T) {
+	const providerKey = "opaque-provider-test-value"
+	if os.Getenv("CSGCLAW_TEST_START_FAILURE") == "" {
+		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestAppServerManagerStartFailureIncludesRedactedStderrTail$")
+		cmd.Env = append(os.Environ(), "CSGCLAW_TEST_START_FAILURE=1")
+		stdout, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("startup test process: %v\n%s", err, stdout)
+		}
+		output := string(stdout)
+		if strings.Contains(output, "sk-secret") || strings.Contains(output, providerKey) {
+			t.Fatal("worker startup diagnostics exposed a credential on stdout")
+		}
+		if !strings.Contains(output, `msg="login failed"`) || !strings.Contains(output, `msg="provider rejected [redacted]"`) {
+			t.Fatal("missing redacted worker startup diagnostics on stdout")
+		}
+		return
+	}
 	withAppServerHelperCommand(t, "fail-before-handshake")
 	dir := t.TempDir()
 	manager := newAppServerManager(testAppServerManagerDeps())
 	spec := testAppServerSessionSpec(dir)
-	spec.Profile.APIKey = "sk-secret"
+	spec.Profile.APIKey = providerKey
 
 	_, err := manager.Start(context.Background(), spec)
 	if err == nil {
@@ -36,7 +54,7 @@ func TestAppServerManagerStartFailureIncludesRedactedStderrTail(t *testing.T) {
 	if !strings.Contains(err.Error(), "stderr tail") || !strings.Contains(err.Error(), "login failed") {
 		t.Fatalf("Start() error = %q, want stderr tail", err.Error())
 	}
-	if strings.Contains(err.Error(), "sk-secret") {
+	if strings.Contains(err.Error(), "sk-secret") || strings.Contains(err.Error(), providerKey) {
 		t.Fatalf("Start() error leaked API key: %q", err.Error())
 	}
 }
@@ -1100,6 +1118,37 @@ func TestAppServerManagerPromptCancellationPreservesRuntimeOnWriteFailure(t *tes
 }
 
 func TestAppServerManagerPromptFailedTurnPublishesFailure(t *testing.T) {
+	if os.Getenv("CSGCLAW_TEST_PROTOCOL_ERROR_STDOUT") == "" {
+		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestAppServerManagerPromptFailedTurnPublishesFailure$")
+		cmd.Env = append(os.Environ(), "CSGCLAW_TEST_PROTOCOL_ERROR_STDOUT=1")
+		stdout, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("failed turn test process: %v\n%s", err, stdout)
+		}
+		var records []string
+		for line := range strings.Lines(string(stdout)) {
+			if strings.HasPrefix(line, "source=worker.stderr runtime=codex ") && strings.Contains(line, "codex app-server protocol error") {
+				records = append(records, line)
+			}
+		}
+		if len(records) != 2 {
+			t.Fatalf("expected retry and failure on stdout, got %q", records)
+		}
+		for i, fields := range [][]string{
+			{"level=WARN", "method=error", "will_retry=true", "retrying connection"},
+			{"level=ERROR", "method=turn/completed", "model failed", "provider unavailable", "[redacted]"},
+		} {
+			for _, field := range append(fields, "thread_id=main-thread", "turn_id=turn-failed") {
+				if !strings.Contains(records[i], field) {
+					t.Fatalf("stdout record missing %q: %s", field, records[i])
+				}
+			}
+		}
+		if strings.Contains(string(stdout), "private-example") {
+			t.Fatal("stdout exposed a credential from the protocol error")
+		}
+		return
+	}
 	withAppServerHelperCommand(t, "prompt-failed")
 	dir := t.TempDir()
 	spec := testAppServerSessionSpec(dir)
@@ -3272,6 +3321,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	case "fail-before-handshake":
 		_, _ = fmt.Fprintln(os.Stderr, "login failed")
 		_, _ = fmt.Fprintln(os.Stderr, "api_key = sk-secret")
+		_, _ = fmt.Fprintln(os.Stderr, "provider rejected", os.Getenv("OPENAI_API_KEY"))
 		os.Exit(2)
 	case "resume-fallback":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
@@ -3710,12 +3760,16 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 			case "turn/start":
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-failed"}})
+				writeRPCNotification(t, "error", map[string]any{
+					"threadId": "main-thread", "turnId": "turn-failed", "willRetry": true,
+					"error": map[string]any{"message": "retrying connection"},
+				})
 				writeRPCNotification(t, "turn/completed", map[string]any{
 					"threadId": "main-thread",
 					"turn": map[string]any{
 						"id":     "turn-failed",
 						"status": "failed",
-						"error":  map[string]any{"message": "model failed"},
+						"error":  map[string]any{"message": "model failed", "additionalDetails": "provider unavailable, token=private-example"},
 					},
 				})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-failed"}), true
@@ -4051,9 +4105,9 @@ func assertServerRequestResponse(t *testing.T, msg map[string]any, wantID int, a
 
 func TestGenerateImageToolUsesActiveTurnHandler(t *testing.T) {
 	called := 0
-	ctx := contract.WithImageGenerationHandler(context.Background(), func(_ context.Context, id, prompt string) error {
+	ctx := contract.WithImageGenerationHandler(context.Background(), func(_ context.Context, id, prompt string, references []int, options modelprovider.ImageGenerationOptions) error {
 		called++
-		if id != "call-image" || prompt != "blue sky" {
+		if id != "call-image" || prompt != "blue sky" || len(references) != 1 || references[0] != 2 || options.Size != "1024x1024" {
 			t.Fatalf("wrong request %s %s", id, prompt)
 		}
 		return nil
@@ -4061,7 +4115,7 @@ func TestGenerateImageToolUsesActiveTurnHandler(t *testing.T) {
 	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
 	for _, turnID := range []string{"turn-other", "turn-1"} {
-		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{"threadId": "thread-1", "turnId": turnID, "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"}})})
+		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{"threadId": "thread-1", "turnId": turnID, "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky", "reference_images": []int{2}, "size": "1024x1024"}})})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4109,7 +4163,7 @@ func TestAppServerCompletedMessageCorrectsStreamedDraft(t *testing.T) {
 
 func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 	calls := 0
-	ctx := contract.WithImageGenerationHandler(context.Background(), func(context.Context, string, string) error {
+	ctx := contract.WithImageGenerationHandler(context.Background(), func(context.Context, string, string, []int, modelprovider.ImageGenerationOptions) error {
 		calls++
 		return nil
 	})
@@ -4118,7 +4172,7 @@ func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 	for _, mode := range []string{ExecutionModeReadOnly, ExecutionModeStandard, ExecutionModeReadOnly, ExecutionModeStandard} {
 		live.spec.ExecutionMode = mode
 		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
-			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"},
+			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky", "reference_images": []int{2}},
 		})})
 		if err != nil {
 			t.Fatal(err)

@@ -130,20 +130,13 @@
   align-items: center;
   gap: 10px;
   padding: 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  border: 0;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text);
   text-align: left;
   font: inherit;
   cursor: pointer;
-}
-.row:hover {
-  background: var(--panel-soft);
-}
-.active {
-  background: var(--primary-soft);
-  border-color: color-mix(in srgb, var(--primary) 26%, transparent);
 }
 .identity {
   min-width: 0;

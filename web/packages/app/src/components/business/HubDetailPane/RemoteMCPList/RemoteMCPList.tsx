@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import type { UIEvent } from "react";
 import { CloudDownload, RefreshCw, Server } from "lucide-react";
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { Button, TextInput } from "@/components/ui";
 import { isRemoteMCPInstalled } from "@/models/mcp";
 import type { MCPServer, RemoteMCPServer } from "@/models/mcp";
@@ -99,7 +100,10 @@ export function RemoteMCPList({
                   <Server size={16} strokeWidth={2} />
                 </span>
                 <div className={styles.main}>
-                  <span className={classNames(styles.title, "truncate")}>{item.name}</span>
+                  <span className={styles.titleRow}>
+                    <span className={classNames(styles.title, "truncate")}>{item.name}</span>
+                    {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+                  </span>
                   <span className={classNames(styles.description, "truncate")}>{description}</span>
                   {metadata ? <span className={classNames(styles.meta, "truncate")}>{metadata}</span> : null}
                 </div>

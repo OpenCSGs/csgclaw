@@ -32,3 +32,16 @@
   gap: 4px;
   font-variant-numeric: tabular-nums;
 }
+
+.compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2px 8px;
+  font-size: 11px;
+  line-height: 16px;
+}
+.compact > strong,
+.compact > span:first-of-type,
+.compact > span:nth-last-of-type(1) {
+  grid-column: 1 / -1;
+}

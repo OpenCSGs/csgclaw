@@ -189,11 +189,15 @@ func TestDiscoveryConcurrentProbesAndExpiredBudget(t *testing.T) {
 			t.Fatal("online agent was marked offline")
 		}
 	}
-	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Millisecond)
-	defer cancel()
-	if _, err = m.Discover(ctx); err == nil {
-		t.Fatal("expired budget returned a successful offline directory")
+	entries, err = m.DiscoverCatalog(t.Context(), nil)
+	if err != nil || len(entries) != 2 || probes.Load() != 2 {
+		t.Fatalf("metadata request started probes: entries=%d probes=%d err=%v", len(entries), probes.Load(), err)
 	}
+	entries, err = m.DiscoverCatalog(t.Context(), []string{platformRelayID})
+	if err != nil || len(entries) != 1 || entries[0].Agent.ID != platformRelayID || probes.Load() != 3 {
+		t.Fatalf("selected probe returned unexpected result: entries=%+v probes=%d err=%v", entries, probes.Load(), err)
+	}
+
 }
 
 func TestQueuedPublicationCanBeCancelledWithoutLoginAndBlocksDeletion(t *testing.T) {

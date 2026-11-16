@@ -204,9 +204,10 @@ describe("task configuration", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("invalid directory");
     expect(localStorage.getItem(TASK_DIRECTORIES_STORAGE_KEY)).toBeNull();
   });
-  it("locks the directory in an existing conversation", () => {
+  it("locks the directory in an existing conversation", async () => {
     setup({ workspace_dir: "/project" }, vi.fn(), true);
     expect(screen.queryByRole("combobox", { name: "iaWorkdirTitle" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute("title", "/project · iaWorkdirLocked");
+    fireEvent.focus(screen.getByLabelText("iaWorkdirTitle"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("/project · iaWorkdirLocked");
   });
 });

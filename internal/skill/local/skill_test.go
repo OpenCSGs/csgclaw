@@ -176,6 +176,23 @@ func TestInstallOriginSurvivesListingAndReplacement(t *testing.T) {
 	}
 }
 
+func TestMarketVersionIsNotReplacedByArchiveDeclaration(t *testing.T) {
+	root := t.TempDir()
+	item, err := InstallArchiveWithOptions(root, "alpha.zip", mustZip(t, map[string]string{
+		"SKILL.md": "---\ndescription: Alpha\nversion: 9.9.9\n---\n# Alpha\n",
+	}), InstallArchiveOptions{Origin: installstate.Record{Source: installstate.SourceMarket, Version: "v2.0.0", RemotePath: "owner/alpha"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.Install == nil || item.Install.Version != "v2.0.0" {
+		t.Fatalf("published release identity was changed by archive metadata: %+v", item.Install)
+	}
+	items, err := List(root)
+	if err != nil || len(items) != 1 || items[0].Install.Version != "v2.0.0" {
+		t.Fatalf("market listing: %+v, %v", items, err)
+	}
+}
+
 func TestListRecognizesLegacyCLIRecordsAndUntrackedSkills(t *testing.T) {
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "legacy", "SKILL.md"), "# Legacy\n")

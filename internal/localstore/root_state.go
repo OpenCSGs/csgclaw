@@ -133,5 +133,22 @@ func updateSection(path, section string, update func(json.RawMessage) (json.RawM
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create root state dir: %w", err)
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	// Readers outside this process must see either the previous complete state or
+	// the next complete state, including when the process exits while writing.
+	file, err := os.CreateTemp(filepath.Dir(path), ".root-state-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if _, err = file.Write(append(data, '\n')); err == nil {
+		err = file.Sync()
+	}
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(file.Name(), path)
 }

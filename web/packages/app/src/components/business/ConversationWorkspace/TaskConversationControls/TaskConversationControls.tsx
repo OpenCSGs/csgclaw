@@ -5,10 +5,11 @@ import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui";
-import { ContextUsageRing, type ConversationWorkingParticipant } from "@/components/business/ConversationPane";
+import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import { resolveAgentChannelUserID, type AgentLike } from "@/models/agents";
 import { isEventMessage, isToolCallMessage, type IMConversation, type TranslateFn } from "@/models/conversations";
 import styles from "./TaskConversationControls.module.css";
+import { ConversationContextUsage } from "./ConversationContextUsage";
 import { TaskConfigurationToolbar } from "@/components/business/TaskConfigurationToolbar";
 
 export function TaskConversationControls({
@@ -70,19 +71,13 @@ export function TaskConversationControls({
           {t("taskEntryNew")}
         </Button>
       ) : null}
-      {!conversation.cloud_agent &&
-        participants
-          .filter((participant) => participant.showContextUsage || participant.contextUsage)
-          .map((participant) => (
-            <span
-              key={participant.leaseID || participant.id || participant.name}
-              className={styles.usage}
-              title={participant.name}
-            >
-              <small>{conversation.is_direct ? "" : participant.name}</small>
-              <ContextUsageRing usage={participant.contextUsage} t={t} />
-            </span>
-          ))}
+      <ConversationContextUsage
+        key={`usage:${conversation.id}`}
+        conversation={conversation}
+        participants={participants}
+        agents={agents}
+        t={t}
+      />
     </div>
   );
 }

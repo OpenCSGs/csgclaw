@@ -6,6 +6,7 @@ import {
   skillSourceFilters,
   skillSourceDirectories,
   skillVersionLabel,
+  skillLibraryVersion,
 } from "@/models/skillLibrary";
 import type { SkillSummary } from "@/models/skillhub";
 const shared: SkillSummary = {
@@ -91,5 +92,15 @@ describe("selected skill version sources", () => {
     expect(skillVersionLabel("v0.9.1")).toBe("v0.9.1");
     expect(skillVersionLabel("custom")).toBe("custom");
     expect(skillVersionLabel(undefined)).toBe("");
+  });
+  it("keeps builtin fingerprints out of release labels while retaining installed and discovered versions", () => {
+    const fingerprint = "fd3c189fe171ad974bd9d43dc5d526fe31b7bad2bd37e53a33266a26192896e6";
+    expect(
+      skillLibraryVersion({ name: "pdf", source: "builtin", install: { source: "builtin", version: fingerprint } }),
+    ).toBe("");
+    expect(
+      skillLibraryVersion({ name: "market", source: "market", install: { source: "market", version: "2.7.0" } }),
+    ).toBe("2.7.0");
+    expect(skillLibraryVersion({ ...shared, discovery: { ...shared.discovery!, version: "0.9.1" } })).toBe("0.9.1");
   });
 });

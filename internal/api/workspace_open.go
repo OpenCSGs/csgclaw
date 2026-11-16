@@ -70,7 +70,7 @@ func (h *Handler) resolveWorkspaceLocation(r *http.Request, relative string) (wo
 	if h.svc == nil || h.workspace == nil {
 		return workspaceLocation{}, errors.New("workspace unavailable")
 	}
-	root, err := h.conversationWorkspaceRoot(strings.TrimSpace(pathValue(r, "id")), r.URL.Query().Get("room_id"))
+	root, err := h.requestWorkspaceRoot(r, strings.TrimSpace(pathValue(r, "id")))
 	if err != nil {
 		return workspaceLocation{}, err
 	}

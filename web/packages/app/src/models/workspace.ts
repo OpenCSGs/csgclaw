@@ -1,6 +1,24 @@
 import type { CSSProperties } from "react";
 
+export const fileSortOptions = ["updated-desc", "updated-asc", "name-asc", "name-desc"] as const;
+export type FileSort = (typeof fileSortOptions)[number];
+
+export function compareFiles(
+  left: { name: string; date?: string },
+  right: { name: string; date?: string },
+  sort: FileSort,
+): number {
+  const nameOrder = left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  if (sort === "name-asc") return nameOrder;
+  if (sort === "name-desc") return -nameOrder;
+  const a = Date.parse(left.date ?? "");
+  const b = Date.parse(right.date ?? "");
+  const missing = Number(!Number.isFinite(a)) - Number(!Number.isFinite(b));
+  return missing || (sort === "updated-asc" ? a - b : b - a) || nameOrder;
+}
+
 export type WorkspaceEntry = {
+  modified_at?: string;
   depth?: number;
   name?: string;
   path: string;

@@ -37,6 +37,8 @@ type appServerRPCResult struct {
 	err    error
 }
 
+const appServerProtocolErrorLog = "codex app-server protocol error"
+
 func newAppServerClient(stdin io.Writer, logger *slog.Logger) *appServerClient {
 	return &appServerClient{
 		stdin:   stdin,
@@ -201,21 +203,26 @@ func (c *appServerClient) handleResponse(msg appServerWireMessage) {
 		return
 	}
 	pending := c.removePending(id)
+	result := appServerRPCResult{result: msg.Result}
+	if len(msg.Error) > 0 {
+		method := ""
+		if pending != nil {
+			method = pending.method
+		}
+		var rpcErr appServerRPCError
+		if err := json.Unmarshal(msg.Error, &rpcErr); err != nil {
+			result.err = fmt.Errorf("decode JSON-RPC error: %w", err)
+			c.logError(appServerProtocolErrorLog, "method", method, "request_id", id, "error", result.err)
+		} else {
+			result.err = rpcErr
+			c.logError(appServerProtocolErrorLog, "method", method, "request_id", id, "code", rpcErr.Code, "error", rpcErr.Message)
+		}
+	}
 	if pending == nil {
 		c.logDebug("ignore codex app-server response with unknown id", "id", id)
 		return
 	}
-
-	if len(msg.Error) > 0 {
-		var rpcErr appServerRPCError
-		if err := json.Unmarshal(msg.Error, &rpcErr); err != nil {
-			pending.ch <- appServerRPCResult{err: fmt.Errorf("decode JSON-RPC error: %w", err)}
-			return
-		}
-		pending.ch <- appServerRPCResult{err: rpcErr}
-		return
-	}
-	pending.ch <- appServerRPCResult{result: msg.Result}
+	pending.ch <- result
 }
 
 func (c *appServerClient) handleServerRequest(msg appServerWireMessage) {

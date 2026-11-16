@@ -59,3 +59,21 @@ describe("message consumption footer", () => {
     expect(screen.queryByText(/本轮消耗/)).toBeNull();
   });
 });
+
+describe("message memory actions", () => {
+  it("shows a saved marker, runs the forget action, and confirms completion", async () => {
+    const t = createTranslator("zh");
+    const forget = vi.fn(async () => {});
+    const { rerender } = render(<ConversationMessageActions content="source" t={t} />);
+    expect(screen.queryByText("记忆已更新")).not.toBeInTheDocument();
+    rerender(<ConversationMessageActions content="source" onForgetMemory={forget} t={t} />);
+    expect(screen.getByText("记忆已更新")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "忘掉这条" }));
+    expect(await screen.findByText("已忘掉")).toBeInTheDocument();
+    expect(forget).toHaveBeenCalledTimes(1);
+    rerender(<ConversationMessageActions content="source" t={t} />);
+    rerender(<ConversationMessageActions content="source" onForgetMemory={forget} t={t} />);
+    expect(screen.getByText("记忆已更新")).toBeInTheDocument();
+    expect(screen.queryByText("已忘掉")).not.toBeInTheDocument();
+  });
+});

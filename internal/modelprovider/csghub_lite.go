@@ -25,6 +25,7 @@ type ModelDiscoveryResult struct {
 	ResolvedBaseURL string
 	Models          []string
 	ImageModels     []string
+	ImageMetadata   map[string]modelcap.ImageGeneration
 	VideoModels     []string
 	VisionModels    []string
 }
@@ -74,6 +75,7 @@ func ListCSGHubLiteModelsWithClient(
 				ResolvedBaseURL: candidate,
 				Models:          directory.Models,
 				ImageModels:     directory.ImageModels,
+				ImageMetadata:   directory.ImageMetadata,
 				VideoModels:     directory.VideoModels,
 				VideoMetadata:   directory.VideoMetadata,
 				VisionModels:    directory.VisionModels,

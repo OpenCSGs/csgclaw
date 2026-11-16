@@ -189,7 +189,7 @@ func TestAgenticHubSkillBlobURLUsesRefQuery(t *testing.T) {
 
 func TestListAgenticHubSkillsNormalizesCatalogRecords(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/hub/api/v1/skills" {
+		if r.URL.Path != "/hub/api/v1/agent/skills" {
 			t.Fatalf("path = %q, want catalog endpoint", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "" {
@@ -204,15 +204,12 @@ func TestListAgenticHubSkillsNormalizesCatalogRecords(t *testing.T) {
 		if got := r.URL.Query().Get("search"); got != "agent" {
 			t.Fatalf("search = %q, want agent", got)
 		}
-		if got := r.URL.Query().Get("sort"); got != "trending" {
-			t.Fatalf("sort = %q, want trending", got)
-		}
-		if got := r.URL.Query().Get("source"); got != "" {
-			t.Fatalf("source = %q, want empty", got)
+		if r.URL.Query().Has("sort") || r.URL.Query().Has("source") {
+			t.Fatalf("unexpected legacy filters: %v", r.URL.Query())
 		}
 		_, _ = io.WriteString(w, `{
 			"data":[
-				{"name":"Skill","path":"AIWizards/agent-builder","description":"Build agents","default_branch":"dev"},
+				{"name":"Skill","path":"AIWizards/agent-builder","description":"Build agents","default_branch":"dev","recommended":true},
 				{"name":"broken","description":"missing path"}
 			],
 			"total":"78"
@@ -239,6 +236,7 @@ func TestListAgenticHubSkillsNormalizesCatalogRecords(t *testing.T) {
 	}
 	if got, want := page.Items[0], (AgenticHubSkillSummary{
 		Description: "Build agents",
+		Recommended: true,
 		Name:        "agent-builder",
 		Ref:         "dev",
 		RemotePath:  "AIWizards/agent-builder",

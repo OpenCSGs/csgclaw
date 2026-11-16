@@ -2,7 +2,7 @@
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  object-fit: cover;
+  object-fit: contain;
   background: var(--panel);
 }
 

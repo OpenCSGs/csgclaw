@@ -62,11 +62,12 @@ type ParticipantThinkingStatus struct {
 }
 
 type ParticipantWorkStatus struct {
-	ContextUsage *modelcap.ContextUsage     `json:"context_usage,omitempty"`
-	Sequence     uint64                     `json:"sequence"`
-	Phase        string                     `json:"phase"`
-	Stage        string                     `json:"stage,omitempty"`
-	Thinking     *ParticipantThinkingStatus `json:"thinking,omitempty"`
+	ContextUsageEpoch uint64                     `json:"context_usage_epoch,omitempty"`
+	ContextUsage      *modelcap.ContextUsage     `json:"context_usage,omitempty"`
+	Sequence          uint64                     `json:"sequence"`
+	Phase             string                     `json:"phase"`
+	Stage             string                     `json:"stage,omitempty"`
+	Thinking          *ParticipantThinkingStatus `json:"thinking,omitempty"`
 }
 
 type ParticipantWorkStatusPatchRequest struct {

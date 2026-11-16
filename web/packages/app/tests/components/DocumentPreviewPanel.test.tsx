@@ -79,6 +79,8 @@ const t = (key: string, params?: Record<string, string | number>) => {
     attachmentPreviewFailed: "Preview failed",
     attachmentPreviewFullscreen: "Fullscreen",
     attachmentPreviewHtmlDocument: "HTML preview document",
+    attachmentPreviewWrapSource: "Wrap lines",
+    attachmentPreviewCopySource: "Copy source",
     attachmentPreviewExitFullscreen: "Exit fullscreen",
     attachmentPreviewLoading: "Loading preview",
     attachmentPreviewOutline: "Document outline",
@@ -154,26 +156,54 @@ describe("DocumentPreviewPanel", () => {
     },
   ];
 
-  it("uses the response charset in both Markdown preview and source", async () => {
-    const data = new Uint8Array([0x23, 0x20, 0xa4, 0xa4, 0xa4, 0xe5]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(data, {
-            headers: { "Content-Type": "text/markdown; charset=big5" },
-          }),
-      ),
+  it.each(["text/markdown", "text/plain; charset=big5"])(
+    "uses the response charset in Markdown preview and source with %s metadata",
+    async (mediaType) => {
+      const data = new Uint8Array([0x23, 0x20, 0xa4, 0xa4, 0xa4, 0xe5]);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(data, {
+              headers: { "Content-Type": "text/markdown; charset=big5" },
+            }),
+        ),
+      );
+      render(
+        <DocumentPreviewPanel
+          index={0}
+          items={[{ ...items[0]!, mediaType }]}
+          t={t}
+          onClose={vi.fn()}
+          onIndexChange={vi.fn()}
+        />,
+      );
+      expect(await screen.findByRole("heading", { name: "中文" })).toBeInTheDocument();
+      const sourceMode = screen.getByRole("radio", { name: "Code" });
+      expect(sourceMode).toHaveAttribute("data-csg-control", "segmented-control");
+      expect(sourceMode.closest('[role="radiogroup"]')).toHaveAttribute("data-variant", "text");
+      await userEvent.setup().click(sourceMode);
+      expect(sourceMode).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByText("# 中文")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("href", items[0]!.downloadURL);
+      await userEvent.setup().click(screen.getByRole("radio", { name: "Preview" }));
+      expect(await screen.findByRole("heading", { name: "中文" })).toBeInTheDocument();
+    },
+  );
+
+  it("displays a plain-text error saved with a PDF extension", async () => {
+    const text = "Download failed: upstream returned an error.";
+    const file = new File([text], "failed.pdf", { type: "text/plain" });
+    render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[{ id: "plain-pdf", name: file.name, mediaType: file.type, sizeBytes: file.size, file }]}
+        t={t}
+        onClose={vi.fn()}
+        onIndexChange={vi.fn()}
+      />,
     );
-    render(<DocumentPreviewPanel index={0} items={items} t={t} onClose={vi.fn()} onIndexChange={vi.fn()} />);
-    expect(await screen.findByRole("heading", { name: "中文" })).toBeInTheDocument();
-    const sourceMode = screen.getByRole("radio", { name: "Code" });
-    expect(sourceMode).toHaveAttribute("data-csg-control", "segmented-control");
-    expect(sourceMode.closest('[role="radiogroup"]')).toHaveAttribute("data-variant", "text");
-    await userEvent.setup().click(sourceMode);
-    expect(sourceMode).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByText("# 中文")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("href", items[0]!.downloadURL);
+    expect(await screen.findByText(text)).toBeInTheDocument();
   });
 
   it("loads, renders, navigates, zooms, downloads, and restores focus", async () => {
@@ -319,11 +349,41 @@ describe("DocumentPreviewPanel", () => {
     expect(frameDocument).not.toContain("tracker.example");
 
     await user.click(screen.getByRole("radio", { name: "Code" }));
-    await waitFor(() =>
-      expect(
-        container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-shiki"]}[data-language="html"]`),
-      ).toHaveTextContent("window.hacked = true"),
+    const code = await screen.findByRole("textbox", { name: "Code" });
+    expect(code).toHaveTextContent("window.hacked = true");
+    expect(code).toHaveAttribute("aria-readonly", "true");
+    expect(container.querySelector(".cm-line span")).toBeInTheDocument();
+  });
+
+  it("shows line numbers and can wrap and copy the source of a large HTML document", async () => {
+    const user = userEvent.setup();
+    const body = "<p>Report text</p>\n".repeat(2800);
+    const longLine = "<p>" + "Long line ".repeat(300) + "</p>";
+    const source = `<!doctype html><html><body>\n${longLine}\n${body}<p>End of source</p></body></html>`;
+    const file = new File([source], "report.html", { type: "text/html" });
+    const { container } = render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[{ file, id: "html", mediaType: file.type, name: file.name, sizeBytes: file.size }]}
+        t={t}
+        onClose={() => {}}
+        onIndexChange={() => {}}
+      />,
     );
+
+    await screen.findByTitle("HTML preview document");
+    await user.click(screen.getByRole("radio", { name: "Code" }));
+    const code = await screen.findByRole("textbox", { name: "Code" });
+    expect(container.querySelector(".cm-lineNumbers")).toBeInTheDocument();
+    expect(code).toHaveClass("cm-lineWrapping");
+
+    await user.click(screen.getByRole("button", { name: "Wrap lines" }));
+    expect(code).not.toHaveClass("cm-lineWrapping");
+    await user.click(screen.getByRole("button", { name: "Copy source" }));
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(source));
+
+    await user.click(screen.getByRole("radio", { name: "Preview" }));
+    expect(await screen.findByTitle("HTML preview document")).toHaveAttribute("sandbox", "");
   });
 
   it("syntax-highlights Go source with dual light and dark theme tokens", async () => {

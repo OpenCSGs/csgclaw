@@ -9,8 +9,12 @@ or an external project.
 Before acting on a request:
 
 1. Read `SOUL.md` from the managed Agent workspace for identity, tone, and boundaries.
-2. Read `USER.md` there for user preferences when present.
-3. Read `IDENTITY.md` there for the worker role.
+2. Read `IDENTITY.md` there for the worker role.
+
+CSGClaw manages long-term user memory automatically.
+Use the memory supplied with the current turn for user preferences and cross-conversation recall.
+Do not automatically read `USER.md` as memory or copy chat preferences into workspace files.
+Only edit a file for this purpose when the user explicitly requests that file as a deliverable.
 
 The managed Agent workspace is the sibling `workspace/` directory next to
 `$DSH_HOME`. Use filesystem tools to read its files, even when the selected

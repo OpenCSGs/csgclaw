@@ -89,6 +89,7 @@ export type ConversationComposerProps = ComposerResourceProps & {
   slashPickerOpen: boolean;
   t: TranslateFn;
   workingParticipants?: ConversationWorkingParticipant[];
+  stoppableParticipant?: ConversationWorkingParticipant;
   toolbar?: ReactNode;
   hideWorkingContextUsage?: boolean;
 };
@@ -124,6 +125,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   slashPickerOpen,
   t,
   workingParticipants = [],
+  stoppableParticipant,
   toolbar,
   hideWorkingContextUsage = false,
   onApplyMention,
@@ -167,8 +169,24 @@ export const ConversationComposer = memo(function ConversationComposer({
     selected: selectedResources(draftSegments),
     disabled: interactionDisabled,
   });
-  const sendDisabled =
-    interactionDisabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length);
+  const canSend = canSendComposer(draftSegments, attachmentDrafts.length);
+  const sendDisabled = interactionDisabled || resourcePicker.active || !canSend;
+  const stopTarget =
+    !isSending && !resourcePicker.active && !draftText.trim() && !canSend && onStopWorkingTurn
+      ? stoppableParticipant
+      : undefined;
+  const stopping = Boolean(isSending || stopTarget);
+  const sendLabel = isSending
+    ? t("stopSending")
+    : stopTarget
+      ? t("conversationWorkingStopAria", { name: stopTarget.name })
+      : t("send");
+  const stopBusy = Boolean(stopTarget?.stopping || stopTarget?.stopSending);
+  const actionTooltip = stopTarget?.stopping
+    ? t("conversationWorkingStopping")
+    : stopTarget?.stopSending
+      ? t("conversationWorkingStopSending")
+      : sendLabel;
   const placeholder = t(textOnly ? "cloudChatPlaceholder" : "inputPlaceholder");
   const actionSuggestions = useMemo(() => composerActionSuggestions(draftText), [draftText]);
 
@@ -375,21 +393,21 @@ export const ConversationComposer = memo(function ConversationComposer({
                 </Button>
               </Tooltip>
             ) : null}
-            <Tooltip content={isSending ? t("stopSending") : t("send")} contentProps={{ side: "top" }}>
+            <Tooltip content={actionTooltip} contentProps={{ side: "top" }}>
               <span>
                 <Button
-                  variant="primary"
-                  className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}${isSending ? " is-stopping" : ""}`}
-                  aria-label={isSending ? t("stopSending") : t("send")}
-                  disabled={isSending ? !onStopSend : sendDisabled}
+                  variant={stopping ? "danger" : "primary"}
+                  className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
+                  aria-label={sendLabel}
+                  disabled={isSending ? !onStopSend : stopTarget ? stopBusy : sendDisabled}
                   iconOnly
-                  size="lg"
-                  onClick={isSending ? onStopSend : onSendMessage}
+                  size="sm"
+                  onClick={isSending ? onStopSend : stopTarget ? () => onStopWorkingTurn?.(stopTarget) : onSendMessage}
                 >
-                  {isSending ? (
-                    <Square aria-hidden="true" size={16} fill="currentColor" />
+                  {stopping ? (
+                    <Square aria-hidden="true" size={14} fill="currentColor" />
                   ) : (
-                    <ArrowUp aria-hidden="true" size={22} strokeWidth={1.5} />
+                    <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
                   )}
                 </Button>
               </span>

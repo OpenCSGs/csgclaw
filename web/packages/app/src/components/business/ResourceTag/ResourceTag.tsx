@@ -1,3 +1,4 @@
+import { ConnectorLogo } from "../ConnectorLogo/ConnectorLogo";
 import { resourceKey, resourceLabel, type ResourceSnapshot } from "@/models/agentResources";
 
 type ResourceTagProps = {
@@ -8,6 +9,9 @@ type ResourceTagProps = {
 export function ResourceTag({ resource, removal }: ResourceTagProps) {
   return (
     <span className="resource-tag" data-resource-type={resource.type} title={resourceKey(resource)}>
+      {resource.type === "connector" ? (
+        <ConnectorLogo name={resourceLabel(resource)} className="resource-tag-brand" fallback={null} />
+      ) : null}
       <span className="resource-tag-label">{resourceLabel(resource)}</span>
       {removal ? (
         <button

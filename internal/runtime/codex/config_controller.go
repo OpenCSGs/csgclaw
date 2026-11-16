@@ -111,7 +111,7 @@ func (r *Runtime) resetPersistedConversationMappings(runtimeID string) error {
 	if err != nil {
 		return fmt.Errorf("resolve codex session metadata after model change: %w", err)
 	}
-	if err := writeJSONFile(r.writeFile, path, meta); err != nil {
+	if err := writeJSONFile(r.writeMetadataFile, path, meta); err != nil {
 		return fmt.Errorf("reset codex conversations after model change: %w", err)
 	}
 	return nil

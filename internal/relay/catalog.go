@@ -2,9 +2,9 @@ package relay
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -13,6 +13,7 @@ import (
 // CatalogEntry is a browser-safe discovery record. ConnectionID is an opaque
 // server/login reference; it never contains credentials.
 type CatalogEntry struct {
+	Recommended        bool   `json:"recommended"`
 	RelayURL           string `json:"relay_url"`
 	ConnectionID       string `json:"connection_id"`
 	Agent              Agent  `json:"agent"`
@@ -28,12 +29,20 @@ type CatalogEntry struct {
 // Discover reads community instances and resolves their subscription IDs through
 // Relay. The local catalog is retained for standalone protocol diagnostics.
 func (m *Manager) Discover(ctx context.Context) ([]CatalogEntry, error) {
-	return m.discover(ctx, "")
+	return m.discover(ctx, "", nil)
+}
+
+// DiscoverCatalog probes only the requested IDs. An empty slice loads metadata only.
+func (m *Manager) DiscoverCatalog(ctx context.Context, probeIDs []string) ([]CatalogEntry, error) {
+	if probeIDs == nil {
+		probeIDs = []string{}
+	}
+	return m.discover(ctx, "", probeIDs)
 }
 
 // DiscoverAgent probes only the requested registration.
 func (m *Manager) DiscoverAgent(ctx context.Context, id, connectionID string) (CatalogEntry, error) {
-	entries, err := m.discover(ctx, id)
+	entries, err := m.discover(ctx, id, nil)
 	if err != nil {
 		return CatalogEntry{}, err
 	}
@@ -45,9 +54,9 @@ func (m *Manager) DiscoverAgent(ctx context.Context, id, connectionID string) (C
 	return CatalogEntry{}, ErrChatReference
 }
 
-func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, error) {
+func (m *Manager) discover(ctx context.Context, onlyID string, probeIDs []string) ([]CatalogEntry, error) {
 	if m.community == nil {
-		return m.catalog(ctx, onlyID), nil
+		return m.catalog(ctx, onlyID, probeIDs), nil
 	}
 	m.mu.Lock()
 	c, err := m.client(m.manifest.Endpoint, m.manifest.Token)
@@ -72,11 +81,22 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 		}
 		instances = selected
 	}
+	probeSet := make(map[string]bool, len(probeIDs))
+	for _, id := range probeIDs {
+		probeSet[id] = true
+	}
+	if len(probeSet) > 0 {
+		selected := instances[:0]
+		for _, item := range instances {
+			if probeSet[item.relayID()] {
+				selected = append(selected, item)
+			}
+		}
+		instances = selected
+	}
 	entries := make([]CatalogEntry, len(instances))
 	jobs := make(chan int)
 	var wg sync.WaitGroup
-	var probeFailure error
-	var failureMu sync.Mutex
 	// Bound fanout while avoiding one slow registration blocking every later one.
 	for range min(8, len(instances)) {
 		wg.Add(1)
@@ -86,26 +106,15 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 				item := instances[index]
 				id := item.relayID()
 				a := Agent{ID: id, Status: "offline"}
-				probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-				var live Agent
-				probeErr := c.Request(probeCtx, http.MethodGet, "/v1/agents/"+url.PathEscape(id), "", nil, &live)
-				var availabilityErr error
-				if probeCtx.Err() != nil {
-					availabilityErr = fmt.Errorf("relay availability query timed out or was cancelled: %w", probeCtx.Err())
-				} else if probeErr != nil && !isNotFound(probeErr) {
-					availabilityErr = fmt.Errorf("relay availability query failed: %w", probeErr)
-				} else if probeErr == nil {
-					if live.ID != id || (live.Status != "online" && live.Status != "offline" && live.Status != "unhealthy") {
-						availabilityErr = fmt.Errorf("relay returned an invalid availability response")
-					} else {
+				if (probeIDs == nil || len(probeSet) > 0) && ctx.Err() == nil {
+					probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+					var live Agent
+					probeErr := c.Request(probeCtx, http.MethodGet, "/v1/agents/"+url.PathEscape(id), "", nil, &live)
+					if probeErr == nil && probeCtx.Err() == nil && live.ID == id &&
+						(live.Status == "online" || live.Status == "offline" || live.Status == "unhealthy") {
 						a = live
 					}
-				}
-				cancel()
-				if availabilityErr != nil {
-					failureMu.Lock()
-					probeFailure = availabilityErr
-					failureMu.Unlock()
+					cancel()
 				}
 				// Community controls discovery visibility, even if Relay's copy differs.
 				a.Visibility = "private"
@@ -117,6 +126,7 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 					RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar,
 					Source: item.Source, Type: item.Type, CreatorName: item.CreatorName, ModelID: item.Metadata.ProvisionRequest.LLM.Model,
 					OwnedByCurrentUser: item.Editable,
+					Recommended:        item.Recommended,
 				}
 				if item.Source == "platform" && item.TemplateID > 0 {
 					entry.TemplateRepoPath = validatedTemplateRepoPath(item.Metadata.TemplateMetadata.RepoPath)
@@ -126,34 +136,25 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 		}()
 	}
 	for index := range instances {
-		select {
-		case jobs <- index:
-		case <-ctx.Done():
-			close(jobs)
-			wg.Wait()
-			return nil, ctx.Err()
-		}
+		jobs <- index
 	}
 	close(jobs)
 	wg.Wait()
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	if probeFailure != nil {
-		return nil, probeFailure
-	}
 	return entries, nil
 }
 func (m *Manager) Catalog(ctx context.Context) []CatalogEntry {
-	return m.catalog(ctx, "")
+	return m.catalog(ctx, "", nil)
 }
 
-func (m *Manager) catalog(ctx context.Context, onlyID string) []CatalogEntry {
+func (m *Manager) catalog(ctx context.Context, onlyID string, probeIDs []string) []CatalogEntry {
 	m.mu.Lock()
 	entries := make([]CatalogEntry, 0, len(m.manifest.Agents))
 	connected := make(map[string]bool, len(m.running))
 	for id, req := range m.manifest.Agents {
 		if req.Visibility != "public" || (onlyID != "" && id != onlyID) {
+			continue
+		}
+		if len(probeIDs) > 0 && !slices.Contains(probeIDs, id) {
 			continue
 		}
 		entry := m.manifest.Catalog[id]
@@ -175,7 +176,7 @@ func (m *Manager) catalog(ctx context.Context, onlyID string) []CatalogEntry {
 		entry := &entries[i]
 		entry.Agent.Status = "offline"
 		entry.Agent.Busy = false
-		if clientErr != nil {
+		if clientErr != nil || (probeIDs != nil && len(probeIDs) == 0) || ctx.Err() != nil {
 			continue
 		}
 		probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)

@@ -279,7 +279,7 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 	}
 	answer := result.Output
 	if state.progress != nil {
-		answer = state.progress.finalText(result.Output)
+		answer = state.progress.finalText(result.Output, result.RuntimeText)
 		state.renderer.ReplaceText(answer)
 	}
 	text := strings.TrimSpace(strings.Join(state.renderer.FinalMessages(), "\n\n"))

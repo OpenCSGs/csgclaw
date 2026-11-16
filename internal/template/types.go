@@ -16,6 +16,7 @@ const (
 )
 
 type Template struct {
+	Recommended    bool `json:"recommended"`
 	VersionCount   int
 	LatestRevision int
 	Publications   []apitypes.TemplatePublication

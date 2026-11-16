@@ -108,8 +108,7 @@ if [ "$APP" = "csgclaw" ]; then
 fi
 
 if [ "$APP" = "csgclaw" ]; then
-  CODEX_CLI_DOWNLOAD_BASE_URL="${CODEX_CLI_DOWNLOAD_BASE_URL:-https://csgclaw.opencsg.com/codex-cli/latest}" \
-    "$(dirname "$0")/fetch-codex-cli.sh" "$GOOS_TARGET" "$GOARCH_TARGET" "$stage_dir"
+  "$(dirname "$0")/fetch-codex-cli.sh" "$GOOS_TARGET" "$GOARCH_TARGET" "$stage_dir"
 fi
 
 archive_base="${APP}_${VERSION}_${GOOS_TARGET}_${GOARCH_TARGET}"

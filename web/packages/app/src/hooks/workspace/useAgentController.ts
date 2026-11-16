@@ -48,7 +48,7 @@ import {
 } from "@/api/hub";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
-import { applyAgentCreationResources } from "@/api/agentCreation";
+import { applyAgentCreationResources, reconcileCreatedAgentRuntime } from "@/api/agentCreation";
 import type { AgentCreationResources } from "@/models/agentCreation";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
 import type { CreateTeamPayload } from "@/api/tasks";
@@ -110,6 +110,7 @@ import {
   resolveRuntimeSelection,
   resolveAgentChannelUserID,
   shouldWaitForManagerRuntimeAfterProfileSave,
+  modelRequestKey,
   startAgentCreateProgress,
 } from "@/models/agents";
 import type {
@@ -129,6 +130,7 @@ import {
   modelProviderCatalogWithModels,
   modelProviderConfigUsesOpenCSG,
   modelProviderOptionsFromCatalog,
+  type ModelProviderCatalog,
 } from "@/models/modelProviders";
 import { agentTemplatesSearch, WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
@@ -488,9 +490,16 @@ export function useAgentController({
   const pendingTemplatePublications = useRef(new Map<string, string>());
   const [agentPagePublishError, setAgentPagePublishError] = useState("");
   const [agentPageError, setAgentPageError] = useState("");
+  const [modelSaveFailure, setModelSaveFailure] = useState<{
+    agentID: string;
+    requestKey: string;
+    modelID: string;
+    message: string;
+  } | null>(null);
   const [agentPageBillingURL, setAgentPageBillingURL] = useState("");
   function setAgentPageSaveError(message: string, billingURL = ""): void {
     setAgentPageError(message);
+    setModelSaveFailure(null);
     setAgentPageBillingURL(billingURL);
   }
   const [agentSkillAddBusy, setAgentSkillAddBusy] = useState(false);
@@ -818,6 +827,8 @@ export function useAgentController({
   const agentModelOptions = useMemo(() => modelProviderOptionsFromCatalog(agentModelProviders), [agentModelProviders]);
   const {
     models: agentPageDiscoveredModels,
+    modelsLoaded: agentPageModelsLoaded,
+    providerConfirmedConnected: agentPageProviderConfirmedConnected,
     modelBusy: agentPageModelProbeBusy,
     modelError: agentPageModelError,
     retryModels: retryAgentPageModels,
@@ -826,15 +837,31 @@ export function useAgentController({
     enabled: Boolean(selectedAgentForPage),
     onDraftChange: setAgentPageDraft,
   });
+  const agentPageProviderID = agentPageDraft?.model_provider_id || "";
+  const agentPageModelDirectory = agentPageModelsLoaded ? agentPageDiscoveredModels : undefined;
   const agentPageModelProviders = useMemo(
     () =>
-      modelProviderCatalogWithModels(
-        agentModelProviders,
-        String(agentPageDraft?.model_provider_id || ""),
-        agentPageDiscoveredModels,
-      ),
-    [agentModelProviders, agentPageDiscoveredModels, agentPageDraft?.model_provider_id],
+      modelProviderCatalogWithModels(agentModelProviders, agentPageProviderID, agentPageModelDirectory, {
+        confirmedConnected: agentPageProviderConfirmedConnected,
+      }),
+    [agentModelProviders, agentPageProviderID, agentPageModelDirectory, agentPageProviderConfirmedConnected],
   );
+  useEffect(() => {
+    if (!agentPageProviderID || agentPageModelDirectory === undefined || agentPageModelProbeBusy) return;
+    queryClient.setQueryData<ModelProviderCatalog>(workspaceQueryKeys.modelProviders(), (catalog) =>
+      catalog
+        ? (modelProviderCatalogWithModels(catalog, agentPageProviderID, agentPageModelDirectory, {
+            confirmedConnected: agentPageProviderConfirmedConnected,
+          }) ?? catalog)
+        : catalog,
+    );
+  }, [
+    agentPageProviderID,
+    agentPageModelDirectory,
+    agentPageModelProbeBusy,
+    agentPageProviderConfirmedConnected,
+    queryClient,
+  ]);
   const agentPageModelOptions = useMemo(
     () => modelProviderOptionsFromCatalog(agentPageModelProviders),
     [agentPageModelProviders],
@@ -1726,9 +1753,26 @@ export function useAgentController({
     }
   }
 
+  const agentPageModelChanged =
+    agentPageDraft?.model_id !== agentPageSavedDraft?.model_id ||
+    agentPageDraft?.model_provider_id !== agentPageSavedDraft?.model_provider_id;
+  const agentPageProbesModelOnSave =
+    agentRuntimeKind(selectedAgentForPage) === "codex" &&
+    !["codex", "claude_code", "claude-code"].includes(String(agentPageDraft?.provider ?? ""));
+  const agentPageModelSaveBlocked = Boolean(
+    agentPageDraft?.model_id &&
+    agentPageSavedDraft &&
+    agentPageModelsLoaded &&
+    !agentPageDiscoveredModels.includes(agentPageDraft.model_id) &&
+    (agentPageModelChanged ||
+      (agentPageProbesModelOnSave &&
+        (profilePayloadForCompare(agentPageDraft) !== profilePayloadForCompare(agentPageSavedDraft) ||
+          runtimeOptionsPayloadForCompare(agentPageDraft) !== runtimeOptionsPayloadForCompare(agentPageSavedDraft)))),
+  );
+
   async function saveAgentPage(): Promise<void> {
     const draftToSave = agentPageDraft;
-    if (!draftToSave || !selectedAgentForPage?.id) {
+    if (!draftToSave || !selectedAgentForPage?.id || agentPageModelSaveBlocked) {
       return;
     }
     if (modelProviderConfigUsesOpenCSG(draftToSave) && !requireOpenCSGAuthentication()) {
@@ -1845,7 +1889,29 @@ export function useAgentController({
         showAgentPageNotice(t("profileSetupIncompleteAfterSave"), "warning", 5000, saved.id);
       }
     } catch (err) {
-      if (!(modelProviderConfigUsesOpenCSG(draftToSave) && handleOpenCSGAuthenticationError(err))) {
+      const code = apiErrorCode(err);
+      if (
+        [
+          "model_not_found",
+          "cluster_not_found",
+          "model_unavailable",
+          "model_not_running",
+          "required_upstream_unavailable",
+          "response_route_unavailable",
+        ].includes(code)
+      ) {
+        const requestKey = modelRequestKey(draftToSave);
+        setModelSaveFailure({
+          agentID: selectedAgentForPage.id,
+          requestKey,
+          modelID: draftToSave.model_id,
+          message: errorMessage(err, t("agentActionFailed")),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: workspaceQueryKeys.agentProfileModels(requestKey),
+          exact: true,
+        });
+      } else if (!(modelProviderConfigUsesOpenCSG(draftToSave) && handleOpenCSGAuthenticationError(err))) {
         setAgentPageSaveError(errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
       }
     } finally {
@@ -1937,7 +2003,8 @@ export function useAgentController({
           : localizeAPIErrorWithDiagnostics(err, t, t("agentActionFailed"));
       const message = localTemplateID
         ? t(
-            apiErrorCode(err) === "template_publish_file_too_large"
+            apiErrorCode(err) === "template_publish_file_too_large" ||
+              apiErrorCode(err) === "template_publish_total_too_large"
               ? "agentTemplateSavedPublishFileTooLarge"
               : "agentTemplateSavedPublishFailed",
             { reason },
@@ -2107,19 +2174,33 @@ export function useAgentController({
             ...(payload.runtime_options !== undefined ? { runtime_options: payload.runtime_options } : {}),
             ...(payload.mcpServers !== undefined ? { mcpServers: payload.mcpServers } : {}),
           });
+      let finalSaved = saved;
+      const creationWarnings: string[] = [];
       if (isCreate && resources && saved.id) {
         const failedResources = await applyAgentCreationResources(saved.id, resources);
         if (failedResources.length)
-          showAgentPageNotice(
-            t("agentWizardResourcesFailed", { names: failedResources.join(", ") }),
-            "warning",
-            0,
-            saved.id,
-            true,
-          );
+          creationWarnings.push(t("agentWizardResourcesFailed", { names: failedResources.join(", ") }));
       }
-      syncManagerProfileFromAgent(saved);
-      await saveLinkedAgentUserAvatar(saved?.participants?.length ? saved : editingAgent || saved, agentDraft.avatar);
+      if (isCreate && saved.id) {
+        try {
+          const reconciled = await reconcileCreatedAgentRuntime(saved.id);
+          if (reconciled?.id === saved.id) {
+            finalSaved = {
+              ...saved,
+              ...reconciled,
+              participants: reconciled.participants ?? saved.participants,
+              skipped_resources: saved.skipped_resources,
+            };
+          }
+        } catch {
+          creationWarnings.push(t("agentCreateRuntimeRecoveryFailed"));
+        }
+      }
+      syncManagerProfileFromAgent(finalSaved);
+      await saveLinkedAgentUserAvatar(
+        finalSaved?.participants?.length ? finalSaved : editingAgent || finalSaved,
+        agentDraft.avatar,
+      );
       if (!isCreate && mcpServersChanged) {
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(editingAgentID) });
       }
@@ -2131,25 +2212,22 @@ export function useAgentController({
               ? t("agentTemplateSkippedKnowledgeBase", { name: String(resource.name || "") })
               : t("agentTemplateSkippedMCP", { name: String(resource.name || "") }),
           );
-          showAgentPageNotice(
-            [t("agentTemplateCreatedWithSkippedResources"), ...resourceLines].join("\n"),
-            "warning",
-            0,
-            saved.id,
-            true,
-          );
+          creationWarnings.push([t("agentTemplateCreatedWithSkippedResources"), ...resourceLines].join("\n"));
+        }
+        if (saved.id && creationWarnings.length > 0) {
+          showAgentPageNotice(creationWarnings.join("\n"), "warning", 0, saved.id, true);
         }
       }
       await refreshAgents();
       await refreshWorkspaceBootstrap();
-      await refreshAgentSkills(saved.id || editingAgentID);
+      await refreshAgentSkills(finalSaved.id || editingAgentID);
       if (isCreate) {
         setAgentProgress((current) =>
           current
             ? { ...current, percent: 100, status: "done", index: Math.max(0, (current.steps?.length || 1) - 1) }
             : current,
         );
-        selectAgent(saved, { replace: true });
+        selectAgent(finalSaved, { replace: true });
       }
       setShowAgentModal(false);
       setAgentDraft(null);
@@ -2893,6 +2971,15 @@ export function useAgentController({
       modelProviders: agentPageModelProviders,
       modelBusy: agentPageModelBusy,
       modelError: agentPageModelError,
+      modelDirectory: agentPageModelDirectory ?? null,
+      modelSaveBlocked: agentPageModelSaveBlocked,
+      modelSaveError:
+        modelSaveFailure &&
+        modelSaveFailure.agentID === selectedAgentForPage?.id &&
+        modelSaveFailure.requestKey === modelRequestKey(agentPageDraft) &&
+        modelSaveFailure.modelID === agentPageDraft?.model_id
+          ? modelSaveFailure.message
+          : undefined,
       onRetryModels: () => {
         if (modelProviderConfigUsesOpenCSG(agentPageDraft) && !requireOpenCSGAuthentication()) {
           return;

@@ -43,6 +43,7 @@ func (h *Handler) agentLifecycleState(id string) string {
 func (h *Handler) configureAgentLifecycle() {
 	if h.im != nil {
 		h.im.SetAgentStateLookup(h.chatUserLifecycleState)
+		h.im.SetLegacyNotifierLookup(h.chatUserIsLegacyNotifier)
 	}
 }
 func (h *Handler) availableScheduledAgent(id string) error {

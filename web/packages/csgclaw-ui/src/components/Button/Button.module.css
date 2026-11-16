@@ -2,45 +2,35 @@
 .btn {
   box-sizing: border-box;
   --btn-height: 40px;
-  --btn-min-width: 0px;
-  --btn-padding-x: 14px;
+  --btn-min-width: 80px;
+  --btn-padding-x: 16px;
   --btn-font-size: 14px;
   --btn-line-height: 20px;
   --button-border: var(--csgclaw-ui-button-neutral-border);
   --button-background: var(--csgclaw-ui-button-neutral-background);
-  --button-text: var(
-    --button-neutral-text,
-    var(--csgclaw-ui-button-neutral-text)
-  );
+  --button-text: var(--csgclaw-ui-button-neutral-text);
   --button-hover-border: var(--csgclaw-ui-button-neutral-hover-border);
   --button-hover-background: var(--csgclaw-ui-button-neutral-hover-background);
-  --button-hover-text: var(
-    --button-neutral-hover-text,
-    var(--csgclaw-ui-button-neutral-hover-text)
-  );
+  --button-hover-text: var(--csgclaw-ui-button-neutral-hover-text);
   --button-shadow: var(--csgclaw-ui-shadow-soft);
   --button-ring: var(--csgclaw-ui-focus-ring);
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--btn-gap, var(--csgclaw-ui-space-1));
+  gap: var(--csgclaw-ui-space-1);
   min-width: var(--btn-min-width);
   min-height: var(--btn-height);
   height: var(--btn-height);
-  padding: 0 calc(var(--btn-padding-x) - 1px);
+  padding: 0 var(--btn-padding-x);
   border: 1px solid var(--button-border);
-  border-radius: var(--csgclaw-ui-radius-md);
+  border-radius: var(--csgclaw-ui-radius-base);
   background: var(--button-background);
   color: var(--button-text);
   box-shadow: var(--button-shadow);
-  font-family: var(--button-font-family, var(--csgclaw-ui-font-sans));
+  font-family: var(--csgclaw-ui-font-sans);
   font-size: var(--btn-font-size);
-  font-weight: var(
-    --btn-font-weight,
-    var(--button-font-weight, var(--csgclaw-ui-font-weight-medium))
-  );
-  font-synthesis: none;
+  font-weight: var(--btn-font-weight, var(--csgclaw-ui-font-weight-medium));
   line-height: var(--btn-line-height);
   white-space: nowrap;
   text-align: center;
@@ -53,23 +43,23 @@
     box-shadow 180ms ease;
 }
 .btn-sm {
-  --btn-height: 36px;
-  --btn-min-width: 0px;
+  --btn-height: 32px;
+  --btn-min-width: 64px;
   --btn-padding-x: 12px;
-  --btn-font-size: 14px;
-  --btn-line-height: 20px;
+  --btn-font-size: 13px;
+  --btn-line-height: 18px;
 }
 .btn-lg {
   --btn-height: 44px;
-  --btn-min-width: 0px;
-  --btn-padding-x: 16px;
-  --btn-font-size: 16px;
-  --btn-line-height: 24px;
+  --btn-min-width: 88px;
+  --btn-padding-x: 18px;
+  --btn-font-size: 15px;
+  --btn-line-height: 22px;
 }
 .btn-xl {
   --btn-height: 48px;
-  --btn-min-width: 0px;
-  --btn-padding-x: 18px;
+  --btn-min-width: 96px;
+  --btn-padding-x: 20px;
   --btn-font-size: 16px;
   --btn-line-height: 24px;
 }
@@ -79,8 +69,6 @@
   --btn-padding-x: 24px;
   --btn-font-size: 18px;
   --btn-line-height: 28px;
-  padding-inline: var(--btn-padding-x);
-  border-radius: var(--csgclaw-ui-radius-base);
 }
 .btn.btn-primary {
   --button-border: var(--csgclaw-ui-button-primary-border);
@@ -110,13 +98,10 @@
 .btn.btn-outline-danger {
   --button-border: var(--csgclaw-ui-button-danger-outline-border);
   --button-background: var(--csgclaw-ui-button-danger-outline-background);
-  --button-text: var(--button-danger-text, var(--csgclaw-ui-danger-text));
+  --button-text: var(--csgclaw-ui-danger-text);
   --button-hover-border: var(--csgclaw-ui-button-danger-outline-hover-border);
   --button-hover-background: var(--csgclaw-ui-danger-hover-background);
-  --button-hover-text: var(
-    --button-danger-hover-text,
-    var(--csgclaw-ui-danger-text-strong)
-  );
+  --button-hover-text: var(--csgclaw-ui-danger-text-strong);
   --button-ring: var(--csgclaw-ui-error-focus-ring);
 }
 .btn:is(
@@ -138,22 +123,13 @@
   --button-hover-background: var(--csgclaw-ui-control-hover-background);
 }
 .btn:is(.btn-tertiary-gray, .btn-link-gray) {
-  --button-text: var(
-    --button-tertiary-text,
-    var(--csgclaw-ui-button-tertiary-text)
-  );
-  --button-hover-text: var(
-    --button-tertiary-hover-text,
-    var(--csgclaw-ui-button-tertiary-hover-text)
-  );
+  --button-text: var(--csgclaw-ui-button-tertiary-text);
+  --button-hover-text: var(--csgclaw-ui-button-tertiary-hover-text);
   --button-hover-background: var(--csgclaw-ui-button-tertiary-hover-background);
 }
 .btn:is(.btn-tertiary-danger, .btn-link-danger) {
-  --button-text: var(--button-danger-text, var(--csgclaw-ui-danger-text));
-  --button-hover-text: var(
-    --button-danger-hover-text,
-    var(--csgclaw-ui-danger-text-strong)
-  );
+  --button-text: var(--csgclaw-ui-danger-text);
+  --button-hover-text: var(--csgclaw-ui-danger-text-strong);
   --button-hover-background: var(--csgclaw-ui-danger-hover-background);
   --button-ring: var(--csgclaw-ui-error-focus-ring);
 }
@@ -175,9 +151,6 @@
   background: var(--button-hover-background);
   color: var(--button-hover-text);
 }
-.btn:active:not(:disabled) {
-  translate: 0 1px;
-}
 .btn.active:not(:disabled):not(.btn-primary, .btn-danger, .btn-secondary-gray) {
   border-color: var(--csgclaw-ui-button-brand-hover-border);
   background: var(--csgclaw-ui-control-selected-background);
@@ -187,10 +160,10 @@
   outline: none;
   box-shadow: var(--button-shadow), var(--button-ring);
 }
-.btn:disabled:not(.btn-loading) {
+.btn:disabled {
   border-color: var(--csgclaw-ui-button-disabled-border);
   background: var(--csgclaw-ui-button-disabled-background);
-  color: var(--button-disabled-text, var(--csgclaw-ui-input-text-disabled));
+  color: var(--csgclaw-ui-input-text-disabled);
   box-shadow: var(--csgclaw-ui-button-disabled-shadow);
   cursor: not-allowed;
 }
@@ -201,7 +174,7 @@
     .btn-link-gray,
     .btn-link-color,
     .btn-link-danger
-  ):disabled:not(.btn-loading) {
+  ):disabled {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
@@ -212,10 +185,6 @@
   color: var(--csgclaw-ui-on-primary);
 }
 .btn.btn-loading:disabled {
-  border-color: var(--button-border);
-  background: var(--button-hover-background);
-  color: var(--button-text);
-  box-shadow: var(--button-shadow);
   cursor: wait;
 }
 .btn-content {
@@ -237,10 +206,19 @@
   width: 100%;
   height: 100%;
 }
+.btn.btn-loading .btn-content {
+  visibility: hidden;
+}
+.btn-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
 .btn-loading-spinner {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: var(--csgclaw-ui-radius-full);
@@ -253,9 +231,76 @@
   }
 }
 
+/* Icon sizes are a component API, independent of workspace button selectors. */
+.csg-icon-button.btn-sm {
+  --btn-height: 28px;
+}
+.csg-icon-button.btn-md {
+  --btn-height: 34px;
+}
+.csg-icon-button.btn-lg {
+  --btn-height: 40px;
+}
+.csg-icon-button:is(
+    .btn-danger,
+    .btn-outline-danger,
+    .btn-tertiary-danger
+  ).btn-sm {
+  --btn-height: 36px;
+}
+.csg-icon-button:is(
+    .btn-danger,
+    .btn-outline-danger,
+    .btn-tertiary-danger
+  ).btn-md {
+  --btn-height: 40px;
+}
+.csg-icon-button:is(
+    .btn-danger,
+    .btn-outline-danger,
+    .btn-tertiary-danger
+  ).btn-lg {
+  --btn-height: 44px;
+}
+
 .btn.btn-secondary-gray {
-  --button-text: var(--button-neutral-text);
-  --button-ring: var(--button-neutral-focus-ring);
+  --btn-height: 42px;
+  --btn-min-width: 0px;
+  --btn-padding-x: 14px;
+  --btn-font-size: 14px;
+  --btn-line-height: 22px;
+  --btn-icon-size: 14px;
+  --btn-gap: 4px;
+  --button-text: var(--csgclaw-ui-button-neutral-text);
+  --button-ring: var(--csgclaw-ui-button-neutral-focus-ring);
+  border-radius: var(--csgclaw-ui-radius-md);
+  /* Figma's inside stroke does not add to its auto-layout padding. */
+  padding-inline: calc(var(--btn-padding-x) - 1px);
+  gap: var(--btn-gap);
+}
+.btn-secondary-gray.btn-sm {
+  --btn-height: 34px;
+  --btn-padding-x: 12px;
+  --btn-font-size: 12px;
+  --btn-line-height: 18px;
+  --btn-font-weight: var(--csgclaw-ui-font-weight-normal);
+  --btn-icon-size: 12px;
+}
+.btn-secondary-gray.btn-lg {
+  --btn-height: 44px;
+  --btn-padding-x: 16px;
+  --btn-font-size: 16px;
+  --btn-line-height: 24px;
+  --btn-icon-size: 16px;
+  --btn-gap: 6px;
+}
+.btn-secondary-gray.btn-xl {
+  --btn-height: 48px;
+  --btn-padding-x: 18px;
+  --btn-font-size: 16px;
+  --btn-line-height: 24px;
+  --btn-icon-size: 20px;
+  --btn-gap: 6px;
 }
 .btn-secondary-gray.btn-2xl {
   --btn-height: 60px;
@@ -264,42 +309,40 @@
   --btn-line-height: 28px;
   --btn-icon-size: 24px;
   --btn-gap: 10px;
-  padding-inline: calc(var(--btn-padding-x) - 1px);
-  border-radius: var(--radius-md);
+}
+.btn-secondary-gray.csg-icon-button {
+  padding: 0;
+}
+.btn-secondary-gray.csg-icon-button.btn-sm {
+  --btn-height: 28px;
+}
+.btn-secondary-gray.csg-icon-button.btn-md {
+  --btn-height: 34px;
+}
+.btn-secondary-gray.csg-icon-button.btn-lg {
+  --btn-height: 40px;
 }
 .btn-secondary-gray.csg-icon-button.btn-2xl {
   --btn-height: 56px;
 }
-.btn.csg-icon-button.btn-2xl {
-  padding: 0;
-}
-.btn .btn-label {
+.btn-secondary-gray .btn-label {
   padding-inline: 2px;
 }
-.btn-content > svg,
-.csg-icon-button .btn-content > span > svg {
-  width: var(--btn-icon-size, 20px);
-  height: var(--btn-icon-size, 20px);
+.btn-secondary-gray .btn-content > svg,
+.btn-secondary-gray.csg-icon-button .btn-content > span,
+.btn-secondary-gray.csg-icon-button .btn-content > span > svg {
+  width: var(--btn-icon-size);
+  height: var(--btn-icon-size);
   flex-shrink: 0;
 }
-.btn-secondary-gray:disabled:not(.btn-loading) {
-  background: var(--button-neutral-disabled-background);
-  color: var(--button-neutral-disabled-text);
+.btn-secondary-gray:disabled {
+  background: var(--csgclaw-ui-button-neutral-disabled-background);
+  color: var(--csgclaw-ui-button-neutral-disabled-text);
 }
 .btn-md {
   --btn-height: 40px;
-  --btn-min-width: 0px;
-  --btn-padding-x: 14px;
+  --btn-min-width: 80px;
+  --btn-padding-x: 16px;
   --btn-font-size: 14px;
   --btn-line-height: 20px;
-}
-
-.btn-lg,
-.btn-xl {
-  --btn-gap: 6px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .btn-loading-spinner {
-    animation: none;
-  }
 }

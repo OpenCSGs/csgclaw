@@ -19,6 +19,7 @@ export const publishRelayAgent = (id: string): Promise<RelayPublicationStatus> =
 export const unpublishRelayAgent = (id: string): Promise<RelayPublicationStatus> => del(path(id));
 
 export type RelayCatalogEntry = {
+  recommended?: boolean;
   type?: string;
   source?: "platform" | "external";
   creator_name?: string;
@@ -43,10 +44,20 @@ export type RelayCatalogEntry = {
 
 export type RelayCatalogTarget = { agent_id: string; connection_id: string };
 
-export async function fetchRelayCatalog(signal?: AbortSignal, target?: RelayCatalogTarget): Promise<CloudAgent[]> {
-  const query = target
-    ? `?${new URLSearchParams({ agent_id: target.agent_id, connection_id: target.connection_id })}`
-    : "";
+export async function fetchRelayCatalog(
+  signal?: AbortSignal,
+  target?: RelayCatalogTarget,
+  probeIDs?: readonly string[],
+): Promise<CloudAgent[]> {
+  const params = new URLSearchParams();
+  if (target) {
+    params.set("agent_id", target.agent_id);
+    params.set("connection_id", target.connection_id);
+  } else if (probeIDs) {
+    params.set("probe", probeIDs.length ? "selected" : "none");
+    for (const id of probeIDs) params.append("agent_ids", id);
+  }
+  const query = params.size ? `?${params}` : "";
   const result = await get<{ data: RelayCatalogEntry[] }>(`api/v1/relay/agents${query}`, { signal });
   return result.data.map((entry) => ({
     id: entry.agent.id,
@@ -58,6 +69,7 @@ export async function fetchRelayCatalog(signal?: AbortSignal, target?: RelayCata
     creatorName: entry.creator_name?.trim(),
     modelID: entry.model_id?.trim(),
     templateRepoPath: entry.template_repo_path?.trim(),
+    recommended: entry.recommended === true,
     ownedByCurrentUser: entry.owned_by_current_user === true,
     publisher: entry.source === "platform" ? "Agentichub" : "CSGClaw",
     sourceAgentID: entry.agent.source_agent_id,

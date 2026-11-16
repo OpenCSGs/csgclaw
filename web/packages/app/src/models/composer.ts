@@ -1,3 +1,4 @@
+import { connectorLogoSource } from "@/shared/connectorLogo";
 import { resourceKey, resourceLabel, isResourceSnapshot, type ResourceSnapshot } from "./agentResources";
 import { fileReferenceKey, type ComposerFileReference, type FileReference } from "./fileReferences";
 
@@ -118,6 +119,15 @@ export function createResourceTokenElement(
   if (agentID) token.dataset.resourceAgentId = agentID;
   token.contentEditable = "false";
   token.title = `${resource.source}:${resource.id}`;
+  const logo = resource.type === "connector" ? connectorLogoSource(resourceLabel(resource)) : undefined;
+  if (logo) {
+    const image = document.createElement("img");
+    image.className = "resource-tag-brand";
+    image.src = logo;
+    image.alt = "";
+    image.draggable = false;
+    token.append(image);
+  }
   const label = document.createElement("span");
   label.className = "resource-tag-label";
   label.textContent = resourceLabel(resource);

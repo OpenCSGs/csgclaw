@@ -1,0 +1,13 @@
+.badge[data-kind="tag"] {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: 4px;
+  white-space: nowrap;
+  color: var(--brand-700);
+  background: color-mix(in srgb, var(--brand-500) 15%, transparent);
+}
+:global(:root[data-theme="dark"]) .badge[data-kind="tag"] {
+  color: var(--brand-300);
+}

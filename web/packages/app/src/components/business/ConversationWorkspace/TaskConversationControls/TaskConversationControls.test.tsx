@@ -59,7 +59,7 @@ describe("task conversation controls", () => {
     );
     expect(screen.queryByLabelText("iaWorkdirTitle")).not.toBeInTheDocument();
   });
-  it("shows the saved shared directory for a new collaboration room", () => {
+  it("shows the saved shared directory for a new collaboration room", async () => {
     render(
       <TaskConversationControls
         conversation={{ ...conversation, is_direct: false, type: "on_demand" }}
@@ -68,7 +68,8 @@ describe("task conversation controls", () => {
         t={t}
       />,
     );
-    expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute("title", expect.stringContaining("/project"));
+    fireEvent.focus(screen.getByLabelText("iaWorkdirTitle"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("/project");
   });
   it("does not count room events as a chat", () => {
     render(
@@ -112,7 +113,7 @@ describe("task conversation controls", () => {
   });
 });
 
-it("keeps the saved guide out of composer controls and does not carry a shared workspace into a private task", () => {
+it("keeps the saved guide out of composer controls and does not carry a shared workspace into a private task", async () => {
   const onNewTask = vi.fn();
   render(
     <TaskConversationControls
@@ -131,7 +132,8 @@ it("keeps the saved guide out of composer controls and does not carry a shared w
   );
   expect(screen.queryByText("teamGuideTab")).not.toBeInTheDocument();
   expect(screen.queryByText("Original team rules")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute("title", expect.stringContaining("/project"));
+  fireEvent.focus(screen.getByLabelText("iaWorkdirTitle"));
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("/project");
   fireEvent.click(screen.getByRole("button", { name: "taskEntryNew" }));
   expect(onNewTask).toHaveBeenCalledExactlyOnceWith();
 });

@@ -63,7 +63,18 @@ func TestRoomConfigurationDSHPersistsAndIsolatesPermissionAndDirectory(t *testin
 		if err != nil {
 			t.Fatal(err)
 		}
-		if meta.PermissionMode != mode || meta.Sessions[key] == "" {
+		expectedMode := mode
+		if expectedMode == "" {
+			expectedMode = PermissionModeDangerFullAccess
+		}
+		proc, err := rt.process(ref.RuntimeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := environmentMap(proc.environment)[permissionModeEnvName]; got != expectedMode {
+			t.Fatalf("process permission mode = %q, want %q", got, expectedMode)
+		}
+		if meta.PermissionMode != expectedMode || meta.Sessions[key] == "" {
 			t.Fatalf("settings/history: %+v", meta)
 		}
 		if previous := identities[key]; previous != "" && previous != meta.Sessions[key] {
@@ -71,6 +82,7 @@ func TestRoomConfigurationDSHPersistsAndIsolatesPermissionAndDirectory(t *testin
 		}
 		identities[key] = meta.Sessions[key]
 	}
+	run("default", first, "", "session/new")
 	run("one", first, "read-only", "session/new")
 	before, _ := rt.process(ref.RuntimeID)
 	run("one", first, "read-only", "session/new")

@@ -69,6 +69,7 @@ function normalizeKnowledgeBase(value: unknown): RemoteKnowledgeBase | null {
     description: stringFromUnknown(value.description) || undefined,
     id,
     name,
+    recommended: value.recommended === true,
     unavailableReason: stringFromUnknown(value.unavailable_reason) || undefined,
   };
 }

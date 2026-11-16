@@ -4,6 +4,7 @@ import { mcpManagedKnowledgeBaseSource, type MCPServer } from "@/models/mcp";
 export type RemoteKnowledgeBaseAvailability = "available" | "unavailable";
 
 export type RemoteKnowledgeBase = {
+  recommended?: boolean;
   availability: RemoteKnowledgeBaseAvailability;
   csgHubResponse?: JSONRecord;
   configuredMCPName?: string;

@@ -1,5 +1,6 @@
 export const LOCALE_STORAGE_KEY = "csgclaw.im.locale" as const;
 export const THEME_STORAGE_KEY = "csgclaw.im.theme" as const;
+export const AUTH_CUSTOM_SITES_STORAGE_KEY = "csgclaw.auth.customSites" as const;
 export const AUTH_ENVIRONMENT_STORAGE_KEY = "csgclaw.auth.environment" as const;
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = "csgclaw.im.sidebarCollapsed" as const;
 export const SIDEBAR_WIDTH_STORAGE_KEY = "csgclaw.im.sidebarWidth" as const;
@@ -28,3 +29,5 @@ export const MANAGER_SETUP_DISMISSED_STORAGE_KEY = "csgclaw.manager.setupDismiss
 export const CLOUD_SEND_CONSENT_STORAGE_KEY = "csgclaw.cloud-send-consent.v1";
 export const CLOUD_AGENTS_STORAGE_KEY = "csgclaw.agents.cloud.v3" as const;
 export const CLOUD_CHAT_STORAGE_KEY = "csgclaw.agents.cloud.chat.v1" as const;
+
+export const PINNED_ENTITIES_STORAGE_KEY = "csgclaw.im.pinnedEntities.v1";

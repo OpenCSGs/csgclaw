@@ -188,6 +188,7 @@ function normalizeRemoteMCPServer(record: unknown): RemoteMCPServer | null {
     description: stringFromUnknown(record.description) || undefined,
     id,
     name,
+    recommended: record.recommended === true,
     protocol: stringFromUnknown(record.protocol) || undefined,
     url,
   };

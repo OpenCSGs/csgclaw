@@ -118,10 +118,6 @@
   font-size: 12px;
 }
 
-.group + .group {
-  margin-top: 2px;
-}
-
 .groupLabel {
   padding: 6px 8px 2px 31px;
   color: var(--muted);
@@ -154,8 +150,8 @@
   cursor: pointer;
 }
 
-.row:hover,
-.row:focus-visible {
+.soloRow:hover,
+.soloRow:focus-visible {
   outline: none;
   background: var(--field);
 }

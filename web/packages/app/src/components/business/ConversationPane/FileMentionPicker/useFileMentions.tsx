@@ -1,8 +1,7 @@
-import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import mentionPickerStyles from "@/components/business/ConversationPane/MentionPicker.module.css";
 import { useRoomFileReader } from "@/components/business/ChatSidePanel/useRoomFileReader";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
-import { File, Folder, User } from "lucide-react";
+import { File, Folder } from "lucide-react";
 import { fetchWorkspaceDirectory, type RoomFile } from "@/api/chatFiles";
 import {
   getComposerMentionState,
@@ -12,9 +11,11 @@ import {
 } from "@/models/composer";
 import type { ComposerFileReference } from "@/models/fileReferences";
 import type { WorkspaceEntry } from "@/models/workspace";
+import { apiErrorCode } from "@/api/client";
 import type { TranslateFn } from "@/models/conversations";
 import type { ChatFileScope } from "@/components/business/ChatSidePanel/types";
 import { useChatSidePanel } from "@/components/business/ChatSidePanel/useChatSidePanel";
+import { MentionOptionText, MentionPersonAvatar } from "../MentionPicker";
 import type { MentionPickerUser } from "../types";
 
 type Candidate =
@@ -41,7 +42,7 @@ export function useFileMentions({
 }) {
   const { state } = useChatSidePanel(scope?.userID ?? "", scope?.roomID ?? "");
   const [query, setQuery] = useState<ComposerMentionState | null>(null);
-  const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
+  const [attachmentFailed, setAttachmentFailed] = useState(false);
   const [attachments, setAttachments] = useState<RoomFile[]>([]);
   const [index, setIndex] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -55,23 +56,49 @@ export function useFileMentions({
   const roomID = scope?.roomID;
   const { read: readFiles } = useRoomFileReader(scope);
   const hasQuery = queryText !== undefined;
+  const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const workspaceDir = scope?.workspaceDir;
+  const automaticWorkspace = scope?.automaticWorkspace;
   useEffect(() => {
-    if (!roomID || !hasQuery || !agentID) return;
-    const abort = new AbortController();
     setEntries([]);
-    void fetchWorkspaceDirectory(agentID, directory, abort.signal, roomID)
-      .then((listing) => setEntries(listing.entries ?? []))
-      .catch(() => {});
+    setWorkspaceError(null);
+    setWorkspaceLoading(false);
+    if (!roomID || !hasQuery || !agentID || automaticWorkspace) return;
+    const abort = new AbortController();
+    setWorkspaceLoading(true);
+    void fetchWorkspaceDirectory(agentID, directory, abort.signal, roomID, workspaceDir)
+      .then((listing) => {
+        if (!abort.signal.aborted) setEntries(listing.entries ?? []);
+      })
+      .catch((error) => {
+        if (!abort.signal.aborted) {
+          setWorkspaceError(
+            apiErrorCode(error) === "unauthorized"
+              ? "chatWorkspaceFilesAuthenticationRequired"
+              : "chatWorkspaceFilesLoadFailed",
+          );
+        }
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setWorkspaceLoading(false);
+      });
     return () => abort.abort();
-  }, [roomID, hasQuery, agentID, directory]);
+  }, [roomID, hasQuery, agentID, directory, workspaceDir, automaticWorkspace]);
   useEffect(() => {
     if (!roomID || queryText === undefined) return;
     const abort = new AbortController();
     setAttachments([]);
+    setAttachmentFailed(false);
     const timer = setTimeout(() => {
       void readFiles(queryText, 0, abort.signal)
-        .then((files) => setAttachments(files.items))
-        .catch(() => {});
+        .then((files) => {
+          if (!abort.signal.aborted) setAttachments(files.items);
+        })
+        .catch(() => {
+          if (!abort.signal.aborted) setAttachmentFailed(true);
+        });
     }, 150);
     return () => {
       clearTimeout(timer);
@@ -137,7 +164,17 @@ export function useFileMentions({
   useLayoutEffect(() => {
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex, candidates.length]);
-  const open = Boolean(scope && (query || people.length) && dismissed !== query?.query && candidates.length);
+  const workspaceMessage =
+    roomID && hasQuery && agentID && !automaticWorkspace
+      ? (workspaceError ??
+        (workspaceLoading ? "agentWorkspaceLoading" : entries.length === 0 ? "agentWorkspaceEmpty" : null))
+      : null;
+  const open = Boolean(
+    scope &&
+    (query || people.length) &&
+    dismissed !== query?.query &&
+    (candidates.length || workspaceMessage || (hasQuery && attachmentFailed)),
+  );
   function apply(candidate: Candidate, navigate = false) {
     if (candidate.kind === "person") {
       onPerson(candidate.user);
@@ -174,6 +211,7 @@ export function useFileMentions({
       setDismissed(query?.query ?? "");
       return true;
     }
+    if (!candidates.length) return false;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       setIndex((value) => (value + (event.key === "ArrowDown" ? 1 : -1) + candidates.length) % candidates.length);
@@ -200,7 +238,7 @@ export function useFileMentions({
           : candidate.kind === "directory"
             ? candidate.path + "/"
             : candidate.reference.label;
-        const Icon = person ? User : candidate.kind === "directory" ? Folder : File;
+        const Icon = candidate.kind === "directory" ? Folder : File;
         return (
           <div
             key={
@@ -212,7 +250,9 @@ export function useFileMentions({
             }
           >
             {i === 0 || (candidates[i - 1].kind === "person" && !person) ? (
-              <div className="chat-file-mention-group">{t(person ? "chatMentionPeople" : "chatMentionFiles")}</div>
+              <div className={mentionPickerStyles["mention-group"]}>
+                {t(person ? "chatMentionPeople" : "chatMentionFiles")}
+              </div>
             ) : null}
             <button
               type="button"
@@ -225,23 +265,37 @@ export function useFileMentions({
                 apply(candidate);
               }}
             >
-              <span className="chat-file-mention-icon">
-                <Icon size={16} />
-              </span>
-              <span>
-                <span className={`message-author ${messageLayoutStyles["message-author"]}`}>@{label}</span>
-                <span className={`conversation-preview ${messageLayoutStyles["conversation-preview"]}`}>
-                  {person
+              {person ? (
+                <MentionPersonAvatar user={candidate.user} />
+              ) : (
+                <span className={mentionPickerStyles["mention-icon"]} aria-hidden="true">
+                  <Icon size={16} />
+                </span>
+              )}
+              <MentionOptionText
+                label={label}
+                description={
+                  person
                     ? candidate.user.id
                     : candidate.kind === "file"
                       ? candidate.sourceLabel
-                      : t("chatDirectoryCompletionHint")}
-                </span>
-              </span>
+                      : t("chatDirectoryCompletionHint")
+                }
+              />
             </button>
           </div>
         );
       })}
+      {workspaceMessage ? (
+        <div className={mentionPickerStyles["mention-group"]} role="status">
+          {t(workspaceMessage)}
+        </div>
+      ) : null}
+      {hasQuery && attachmentFailed ? (
+        <div className={mentionPickerStyles["mention-group"]} role="status">
+          {t("chatConversationFilesLoadFailed")}
+        </div>
+      ) : null}
     </div>
   ) : null;
   return { picker, sync, handleKeyDown };

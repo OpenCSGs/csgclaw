@@ -13,6 +13,8 @@ import (
 	"syscall"
 )
 
+const canFindUntrackedRuntimeProcesses = true
+
 func stopRuntimeProcessesUsingDir(runtimeDir string) ([]int, error) {
 	runtimeDir = strings.TrimSpace(runtimeDir)
 	if runtimeDir == "" {

@@ -1,6 +1,6 @@
 # 交互设计规范
 
-适用于 `web/app` 中影响布局、控件、导航、字段、图标、文案、多语言及交互状态的改动。[英文版](interaction-design.md)为 AI 规范主文档，两版规则编号对应。
+适用于 `web/packages/app` 和共享组件包 `web/packages/csgclaw-ui` 中影响布局、控件、导航、字段、图标、文案、多语言及交互状态的改动。[英文版](interaction-design.md)为 AI 规范主文档，两版规则编号对应。
 
 [前端开发规范](development.md)管理代码结构、样式、国际化机制及测试命令；[组件规范](ui-components.md)管理组件 API、键盘行为与浮层。本文规定用户可感知的交互结果。[走查方案](../../ux/interaction-quality-plan.zh.md)管理推广、问题记录和效果评估。
 

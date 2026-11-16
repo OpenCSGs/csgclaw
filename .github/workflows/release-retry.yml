@@ -9,6 +9,11 @@ on:
       - .github/workflows/release-retry.yml
       - .github/workflows/release.yml
       - scripts/release-retry.test.mjs
+      - scripts/release-recovery.mjs
+      - scripts/release-recovery.test.mjs
+      - scripts/release-platforms.txt
+      - scripts/build.ps1
+      - scripts/build.tests.ps1
       - scripts/macos-stapler.mjs
       - scripts/macos-stapler.test.mjs
       - scripts/macos-desktop-package.mjs
@@ -27,7 +32,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: desktop/package.json
-      - run: node --test scripts/release-retry.test.mjs scripts/macos-stapler.test.mjs scripts/macos-desktop-package.test.mjs
+      - run: node --test scripts/release-retry.test.mjs scripts/release-recovery.test.mjs scripts/macos-stapler.test.mjs scripts/macos-desktop-package.test.mjs
+
+  windows-checksum-test:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: windows-2025
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check checksum verification in both PowerShell hosts
+        shell: pwsh
+        run: |
+          .\scripts\build.tests.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.tests.ps1
 
   retry:
     if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' }}

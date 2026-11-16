@@ -1,3 +1,4 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { InlineError, Button, Checkbox, DialogRoot, SegmentedControl, TextInput } from "@/components/ui";
@@ -11,6 +12,9 @@ import type { SkillSummary } from "@/models/skillhub";
 import { ResourceFeaturedIcon } from "@/components/business/ResourceListCard";
 import { SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/business/Icons";
 import { SkillMarketPreview } from "./SkillMarketPreview";
+import { SkillUpdateDialog } from "@/components/business/SkillUpdateDialog";
+import { useSkillUpdatePrompt } from "@/hooks/workspace/useSkillUpdates";
+import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace/useWorkspaceControllerContext";
 import type { TranslateFn } from "@/models/conversations";
 import { localizeAPIError } from "@/shared/i18n";
 import { errorMessage } from "@/api/client";
@@ -44,7 +48,10 @@ export function AgentResourcePicker({
   portalContainer?: HTMLElement | null;
   t: TranslateFn;
 }) {
-  const picker = useAgentResourcePicker({ agentID, kind, authenticated, onAdd, t });
+  const controller = useOptionalWorkspaceControllerContext();
+  const updatePrompt = useSkillUpdatePrompt();
+  const requestSkillUpdate = controller?.hubViewProps?.hub?.requestSkillUpdates ?? updatePrompt.requestSkillUpdates;
+  const picker = useAgentResourcePicker({ agentID, kind, authenticated, onAdd, t, requestSkillUpdate });
   const { openSettings } = useWorkspaceDialogs();
   const [selected, setSelected] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -94,6 +101,7 @@ export function AgentResourcePicker({
             setPreview(skill);
           },
           name: skill.name,
+          recommended: skill.recommended,
           description: skill.description,
           installed: false,
           actionLabel: skillActionLabel(skill),
@@ -106,6 +114,7 @@ export function AgentResourcePicker({
             id: server.id,
             open: undefined,
             name: server.name,
+            recommended: server.recommended,
             description: server.description,
             installed: picker.globalServers.some(
               (item) => picker.enabledNames.has(item.name) && isRemoteMCPInstalled([item], server),
@@ -120,6 +129,7 @@ export function AgentResourcePicker({
               id: item.id,
               open: undefined,
               name: item.name,
+              recommended: item.recommended,
               description: item.unavailableReason || item.description,
               installed: false,
               actionLabel: undefined,
@@ -305,7 +315,14 @@ export function AgentResourcePicker({
                             {kind === "skill" ? <SidebarPuzzlePiece02Icon size={16} /> : <SidebarMcpIcon size={16} />}
                           </ResourceFeaturedIcon>
                         )}
-                        <ResourcePickerCopy name={item.name} description={item.description} onOpen={item.open} />
+                        <ResourcePickerCopy
+                          name={item.name}
+                          titleBadge={
+                            item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null
+                          }
+                          description={item.description}
+                          onOpen={item.open}
+                        />
                         <Button
                           size="sm"
                           variant={
@@ -369,6 +386,15 @@ export function AgentResourcePicker({
           onAfterClose={() => previewTrigger.current?.focus()}
           onInstall={() => void picker.installSkill(preview)}
           portalContainer={portalContainer}
+        />
+      ) : null}
+      {updatePrompt.skillUpdateNames.length ? (
+        <SkillUpdateDialog
+          key={updatePrompt.skillUpdateNames.join("\u0000")}
+          names={updatePrompt.skillUpdateNames}
+          locale={controller?.sidebarProps?.locale}
+          t={t}
+          onClose={updatePrompt.finishSkillUpdates}
         />
       ) : null}
       <SkillUploadDialog

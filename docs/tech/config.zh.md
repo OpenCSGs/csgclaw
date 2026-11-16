@@ -68,6 +68,33 @@ GPT-5.4 和 GPT-5.5 支持 `none` 到 `xhigh`，不支持 `minimal` 或 `max`。
 
 `no_auth` 控制 CSGClaw 是否跳过 bearer token 检查，默认值是 `false`。仅建议在可信的本地或开发环境中设置为 `true`。
 
+本机 Web、桌面、远程访问和云端部署均默认开启 Agent 记忆，无需额外配置或沙盒创建标识。
+记忆沿用聊天的实例鉴权，用户请求使用默认用户 ID `user-admin`。
+代理转发、监听地址和沙盒创建服务不决定记忆是否可用。
+用户可在 Agent 的记忆页单独关闭记忆，关闭状态在重启后保留。
+仅符合条件的私聊参与学习，群聊和 Agent 身份请求仍不参与。
+当前不区分公共智能体部署，共享实例也默认开启记忆。
+
+记忆保存在 `~/.csgclaw/agents/<agent-id>/memory/<user-id>/`，包含 `state.json` 和纯正文 `MEMORY.md`。
+实例级记忆状态保存在 `~/.csgclaw/state.json` 的 `agent_memory` 小节，仅在首次初始化或实例模式变化时更新。
+Runtime 重建或切换会保留记忆，永久删除 Agent 时会清理对应记忆。
+记忆页在查看时自动更新，编辑过程中暂停刷新，保留未保存的草稿。
+“重置记忆”在确认后删除当前全部记忆（含手动编辑），并从历史私聊重新生成。
+“清空记忆”在确认后立即删除记忆并停止当前学习，聊天记录保留，后续私聊仍可产生新记忆。
+通过 Markdown 编辑三类记忆，未分类内容会归入已确认事实。
+历史初始化按时间顺序分段遍历全部符合条件的私聊，累积提炼记忆，并随每段结果保存读取位置，以便重启后继续。
+长消息的后续正文会在下一段继续读取。
+日常聊天仍然每轮独立触发后台记忆判断，不合并批处理。
+后台记忆提炼与 Agent 聊天共用流式模型网关、服务商认证和连接重试机制。
+
+切换到统一记忆时，不导入 Codex 或 DSH 的旧原生记忆文件。
+符合条件的 Agent 会在初始化时从历史私聊重新生成个人记忆。
+记忆不可用时，从未注入统一记忆的已有会话继续保留聊天上下文。
+曾绑定统一记忆的会话会先被解除关联，再选择不带记忆的会话。
+新建 Agent 时明确提供的模板知识单独保存在 `agents/<agent-id>/memory/template.json`，供新的可用用户作用域首次采用。
+已初始化作用域的记忆被重置或清空后，不会恢复模板种子。
+“忘掉这条”会排除该消息后续的历史扫描和延迟学习更新，同时保留其他排队消息及初始化读取位置。
+
 `show_upgrade` 控制 Web UI 是否展示升级操作。默认值是 `true`；仅在当前部署不能自升级时设置为 `false`，例如托管的 Kubernetes 环境。
 
 Server 根据当前运行版本推导更新通道：`v0.5.0` 这类纯三段版本使用 `release`，预发布、开发、本地构建以及其他非纯三段版本使用 `beta`。Web UI 中的版本通道切换是一次性安装操作，不会持久化到 `config.toml`。
@@ -143,14 +170,17 @@ default_worker_template = "builtin.codex-worker"
 
 Agent 可以在档案中单独选择可选的图片生成服务商和模型，与对话模型分开配置。
 当前接入 Codex Runtime 的 CSGClaw 网页对话生图工具，并复用所选服务商的凭证。
-服务商声明的 `text-to-image` 模型单独缓存在 `image_models` 中；缺少任务元数据时，也会识别已适配的 GPT Image 型号。
+服务商声明的 `text-to-image` 和 `image-to-image` 模型单独缓存在 `image_models` 中；缺少任务元数据时，也会识别已适配的 GPT Image 型号。
+模型下拉列表从 `image_metadata` 读取服务商声明的输入能力。已有目录可通过重新检查服务商连接更新标签。
 连接检查会刷新该缓存，但目录声明不代表当前账号或上游适配器已通过真实生图请求。
-图片适配器使用 OpenAI Images API 并请求 base64 输出；仅暴露其他原生请求格式的服务商需要由兼容网关完成适配。
+在网页对话中上传图片后，可以让 Agent 编辑图片或参考图片生成。所选模型须支持 OpenAI 兼容的 multipart `POST /v1/images/edits` 并返回 `b64_json` 或在 `data[0].url` 中提供可下载的图片链接。纯文字请求使用 `POST /v1/images/generations`。
 
 ### 视频生成模型
 
 Agent 可以在档案中单独选择视频生成服务商和模型。服务商声明的 `text-to-video` 或 `image-to-video` 模型缓存在 `video_models` 中。
-视频适配器使用 AIGateway 的 OpenAI-compatible 异步接口：`POST /v1/videos` 创建任务，`GET /v1/videos/{id}` 查询状态，完成后通过 `GET /v1/videos/{id}/content` 获取视频。Codex Runtime 通过 `csgclaw_generate_video` 工具调用该能力；生成结果作为会话视频附件保存和投递。
+视频适配器使用 AIGateway 的 OpenAI-compatible 异步接口：`POST /v1/videos` 创建任务，`GET /v1/videos/{id}` 查询状态，完成后通过 `GET /v1/videos/{id}/content` 获取视频。图生视频时，在对话中上传一张图片并要求 Agent 将其用作首帧。适配器通过 multipart `input_reference` 上传参考图。网关明确拒绝此格式时，改用 JSON 的 `input_reference.image_url`。Codex Runtime 通过 `csgclaw_generate_video` 工具调用该能力；生成结果作为会话视频附件保存和投递。
+
+参考图支持 PNG、JPEG 和 WebP。每次请求的参考图合计最多 32 MiB，图生图最多可传入 16 张。
 
 ### 动态 Codex 或 Claude Code Profile
 

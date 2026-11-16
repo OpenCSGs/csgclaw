@@ -25,7 +25,9 @@ export type SidecarConnection = {
   sessionToken: string;
 };
 
-const READY_TIMEOUT_MS = 30_000;
+// Cold Windows startup includes loading the bundled executable and preparing
+// first-run state. Keep this bounded without repeatedly killing that work.
+const READY_TIMEOUT_MS = 5 * 60_000;
 const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 45_000;
 const TERMINATE_TIMEOUT_MS = 2_000;
 const MAX_STDERR_SUMMARY_BYTES = 12 * 1024;

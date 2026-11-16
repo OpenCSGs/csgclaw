@@ -11,7 +11,7 @@ import (
 	"csgclaw/internal/modelprovider"
 )
 
-func (s *ModelConfiguration) GenerateImage(ctx context.Context, ref *modelprovider.ImageGenerationConfig, prompt string) (modelprovider.GeneratedImage, error) {
+func (s *ModelConfiguration) GenerateImage(ctx context.Context, ref *modelprovider.ImageGenerationConfig, prompt string, options modelprovider.ImageGenerationOptions, references ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
 	empty := modelprovider.GeneratedImage{}
 	if ref == nil || ref.ProviderID == "" || ref.ModelID == "" {
 		return empty, fmt.Errorf("image_model_not_configured")
@@ -45,7 +45,7 @@ func (s *ModelConfiguration) GenerateImage(ctx context.Context, ref *modelprovid
 	if strings.TrimSpace(baseURL) == "" {
 		return empty, fmt.Errorf("image_model_unavailable")
 	}
-	return modelprovider.GenerateImage(ctx, &http.Client{Timeout: 8 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, baseURL, key, profile.Headers, ref.ModelID, prompt)
+	return modelprovider.GenerateImageWithOptions(ctx, &http.Client{Timeout: 8 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, baseURL, key, profile.Headers, ref.ModelID, prompt, options, references...)
 }
 
 func (s *ModelConfiguration) supportsImageModel(ref *modelprovider.ImageGenerationConfig) bool {

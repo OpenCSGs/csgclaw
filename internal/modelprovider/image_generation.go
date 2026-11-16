@@ -56,24 +56,58 @@ type GeneratedImage struct {
 	MediaType string
 }
 
-// GenerateImage requests one PNG. The caller owns cancellation and delivery.
-func GenerateImage(ctx context.Context, client *http.Client, baseURL, key string, headers map[string]string, model, prompt string) (GeneratedImage, error) {
+// ImageGenerationOptions contains optional provider request parameters.
+type ImageGenerationOptions struct {
+	Size       string `json:"size,omitempty"`
+	Resolution string `json:"resolution,omitempty"`
+}
+
+// GenerateImage requests one image, editing the provided references when present.
+func GenerateImage(ctx context.Context, client *http.Client, baseURL, key string, headers map[string]string, model, prompt string, references ...ReferenceImage) (GeneratedImage, error) {
+	return GenerateImageWithOptions(ctx, client, baseURL, key, headers, model, prompt, ImageGenerationOptions{}, references...)
+}
+
+func GenerateImageWithOptions(ctx context.Context, client *http.Client, baseURL, key string, headers map[string]string, model, prompt string, options ImageGenerationOptions, references ...ReferenceImage) (GeneratedImage, error) {
 	var result GeneratedImage
-	params := map[string]any{"model": model, "prompt": prompt, "n": 1}
-	if IsGPTImageModel(model) {
-		params["output_format"] = "png"
-	} else {
-		params["response_format"] = "b64_json"
+	fields := map[string]string{"model": model, "prompt": prompt}
+	if size := strings.TrimSpace(options.Size); size != "" {
+		fields["size"] = size
 	}
-	body, err := json.Marshal(params)
+	if resolution := strings.TrimSpace(options.Resolution); resolution != "" {
+		fields["resolution"] = resolution
+	}
+	endpoint, contentType := "/images/generations", "application/json"
+	var body []byte
+	var err error
+	if len(references) == 0 {
+		params := map[string]any{"n": 1}
+		for name, value := range fields {
+			params[name] = value
+		}
+		if IsGPTImageModel(model) {
+			params["output_format"] = "png"
+		} else {
+			params["response_format"] = "b64_json"
+		}
+		body, err = json.Marshal(params)
+	} else {
+		if len(references) > MaxImageEditReferences {
+			return result, fmt.Errorf("image edits support up to %d reference images", MaxImageEditReferences)
+		}
+		endpoint = "/images/edits"
+		field := "image"
+		if len(references) > 1 {
+			field = "image[]"
+		}
+		body, contentType, err = referenceImageMultipart(fields, field, references)
+	}
 	if err != nil {
 		return result, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/images/generations", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+endpoint, bytes.NewReader(body))
 	if err != nil {
 		return result, fmt.Errorf("invalid image provider URL")
 	}
-	req.Header.Set("Content-Type", "application/json")
 	// Image gateways may transform upstream bodies; avoid automatic gzip decoding
 	// against an upstream Content-Encoding header that no longer matches the body.
 	req.Header.Set("Accept-Encoding", "identity")
@@ -83,6 +117,7 @@ func GenerateImage(ctx context.Context, client *http.Client, baseURL, key string
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	req.Header.Set("Content-Type", contentType)
 	response, err := client.Do(req)
 	if err != nil {
 		return result, imageTransportError(err)
@@ -109,6 +144,7 @@ func GenerateImage(ctx context.Context, client *http.Client, baseURL, key string
 	var payload struct {
 		Data []struct {
 			B64 string `json:"b64_json"`
+			URL string `json:"url"`
 		} `json:"data"`
 	}
 	decodeErr := json.Unmarshal(data, &payload)
@@ -117,10 +153,17 @@ func GenerateImage(ctx context.Context, client *http.Client, baseURL, key string
 			return result, imageResponseError(response, data, key, headers)
 		}
 	}
-	if decodeErr != nil || len(payload.Data) != 1 || payload.Data[0].B64 == "" {
-		return result, &ImageGenerationError{HTTPStatus: response.StatusCode, Code: "upstream_response_invalid", Message: "The image service did not return the requested base64 image data."}
+	if decodeErr != nil || len(payload.Data) != 1 || (payload.Data[0].B64 == "" && payload.Data[0].URL == "") {
+		return result, &ImageGenerationError{HTTPStatus: response.StatusCode, Code: "upstream_response_invalid", Message: "The image service did not return base64 image data or an image URL."}
 	}
-	result.Data, err = base64.StdEncoding.DecodeString(payload.Data[0].B64)
+	if payload.Data[0].B64 != "" {
+		result.Data, err = base64.StdEncoding.DecodeString(payload.Data[0].B64)
+	} else {
+		result.Data, err = downloadGeneratedImage(ctx, payload.Data[0].URL, baseURL)
+		if err != nil {
+			return result, err
+		}
+	}
 	if err != nil || len(result.Data) == 0 || len(result.Data) > MaxGeneratedImageBytes {
 		return GeneratedImage{}, fmt.Errorf("invalid or oversized image")
 	}

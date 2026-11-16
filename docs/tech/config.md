@@ -68,6 +68,33 @@ When it is set, the Web UI login flow also uses it as the trusted public base fo
 
 `no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
 
+Agent memory is enabled by default in local Web, desktop, remote, and cloud deployments, without any additional configuration or provisioning metadata.
+Memory uses the same instance authentication as chat and maps human requests to the default user ID, `user-admin`.
+Proxy forwarding, the listen address, and the sandbox creation service do not determine whether memory is available.
+Users can disable memory per Agent, and that choice survives restarts.
+Only eligible private conversations are learned; group chats and Agent-identity requests remain excluded.
+There is currently no separate public-Agent deployment flag; shared deployments also default to memory enabled.
+
+Memory is stored in `~/.csgclaw/agents/<agent-id>/memory/<user-id>/`, containing `state.json` and the plain Markdown document `MEMORY.md`.
+Instance-level memory state is stored in the `agent_memory` section of `~/.csgclaw/state.json` and is only updated on initialization or a deployment mode change.
+Runtime recreation and switching preserve memory, while permanent Agent deletion removes it.
+The memory page updates automatically while being viewed and pauses refreshes during editing to preserve the draft.
+“Reset memory” deletes existing notes, including manual edits, and rebuilds them from private chat history after confirmation.
+“Clear memory” immediately deletes notes and stops current memory learning after confirmation, while preserving chats and allowing future private turns to create new memories.
+Use the Markdown editor to edit all three categories; uncategorized text is saved under confirmed facts.
+History initialization scans all eligible private messages chronologically in bounded segments, accumulates learned entries, and saves the cursor with each segment so it can resume after a restart.
+Long messages continue in subsequent segments rather than losing their trailing text.
+Regular chat turns still trigger individual background memory decisions without batching.
+Background memory extraction shares the streaming model gateway, provider authentication, and connection recovery used by Agent chat.
+
+Native Codex and DSH memory files are not imported when switching to unified memory.
+Eligible Agents rebuild personal memory from private chat history during initialization.
+When memory is unavailable, existing sessions that never received unified memory retain their chat context.
+Sessions previously bound to unified memory are detached before selecting a memory-free session.
+Explicit template knowledge is saved separately under `agents/<agent-id>/memory/template.json` and adopted once by a new eligible user scope.
+Resetting or clearing an initialized scope does not restore the template seed.
+Forgetting a message excludes that source from future history scans and late learning updates, while preserving other queued messages and the initialization cursor.
+
 `show_upgrade` controls whether the Web UI shows upgrade actions. The default is `true`; set it to `false` only when the deployment cannot self-upgrade, such as managed Kubernetes environments.
 
 The server derives its active update channel from the running version. Plain versions such as `v0.5.0` use the `release` channel; prerelease, development, local, and otherwise non-plain versions use `beta`. A version-channel switch from the Web UI is a one-shot installation and is not persisted in `config.toml`.
@@ -143,14 +170,17 @@ default_worker_template = "builtin.codex-worker"
 
 An Agent can select an optional image generation provider and model separately from its chat model in Profile.
 The current integration uses the Codex Runtime's image tool in CSGClaw web conversations and reuses the selected provider's credentials.
-Provider-declared `text-to-image` models are cached separately in `image_models`; known GPT Image models are recognized when task metadata is unavailable.
+Provider-declared `text-to-image` and `image-to-image` models are cached separately in `image_models`; known GPT Image models are recognized when task metadata is unavailable.
+The model picker shows the provider-declared input modes cached in `image_metadata`. Refresh the provider connection to populate the labels for an existing catalog.
 This cache is refreshed by connection checks and does not mean the current account or upstream adapter has passed a real generation request.
-The image adapter uses the OpenAI Images API and requests base64 output; providers exposing only a native, different request schema require a compatible gateway adapter.
+In a web conversation, attach one or more images and ask the Agent to edit them or use them as references. The configured model must support OpenAI-compatible multipart `POST /v1/images/edits` and return `b64_json` or a downloadable image URL in `data[0].url`. Text-only requests use `POST /v1/images/generations`.
 
 ### Video generation models
 
 An Agent can select a video generation provider and model separately from its chat model. Provider-declared `text-to-video` and `image-to-video` models are cached in `video_models`.
-The video adapter uses AIGateway's OpenAI-compatible asynchronous API: `POST /v1/videos` creates a task, `GET /v1/videos/{id}` reads its status, and `GET /v1/videos/{id}/content` downloads the result. The Codex Runtime exposes this through `csgclaw_generate_video`; completed videos are stored and delivered as conversation attachments.
+The video adapter uses AIGateway's OpenAI-compatible asynchronous API: `POST /v1/videos` creates a task, `GET /v1/videos/{id}` reads its status, and `GET /v1/videos/{id}/content` downloads the result. For image-to-video, attach one image and ask the Agent to use it as the first frame. The adapter sends the reference image as multipart `input_reference` and falls back to JSON `input_reference.image_url` when the gateway explicitly rejects multipart references. The Codex Runtime exposes this through `csgclaw_generate_video`; completed videos are stored and delivered as conversation attachments.
+
+Reference uploads support PNG, JPEG, and WebP, with a combined limit of 32 MiB per request. Image edits accept up to 16 images.
 
 ### Dynamic Codex or Claude Code profiles
 

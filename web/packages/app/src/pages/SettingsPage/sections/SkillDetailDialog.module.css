@@ -116,3 +116,15 @@
 .embedded {
   margin: 10px 0 0;
 }
+.updateNotice {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.updateNotes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}

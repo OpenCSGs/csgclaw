@@ -28,7 +28,7 @@ function defaultTranslate(key: string, params?: Record<string, unknown>) {
 }
 
 function renderConversationComposer(overrideProps: Partial<React.ComponentProps<typeof ConversationComposer>> = {}) {
-  return render(
+  const composer = (props: typeof overrideProps) => (
     <ConversationComposer
       authBusyProvider=""
       authStatuses={{}}
@@ -56,8 +56,11 @@ function renderConversationComposer(overrideProps: Partial<React.ComponentProps<
       onSendMessage={vi.fn()}
       onSyncComposer={vi.fn()}
       {...overrideProps}
-    />,
+      {...props}
+    />
   );
+  const view = render(composer({}));
+  return { ...view, rerenderComposer: (props: typeof overrideProps) => view.rerender(composer(props)) };
 }
 
 describe("ConversationComposer working activity", () => {
@@ -229,4 +232,31 @@ describe("ConversationComposer attachment menu", () => {
     expect(screen.queryByText("GitLab")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "连接" })).not.toBeInTheDocument();
   });
+});
+
+it("uses the send slot for stopping a single turn only while the composer is empty", async () => {
+  const user = userEvent.setup();
+  const participant = { id: "worker", name: "Worker", canStop: true, leaseID: "lease-2" };
+  const onStopWorkingTurn = vi.fn();
+  const onSendMessage = vi.fn();
+  const { rerenderComposer } = renderConversationComposer({
+    stoppableParticipant: participant,
+    onStopWorkingTurn,
+    onSendMessage,
+  });
+
+  await user.click(screen.getByRole("button", { name: "conversationWorkingStopAria" }));
+  expect(onStopWorkingTurn).toHaveBeenCalledWith(participant);
+  rerenderComposer({ stoppableParticipant: { ...participant, stopping: true } });
+  expect(screen.getByRole("button", { name: "conversationWorkingStopAria" })).toBeDisabled();
+
+  rerenderComposer({ draftText: "Follow up", draftSegments: [{ type: "text", text: "Follow up" }] });
+  expect(screen.queryByRole("button", { name: "conversationWorkingStopAria" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "send" }));
+  expect(onSendMessage).toHaveBeenCalledOnce();
+
+  rerenderComposer({});
+  expect(screen.getByRole("button", { name: "conversationWorkingStopAria" })).toBeEnabled();
+  rerenderComposer({ stoppableParticipant: undefined });
+  expect(screen.getByRole("button", { name: "send" })).toBeDisabled();
 });

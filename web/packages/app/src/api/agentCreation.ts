@@ -1,7 +1,35 @@
-import { batchAddAgentMCPServersRequest, fetchAgentMCPServers, updateAgentRequest } from "./agents";
+import {
+  batchAddAgentMCPServersRequest,
+  fetchAgent,
+  fetchAgentMCPServers,
+  runAgentActionRequest,
+  updateAgentRequest,
+} from "./agents";
 import { bindAgentApp } from "./apps";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "./knowledgeBases";
 import type { AgentCreationResources } from "@/models/agentCreation";
+import { agentRuntimeState, type AgentLike } from "@/models/agents";
+
+const createdAgentRecoveryActions = new Map([
+  ["created", "start"],
+  ["stopped", "start"],
+  ["exited", "start"],
+  ["failed", "start"],
+  ["unknown", "recreate"],
+]);
+
+// Resource binding can restart a newly-created runtime. If that restart fails
+// after Stop has persisted, retry the same recovery that first-message delivery
+// would otherwise perform so the creation flow reports the final state.
+export async function reconcileCreatedAgentRuntime(agentID: string): Promise<AgentLike> {
+  const latest = await fetchAgent(agentID, { cacheBust: true });
+  const state = agentRuntimeState(latest).toLowerCase();
+  const action = createdAgentRecoveryActions.get(state);
+  if (!action) {
+    return latest;
+  }
+  return runAgentActionRequest(agentID, action);
+}
 
 // Skills are saved with the create request. Failures in the remaining bindings
 // must not turn a successful creation into a second create attempt.

@@ -27,13 +27,15 @@ import (
 )
 
 const (
-	defaultRemoteHTTPTimeout    = 60 * time.Second
-	defaultRemoteMaxJSONBytes   = 4 * 1024 * 1024
-	defaultRemoteMaxFileBytes   = 50 * 1024 * 1024
-	officialTemplateNamespace   = "agentichub"
-	remoteManifestFileName      = "agent.toml"
-	remoteAgentTemplatesPerPage = 20
-	remoteCommunityTemplateType = "csgclaw"
+	defaultRemoteHTTPTimeout  = 60 * time.Second
+	defaultRemoteMaxJSONBytes = 4 * 1024 * 1024
+	defaultRemoteMaxFileBytes = 50 * 1024 * 1024
+	// Allow a full publishable snapshot plus repository files and ZIP overhead.
+	defaultRemoteMaxWorkspaceBytes = 128 * 1024 * 1024
+	officialTemplateNamespace      = "agentichub"
+	remoteManifestFileName         = "agent.toml"
+	remoteAgentTemplatesPerPage    = 20
+	remoteCommunityTemplateType    = "csgclaw"
 )
 
 type RemoteStore struct {
@@ -51,6 +53,7 @@ type RemoteAPIError struct {
 	StatusCode int
 	Code       string
 	Message    string
+	Path       string
 	Cause      error
 }
 
@@ -93,6 +96,7 @@ type remoteAgentTemplateListResponse struct {
 }
 
 type remoteAgentTemplate struct {
+	Recommended bool                        `json:"recommended"`
 	ID          int64                       `json:"id"`
 	Type        string                      `json:"type"`
 	Name        string                      `json:"name"`
@@ -138,6 +142,7 @@ type remoteUpdateCodeRequest struct {
 }
 
 type remoteCodeRepository struct {
+	Recommended   bool              `json:"-"`
 	Name          string            `json:"name"`
 	Nickname      string            `json:"nickname"`
 	Description   string            `json:"description"`
@@ -161,6 +166,7 @@ type remoteTreeEntry struct {
 	Type string `json:"type"`
 	Path string `json:"path"`
 	Size int64  `json:"size"`
+	SHA  string `json:"sha"`
 }
 
 type remoteBlobResponse struct {
@@ -182,7 +188,7 @@ func NewRemoteStore(baseURL, token string) *RemoteStore {
 			Timeout: defaultRemoteHTTPTimeout,
 		},
 		maxJSON:      defaultRemoteMaxJSONBytes,
-		maxWorkspace: defaultRemoteMaxFileBytes,
+		maxWorkspace: defaultRemoteMaxWorkspaceBytes,
 	}
 }
 
@@ -192,20 +198,22 @@ func NewAuthenticatedRemoteStore(baseURL, token, username string) *RemoteStore {
 	return store
 }
 
+var errInvalidRemoteTemplate = errors.New("invalid remote template")
+
 func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 	repositories := make([]remoteCodeRepository, 0)
 	seen := make(map[string]int)
-	var listErrs []error
-	var organizationTemplates remoteCodeListResponse
-	if err := s.getJSON(ctx, s.templatesURL(), &organizationTemplates); err != nil {
-		listErrs = append(listErrs, err)
-	} else {
-		repositories = appendRemoteTemplateRepositories(repositories, seen, organizationTemplates.Data)
-	}
-
 	agentTemplates, err := s.listAgentTemplates(ctx)
 	if err != nil {
-		listErrs = append(listErrs, err)
+		if !errors.Is(err, ErrTemplateNotFound) || len(agentTemplates) != 0 {
+			return nil, err
+		}
+		// Older Hub deployments do not expose the agent template catalog.
+		var legacy remoteCodeListResponse
+		if err := s.getJSON(ctx, s.templatesURL(), &legacy); err != nil {
+			return nil, err
+		}
+		repositories = appendRemoteTemplateRepositories(repositories, seen, legacy.Data)
 	}
 	for _, item := range agentTemplates {
 		if !strings.EqualFold(strings.TrimSpace(item.Type), remoteCommunityTemplateType) {
@@ -218,10 +226,8 @@ func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 			Path:        strings.TrimSpace(item.Metadata.RepoPath),
 			UpdatedAt:   item.UpdatedAt,
 			Metadata:    remoteTemplateMetadata(item.Metadata),
+			Recommended: item.Recommended,
 		}})
-	}
-	if len(repositories) == 0 && len(listErrs) > 0 {
-		return nil, errors.Join(listErrs...)
 	}
 
 	items := make([]Template, 0, len(repositories))
@@ -233,6 +239,9 @@ func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 		}
 		item, err := s.getTemplate(ctx, id, repository)
 		if err != nil {
+			if !errors.Is(err, errInvalidRemoteTemplate) && !errors.Is(err, ErrTemplateNotFound) {
+				return nil, fmt.Errorf("load remote template %q: %w", id, err)
+			}
 			slog.Warn("skip invalid remote hub template", "id", id, "error", err)
 			continue
 		}
@@ -295,11 +304,13 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 	branch := strings.TrimSpace(repository.DefaultBranch)
 	if branch == "" {
 		metadata := repository.Metadata
+		recommended := repository.Recommended
 		var payload remoteCodeResponse
 		if err := s.getJSON(ctx, s.templateURL(id), &payload); err != nil {
 			return Template{}, err
 		}
 		repository = payload.Data
+		repository.Recommended = recommended
 		if repository.Metadata == nil {
 			repository.Metadata = metadata
 		}
@@ -315,7 +326,7 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 	}
 	updatedAt, err := parseManifestUpdatedAt(manifest.UpdatedAt)
 	if err != nil {
-		return Template{}, fmt.Errorf("validate remote hub manifest %q: %w", id, err)
+		return Template{}, fmt.Errorf("%w: validate remote hub manifest %q: %w", errInvalidRemoteTemplate, id, err)
 	}
 	if updatedAt.IsZero() {
 		updatedAt = repository.UpdatedAt
@@ -338,11 +349,11 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 	namespace := strings.SplitN(id, "/", 2)[0]
 	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.RuntimeOptions)
 	if err != nil {
-		return Template{}, fmt.Errorf("validate remote hub manifest %q runtime options: %w", id, err)
+		return Template{}, fmt.Errorf("%w: validate remote hub manifest %q runtime options: %w", errInvalidRemoteTemplate, id, err)
 	}
 	modelConfig, err := normalizeTemplateModelConfig(manifest.ModelConfig)
 	if err != nil {
-		return Template{}, fmt.Errorf("validate remote hub manifest %q model config: %w", id, err)
+		return Template{}, fmt.Errorf("%w: validate remote hub manifest %q model config: %w", errInvalidRemoteTemplate, id, err)
 	}
 	return Template{
 		ID:             remoteTemplateName(id),
@@ -360,6 +371,7 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		RuntimeOptions: runtimeOptions,
 		ModelConfig:    modelConfig,
 		Metadata:       repository.Metadata,
+		Recommended:    repository.Recommended,
 		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir},
 		UpdatedAt:      updatedAt,
 	}, nil
@@ -387,11 +399,11 @@ func (s *RemoteStore) fetchManifest(ctx context.Context, id, branch string) (tem
 	}
 	var manifest templateManifest
 	if err := toml.Unmarshal(data, &manifest); err != nil {
-		return templateManifest{}, fmt.Errorf("decode remote hub manifest %q: %w", id, err)
+		return templateManifest{}, fmt.Errorf("%w: decode remote hub manifest %q: %w", errInvalidRemoteTemplate, id, err)
 	}
 	retiredclaws.TemplateManifest(&manifest.RuntimeKind, &manifest.RuntimeOptions, &manifest.Image.Ref)
 	if err := validateManifest(manifest); err != nil {
-		return templateManifest{}, fmt.Errorf("validate remote hub manifest %q: %w", id, err)
+		return templateManifest{}, fmt.Errorf("%w: validate remote hub manifest %q: %w", errInvalidRemoteTemplate, id, err)
 	}
 	return manifest, nil
 }
@@ -730,7 +742,7 @@ func (s *RemoteStore) fetchWorkspaceTree(
 }
 
 func (s *RemoteStore) fetchBlob(ctx context.Context, id, filePath, branch string) ([]byte, error) {
-	return s.fetchBlobWithLimit(ctx, id, filePath, branch, s.maxWorkspace)
+	return s.fetchBlobWithLimit(ctx, id, filePath, branch, min(s.maxWorkspace, defaultRemoteMaxFileBytes))
 }
 
 func (s *RemoteStore) fetchBlobWithLimit(ctx context.Context, id, filePath, branch string, maxBytes int64) ([]byte, error) {
@@ -799,13 +811,11 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 			return Template{}, fmt.Errorf("create remote hub template: %w", err)
 		}
 		branch = strings.TrimSpace(created.Data.DefaultBranch)
-	} else if err := s.putJSON(ctx, s.remoteTemplateEndpoint(request.Name), remoteUpdateCodeRequest{Nickname: request.Nickname}, nil); err != nil {
-		return Template{}, fmt.Errorf("update remote hub template: %w", err)
 	}
 	if branch == "" {
 		branch = "main"
 	}
-	if err := s.commitRemoteTemplate(ctx, request.Name, branch, files, exists); err != nil {
+	if err := s.commitRemoteTemplate(ctx, request.Name, branch, files, exists, request.Nickname); err != nil {
 		return Template{}, err
 	}
 	return Template{
@@ -894,7 +904,7 @@ func (s *RemoteStore) getJSONWithLimit(ctx context.Context, endpoint string, out
 		return fmt.Errorf("%w", ErrTemplateNotFound)
 	}
 	if status < 200 || status >= 300 {
-		return fmt.Errorf("remote hub request failed with status %d: %s", status, truncateRemoteBody(body))
+		return decodeRemoteAPIError(status, body)
 	}
 	if len(strings.TrimSpace(string(body))) == 0 {
 		return fmt.Errorf("%w", ErrTemplateNotFound)
@@ -961,14 +971,21 @@ func (s *RemoteStore) sendJSON(ctx context.Context, method, endpoint string, inp
 
 func decodeRemoteAPIError(statusCode int, data []byte) *RemoteAPIError {
 	var payload struct {
-		Code string `json:"code"`
-		Msg  string `json:"msg"`
+		Code    string          `json:"code"`
+		Msg     string          `json:"msg"`
+		Context json.RawMessage `json:"context"`
 	}
 	if err := json.Unmarshal(data, &payload); err == nil {
 		remoteErr := &RemoteAPIError{
 			StatusCode: statusCode,
 			Code:       strings.TrimSpace(payload.Code),
 			Message:    strings.TrimSpace(payload.Msg),
+		}
+		var details struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(payload.Context, &details) == nil {
+			remoteErr.Path = details.Path
 		}
 		if remoteErr.Code != "" || remoteErr.Message != "" {
 			return remoteErr

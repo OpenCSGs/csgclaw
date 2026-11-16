@@ -15,6 +15,14 @@ import {
 } from "@/api/chatFiles";
 import type { IMConversation } from "@/models/conversations";
 import { createQueryWrapper } from "../helpers/queryClient";
+import { fetchBrowserSessions, closeBrowserSession } from "@/api/browser";
+
+vi.mock("@/api/browser", async (original) => ({
+  ...(await original<typeof import("@/api/browser")>()),
+  fetchBrowserSessions: vi.fn().mockResolvedValue([]),
+  closeBrowserSession: vi.fn().mockResolvedValue(undefined),
+  fetchBrowserFrame: vi.fn(() => new Promise(() => {})),
+}));
 
 vi.mock("@/api/chatFiles", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/chatFiles")>()),
@@ -156,6 +164,7 @@ describe("shared chat sidebar", () => {
         expect.objectContaining({ source: "workspace", agent_id: "alice", path: "" }),
         "system",
         "",
+        "",
       ),
     );
     await user.click(screen.getByRole("button", { name: /^README.md/ }));
@@ -166,6 +175,7 @@ describe("shared chat sidebar", () => {
         "sidebar-test",
         expect.objectContaining({ source: "workspace", agent_id: "alice", path: "README.md" }),
         "app:/Applications/Code.app",
+        "",
         "",
       ),
     );
@@ -324,6 +334,7 @@ describe("shared chat sidebar", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    vi.mocked(fetchBrowserSessions).mockResolvedValue([]);
     vi.mocked(fetchFileLocation).mockResolvedValue({
       absolute_path: "/workspace/Alice/README.md",
       directory: false,
@@ -373,6 +384,61 @@ describe("shared chat sidebar", () => {
       total: 1,
     });
   });
+  it("opens HTML workspace files in the right browser and reloads their source", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+      entries: [{ path: "game.html", name: "game.html", type: "file", size: 100 }],
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response("<canvas></canvas><script>startGame()</script>", { headers: { "Content-Type": "text/html" } }),
+      );
+    const previewURL = new URL("html-preview.html", document.baseURI).href;
+    const view = render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    try {
+      await user.click(screen.getByRole("button", { name: "Files" }));
+      await user.click(await screen.findByRole("button", { name: /^game.html/ }));
+      const initialFrame = await screen.findByTitle("Browser");
+      expect(initialFrame).toHaveAttribute("src", previewURL);
+      expect(screen.queryByTitle("HTML preview document")).not.toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Web address" })).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("workspace/content?path=game.html"),
+        expect.objectContaining({ credentials: "same-origin" }),
+      );
+      fetchMock.mockResolvedValue(new Response("<h1>Updated</h1>", { headers: { "Content-Type": "text/html" } }));
+      await user.click(screen.getByRole("button", { name: "Refresh" }));
+      await waitFor(() => expect(screen.getByTitle("Browser")).not.toBe(initialFrame));
+      const refreshed = screen.getByTitle<HTMLIFrameElement>("Browser");
+      const post = vi.spyOn(refreshed.contentWindow!, "postMessage");
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: refreshed.contentWindow,
+          data: { type: "csgclaw:html-preview-ready" },
+          origin: "null",
+        }),
+      );
+      expect(post).toHaveBeenCalledExactlyOnceWith({ type: "csgclaw:html-preview", html: "<h1>Updated</h1>" }, "*");
+      const address = screen.getByRole("textbox", { name: "Web address" });
+      await user.clear(address);
+      await user.type(address, "https://example.org/{Enter}");
+      expect(screen.getByRole("tab", { name: "example.org" })).toHaveAttribute("aria-selected", "true");
+      const gameTab = screen.getByRole("tab", { name: "game.html" });
+      const gamePanel = document.getElementById(gameTab.getAttribute("aria-controls")!)!;
+      expect(gamePanel).not.toBeVisible();
+      expect(within(gamePanel).getByTitle("Browser")).toBe(refreshed);
+      await user.click(screen.getByRole("tab", { name: "game.html" }));
+      expect(screen.getByRole("textbox", { name: "Web address" })).toHaveValue(previewURL);
+      await user.click(screen.getByRole("button", { name: "Close tab game.html" }));
+      expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+      expect(refreshed).not.toBeInTheDocument();
+    } finally {
+      view.unmount();
+      fetchMock.mockRestore();
+    }
+  });
+
   it("retains tabs on collapse, restores per-conversation state, and does not persist capabilities", async () => {
     const user = userEvent.setup();
     const wrapper = createQueryWrapper().wrapper;
@@ -532,8 +598,32 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Files" }));
     await screen.findByRole("button", { name: /^second-task.md/ });
     expect(screen.queryByRole("button", { name: /^first-task.md/ })).not.toBeInTheDocument();
-    expect(fetchWorkspaceDirectory).toHaveBeenCalledWith("alice", "", expect.any(AbortSignal), "second-task");
+    expect(fetchWorkspaceDirectory).toHaveBeenCalledWith(
+      "alice",
+      "",
+      expect.any(AbortSignal),
+      "second-task",
+      undefined,
+    );
   });
+  it("defaults to latest workspace files and lets users sort by name", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+      entries: [
+        { path: "a.md", name: "a.md", type: "file", modified_at: "2026-10-01T10:00:00Z" },
+        { path: "b.md", name: "b.md", type: "file", modified_at: "2026-10-02T10:00:00Z" },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    await screen.findByRole("button", { name: /^a.md/ });
+    const fileOrder = () => screen.getAllByRole("button", { name: /^[ab]\.md/ }).map((item) => item.textContent);
+    expect(fileOrder()[0]).toContain("b.md");
+    await user.click(screen.getByRole("combobox", { name: "Sort files" }));
+    await user.click(screen.getByRole("option", { name: "Name A–Z" }));
+    expect(fileOrder()[0]).toContain("a.md");
+  });
+
   it("supports application maximum size and gives Escape precedence to restoring layout", async () => {
     const user = userEvent.setup();
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });
@@ -547,4 +637,29 @@ describe("shared chat sidebar", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(panel).not.toBeVisible();
   });
+});
+
+it("opens the Agent's live browser in its chat and closes the shared session with its tab", async () => {
+  localStorage.clear();
+  vi.mocked(fetchBrowserSessions).mockResolvedValue([
+    {
+      id: "shared-browser",
+      room_id: conversation.id,
+      url: "https://example.test/form",
+      title: "Form",
+      revision: 1,
+      width: 1280,
+      height: 800,
+      can_go_back: false,
+      can_go_forward: false,
+    },
+  ]);
+  const user = userEvent.setup();
+  const { wrapper } = createQueryWrapper();
+  render(<Harness />, { wrapper });
+  expect(await screen.findByRole("region", { name: "Agent browser" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Close tab example.test" }));
+  await waitFor(() => expect(closeBrowserSession).toHaveBeenCalledWith(conversation.id, "shared-browser"));
+  expect(screen.queryByRole("region", { name: "Agent browser" })).not.toBeInTheDocument();
+  vi.mocked(fetchBrowserSessions).mockResolvedValue([]);
 });

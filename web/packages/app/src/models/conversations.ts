@@ -1,7 +1,13 @@
+import {
+  isNotificationBotAgent,
+  partitionWorkspaceAgentItems,
+  resolveAgentChannelUserID,
+  type AgentLike,
+} from "@/models/agents";
 import { resourceMessageText } from "./conversationResources";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { newerProgressMessage } from "@/models/turnProgress";
-import type { ContextUsage } from "@/models/modelMetadata";
+import { normalizeContextUsage, type ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
 import {
   isToolDeliveryMessage,
@@ -40,6 +46,7 @@ export type IMUser = {
   agent_id?: string | null;
   agent_state?: "archived" | "deleted" | "";
   deleted_at?: string | null;
+  legacy_notifier?: boolean | null;
   accent_hex?: string | null;
   avatar?: string | null;
   description?: string | null;
@@ -158,6 +165,8 @@ function videoGenerationParentMessageID(message: IMMessage): string {
 }
 
 export type IMConversation = {
+  context_usage_epoch?: number;
+  context_usage?: Record<string, ContextUsage>;
   created_by?: string;
   cloud_agent?: { agent_id: string; connection_id: string; user_id: string };
   configuration?: TaskConfiguration;
@@ -223,6 +232,7 @@ export type ParticipantWorkUpdate = {
   status?: {
     phase: "working" | "thinking";
     context_usage?: ContextUsage;
+    context_usage_epoch?: number;
     sequence: number;
     stage?: ParticipantWorkStage | null;
     thinking?: {
@@ -858,6 +868,54 @@ export function isOnDemandConversation(conversation: { type?: RoomType | null } 
   return roomType(conversation) === RoomTypes.onDemand;
 }
 
+export function roomInviteCandidates(
+  conversation: IMConversation | null | undefined,
+  users: readonly IMUser[] | undefined,
+  agents: readonly AgentLike[],
+): IMUser[] {
+  if (!conversation) return [];
+  const { workerAgentItems } = partitionWorkspaceAgentItems(agents);
+  const agentIDsByUserID = new Map<string, string>();
+  for (const agent of workerAgentItems) {
+    const agentID = stripLocalIdentityPrefixes(agent.id ?? "");
+    const userID = stripLocalIdentityPrefixes(resolveAgentChannelUserID(agent));
+    if (agentID && userID && !agent.archived_at) agentIDsByUserID.set(userID, agentID);
+  }
+  return availableRoomUsers(conversation, users).filter((user) => {
+    const agentID = agentIDsByUserID.get(stripLocalIdentityPrefixes(user.id));
+    return (
+      Boolean(agentID) &&
+      (!user.agent_id || stripLocalIdentityPrefixes(user.agent_id) === agentID) &&
+      !user.participants?.some((participant) => participant.type === "notification")
+    );
+  });
+}
+
+export function roomExternalMessageCandidates(
+  conversation: IMConversation | null | undefined,
+  users: readonly IMUser[] | undefined,
+  agents: readonly AgentLike[],
+): IMUser[] {
+  return availableRoomUsers(conversation, users).filter(
+    (user) =>
+      user.participants?.some((participant) => participant.type === "notification") ||
+      isNotificationBotAgent(resolveAgentForUser(agents, user)),
+  );
+}
+
+function availableRoomUsers(conversation: IMConversation | null | undefined, users: readonly IMUser[] = []): IMUser[] {
+  if (!conversation) return [];
+  return users.filter(
+    (user) =>
+      user.role !== "cloud" &&
+      !user.agent_state &&
+      !user.deleted_at &&
+      !user.legacy_notifier &&
+      normalizeComparable(user.role) !== "notifier" &&
+      !conversation.members.some((memberID) => localIdentitiesMatch(memberID, user.id)),
+  );
+}
+
 export function resolveRoomInviterID(
   room: Pick<IMConversation, "members"> | null | undefined,
   options: { preferredInviterIDs?: Array<string | null | undefined> } = {},
@@ -1020,6 +1078,28 @@ export function applyIMEvent<T extends IMData | null | undefined>(
 ): T | IMData {
   if (!current || !event?.type) {
     return current;
+  }
+
+  if (event.type === "participant.work.updated" && event.work && !event.work.thread_root_id) {
+    const work = event.work;
+    const usage = normalizeContextUsage(work.status?.context_usage);
+    if (!usage || !work.user_id || work.reason !== "status_updated") return current;
+    return {
+      ...current,
+      rooms: current.rooms.map((room) => {
+        if (room.id !== work.room_id || !room.members.some((id) => localIdentitiesMatch(id, work.user_id))) return room;
+        const epoch = work.status?.context_usage_epoch ?? 0;
+        const currentEpoch = room.context_usage_epoch ?? 0;
+        if (epoch < currentEpoch) return room;
+        const previous = epoch === currentEpoch ? room.context_usage?.[work.user_id] : undefined;
+        if (previous && Date.parse(previous.updated_at) > Date.parse(usage.updated_at)) return room;
+        return {
+          ...room,
+          context_usage_epoch: epoch,
+          context_usage: { ...(epoch === currentEpoch ? room.context_usage : {}), [work.user_id]: usage },
+        };
+      }),
+    };
   }
 
   if (event.type === "room.attachment_deleted" && event.room_id && event.attachment_id) {
@@ -1307,8 +1387,24 @@ export function upsertConversationInData<T extends IMData | null | undefined>(
     return current;
   }
 
-  const existing = current.rooms.some((item) => item.id === conversation.id);
-  const normalized = normalizeRoom(conversation);
+  const previous = current.rooms.find((item) => item.id === conversation.id);
+  const existing = Boolean(previous);
+  let normalized = normalizeRoom(conversation);
+  const previousEpoch = previous?.context_usage_epoch ?? 0;
+  const incomingEpoch = normalized.context_usage_epoch ?? 0;
+  if (previous && previousEpoch >= incomingEpoch) {
+    const usage: Record<string, ContextUsage> = previousEpoch > incomingEpoch ? {} : { ...normalized.context_usage };
+    for (const [id, snapshot] of Object.entries(previous.context_usage ?? {})) {
+      const incoming = usage[id];
+      if (
+        previousEpoch > incomingEpoch ||
+        !incoming ||
+        Date.parse(snapshot.updated_at) > Date.parse(incoming.updated_at)
+      )
+        usage[id] = snapshot;
+    }
+    normalized = normalizeRoom({ ...normalized, context_usage_epoch: previousEpoch, context_usage: usage });
+  }
   const rooms = existing
     ? current.rooms.map((item) => (item.id === conversation.id ? normalized : item))
     : [normalized, ...current.rooms];
@@ -1412,5 +1508,11 @@ export function normalizeRoom(room: IMConversation): IMConversation {
     ...room,
     messages: room.messages ?? [],
     threads: room.threads ?? [],
+    context_usage: Object.fromEntries(
+      Object.entries(room.context_usage ?? {}).flatMap(([id, value]) => {
+        const usage = normalizeContextUsage(value);
+        return usage && room.members.some((member) => localIdentitiesMatch(member, id)) ? [[id, usage]] : [];
+      }),
+    ),
   };
 }

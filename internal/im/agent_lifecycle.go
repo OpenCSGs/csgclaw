@@ -137,7 +137,21 @@ func (s *Service) agentStateLocked(id string) string {
 	}
 	return user.AgentState
 }
+
+// SetLegacyNotifierLookup installs an identity lookup that must not call IM.
+func (s *Service) SetLegacyNotifierLookup(lookup func(User) bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.legacyNotifier = lookup
+}
+
+func (s *Service) isLegacyNotifierLocked(user User) bool {
+	return strings.EqualFold(strings.TrimSpace(user.Role), "notifier") ||
+		(s.legacyNotifier != nil && s.legacyNotifier(user))
+}
+
 func (s *Service) presentUserLocked(user User) User {
+	user.LegacyNotifier = s.isLegacyNotifierLocked(user)
 	user.AgentState = s.agentStateLocked(user.ID)
 	if user.AgentState != "" {
 		user.IsOnline = false

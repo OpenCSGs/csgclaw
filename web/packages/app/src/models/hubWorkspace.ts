@@ -75,6 +75,7 @@ export function hubTemplateErrorCode(error: unknown): string {
 }
 
 export type HubTemplate = AgentTemplateLike & {
+  recommended?: boolean;
   uid?: string;
   source_agent_id?: string;
   publications?: Array<{

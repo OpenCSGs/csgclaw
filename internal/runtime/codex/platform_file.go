@@ -38,7 +38,7 @@ func (r *Runtime) WithPlatformFile(ctx context.Context, agentID, threadID, turnI
 		defer stop()
 	}
 	var result json.RawMessage
-	err = withAppServerUploadFile(live.spec, path, func(file *os.File, size int64) error {
+	err = withAppServerUploadFile(roomThreadSpec(turnCtx, live.spec), path, func(file *os.File, size int64) error {
 		if err := operationCtx.Err(); err != nil {
 			return err
 		}

@@ -193,6 +193,39 @@ Server 保持当前 Hub catalog 的排序，并返回归一化后的 Skill 摘�
 
 ### `POST /api/v1/skills:install`
 
+安装已发布技能时，将版本解析到固定 commit，并记录来源 URL、远端路径、版本、commit、安装时间、更新时间和内容指纹。
+市场列表展示最新已发布版本；列表缺少版本字段时，从技能详情接口补查。
+
+### 技能更新确认
+
+`GET /api/v1/skills/updates` 按安装来源检查市场技能，返回逐项结果和 `checkedAt`。
+Web 每五分钟检查一次，也可在“设置 > 技能”手动检查。
+来源不可用或检查失败会保留错误状态，不会显示为已是最新。
+本机发现的外部技能和自建技能仍由原来源管理。
+`SKILL.md` 未声明版本不会停用更新检测：优先使用安装记录中的版本，其次按已发布 commit 或固定 ref 识别。
+安装版本及 commit 都无法识别时，将原始安装指纹与最新发布包比较。
+内容一致时识别为对应发布版本；内容不同时提供受控替换，并明确保留“当前版本未知”的状态。
+原始安装指纹已匹配发布包时，本地自行修改内容不会被误报为远端更新。
+
+`GET /api/v1/skills/{name}/update-check?preview=true` 返回确认清单，包括当前版本、目标发布版本及 commit、版本说明、同来源 Agent 副本以及新增、修改、删除的文件。
+文件差异比较当前本地内容；二进制或过大的内容只列出变化，不展示正文。
+确认状态指纹涵盖安装记录、本地文件和受影响副本。
+检查及预览不会替换文件。
+
+`POST /api/v1/skills:updates` 接受 `{"items":[{"name":"example","version":"1.2.0","commit":"<已发布 commit>","state":"<确认状态>","strategy":"update"}]}`。
+`update` 下载用户已核对的固定 commit，并替换清单中的技能库及 Agent 副本，保留原启用状态。
+`keep-local` 不修改文件，只记录本次忽略的发布版本；之后的新版本仍会提示。
+确认弹窗默认选择更新，逐项显示所有技能的“当前版本 → 目标版本”，用户可直接点击确认。
+预览加载中或加载失败时不能确认，打开弹窗本身不会执行更新。
+文件、来源、目标副本范围或已发布版本映射变化后，必须重新检查并确认。
+批量结果逐项列出成功或失败的目标，不将部分完成显示为全部成功。
+替换前完成下载及压缩包校验，替换失败时恢复原目录。
+不创建本地分支、合并流程或历史版本库。
+进行中的任务可能已加载旧指令，后续读取使用新文件。
+发布可见性及企业发布审批由 Hub 控制，客户端不另建审批系统。
+
+### 首次安装远端技能
+
 从同一个有效 OpenCSG Hub 安装远端 Skill。用户已登录时，Server 会在仓库压缩包请求以及旧版 Hub 的每个 tree/blob 回退请求中携带匹配环境的 OpenCSG Access Token，从而安装该用户有权查看的私有 Skill；未登录时仍只能安装公开 Skill。设置 `replace` 可覆盖同名本地 Skill。内置 Skill 禁止替换；远端安装窗口中，安装名称与内置 Skill 同名时隐藏操作按钮。
 
 ```json
@@ -763,10 +796,10 @@ memory_mode = "disabled"
 发布时只保存适合模板复用的运行时选项。
 Codex Worker 目前保存 `execution_mode` 和 `memory_mode`，不会保存 `local_workspace_dir` 等本机选项。
 创建请求显式提供的运行时选项优先于模板值。
-缺少 `execution_mode` 时默认为 `standard`。
+缺少 `execution_mode` 时默认为 `standard`。标准模式为 Codex 配置 `sandbox_mode = "danger-full-access"`，允许访问工作目录之外的文件，访问范围受运行进程的操作系统权限限制。
 缺少 `memory_mode` 时默认为 `enabled`。
 
-DSH Worker 的 `permission_mode` 可选 `workspace-write`、`read-only`、`danger-full-access`，默认 `workspace-write`。`local_workspace_dir` 可指定本机绝对路径；留空时使用 Agent 自动管理的工作目录。切换目录会开启新 DSH 会话，避免恢复到旧目录。CSGClaw 将 Agent 指令保存在独立的 `DSH_HOME/AGENTS.md`，DSH 同时读取所选项目自己的 `AGENTS.md`，不会修改项目文件。发布模板只保留 `permission_mode`，不会发布本机工作目录。
+DSH Worker 的 `permission_mode` 可选 `workspace-write`、`read-only`、`danger-full-access`，默认 `danger-full-access`。`local_workspace_dir` 可指定本机绝对路径；留空时使用 Agent 自动管理的工作目录。切换目录会开启新 DSH 会话，避免恢复到旧目录。CSGClaw 将 Agent 指令保存在独立的 `DSH_HOME/AGENTS.md`，DSH 同时读取所选项目自己的 `AGENTS.md`，不会修改项目文件。发布模板只保留 `permission_mode`，不会发布本机工作目录。
 
 ### `GET /api/v1/hub/templates`
 
@@ -804,6 +837,9 @@ DSH Worker 的 `permission_mode` 可选 `workspace-write`、`read-only`、`dange
 - `agent_id` 必填
 - `registry` 省略时使用默认 publish registry
 - 只有显式设置 `include_memory: true` 才会发布 Codex 记忆摘要，包括通过 `template_id` 再发布已有本地模板时；由于记忆可能包含从对话中提取的隐私信息，该字段默认是 `false`
+- 发布到社区时，整份模板最多 100 MiB，客户端单文件上限为 50 MiB，均按 Base64 编码前的文件字节数计算。单文件还受 StarHub 普通 Git 文件上限约束。超过总上限返回 HTTP 413，`error.code` 为 `template_publish_total_too_large`，`error.max_total_bytes` 为允许的最大字节数。
+- 发布在仓库原有的默认分支上提交，更新时跳过内容未变的文件。每批以 10 MiB 原始文件内容为目标，最多 200 项文件操作。超过 10 MiB 且可通过普通 Git 上传的文件单独提交。
+- 遇到超时或可重试的服务错误时，最多自动重试两次。每次重试读取远端最新状态，只提交剩余变更。其他文件全部提交成功后才单独提交有变化的 `agent.toml`。发布失败后，远端可能已包含部分文件变更，模板版本标记仍保留旧值，用户可再次发布同一本地版本以补齐变更。
 - 发布成功返回 `201 Created`
 
 ### `GET /api/v1/hub/templates/{id}`
@@ -1508,6 +1544,8 @@ prompt context 使用；它不是 thread reply 列表。Participant client 可�
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
 
+第三方 UI 和客户端的完整接入流程见 [Agent Responses 接入指南](agent-responses-integration.zh.md)。
+
 通过选定 Agent 及其真实 CSGClaw runtime 执行一次 turn。
 `{agent}` selector 可以使用 Agent ID，也可以使用不区分大小写的唯一 Agent 名称。
 该接口与 `/llm/responses` 相互独立，后者只代理模型流量，不执行 Agent。
@@ -1714,8 +1752,16 @@ message_delta             (stop_reason: end_turn)
 message_stop
 ```
 
-每个 SSE block 同时包含 `event: <type>` 和 JSON `data:` payload；payload
-中的 `type` 与事件名一致。工具名称由 `tool_use` 返回，工具参数由 `input_json_delta` 返回，
+每条 SSE 事件都有事件名和 JSON payload，payload 的 `type` 与事件名一致。
+Runtime 报告开始推理时，流会打开一个 `thinking` 内容块。块内可包含零条或多条
+`thinking_delta`，增量文字位于 `delta.thinking`。收到同一 `index` 的
+`content_block_stop` 表示这一段思考结束。工具调用后也可以出现新的思考块。
+
+请求体设置 `stream: true`，并发送 `Prefer: csgclaw-reasoning-summary` 请求头。
+模型向 Codex 提供摘要时，接口会将其作为展示文本输出。服务端接受该偏好时返回
+`Preference-Applied: csgclaw-reasoning-summary`，旧服务端可忽略该偏好并正常回答。Session 不转发原始推理，也不生成 Anthropic 签名。
+
+工具名称由 `tool_use` 返回，工具参数由 `input_json_delta` 返回，
 其中的敏感值已经脱敏。`tool_use` 的 `content_block_stop` 表示参数传输结束。
 工具执行结束时，服务端发送一次 `tool_result`，通过 `tool_result_delta` 返回输出。
 每段正文只等待它到达时仍在执行的工具返回结果。如果工具结果缺失，服务端在本轮结束时发送已收到的正文。

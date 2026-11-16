@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/skill/discovery"
+	"csgclaw/internal/skill/installstate"
 
 	"gopkg.in/yaml.v3"
 )
@@ -22,12 +23,13 @@ const (
 )
 
 type SkillSummary struct {
-	Name        string           `json:"name"`
-	Description string           `json:"description,omitempty"`
-	Source      string           `json:"source,omitempty"`
-	Readonly    bool             `json:"readonly,omitempty"`
-	Discovery   *discovery.Skill `json:"discovery,omitempty"`
-	Directory   string           `json:"directory,omitempty"`
+	Name        string               `json:"name"`
+	Description string               `json:"description,omitempty"`
+	Source      string               `json:"source,omitempty"`
+	Readonly    bool                 `json:"readonly,omitempty"`
+	Discovery   *discovery.Skill     `json:"discovery,omitempty"`
+	Directory   string               `json:"directory,omitempty"`
+	Install     *installstate.Record `json:"install,omitempty"`
 }
 
 type SkillSource struct {

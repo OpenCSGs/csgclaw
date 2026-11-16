@@ -64,6 +64,9 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 		return contract.TurnResult{Status: contract.TurnFailed, Error: inputErr}
 	}
 	defer cleanup()
+	if memory := contract.MemoryReference(request.RuntimeMemory); memory != "" {
+		blocks = append([]PromptContentBlock{TextBlock(memory)}, blocks...)
+	}
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -81,11 +84,12 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	promptDone := make(chan error, 1)
 	go func() {
 		promptDone <- a.runtime.PromptTurn(runCtx, a.runtimeID, PromptRequest{
-			Model:               request.Model,
-			SessionID:           sessionID,
-			ClientUserMessageID: string(request.ID),
-			Prompt:              blocks,
-			TextOnlyUserInput:   request.Interaction == contract.InteractionTextOnly,
+			Model:                  request.Model,
+			SessionID:              sessionID,
+			ClientUserMessageID:    string(request.ID),
+			Prompt:                 blocks,
+			TextOnlyUserInput:      request.Interaction == contract.InteractionTextOnly,
+			StreamReasoningSummary: request.StreamReasoningSummary,
 			OnAccepted: func() {
 				if dispatchedState.CompareAndSwap(false, true) {
 					close(accepted)
@@ -123,7 +127,7 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 				return result
 			}
 			filesOwned = false
-			return contract.TurnResult{Status: contract.TurnSucceeded, Output: output.String(), Dispatched: dispatched, RuntimeFiles: files}
+			return contract.TurnResult{Status: contract.TurnSucceeded, Output: output.String(), Dispatched: dispatched, RuntimeFiles: files, RuntimeText: output.messageSnapshots()}
 		}
 		select {
 		case <-accepted:
@@ -163,8 +167,9 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 }
 
 func (a *ConversationAdapter) session(ctx context.Context, request contract.TurnRequest) (string, *contract.TurnError) {
+	key := contract.RuntimeSessionKey(request)
 	if request.Continuation == contract.ContinuationRequireExisting {
-		sessionID, ok, err := a.runtime.ExistingEngineSession(ctx, a.runtimeID, string(request.ConversationKey))
+		sessionID, ok, err := a.runtime.ExistingEngineSession(ctx, a.runtimeID, key)
 		if err != nil {
 			return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 		}
@@ -173,7 +178,7 @@ func (a *ConversationAdapter) session(ctx context.Context, request contract.Turn
 		}
 		return sessionID, nil
 	}
-	sessionID, err := a.runtime.EnsureEngineSession(ctx, a.runtimeID, string(request.ConversationKey))
+	sessionID, err := a.runtime.EnsureEngineSession(ctx, a.runtimeID, key)
 	if err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: fmt.Sprintf("ensure Codex conversation: %v", err)}
 	}
@@ -290,6 +295,10 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		output.apply(event.MessageID, phase, event.Text, snapshot)
 	case activity.RuntimeEventThoughtDelta:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventThoughtDelta, Thought: event.Text})
+	case activity.RuntimeEventReasoningStarted, activity.RuntimeEventReasoningSummary, activity.RuntimeEventReasoningCompleted:
+		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, ItemID: event.MessageID, Activity: &contract.ActivityUpdate{
+			Kind: string(event.Kind), Payload: event.Text,
+		}})
 	case activity.RuntimeEventToolCallStart:
 		tool := toolActivity(event)
 		output.observeTool(contract.TurnEventToolCallStart, tool)
@@ -306,8 +315,15 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 	return nil
 }
 
+func (a *ConversationAdapter) workspaceDir(ctx context.Context) (string, error) {
+	if room, ok := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); ok {
+		return room.WorkspaceDir, nil
+	}
+	return a.runtime.WorkspaceDir(a.runtimeID)
+}
+
 func (a *ConversationAdapter) authorizeOutputFile(ctx context.Context, request activity.RuntimeFile) (*contract.OutputFile, *contract.TurnError) {
-	workspace, err := a.runtime.WorkspaceDir(a.runtimeID)
+	workspace, err := a.workspaceDir(ctx)
 	if err != nil {
 		return nil, a.runtimeFileUnavailable(ctx, request.Path, "resolve_workspace", err)
 	}
@@ -545,7 +561,7 @@ func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.
 	})
 	if needsWorkspace {
 		var err error
-		workspace, err = a.runtime.WorkspaceDir(a.runtimeID)
+		workspace, err = a.workspaceDir(ctx)
 		if err != nil {
 			return nil, cleanup, a.runtimeInputFileUnavailable("resolve_workspace", err)
 		}
@@ -568,6 +584,7 @@ func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.
 		}
 	}
 	blocks := make([]PromptContentBlock, 0, len(input))
+	imageIndex := 0
 	for index, part := range input {
 		if part.Kind == contract.InputPartText {
 			blocks = append(blocks, TextBlock(part.Text))
@@ -596,7 +613,8 @@ func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.
 			return nil, func() {}, a.runtimeInputFileUnavailable("copy_input", err)
 		}
 		if strings.HasPrefix(mediaType, "image/") {
-			blocks = append(blocks, LocalImageBlock(path))
+			imageIndex++
+			blocks = append(blocks, TextBlock(fmt.Sprintf("Attached reference image %d (%q):", imageIndex, part.File.Resolved.Name)), LocalImageBlock(path))
 		} else {
 			blocks = append(blocks, TextBlock(fmt.Sprintf("Attached file %q is temporarily available for this turn at %s. This managed input is deleted when the turn ends. If the user asks to save or keep it for later, copy it to a regular workspace path outside .csgclaw/engine-inputs and .csgclaw/attachments, verify the saved file, and report that persistent path. Do not claim it was saved without doing the copy. In later turns, recover missing inputs using the current room attachment list/download commands instead of reusing this temporary path.", part.File.Resolved.Name, path)))
 		}

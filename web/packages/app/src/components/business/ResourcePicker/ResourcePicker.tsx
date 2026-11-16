@@ -62,16 +62,21 @@ export function ResourcePickerRow({ children, selectable = false }: { children: 
 
 export function ResourcePickerCopy({
   name,
+  titleBadge,
   description,
   onOpen,
 }: {
   name: string;
+  titleBadge?: ReactNode;
   description?: string;
   onOpen?: (trigger: HTMLButtonElement) => void;
 }) {
   const copy = (
     <>
-      <strong>{name}</strong>
+      <strong>
+        {name}
+        {titleBadge}
+      </strong>
       <span>{description}</span>
     </>
   );

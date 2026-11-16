@@ -1016,6 +1016,7 @@ export function useWorkspaceController(): WorkspaceController {
           busy: auth.busy || auth.pending,
           environment: auth.environment,
           error: auth.error,
+          locale,
           onConnect: openCSGAuthGuard.login,
           onOpenChange: (open: boolean) => {
             if (!open) {

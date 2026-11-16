@@ -55,6 +55,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 	(*waiter).mu.RLock()
 	visible := (*waiter).visibleActivity
 	textOnlyUserInput := (*waiter).textOnlyUserInput
+	streamReasoningSummary := (*waiter).streamReasoningSummary
 	(*waiter).mu.RUnlock()
 	if visible {
 		return PromptResponse{}, &contextWindowError{}
@@ -78,6 +79,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 		next.mu.Lock()
 		next.diagnostic = diagnostics.From(ctx)
 		next.textOnlyUserInput = textOnlyUserInput
+		next.streamReasoningSummary = streamReasoningSummary
 		next.mu.Unlock()
 		*waiter = next
 		live.setAppServerTurnContext(threadID, next, ctx)
@@ -120,7 +122,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 	if err := newWaiter(); err != nil {
 		return PromptResponse{}, err
 	}
-	params := appServerTurnStartParamsWithInput(live.spec, threadID, []map[string]any{}, "")
+	params := appServerTurnStartParamsForContext(ctx, live.spec, threadID, []map[string]any{}, "")
 	applyTurnModelParams(params, selectedModel)
 	raw, err := live.appClient.request(ctx, "turn/start", params)
 	if err != nil {
@@ -132,5 +134,5 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 }
 
 func contextVisibleEvent(kind activity.RuntimeEventKind) bool {
-	return kind == activity.RuntimeEventTextDelta || kind == activity.RuntimeEventToolCallStart || kind == activity.RuntimeEventToolCallUpdate || kind == activity.RuntimeEventFileOutput || kind == activity.RuntimeEventStructuredOutput
+	return kind == activity.RuntimeEventTextDelta || kind == activity.RuntimeEventReasoningSummary || kind == activity.RuntimeEventToolCallStart || kind == activity.RuntimeEventToolCallUpdate || kind == activity.RuntimeEventFileOutput || kind == activity.RuntimeEventStructuredOutput
 }

@@ -1357,6 +1357,7 @@ describe("useAgentController", () => {
     );
     const payload = vi.mocked(updateAgentRequest).mock.calls[0]?.[1];
     expect(payload).not.toHaveProperty("name");
+    expect(payload).not.toHaveProperty("agent_profile");
   });
 
   it("updates the live manager profile after changing its model provider", async () => {
@@ -1414,6 +1415,123 @@ describe("useAgentController", () => {
     expect(result.current.managerProfile?.model_id).toBe("deepseek-v4-pro");
     expect(result.current.refreshWorkspaceManagerProfile).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["codex", true],
+    ["dsh", false],
+  ] as const)("checks whether %s needs a model probe before saving runtime settings", async (runtimeKind, blocked) => {
+    const agentProfile: AgentProfileLike = { ...profile, provider: "csghub", model_provider_id: "opencsg" };
+    const agent: AgentLike = {
+      ...oldAgent,
+      runtime_kind: runtimeKind,
+      provider: "csghub",
+      model_provider_id: "opencsg",
+      agent_profile: agentProfile,
+    };
+    vi.mocked(fetchAgent).mockReset().mockResolvedValue(agent);
+    vi.mocked(fetchAgentProfile).mockResolvedValue(agentProfile);
+    vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: [] });
+    vi.mocked(updateAgentRequest).mockResolvedValue(agent);
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ agents: [agent], openCSGAuthenticated: true }).controller,
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.agentViewProps.modelDirectory).toEqual([]));
+    await waitFor(() => expect(result.current.agentViewProps.savedDraft?.model_provider_id).toBe("opencsg"));
+
+    act(() => {
+      const draft = result.current.agentViewProps.draft!;
+      result.current.agentViewProps.onDraftChange?.({
+        ...draft,
+        runtime_options: { ...draft.runtime_options, workspace_dir: "/tmp/agent-workspace" },
+      });
+    });
+    expect(result.current.agentViewProps.modelSaveBlocked).toBe(blocked);
+    await act(async () => {
+      await result.current.agentViewProps.onSave?.();
+    });
+    if (blocked) {
+      expect(updateAgentRequest).not.toHaveBeenCalled();
+    } else {
+      expect(updateAgentRequest).toHaveBeenCalledWith(
+        "u-manager",
+        expect.objectContaining({
+          runtime_options: expect.objectContaining({ workspace_dir: "/tmp/agent-workspace" }),
+        }),
+      );
+    }
+
+    await act(async () => {
+      await result.current.agentViewProps.onMetadataSave?.({ description: "Updated description" });
+    });
+    expect(updateAgentRequest).toHaveBeenLastCalledWith("u-manager", { description: "Updated description" });
+  });
+
+  it("makes a failed provider selectable after model discovery succeeds", async () => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [{ id: "codex", builtin: true, status: "failed", models: ["cached-model"] }],
+    });
+    vi.mocked(fetchAgentProfileModels)
+      .mockRejectedValueOnce(new Error("Model directory unavailable"))
+      .mockResolvedValue({ models: ["recovered-model"], providerStatus: "connected" });
+    const { result } = renderHook(() => useAgentControllerHarness({ modelProviders: catalog }).controller, {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.agentViewProps.modelError).toBeTruthy());
+    await act(async () => {
+      await result.current.agentViewProps.onRetryModels?.();
+    });
+    await waitFor(() =>
+      expect(
+        result.current.agentViewProps.modelProviders?.providers.find((provider) => provider.id === "codex"),
+      ).toMatchObject({ status: "connected", models: ["recovered-model"] }),
+    );
+  });
+
+  it.each(["model_not_found", "cluster_not_found", "model_unavailable", "model_not_running"])(
+    "refreshes the model directory and surfaces a field error when saving returns %s",
+    async (code) => {
+      vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["retired-model", "current-model"] });
+      vi.mocked(updateAgentRequest).mockRejectedValueOnce({
+        status: 404,
+        code,
+        message: "Model no longer routable",
+      } satisfies ApiError);
+      const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+
+      await waitFor(() => expect(result.current.agentViewProps.modelDirectory).toContain("retired-model"));
+      vi.mocked(fetchAgentProfileModels)
+        .mockClear()
+        .mockResolvedValue({ models: ["current-model"] });
+      act(() => {
+        result.current.agentViewProps.onDraftChange?.({
+          ...result.current.agentViewProps.draft!,
+          model_id: "retired-model",
+        });
+      });
+
+      await act(async () => {
+        await result.current.agentViewProps.onSave?.();
+      });
+
+      await waitFor(() => expect(result.current.agentViewProps.modelDirectory).toEqual(["current-model"]));
+      expect(fetchAgentProfileModels).toHaveBeenCalled();
+      expect(result.current.agentViewProps.draft?.model_id).toBe("retired-model");
+      expect(result.current.agentViewProps.modelSaveError).toBe("Model no longer routable");
+      expect(result.current.agentViewProps.modelSaveBlocked).toBe(true);
+      expect(result.current.agentViewProps.saveError).toBe("");
+
+      act(() => {
+        result.current.agentViewProps.onDraftChange?.({
+          ...result.current.agentViewProps.draft!,
+          model_id: "current-model",
+        });
+      });
+      expect(result.current.agentViewProps.modelSaveError).toBeUndefined();
+      expect(result.current.agentViewProps.modelSaveBlocked).toBe(false);
+    },
+  );
 
   it("exposes the billing URL when saving the Agent page fails for insufficient balance", async () => {
     vi.mocked(updateAgentRequest).mockRejectedValueOnce({
@@ -3546,6 +3664,46 @@ describe("useAgentController", () => {
     const createPayload = vi.mocked(createBotRequest).mock.calls[0]?.[0];
     expect(createPayload).not.toHaveProperty("avatar");
     expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-worker", { avatar: selectedAvatar });
+  });
+
+  it("restarts a created worker left stopped after resource setup", async () => {
+    const stoppedWorker: AgentLike = {
+      ...oldAgent,
+      id: "u-worker",
+      name: "worker",
+      participants: [
+        {
+          agent_id: "u-worker",
+          channel: "csgclaw",
+          channel_user_ref: "user-worker",
+          id: "pt-worker",
+          type: "agent",
+        },
+      ],
+      role: "worker",
+      status: "stopped",
+    };
+    const runningWorker = { ...stoppedWorker, status: "running" };
+    const { result } = renderHook(() => useAgentControllerHarness(), { wrapper: createWrapper() });
+
+    await act(async () => {
+      await result.current.controller.computerViewProps.onCreateAgent();
+    });
+    await waitFor(() => expect(result.current.controller.agentProfileModalProps).not.toBeNull());
+
+    vi.mocked(fetchAgent).mockReset().mockResolvedValue(stoppedWorker);
+    vi.mocked(runAgentActionRequest).mockResolvedValue(runningWorker);
+
+    await act(async () => {
+      await result.current.controller.agentProfileModalProps?.onSave();
+    });
+
+    expect(fetchAgent).toHaveBeenCalledWith("u-worker", { cacheBust: true });
+    expect(runAgentActionRequest).toHaveBeenCalledWith("u-worker", "start");
+    expect(result.current.selectAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "u-worker", status: "running" }),
+      { replace: true },
+    );
   });
 
   it("uses another available provider when OpenCSG is signed out", async () => {

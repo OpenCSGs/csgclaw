@@ -64,7 +64,7 @@ func (h *Handler) handleRoomAttachments(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	q := r.URL.Query()
-	opts := apitypes.RoomAttachmentListOptions{Query: q.Get("query"), MessageID: q.Get("message_id"), Limit: 50}
+	opts := apitypes.RoomAttachmentListOptions{Query: q.Get("query"), Sort: q.Get("sort"), MessageID: q.Get("message_id"), Limit: 50}
 	for key, dst := range map[string]*int{"from": &opts.From, "limit": &opts.Limit} {
 		if q.Has(key) {
 			value, err := strconv.Atoi(q.Get(key))

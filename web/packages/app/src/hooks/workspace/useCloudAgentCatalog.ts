@@ -4,22 +4,35 @@ import { fetchRelayCatalog, type RelayCatalogTarget } from "@/api/relay";
 import type { AuthStatus } from "@/models/auth";
 import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 
-function catalogKey(login: string, agentID = "", connectionID = "") {
-  return ["workspace", "cloud-agent-catalog", login, agentID, connectionID] as const;
+function catalogKey(login: string, agentID = "", connectionID = "", metadataOnly = false) {
+  return [
+    "workspace",
+    "cloud-agent-catalog",
+    login,
+    agentID,
+    connectionID,
+    ...(metadataOnly ? ["metadata"] : []),
+  ] as const;
 }
 
-export function cloudAgentCatalogKey(auth?: AuthStatus, target?: RelayCatalogTarget) {
+export function cloudAgentCatalogKey(auth?: AuthStatus, target?: RelayCatalogTarget, metadataOnly = false) {
   const login = auth?.authenticated
     ? JSON.stringify([auth.base_url, auth.user_uuid || auth.user_id, auth.logged_in_at])
     : "";
-  return catalogKey(login, target?.agent_id, target?.connection_id);
+  return catalogKey(login, target?.agent_id, target?.connection_id, metadataOnly);
 }
 
 type CatalogPoller = { consumers: number; stop: () => void };
 const pollers = new WeakMap<QueryClient, Map<string, CatalogPoller>>();
 
-function subscribeToCatalogRefresh(client: QueryClient, login: string, agentID: string, connectionID: string) {
-  const queryKey = catalogKey(login, agentID, connectionID);
+function subscribeToCatalogRefresh(
+  client: QueryClient,
+  login: string,
+  agentID: string,
+  connectionID: string,
+  metadataOnly: boolean,
+) {
+  const queryKey = catalogKey(login, agentID, connectionID, metadataOnly);
   const scope = JSON.stringify(queryKey);
   let catalogs = pollers.get(client);
   if (!catalogs) {
@@ -56,15 +69,20 @@ function subscribeToCatalogRefresh(client: QueryClient, login: string, agentID: 
 }
 
 /** Passive consumers observe cached metadata without starting requests or refresh timers. */
-export function useCloudAgentCatalog(auth?: AuthStatus, enabled = true, target?: RelayCatalogTarget) {
+export function useCloudAgentCatalog(
+  auth?: AuthStatus,
+  enabled = true,
+  target?: RelayCatalogTarget,
+  metadataOnly = false,
+) {
   const client = useQueryClient();
-  const queryKey = cloudAgentCatalogKey(auth, target);
+  const queryKey = cloudAgentCatalogKey(auth, target, metadataOnly);
   const login = queryKey[2];
   const agentID = queryKey[3];
   const connectionID = queryKey[4];
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => fetchRelayCatalog(signal, target),
+    queryFn: ({ signal }) => (metadataOnly ? fetchRelayCatalog(signal, target, []) : fetchRelayCatalog(signal, target)),
     enabled,
     retry: false,
     staleTime: 5000,
@@ -72,7 +90,7 @@ export function useCloudAgentCatalog(auth?: AuthStatus, enabled = true, target?:
   });
   useEffect(() => {
     if (!enabled) return;
-    return subscribeToCatalogRefresh(client, login, agentID, connectionID);
-  }, [client, enabled, login, agentID, connectionID]);
+    return subscribeToCatalogRefresh(client, login, agentID, connectionID, metadataOnly);
+  }, [client, enabled, login, agentID, connectionID, metadataOnly]);
   return query;
 }

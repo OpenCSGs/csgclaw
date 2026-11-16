@@ -18,7 +18,8 @@ func WithDSHRuntime() agent.ControllerOption {
 		}
 		host := s.RuntimeHost()
 		rt := runtimedsh.New(runtimedsh.Dependencies{
-			ResolveRoomProfile: s.TaskRuntimeProfile,
+			ResolveRoomProfile:  s.TaskRuntimeProfile,
+			DisableNativeMemory: true,
 			ResolveBinary: func(ctx context.Context) (dshcli.Info, error) {
 				return (dshcli.Provider{}).Resolve(ctx)
 			},

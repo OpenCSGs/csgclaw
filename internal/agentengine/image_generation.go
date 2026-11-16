@@ -13,25 +13,29 @@ import (
 	"csgclaw/internal/modelprovider"
 )
 
-type imageGenerator func(context.Context, *modelprovider.ImageGenerationConfig, string) (modelprovider.GeneratedImage, error)
+type imageGenerator func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error)
 
-func (c *conversations) imageHandler(turn *activeTurn, sink EventSink, ref *modelprovider.ImageGenerationConfig) contract.ImageGenerationHandler {
+func (c *conversations) imageHandler(turn *activeTurn, sink EventSink, ref *modelprovider.ImageGenerationConfig, input []InputPart) contract.ImageGenerationHandler {
 	var mu sync.Mutex
 	tasks := map[string]error{}
-	return func(ctx context.Context, id, prompt string) error {
+	return func(ctx context.Context, id, prompt string, indices []int, options modelprovider.ImageGenerationOptions) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if err, ok := tasks[id]; ok {
 			return err
 		}
-		task := contract.ImageGenerationTask{ID: id, Prompt: strings.TrimSpace(prompt), Model: modelprovider.CloneImageGeneration(ref)}
-		err := c.generateImage(ctx, turn, sink, task)
+		task := contract.ImageGenerationTask{ID: id, Options: options, Prompt: strings.TrimSpace(prompt), Model: modelprovider.CloneImageGeneration(ref)}
+		references, ids, err := loadReferenceImages(ctx, input, indices, modelprovider.MaxImageEditReferences)
+		if err == nil {
+			task.AttachmentIDs = ids
+			err = c.generateImage(ctx, turn, sink, task, references...)
+		}
 		tasks[id] = err
 		return err
 	}
 }
 
-func (c *conversations) generateImage(ctx context.Context, turn *activeTurn, sink EventSink, task contract.ImageGenerationTask) error {
+func (c *conversations) generateImage(ctx context.Context, turn *activeTurn, sink EventSink, task contract.ImageGenerationTask, references ...modelprovider.ReferenceImage) error {
 	capability, ok := sink.(interface{ SupportsImageGeneration() bool })
 	if !ok || !capability.SupportsImageGeneration() {
 		return fmt.Errorf("image generation is available in CSGClaw web conversations only")
@@ -59,7 +63,7 @@ func (c *conversations) generateImage(ctx context.Context, turn *activeTurn, sin
 			err = fmt.Errorf("image_model_unavailable")
 		} else {
 			imageCtx, cancel := context.WithTimeout(ctx, 8*time.Minute)
-			result, err = c.engine.generateImage(imageCtx, task.Model, task.Prompt)
+			result, err = c.engine.generateImage(imageCtx, task.Model, task.Prompt, task.Options, references...)
 			cancel()
 		}
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/modelcap"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -63,6 +64,7 @@ type ModelProviderSummary struct {
 	ModelMetadata    map[string]modelcap.Resolved        `json:"model_metadata"`
 	ModelOverrides   map[string]modelcap.Metadata        `json:"model_overrides"`
 	ImageModels      []string                            `json:"image_models"`
+	ImageMetadata    map[string]modelcap.ImageGeneration `json:"image_metadata,omitempty"`
 	VideoModels      []string                            `json:"video_models"`
 	VideoMetadata    map[string]modelcap.VideoGeneration `json:"video_metadata,omitempty"`
 	VisionModels     []string                            `json:"vision_models"`
@@ -89,6 +91,7 @@ type ModelProviderCheckResult struct {
 	ModelMetadata   map[string]modelcap.Metadata        `json:"model_metadata,omitempty"`
 	VideoMetadata   map[string]modelcap.VideoGeneration `json:"video_metadata,omitempty"`
 	ImageModels     []string                            `json:"image_models"`
+	ImageMetadata   map[string]modelcap.ImageGeneration `json:"image_metadata,omitempty"`
 	VideoModels     []string                            `json:"video_models"`
 	VisionModels    []string                            `json:"vision_models"`
 	ID              string                              `json:"id"`
@@ -246,6 +249,7 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 		Builtin:       true,
 		Models:        prioritizeOpenCSGAutoModel(id, provider.BaseURL, provider.Models),
 		ImageModels:   imageModels(id, provider.Models, provider.ImageModels),
+		ImageMetadata: maps.Clone(provider.ImageMetadata),
 		VideoModels:   videoModels(id, provider.Models, provider.VideoModels),
 		VideoMetadata: modelcap.CloneVideoGeneration(provider.VideoMetadata),
 		VisionModels:  append([]string(nil), provider.VisionModels...),
@@ -329,6 +333,7 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 		Headers:          cloneStringMap(provider.Headers),
 		Models:           prioritizeOpenCSGAutoModel(id, provider.BaseURL, provider.Models),
 		ImageModels:      imageModels(id, provider.Models, provider.ImageModels),
+		ImageMetadata:    maps.Clone(provider.ImageMetadata),
 		VideoModels:      videoModels(id, provider.Models, provider.VideoModels),
 		VideoMetadata:    modelcap.CloneVideoGeneration(provider.VideoMetadata),
 		VisionModels:     append([]string(nil), provider.VisionModels...),
@@ -388,6 +393,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		directory, err = modelprovider.ListOpenCSGModelDirectoryWithClient(ctx, client, baseURL, apiKey, input.Headers)
 		models, images, videos, visions = directory.Models, directory.ImageModels, directory.VideoModels, directory.VisionModels
 		result.ModelMetadata = directory.ModelMetadata
+		result.ImageMetadata = directory.ImageMetadata
 		result.VideoMetadata = directory.VideoMetadata
 		result.ResolvedBaseURL = baseURL
 	case ModelProviderIDCodex, ModelProviderIDClaude:
@@ -417,6 +423,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		videos = discovery.VideoModels
 		visions = discovery.VisionModels
 		result.ModelMetadata = discovery.ModelMetadata
+		result.ImageMetadata = discovery.ImageMetadata
 		result.VideoMetadata = discovery.VideoMetadata
 		result.ResolvedBaseURL = discovery.ResolvedBaseURL
 		err = discoveryErr
@@ -431,6 +438,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 			result.VideoModels = checked.VideoModels
 			result.VisionModels = checked.VisionModels
 			result.ModelMetadata = checked.ModelMetadata
+			result.ImageMetadata = checked.ImageMetadata
 			result.VideoMetadata = checked.VideoMetadata
 			result.ModelSource = checked.Source
 			if checkErr != nil {
@@ -446,6 +454,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		directory, err = modelprovider.ListOpenAIModelDirectoryWithClient(ctx, &http.Client{Timeout: 3 * time.Second}, baseURL, apiKey, input.Headers)
 		models, images, videos, visions = directory.Models, directory.ImageModels, directory.VideoModels, directory.VisionModels
 		result.ModelMetadata = directory.ModelMetadata
+		result.ImageMetadata = directory.ImageMetadata
 		result.VideoMetadata = directory.VideoMetadata
 		result.ResolvedBaseURL = baseURL
 	}
@@ -542,6 +551,7 @@ func ClearModelProviderCachedState(llm config.LLMConfig, id string) (config.LLMC
 	existing.ModelMetadata = nil
 	existing.Models = nil
 	existing.ImageModels = nil
+	existing.ImageMetadata = nil
 	existing.VideoModels = nil
 	existing.VideoMetadata = nil
 	existing.VisionModels = nil
@@ -566,12 +576,14 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 		out.Models = append([]string(nil), result.Models...)
 		out.ImageModels = append([]string(nil), result.ImageModels...)
 		out.VideoModels = append([]string(nil), result.VideoModels...)
+		out.ImageMetadata = maps.Clone(result.ImageMetadata)
 		out.VideoMetadata = modelcap.CloneVideoGeneration(result.VideoMetadata)
 		out.VisionModels = append([]string(nil), result.VisionModels...)
 	} else if id == ModelProviderIDCodex || id == ModelProviderIDClaude {
 		out.ModelMetadata = nil
 		out.Models = nil
 		out.ImageModels = nil
+		out.ImageMetadata = nil
 		out.VisionModels = nil
 	}
 	if result.Status == ModelProviderStatusConnected && NormalizeModelProviderID(id) == ModelProviderIDCSGHubLite {
@@ -590,7 +602,7 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 func providerConfigsEqual(left, right config.ProviderConfig) bool {
 	left = left.Resolved()
 	right = right.Resolved()
-	if left.APIProtocol != right.APIProtocol || left.Region != right.Region || left.ModelSource != right.ModelSource || !reflect.DeepEqual(left.ModelMetadata, right.ModelMetadata) || !reflect.DeepEqual(left.VideoMetadata, right.VideoMetadata) || !reflect.DeepEqual(left.ModelOverrides, right.ModelOverrides) || left.DisplayName != right.DisplayName ||
+	if left.APIProtocol != right.APIProtocol || left.Region != right.Region || left.ModelSource != right.ModelSource || !reflect.DeepEqual(left.ModelMetadata, right.ModelMetadata) || !maps.Equal(left.ImageMetadata, right.ImageMetadata) || !reflect.DeepEqual(left.VideoMetadata, right.VideoMetadata) || !reflect.DeepEqual(left.ModelOverrides, right.ModelOverrides) || left.DisplayName != right.DisplayName ||
 		left.BaseURL != right.BaseURL ||
 		left.APIKey != right.APIKey ||
 		left.ReasoningEffort != right.ReasoningEffort ||

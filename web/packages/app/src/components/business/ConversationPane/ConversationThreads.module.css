@@ -124,8 +124,6 @@
 .thread-composer {
   --composer-add-control-size: 40px;
   --composer-add-icon-size: 22px;
-  --composer-send-control-size: 44px;
-  --composer-send-icon-size: 20px;
 
   position: relative;
   padding: 14px;
@@ -173,7 +171,6 @@
 
 .thread-composer-toolbar {
   display: flex;
-  min-height: calc(var(--composer-send-control-size) + 8px);
   align-items: center;
   justify-content: space-between;
   gap: 8px;

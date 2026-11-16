@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
+import type { SkillUpdateInfo } from "@/models/skillUpdates";
 import {
+  applySkillUpdates,
   fetchRemoteSkillsPage,
   fetchSkillFile,
   fetchSkills,
@@ -52,6 +54,7 @@ describe("skills API", () => {
               {
                 description: "Build agents from natural language.",
                 name: "agent-builder",
+                recommended: true,
                 readonly: true,
                 remote_path: "AIWizards/agent-builder",
                 remote_ref: "dev",
@@ -74,6 +77,7 @@ describe("skills API", () => {
         {
           description: "Build agents from natural language.",
           name: "agent-builder",
+          recommended: true,
           readonly: true,
           remotePath: "AIWizards/agent-builder",
           remoteRef: "dev",
@@ -136,5 +140,75 @@ describe("skills API", () => {
         method: "POST",
       }),
     );
+  });
+});
+
+describe("skill update batches", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function plans(count: number): SkillUpdateInfo[] {
+    return Array.from({ length: count }, (_, i) => ({
+      name: `skill-${i}`,
+      available: true,
+      localVersion: "1.0.0",
+      latestVersion: "2.0.0",
+      commit: "release-commit",
+      state: `state-${i}`,
+      publishedAt: "2026-11-13T00:00:00Z",
+      checkedAt: "2026-11-13T01:00:00Z",
+      sourceUrl: `https://example.com/skills/team/skill-${i}`,
+      remotePath: `team/skill-${i}`,
+      targets: [],
+    }));
+  }
+
+  it.each([100, 101, 201])("submits all %i updates within the API limit", async (count) => {
+    const sizes: number[] = [];
+    mockFetch(async (_url, init) => {
+      const { items } = JSON.parse(String(init?.body));
+      sizes.push(items.length);
+      if (items.length > 100) return Response.json({}, { status: 400 });
+      return Response.json({
+        results: items.map((item: { name: string }) => ({
+          name: item.name,
+          targetId: "library",
+          targetName: "",
+          status: "updated",
+        })),
+      });
+    });
+    const response = await applySkillUpdates(plans(count), "update");
+    expect(response.results).toHaveLength(count);
+    expect(response.results.every((result) => result.status === "updated")).toBe(true);
+    expect(response.results.map((result) => result.name)).toEqual(plans(count).map((item) => item.name));
+    expect(sizes).toEqual(count === 100 ? [100] : count === 101 ? [100, 1] : [100, 100, 1]);
+  });
+
+  it("retains successful results and reports a failed batch without skipping later skills", async () => {
+    let calls = 0;
+    mockFetch(async (_url, init) => {
+      const { items } = JSON.parse(String(init?.body));
+      calls++;
+      if (calls === 2) return Response.json({ error: { code: "skill_release_changed" } }, { status: 409 });
+      expect(items.every((item: { strategy: string }) => item.strategy === "keep-local")).toBe(true);
+      return Response.json({
+        results: items.map((item: { name: string }) => ({
+          name: item.name,
+          targetId: "library",
+          targetName: "",
+          status: "kept",
+        })),
+      });
+    });
+    const response = await applySkillUpdates(plans(201), "keep-local");
+    expect(calls).toBe(3);
+    expect(response.results).toHaveLength(201);
+    expect(response.results.slice(0, 100).every((result) => result.status === "kept")).toBe(true);
+    expect(
+      response.results
+        .slice(100, 200)
+        .every((result) => result.status === "failed" && result.error === "skill_release_changed"),
+    ).toBe(true);
+    expect(response.results[200].status).toBe("kept");
   });
 });

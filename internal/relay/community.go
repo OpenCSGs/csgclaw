@@ -63,6 +63,7 @@ type RelayRegistration struct {
 	AgentID string `json:"agent_id"`
 }
 type CommunityInstance struct {
+	Recommended bool               `json:"recommended"`
 	ID          int64              `json:"id"`
 	TemplateID  int64              `json:"template_id,omitempty"`
 	Name        string             `json:"name"`

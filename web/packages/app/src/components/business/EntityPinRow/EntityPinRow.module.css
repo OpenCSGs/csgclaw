@@ -1,0 +1,40 @@
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding-inline-end: 4px;
+  border-radius: var(--radius-md);
+}
+
+.row:hover,
+.row:focus-within {
+  background: color-mix(in srgb, var(--panel-soft) 65%, transparent);
+}
+
+.row:has(> [aria-current="true"]) {
+  background: var(--panel-soft);
+}
+
+.row > button:first-child:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.pin svg {
+  transform: rotate(45deg);
+}
+
+.heading {
+  margin-block-end: 4px;
+}
+
+.heading[aria-expanded="false"] .chevron {
+  transform: rotate(-90deg);
+}
+
+@media (hover: hover) {
+  .row:not(:hover):not(:focus-within) .pin {
+    opacity: 0;
+    pointer-events: none;
+  }
+}

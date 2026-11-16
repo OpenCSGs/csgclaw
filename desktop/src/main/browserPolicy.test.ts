@@ -4,6 +4,7 @@ import {
   browserURL,
   clipBrowserBounds,
   parseBrowserRequest,
+  htmlPreviewPartition,
 } from "./browserPolicy";
 
 test("remote browsing rejects application access, credentials and privileged schemes", () => {
@@ -32,9 +33,16 @@ test("browser requests and bounds are validated at the IPC boundary", () => {
     bounds: { x: 10, y: 20, width: 500, height: 400 },
   };
   assert.deepEqual(parseBrowserRequest(request), request);
+  const preview = { id: "html", action: "previewHTML", html: "<script>game()</script>", sourceKey: "file-a" };
+  assert.deepEqual(parseBrowserRequest(preview), preview);
+  assert.deepEqual(parseBrowserRequest({ id: "html", action: "releaseHTML" }), { id: "html", action: "releaseHTML" });
   for (const value of [
     null,
     {},
+    { id: "html", action: "previewHTML", html: 42, sourceKey: "file-a" },
+    { id: "html", action: "previewHTML", html: "<html></html>" },
+    { id: "html", action: "previewHTML", html: "<html></html>", sourceKey: "" },
+    { id: "html", action: "previewHTML", html: "<html></html>", sourceKey: 42 },
     { ...request, action: "executeJavaScript" },
     { ...request, id: "" },
     { ...request, visible: 1 },
@@ -50,4 +58,14 @@ test("browser requests and bounds are validated at the IPC boundary", () => {
     clipBrowserBounds({ x: 300, y: 300, width: 100, height: 100 }, 200, 200),
     { x: 200, y: 200, width: 0, height: 0 },
   );
+});
+
+test("HTML storage partitions are stable per source and separate from ordinary browsing", () => {
+  const origin = "http://127.0.0.1:18080";
+  const first = htmlPreviewPartition(origin, "room-a:file-a");
+  assert.equal(htmlPreviewPartition(origin, "room-a:file-a"), first);
+  assert.notEqual(htmlPreviewPartition(origin, "room-a:file-b"), first);
+  assert.notEqual(htmlPreviewPartition(origin, "room-b:file-a"), first);
+  assert.notEqual(htmlPreviewPartition("http://127.0.0.1:18081", "room-a:file-a"), first);
+  assert.notEqual(first, "persist:csgclaw-browser");
 });

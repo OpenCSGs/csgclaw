@@ -17,7 +17,7 @@ const (
 	PermissionModeReadOnly         = "read-only"
 	PermissionModeWorkspaceWrite   = "workspace-write"
 	PermissionModeDangerFullAccess = "danger-full-access"
-	defaultPermissionMode          = PermissionModeWorkspaceWrite
+	defaultPermissionMode          = PermissionModeDangerFullAccess
 )
 
 type RuntimeOptions struct {

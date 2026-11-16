@@ -5,11 +5,13 @@ import (
 	"context"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentmemory"
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/apps"
 	"csgclaw/internal/auth"
+	"csgclaw/internal/browser"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/csgclaw/notification"
 	"csgclaw/internal/channel/feishu"
@@ -52,6 +54,8 @@ import (
 )
 
 type Handler struct {
+	browserMu                  sync.Mutex
+	browser                    *browser.Service
 	agentArchiveMu             sync.Mutex
 	cloudTaskWG                sync.WaitGroup
 	relayCancel                context.CancelFunc
@@ -96,6 +100,8 @@ type Handler struct {
 	serverAccessToken          string
 	desktopSessionToken        string
 	serverNoAuth               bool
+	agentMemory                *agentmemory.Store
+	memoryMode                 string
 	upgradeManager             *upgrade.Manager
 	upgradeConfigPath          string
 	upgradeApply               func(upgrade.ApplyHelperOptions) error
@@ -1945,6 +1951,15 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err != nil {
+			var totalTooLarge *hub.PublishTotalTooLargeError
+			if errors.As(err, &totalTooLarge) {
+				writeHubTemplateErrorPayload(w, http.StatusRequestEntityTooLarge, map[string]any{
+					"code":            "template_publish_total_too_large",
+					"message":         totalTooLarge.Error(),
+					"max_total_bytes": totalTooLarge.MaxBytes,
+				}, savedTemplateID)
+				return
+			}
 			var tooLarge *hub.PublishFileTooLargeError
 			if errors.As(err, &tooLarge) {
 				writeHubTemplateErrorPayload(w, http.StatusRequestEntityTooLarge, map[string]any{
@@ -2117,6 +2132,7 @@ func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {
 
 func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 	presented := apitypes.HubTemplate{
+		Recommended:    item.Recommended,
 		LatestRevision: item.LatestRevision,
 		VersionCount:   item.VersionCount,
 		Publications:   item.Publications,
@@ -2543,6 +2559,12 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 			}
 			writeAPIError(w, err, http.StatusBadRequest)
 			return
+		}
+		h.browserMu.Lock()
+		browsers := h.browser
+		h.browserMu.Unlock()
+		if browsers != nil {
+			browsers.CloseRoom(r.Context(), id)
 		}
 		if hasDeletedRoom {
 			h.publishRoomEvent(im.EventTypeRoomDeleted, deletedRoom)
@@ -3057,6 +3079,16 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	serviceReq.DiagnosticStart = receivedAt
 	serviceReq = h.resolveCSGClawParticipantMessageRequest(serviceReq)
+	if userID := h.memoryUser(r); userID != "" && h.im != nil &&
+		h.im.MemoryPrivateRoom(serviceReq.RoomID, userID, "") {
+		sender := h.im.ResolveUserID(serviceReq.SenderID)
+		if sender == "" {
+			sender = h.im.CurrentUserID()
+		}
+		if sender == userID {
+			serviceReq.MemoryUserID = userID
+		}
+	}
 	if caller := strings.TrimSpace(r.Header.Get("X-CSGClaw-Caller-Agent")); caller != "" {
 		if !h.participantBridgeTargetForRoomMember(serviceReq.SenderID).matches(caller) {
 			http.Error(w, "message sender must match runtime caller", http.StatusForbidden)

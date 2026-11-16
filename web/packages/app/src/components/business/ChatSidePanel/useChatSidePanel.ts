@@ -17,11 +17,11 @@ export function chatSidePanelKey(userID: string, roomID: string): string {
   return `${CHAT_SIDE_PANEL_STORAGE_KEY}:${window.location.origin}${window.location.pathname}:${encodeURIComponent(userID)}:${encodeURIComponent(roomID)}`;
 }
 
-function read(key: string): ChatSideState {
+function read(key: string, persist: boolean): ChatSideState {
   let snapshot = snapshots.get(key);
   if (!snapshot) {
     try {
-      snapshot = restoreChatSideState(localStorage.getItem(key));
+      snapshot = restoreChatSideState(persist ? localStorage.getItem(key) : null);
     } catch {
       snapshot = restoreChatSideState(null);
     }
@@ -30,7 +30,7 @@ function read(key: string): ChatSideState {
   return snapshot;
 }
 
-export function useChatSidePanel(userID: string, roomID: string) {
+export function useChatSidePanel(userID: string, roomID: string, persist = true) {
   const key = chatSidePanelKey(userID, roomID);
   const subscribe = useCallback(
     (listener: () => void) => {
@@ -47,14 +47,14 @@ export function useChatSidePanel(userID: string, roomID: string) {
     },
     [key],
   );
-  const getSnapshot = useCallback(() => read(key), [key]);
+  const getSnapshot = useCallback(() => read(key, persist), [key, persist]);
   const state = useSyncExternalStore(subscribe, getSnapshot);
   const actions = useMemo(() => {
     const update = (updater: (current: ChatSideState) => ChatSideState) => {
-      const next = updater(read(key));
+      const next = updater(read(key, persist));
       snapshots.set(key, next);
       try {
-        localStorage.setItem(key, serializeChatSideState(next));
+        if (persist) localStorage.setItem(key, serializeChatSideState(next));
       } catch {
         /* In-memory tabs work without storage. */
       }
@@ -63,11 +63,12 @@ export function useChatSidePanel(userID: string, roomID: string) {
     return {
       openTab: (tab: ChatSideTab) => update((current) => openChatSideTab(current, tab)),
       closeTab: (id: string) => update((current) => closeChatSideTab(current, id)),
-      patch: (patch: Partial<ChatSideState>) => update((current) => ({ ...current, ...patch })),
+      patch: (patch: Partial<ChatSideState> | ((current: ChatSideState) => Partial<ChatSideState>)) =>
+        update((current) => ({ ...current, ...(typeof patch === "function" ? patch(current) : patch) })),
       replaceTab: (tab: ChatSideTab, previousID = tab.id) =>
         update((current) => replaceChatSideTab(current, previousID, tab)),
     };
-  }, [key]);
+  }, [key, persist]);
   return { state, ...actions };
 }
 

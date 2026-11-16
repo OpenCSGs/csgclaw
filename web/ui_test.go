@@ -32,6 +32,32 @@ func TestOnboardingGuideServesWithoutRedirectAndUsesExternalScript(t *testing.T)
 	}
 }
 
+func TestHTMLPreviewHasItsOwnSandboxPolicy(t *testing.T) {
+	assets := os.DirFS("packages/app/public")
+	handler := spaHandler{fsys: assets, files: http.FileServer(http.FS(assets))}
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		t.Run(method, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			// Model the outer desktop renderer middleware's application policy.
+			rec.Header().Set("Content-Security-Policy", "script-src 'self'; frame-ancestors 'none'")
+			rec.Header().Set("X-Frame-Options", "DENY")
+			handler.ServeHTTP(rec, httptest.NewRequest(method, "/html-preview.html", nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d", rec.Code)
+			}
+			if got := rec.Header().Get("Content-Security-Policy"); got != "sandbox allow-scripts allow-forms; frame-ancestors 'self'; object-src 'none'" {
+				t.Fatalf("preview policy = %q", got)
+			}
+			if rec.Header().Get("X-Frame-Options") != "SAMEORIGIN" || rec.Header().Get("Cache-Control") != "no-cache" || rec.Header().Get("Referrer-Policy") != "no-referrer" {
+				t.Fatalf("preview headers = %v", rec.Header())
+			}
+			if method == http.MethodHead && rec.Body.Len() != 0 {
+				t.Fatal("HEAD must not return preview content")
+			}
+		})
+	}
+}
+
 func TestHandlerServesIndexForSPARoutes(t *testing.T) {
 	requireBuiltWebAssets(t)
 

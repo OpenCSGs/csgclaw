@@ -1296,6 +1296,62 @@ func TestPresentDirectRoomKeepsTitleWhenCurrentUserIsNotMember(t *testing.T) {
 	}
 }
 
+func TestAddRoomMembersRejectsCloudIdentity(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{
+		CurrentUserID: AdminUserID,
+		Users: []User{
+			{ID: AdminUserID, Name: "admin"},
+			{ID: "user-worker", Name: "Worker", Role: "worker"},
+			{ID: "user-relay-history", Name: "Cloud History", Role: "cloud"},
+		},
+		Rooms: []Room{{ID: "room-1", Members: []string{AdminUserID}}},
+	})
+
+	_, err := svc.AddRoomMembers(AddRoomMembersRequest{
+		RoomID:    "room-1",
+		InviterID: AdminUserID,
+		UserIDs:   []string{"user-worker", "relay-history"},
+	})
+	if err == nil || err.Error() != "cannot invite a cloud agent to this room" {
+		t.Fatalf("AddRoomMembers() error = %v, want cloud identity rejection", err)
+	}
+	room, _ := svc.Room("room-1")
+	if !slices.Equal(room.Members, []string{AdminUserID}) {
+		t.Fatalf("room members = %v after rejected invitation", room.Members)
+	}
+}
+
+func TestAddRoomMembersRejectsLegacyNotifier(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{
+		CurrentUserID: AdminUserID,
+		Users: []User{
+			{ID: AdminUserID, Name: "admin"},
+			{ID: "user-worker", Name: "Worker", Role: "worker"},
+			{ID: "user-old", Name: "Legacy notifier", Role: "worker"},
+			{ID: "user-old-role", Name: "Legacy notifier role", Role: "notifier"},
+		},
+		Rooms: []Room{{ID: "room-1", Members: []string{AdminUserID}}},
+	})
+	svc.SetLegacyNotifierLookup(func(user User) bool { return user.ID == "user-old" })
+
+	for _, id := range []string{"user-old", "user-old-role"} {
+		user, ok := svc.User(id)
+		if !ok || !user.LegacyNotifier {
+			t.Fatalf("User(%q) was not marked as a legacy notifier", id)
+		}
+		_, err := svc.AddRoomMembers(AddRoomMembersRequest{
+			RoomID: "room-1", InviterID: AdminUserID, UserIDs: []string{"user-worker", id},
+		})
+		if err == nil || err.Error() != "cannot invite a legacy notifier to this room" {
+			t.Fatalf("AddRoomMembers(%q) error = %v, want legacy notifier rejection", id, err)
+		}
+	}
+	room, _ := svc.Room("room-1")
+	if !slices.Equal(room.Members, []string{AdminUserID}) {
+		t.Fatalf("room members = %v after rejected invitations", room.Members)
+	}
+}
+
 func TestAddRoomMembersRejectsDirectRoom(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",

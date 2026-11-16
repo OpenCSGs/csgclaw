@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -64,6 +66,19 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 		return
 	}
 	if isRawAppServerNotificationMethod(note.Method) {
+		switch note.Method {
+		case "error":
+			willRetry, _ := params["willRetry"].(bool)
+			live.appClient.logTurnError(note.Method, params, params, willRetry)
+		case "turn/completed":
+			turn, _ := params["turn"].(map[string]any)
+			if turn == nil {
+				turn = params
+			}
+			if strings.EqualFold(appServerString(turn, "status"), "failed") {
+				live.appClient.logTurnError(note.Method, params, turn, false)
+			}
+		}
 		live.appServerProtocol(note.Method)
 		m.handleRawAppServerNotification(runtimeID, live, note.Method, params)
 		return
@@ -71,12 +86,44 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 
 	protocol := live.appServerProtocol(note.Method)
 	if protocol == appServerProtocolLegacy {
+		switch appServerString(params, "type") {
+		case "error":
+			live.appClient.logTurnError(note.Method, params, params, false)
+		case "stream_error":
+			live.appClient.logTurnError(note.Method, params, params, true)
+		}
 		m.handleLegacyAppServerEvent(runtimeID, live, params)
 		return
 	}
 	if protocol == appServerProtocolRaw {
 		m.handleRawAppServerNotification(runtimeID, live, note.Method, params)
 	}
+}
+
+// Log the error fields before turn recovery can replace the provider's message.
+func (c *appServerClient) logTurnError(method string, params, event map[string]any, willRetry bool) {
+	if c == nil || c.logger == nil {
+		return
+	}
+	details, _ := event["error"].(map[string]any)
+	message := appServerString(details, "message")
+	if message == "" {
+		message = appServerString(event, "message")
+	}
+	attrs := []any{
+		"method", method,
+		"thread_id", appServerNotificationThreadID(params),
+		"turn_id", legacyNotificationTurnID(params),
+		"error", message,
+	}
+	if extra := appServerString(details, "additionalDetails"); extra != "" {
+		attrs = append(attrs, "details", extra)
+	}
+	if willRetry {
+		c.logger.Warn(appServerProtocolErrorLog, append(attrs, "will_retry", true)...)
+		return
+	}
+	c.logger.Error(appServerProtocolErrorLog, attrs...)
 }
 
 func isRawAppServerNotificationMethod(method string) bool {
@@ -291,8 +338,12 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	// Account for it before the item lifecycle handler below.
 	switch method {
 	case "item/reasoning/textDelta", "item/reasoning/summaryTextDelta", "item/reasoning/summaryPartAdded", "item/mcpToolCall/progress":
+		turnID := appServerNotificationTurnID(params)
+		if method == "item/reasoning/summaryTextDelta" {
+			m.handleReasoningSummaryDelta(runtimeID, live, threadID, turnID, params)
+		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
-			turnID:   appServerNotificationTurnID(params),
+			turnID:   turnID,
 			activity: strings.TrimPrefix(method, "item/") + ":" + appServerString(params, "itemId"),
 			progress: true,
 		})
@@ -354,14 +405,32 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	}
 	itemType := appServerString(item, "type")
 	itemID := appServerString(item, "id")
+	turnID := appServerNotificationTurnID(params)
 	activity := strings.Trim(strings.TrimPrefix(method, "item/")+":"+itemType+":"+itemID, ":")
 	live.notifyAppServerTurn(threadID, appServerTurnResult{
-		turnID:   appServerNotificationTurnID(params),
+		turnID:   turnID,
 		activity: activity,
 		progress: appServerItemIsProgress(itemType),
 	})
 
 	switch {
+	case itemType == "reasoning" && (method == "item/started" || method == "item/completed"):
+		waiter := live.appServerTurnWaiter(threadID)
+		if active, summary := waiter.reasoningStream(turnID); active && itemID != "" {
+			kind := activitypkg.RuntimeEventReasoningStarted
+			if method == "item/completed" {
+				kind = activitypkg.RuntimeEventReasoningCompleted
+				if summary {
+					parts, _ := item["summary"].([]any)
+					text, firstCompletion := waiter.completeReasoningSummary(itemID, parts)
+					if !firstCompletion {
+						return
+					}
+					m.publishReasoningSummary(runtimeID, threadID, turnID, itemID, text)
+				}
+			}
+			m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, MessageID: itemID, Kind: kind})
+		}
 	case method == "item/started" && itemType == "agentMessage":
 		phase := appServerString(item, "phase")
 		if strings.TrimSpace(phase) == "" {
@@ -438,6 +507,111 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			m.publishAppServerEvent(event)
 		}
 	}
+}
+
+type appServerReasoningSummary struct {
+	parts     map[int]*strings.Builder
+	completed bool
+}
+
+func (m *appServerManager) handleReasoningSummaryDelta(runtimeID string, live *liveSession, threadID, turnID string, params map[string]any) {
+	itemID := appServerString(params, "itemId")
+	text, _ := params["delta"].(string)
+	if itemID == "" || text == "" {
+		return
+	}
+	index := 0
+	if value, exists := params["summaryIndex"]; exists {
+		var err error
+		index, err = strconv.Atoi(appServerRequestIDValue(value))
+		if err != nil || index < 0 {
+			return
+		}
+	}
+	waiter := live.appServerTurnWaiter(threadID)
+	if active, summary := waiter.reasoningStream(turnID); active && summary {
+		if waiter.recordReasoningSummaryDelta(itemID, index, text) {
+			m.publishReasoningSummary(runtimeID, threadID, turnID, itemID, text)
+		}
+	}
+}
+
+func (w *appServerTurnWaiter) reasoningSummary(itemID string) *appServerReasoningSummary {
+	if w.reasoningSummaries == nil {
+		w.reasoningSummaries = make(map[string]*appServerReasoningSummary)
+	}
+	summary := w.reasoningSummaries[itemID]
+	if summary == nil {
+		summary = &appServerReasoningSummary{parts: make(map[int]*strings.Builder)}
+		w.reasoningSummaries[itemID] = summary
+	}
+	return summary
+}
+
+func (w *appServerTurnWaiter) recordReasoningSummaryDelta(itemID string, index int, text string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	summary := w.reasoningSummary(itemID)
+	if summary.completed {
+		return false
+	}
+	part := summary.parts[index]
+	if part == nil {
+		part = &strings.Builder{}
+		summary.parts[index] = part
+	}
+	part.WriteString(text)
+	// Later parts wait for the snapshot so missing earlier text can still
+	// be inserted in order in the append-only Session stream.
+	return index == 0
+}
+
+func (w *appServerTurnWaiter) completeReasoningSummary(itemID string, snapshot []any) (string, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	summary := w.reasoningSummary(itemID)
+	if summary.completed {
+		return "", false
+	}
+	summary.completed = true
+	parts := make(map[int]string, len(summary.parts))
+	for index, part := range summary.parts {
+		parts[index] = part.String()
+	}
+	summary.parts = nil
+
+	streamed := parts[0]
+	for index, value := range snapshot {
+		if text, ok := value.(string); ok && text != "" {
+			parts[index] = text
+		}
+	}
+	var tail strings.Builder
+	if suffix, matches := strings.CutPrefix(parts[0], streamed); matches {
+		tail.WriteString(suffix)
+	}
+	hasText := streamed != "" || tail.Len() > 0
+	for _, index := range slices.Sorted(maps.Keys(parts)) {
+		if index == 0 || parts[index] == "" {
+			continue
+		}
+		if hasText {
+			tail.WriteString("\n\n")
+		}
+		tail.WriteString(parts[index])
+		hasText = true
+	}
+	return tail.String(), true
+}
+
+func (m *appServerManager) publishReasoningSummary(runtimeID, threadID, turnID, itemID, text string) {
+	if text == "" {
+		return
+	}
+	m.publishAppServerEvent(SessionEvent{
+		RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, MessageID: itemID,
+		Kind: activitypkg.RuntimeEventReasoningSummary, Text: text,
+	})
 }
 
 func cloneAppServerParams(params map[string]any) map[string]any {

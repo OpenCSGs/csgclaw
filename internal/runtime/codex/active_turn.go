@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"crypto/rand"
+	"csgclaw/internal/agentengine/contract"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -46,7 +47,7 @@ func (r *Runtime) AgentTurnContext(agentID, threadID, turnID string) (context.Co
 	defer live.mu.Unlock()
 	for conversation, thread := range live.conversationSessions {
 		if thread == threadID {
-			return ctx, conversation, nil
+			return ctx, contract.LogicalRuntimeSessionKey(conversation), nil
 		}
 	}
 	return nil, "", fmt.Errorf("thread has no Engine conversation binding")

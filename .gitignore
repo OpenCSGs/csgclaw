@@ -49,3 +49,8 @@ third_party/boxlite-go/libboxlite.a
 third_party/boxlite-go/boxlite-c*/
 
 .playwright-cli
+
+# Downloaded Codex package resources
+/codex-resources/
+/codex-path/
+/codex-package.json

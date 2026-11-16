@@ -36,16 +36,16 @@ func (c *conversations) RecoverVideoGeneration(ctx context.Context, request Turn
 	defer cancel()
 	turn := &activeTurn{ctx: turnCtx, cancel: cancel, agentID: c.agentID, request: request}
 	defer c.engine.files.DeleteTurn(c.agentID, request.ConversationKey, request.ID)
-	if err := c.generateVideo(turnCtx, turn, sink, *request.VideoGeneration); err != nil {
+	if err := c.generateVideo(turnCtx, turn, sink, *request.VideoGeneration, nil); err != nil {
 		return failedResult(ErrorRuntimeFailed, err.Error())
 	}
 	return TurnResult{Status: TurnSucceeded, Dispatched: true}
 }
 
-func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *modelprovider.VideoGenerationConfig) contract.VideoGenerationHandler {
+func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *modelprovider.VideoGenerationConfig, input []InputPart) contract.VideoGenerationHandler {
 	var mu sync.Mutex
 	tasks := map[string]struct{}{}
-	return func(ctx context.Context, id, prompt string, options modelprovider.VideoGenerationOptions) error {
+	return func(ctx context.Context, id, prompt string, options modelprovider.VideoGenerationOptions, indices ...int) error {
 		capability, ok := sink.(interface{ SupportsVideoGeneration() bool })
 		if !ok || !capability.SupportsVideoGeneration() {
 			return fmt.Errorf("video generation is available in CSGClaw web conversations only")
@@ -59,6 +59,15 @@ func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *mode
 			mu.Unlock()
 			return nil
 		}
+		references, _, err := loadReferenceImages(ctx, input, indices, 1)
+		if err != nil {
+			mu.Unlock()
+			return err
+		}
+		var reference *modelprovider.ReferenceImage
+		if len(references) > 0 {
+			reference = &references[0]
+		}
 		tasks[id] = struct{}{}
 		mu.Unlock()
 
@@ -68,7 +77,7 @@ func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *mode
 		// submission immediately and the terminal event can arrive later.
 		backgroundCtx := context.WithoutCancel(ctx)
 		go func() {
-			if err := c.generateVideo(backgroundCtx, turn, sink, task); err != nil {
+			if err := c.generateVideo(backgroundCtx, turn, sink, task, reference); err != nil {
 				slog.Error("background video generation failed", "agent_id", c.agentID, "turn_id", turn.request.ID, "video_task_id", task.ID, "error", err)
 			}
 		}()
@@ -76,7 +85,7 @@ func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *mode
 	}
 }
 
-func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sink EventSink, task contract.VideoGenerationTask) error {
+func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sink EventSink, task contract.VideoGenerationTask, reference *modelprovider.ReferenceImage) error {
 	capability, ok := sink.(interface{ SupportsVideoGeneration() bool })
 	if !ok || !capability.SupportsVideoGeneration() {
 		return fmt.Errorf("video generation is available in CSGClaw web conversations only")
@@ -132,6 +141,7 @@ func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sin
 		}
 		videoCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 		options := task.Options
+		options.Reference = reference
 		options.RequestID = task.ID
 		options.ResumeID = task.UpstreamID
 		options.Progress = func(progress modelprovider.VideoGenerationProgress) {
