@@ -170,6 +170,28 @@ describe("application component playgrounds", () => {
     expect(screen.getByText("Figma 原尺寸参考")).toBeVisible();
     expect(screen.getByText(/设计节点索引/)).toBeVisible();
   });
+  it("preserves events when switching between preview and design details", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <LabView.Provider value="preview">
+        <ApplicationFoundations kind="calendars" />
+      </LabView.Provider>,
+    );
+    await user.type(screen.getByRole("textbox", { name: "日程名称" }), "Review session");
+    await user.click(screen.getByRole("button", { name: "添加日程" }));
+    rerender(
+      <LabView.Provider value="design">
+        <ApplicationFoundations kind="calendars" />
+      </LabView.Provider>,
+    );
+    expect(screen.queryByRole("button", { name: "添加日程" })).not.toBeInTheDocument();
+    rerender(
+      <LabView.Provider value="preview">
+        <ApplicationFoundations kind="calendars" />
+      </LabView.Provider>,
+    );
+    expect(screen.getByText("Review session")).toBeVisible();
+  });
   it("shows breadcrumb interactions directly and navigates collapsed ancestors with the keyboard", async () => {
     render(<ApplicationFoundations kind="breadcrumbs" />);
     const user = userEvent.setup();

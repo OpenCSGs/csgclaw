@@ -262,14 +262,14 @@ function UiLabContent() {
               <UiLabPanel id="checkbox-foundations" active={destination} visible={isVisible("checkbox-foundations")}>
                 <CheckboxFoundations />
               </UiLabPanel>
+              <UiLabPanel id="slider-foundations" active={destination} visible={isVisible("slider-foundations")}>
+                <SliderFoundations />
+              </UiLabPanel>
               <UiLabPanel id="tooltip-foundations" active={destination} visible={isVisible("tooltip-foundations")}>
                 <TooltipFoundations />
               </UiLabPanel>
               <UiLabPanel id="progress-foundations" active={destination} visible={isVisible("progress-foundations")}>
                 <ProgressFoundations />
-              </UiLabPanel>
-              <UiLabPanel id="slider-foundations" active={destination} visible={isVisible("slider-foundations")}>
-                <SliderFoundations />
               </UiLabPanel>
               <UiLabPanel id="tabs-foundations" active={destination} visible={isVisible("tabs-foundations")}>
                 <TabsFoundations />

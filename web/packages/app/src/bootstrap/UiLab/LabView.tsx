@@ -6,5 +6,6 @@ export function DesignOnly({ children }: { children: ReactNode }) {
 }
 
 export function PreviewOnly({ children }: { children: ReactNode }) {
-  return useContext(LabView) === "design" ? null : children;
+  const hidden = useContext(LabView) === "design";
+  return <div hidden={hidden} style={hidden ? undefined : { display: "contents" }}>{children}</div>;
 }
