@@ -173,7 +173,7 @@ The current integration uses the Codex Runtime's image tool in CSGClaw web conve
 Provider-declared `text-to-image` and `image-to-image` models are cached separately in `image_models`; known GPT Image models are recognized when task metadata is unavailable.
 The model picker shows the provider-declared input modes cached in `image_metadata`. Refresh the provider connection to populate the labels for an existing catalog.
 This cache is refreshed by connection checks and does not mean the current account or upstream adapter has passed a real generation request.
-In a web conversation, attach one or more images and ask the Agent to edit them or use them as references. The configured model must support OpenAI-compatible multipart `POST /v1/images/edits` and return `b64_json` or a downloadable image URL in `data[0].url`. Text-only requests use `POST /v1/images/generations`.
+In a web conversation, attach one or more images and ask the Agent to edit them or use them as references. The configured model must support OpenAI-compatible multipart `POST /v1/images/edits` and return `b64_json` or a downloadable image URL in `data[0].url`. Text-only requests use `POST /v1/images/generations`. CSGClaw checks the provider catalog’s text-to-image and image-to-image capabilities before sending each request. An unclassified model in the image catalog is eligible for text-to-image. Reference editing requires a declared capability or a built-in GPT Image capability. After an HTTP 400 the Agent reports the error and ends the image request for that turn. To generate a new image after an unsuccessful reference edit, start a new turn and explicitly request a redraw.
 
 ### Video generation models
 

@@ -11,6 +11,7 @@ export const ApiEndpoints = {
   serverRestart: `${API_BASE_PATH}/server/restart`,
   serverRestartStatus: `${API_BASE_PATH}/server/restart/status`,
   authStatus: `${API_BASE_PATH}/auth/status`,
+  authSiteCheck: `${API_BASE_PATH}/auth/site-check`,
   authLoginSites: `${API_BASE_PATH}/auth/login-sites`,
   authLogin: `${API_BASE_PATH}/auth/login`,
   authLogout: `${API_BASE_PATH}/auth/logout`,

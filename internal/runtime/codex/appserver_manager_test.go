@@ -651,6 +651,129 @@ func TestAppServerManagerPublishFileDynamicToolEndToEnd(t *testing.T) {
 	}
 }
 
+func TestAppServerManagerVideoConfirmationContinuesAppServerTurn(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-video-confirm")
+	spec := testAppServerSessionSpec(t.TempDir())
+	sink := &recordingSink{}
+	broker := NewUserInputBroker(sink)
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = broker
+	manager := newAppServerManager(deps)
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+	thread, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "engine-video")
+	if err != nil {
+		t.Fatalf("EnsureEngineSession() error = %v", err)
+	}
+	generated := 0
+	ctx := contract.WithVideoGenerationHandler(context.Background(), func(_ context.Context, id, prompt string, options modelprovider.VideoGenerationOptions, references ...int) error {
+		generated++
+		if id != "call-video" || prompt != "kitten in a bath" || options.Seconds != 6 || len(references) != 0 {
+			t.Fatalf("video request = id:%q prompt:%q options:%+v refs:%v", id, prompt, options, references)
+		}
+		return nil
+	})
+	promptResult := make(chan struct {
+		response PromptResponse
+		err      error
+	}, 1)
+	go func() {
+		response, err := manager.Prompt(ctx, SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{SessionID: thread, Prompt: []PromptContentBlock{TextBlock("create a video")}})
+		promptResult <- struct {
+			response PromptResponse
+			err      error
+		}{response, err}
+	}()
+	requestID := waitForUserInputRequest(t, sink)
+	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{mediaGenerationConfirmationTextFor("en", "video").confirm}}}}}); err != nil {
+		t.Fatalf("confirm video: %v", err)
+	}
+	select {
+	case result := <-promptResult:
+		if result.err != nil || result.response.StopReason != StopReasonEndTurn {
+			t.Fatalf("Prompt() = %+v, %v", result.response, result.err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("prompt did not resume after video confirmation")
+	}
+	if generated != 1 {
+		t.Fatalf("generated = %d, want one", generated)
+	}
+	waitForRuntime(t, func() bool {
+		for _, event := range sink.snapshot() {
+			if event.Kind == SessionEventTextDelta && event.Text == "video submitted" {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+func TestAppServerManagerVideoRevisionThenConfirmationContinuesAppServerTurn(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-video-revise-confirm")
+	spec := testAppServerSessionSpec(t.TempDir())
+	sink := &recordingSink{}
+	broker := NewUserInputBroker(sink)
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = broker
+	manager := newAppServerManager(deps)
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+	thread, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "engine-video-revision")
+	if err != nil {
+		t.Fatalf("EnsureEngineSession() error = %v", err)
+	}
+	generated := 0
+	ctx := contract.WithVideoGenerationHandler(context.Background(), func(_ context.Context, _ string, prompt string, _ modelprovider.VideoGenerationOptions, _ ...int) error {
+		generated++
+		if prompt != "golden retriever in a bath" {
+			t.Fatalf("revised video prompt = %q", prompt)
+		}
+		return nil
+	})
+	promptResult := make(chan error, 1)
+	go func() {
+		_, err := manager.Prompt(ctx, SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{SessionID: thread, Prompt: []PromptContentBlock{TextBlock("create a video")}})
+		promptResult <- err
+	}()
+	firstRequestID := waitForUserInputRequest(t, sink)
+	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: firstRequestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{"user_note: 改成金毛犬"}}}}}); err != nil {
+		t.Fatalf("submit revision: %v", err)
+	}
+	var secondRequestID string
+	waitForRuntime(t, func() bool {
+		for _, event := range sink.snapshot() {
+			if event.Kind != activity.RuntimeEventUserInputRequest || event.UserInputID == "" || event.UserInputID == firstRequestID {
+				continue
+			}
+			snapshot, ok := broker.Get(event.UserInputID)
+			if ok && snapshot.Status == activity.UserInputStatusPending {
+				secondRequestID = event.UserInputID
+				return true
+			}
+		}
+		return false
+	})
+	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: secondRequestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{mediaGenerationConfirmationTextFor("en", "video").confirm}}}}}); err != nil {
+		t.Fatalf("confirm revised video: %v", err)
+	}
+	select {
+	case err := <-promptResult:
+		if err != nil {
+			t.Fatalf("Prompt() error = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("prompt did not resume after confirming revised video")
+	}
+	if generated != 1 {
+		t.Fatalf("generated = %d, want one", generated)
+	}
+}
+
 func TestAppServerManagerQuestionRoundTripForManagerAndWorker(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -3524,6 +3647,77 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return nil, false
 			}
 		})
+	case "prompt-video-confirm":
+		awaitingTool := false
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			if awaitingTool {
+				assertServerRequestResponse(t, msg, 9011, func(result map[string]any) {
+					if result["success"] != true {
+						t.Fatalf("video confirmation tool result = %#v", result)
+					}
+				})
+				awaitingTool = false
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "engine-thread", "item": map[string]any{"id": "message-video", "type": "agentMessage", "text": "video submitted"}})
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "engine-thread", "turn": map[string]any{"id": "turn-video", "status": "completed"}})
+				return nil, false
+			}
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "engine-thread"}), true
+			case "turn/start":
+				awaitingTool = true
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "engine-thread", "turn": map[string]any{"id": "turn-video"}})
+				writeRPCServerRequest(t, 9011, "item/tool/call", map[string]any{
+					"threadId": "engine-thread", "turnId": "turn-video", "callId": "call-video", "tool": "csgclaw_generate_video",
+					"arguments": map[string]any{"prompt": "kitten in a bath", "seconds": 6},
+				})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-video"}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-video-revise-confirm":
+		stage := 0
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			if stage == 1 {
+				assertServerRequestResponse(t, msg, 9012, func(result map[string]any) {
+					if result["success"] != false {
+						t.Fatalf("revision result = %#v", result)
+					}
+				})
+				stage = 2
+				writeRPCServerRequest(t, 9013, "item/tool/call", map[string]any{
+					"threadId": "engine-thread", "turnId": "turn-video", "callId": "call-video-revised", "tool": "csgclaw_generate_video",
+					"arguments": map[string]any{"prompt": "golden retriever in a bath", "seconds": 6},
+				})
+				return nil, false
+			}
+			if stage == 2 {
+				assertServerRequestResponse(t, msg, 9013, func(result map[string]any) {
+					if result["success"] != true {
+						t.Fatalf("confirmed revised video result = %#v", result)
+					}
+				})
+				stage = 3
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "engine-thread", "item": map[string]any{"id": "message-video", "type": "agentMessage", "text": "revised video submitted"}})
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "engine-thread", "turn": map[string]any{"id": "turn-video", "status": "completed"}})
+				return nil, false
+			}
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "engine-thread"}), true
+			case "turn/start":
+				stage = 1
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "engine-thread", "turn": map[string]any{"id": "turn-video"}})
+				writeRPCServerRequest(t, 9012, "item/tool/call", map[string]any{
+					"threadId": "engine-thread", "turnId": "turn-video", "callId": "call-video-original", "tool": "csgclaw_generate_video",
+					"arguments": map[string]any{"prompt": "puppy in a bath", "seconds": 6},
+				})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-video"}), true
+			default:
+				return nil, false
+			}
+		})
 	case "prompt-user-input-complete":
 		awaitingAnswer := false
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
@@ -4112,17 +4306,47 @@ func TestGenerateImageToolUsesActiveTurnHandler(t *testing.T) {
 		}
 		return nil
 	})
+	ctx = context.WithValue(ctx, mediaGenerationLocaleKey{}, "zh")
 	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
-	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
-	for _, turnID := range []string{"turn-other", "turn-1"} {
-		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{"threadId": "thread-1", "turnId": turnID, "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky", "reference_images": []int{2}, "size": "1024x1024"}})})
+	sink := &recordingSink{}
+	broker := NewUserInputBroker(sink)
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = broker
+	manager := newAppServerManager(deps)
+	request := appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"operation": "edit", "prompt": "blue sky", "reference_images": []int{2}, "size": "1024x1024"}})}
+
+	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{"threadId": "thread-1", "turnId": "turn-other", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"}})})
+	if err != nil || response.(map[string]any)["success"] != false {
+		t.Fatalf("inactive turn result = %#v, %v", response, err)
+	}
+
+	result := make(chan map[string]any, 1)
+	go func() {
+		response, err := manager.handleAppServerServerRequest("runtime-1", live, request)
 		if err != nil {
-			t.Fatal(err)
+			t.Errorf("handle image generation: %v", err)
+			return
 		}
-		result := response.(map[string]any)
-		if result["success"] != (turnID == "turn-1") {
-			t.Fatalf("wrong result: %v", result)
+		result <- response.(map[string]any)
+	}()
+	requestID := waitForUserInputRequest(t, sink)
+	question, ok := broker.Get(requestID)
+	if !ok || len(question.Questions) != 1 || question.Questions[0].Header != "确认图片生成" || !question.Questions[0].IsOther || !strings.Contains(question.Questions[0].Question, "请确认将发送给图片模型的提示词：") || !strings.Contains(question.Questions[0].Question, "如需修改，请在下方输入具体要求。") || !strings.Contains(question.Questions[0].Question, "blue sky") || !strings.Contains(question.Questions[0].Question, "尺寸：1024x1024") {
+		t.Fatalf("confirmation question = %#v", question)
+	}
+	if called != 0 {
+		t.Fatalf("handler invoked before confirmation: %d", called)
+	}
+	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{mediaGenerationConfirmationTextFor("zh", "image").confirm}}}}}); err != nil {
+		t.Fatalf("confirm generation: %v", err)
+	}
+	select {
+	case response := <-result:
+		if response["success"] != true {
+			t.Fatalf("confirmed result = %#v", response)
 		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("image generation did not continue after confirmation")
 	}
 	if called != 1 {
 		t.Fatalf("handler invoked %d times", called)
@@ -4190,21 +4414,149 @@ func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 		return nil
 	})
 	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
-	manager := newAppServerManager(testAppServerManagerDeps())
+	sink := &recordingSink{}
+	broker := NewUserInputBroker(sink)
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = broker
+	manager := newAppServerManager(deps)
 	for _, mode := range []string{ExecutionModeReadOnly, ExecutionModeStandard, ExecutionModeReadOnly, ExecutionModeStandard} {
 		live.spec.ExecutionMode = mode
-		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
+		request := appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
 			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky", "reference_images": []int{2}},
-		})})
-		if err != nil {
-			t.Fatal(err)
+		})}
+		if mode == ExecutionModeReadOnly {
+			response, err := manager.handleAppServerServerRequest("runtime-1", live, request)
+			if err != nil || response.(map[string]any)["success"] != false {
+				t.Fatalf("mode %s: %#v, %v", mode, response, err)
+			}
+			continue
 		}
-		if response.(map[string]any)["success"] != (mode == ExecutionModeStandard) {
-			t.Fatalf("mode %s: %#v", mode, response)
+		result := make(chan map[string]any, 1)
+		go func() {
+			response, err := manager.handleAppServerServerRequest("runtime-1", live, request)
+			if err != nil {
+				t.Errorf("mode %s: %v", mode, err)
+				return
+			}
+			result <- response.(map[string]any)
+		}()
+		var requestID string
+		waitForRuntime(t, func() bool {
+			for _, event := range sink.snapshot() {
+				if event.Kind != activity.RuntimeEventUserInputRequest || event.UserInputID == "" {
+					continue
+				}
+				question, ok := broker.Get(event.UserInputID)
+				if ok && question.Status == activity.UserInputStatusPending {
+					requestID = event.UserInputID
+					return true
+				}
+			}
+			return false
+		})
+		if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{mediaGenerationConfirmationTextFor("en", "image").confirm}}}}}); err != nil {
+			t.Fatalf("mode %s confirmation: %v", mode, err)
+		}
+		select {
+		case response := <-result:
+			if response["success"] != true {
+				t.Fatalf("mode %s: %#v", mode, response)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("mode %s did not continue after confirmation", mode)
 		}
 	}
 	if calls != 2 {
 		t.Fatalf("generation called %d times, want two standard-mode calls", calls)
+	}
+}
+
+func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testing.T) {
+	called := 0
+	ctx := contract.WithVideoGenerationHandler(context.Background(), func(context.Context, string, string, modelprovider.VideoGenerationOptions, ...int) error {
+		called++
+		return nil
+	})
+	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
+	sink := &recordingSink{}
+	broker := NewUserInputBroker(sink)
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = broker
+	manager := newAppServerManager(deps)
+	request := appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
+		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-video", "tool": "csgclaw_generate_video", "arguments": map[string]any{"prompt": "slow moving clouds", "reference_images": []int{3}, "size": "1280x720", "seconds": 6},
+	})}
+	result := make(chan map[string]any, 1)
+	go func() {
+		response, err := manager.handleAppServerServerRequest("runtime-1", live, request)
+		if err != nil {
+			t.Errorf("handle video generation: %v", err)
+			return
+		}
+		result <- response.(map[string]any)
+	}()
+	requestID := waitForUserInputRequest(t, sink)
+	question, ok := broker.Get(requestID)
+	if !ok || len(question.Questions) != 1 || !strings.Contains(question.Questions[0].Question, "Duration: 6 seconds") || !strings.Contains(question.Questions[0].Question, "Reference images: 1") {
+		t.Fatalf("confirmation question = %#v", question)
+	}
+	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{mediaGenerationConfirmationTextFor("en", "video").cancel}}}}}); err != nil {
+		t.Fatalf("cancel generation: %v", err)
+	}
+	select {
+	case response := <-result:
+		if response["success"] != false {
+			t.Fatalf("canceled result = %#v", response)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("video generation did not stop after cancellation")
+	}
+	if called != 0 {
+		t.Fatalf("video provider invoked after cancellation: %d", called)
+	}
+}
+
+func TestMediaGenerationConfirmationTextUsesTurnLocale(t *testing.T) {
+	zh := mediaGenerationConfirmationTextFor("zh-CN", "image")
+	if zh.header != "确认图片生成" || zh.questionPrefix != "请确认将发送给图片模型的提示词：" || zh.revisionHint != "如需修改，请在下方输入具体要求。" || zh.confirm != "确认生成" || zh.cancel != "取消" {
+		t.Fatalf("Chinese confirmation text = %#v", zh)
+	}
+	en := mediaGenerationConfirmationTextFor("en-US", "video")
+	if en.header != "Confirm video generation" || en.revisionHint != "To revise it, enter your requested changes below." || en.confirm != "Generate" || en.cancel != "Cancel" {
+		t.Fatalf("English confirmation text = %#v", en)
+	}
+}
+
+func TestMediaGenerationDetailsUsesTurnLocale(t *testing.T) {
+	if got, want := mediaGenerationDetails("zh-CN", "1024x1024", 6, 1), "尺寸：1024x1024\n时长：6 秒\n参考图片：1 张"; got != want {
+		t.Fatalf("Chinese generation details = %q, want %q", got, want)
+	}
+	if got, want := mediaGenerationDetails("en-US", "1024x1024", 6, 1), "Size: 1024x1024\nDuration: 6 seconds\nReference images: 1"; got != want {
+		t.Fatalf("English generation details = %q, want %q", got, want)
+	}
+}
+
+func TestMediaGenerationConfirmationReturnsFreeformRevision(t *testing.T) {
+	sink := &recordingSink{}
+	broker := NewUserInputBroker(sink)
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = broker
+	manager := newAppServerManager(deps)
+	result := make(chan error, 1)
+	go func() {
+		result <- manager.confirmMediaGeneration(context.WithValue(context.Background(), mediaGenerationLocaleKey{}, "zh"), "runtime-1", appServerDynamicToolCallParams{ThreadID: "thread-1", TurnID: "turn-1", CallID: "call-image", Tool: "csgclaw_generate_image"}, "rpc-request-1", "image", "一只小猫", "")
+	}()
+	requestID := waitForUserInputRequest(t, sink)
+	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{"user_note: 改成橘猫，暖色背景"}}}}}); err != nil {
+		t.Fatalf("submit revision: %v", err)
+	}
+	select {
+	case err := <-result:
+		if err == nil || !strings.Contains(err.Error(), "改成橘猫，暖色背景") {
+			t.Fatalf("revision result = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("confirmation did not return the requested revision")
 	}
 }
 

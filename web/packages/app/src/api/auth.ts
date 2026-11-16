@@ -25,3 +25,7 @@ export async function fetchAuthLoginSites(signal: AbortSignal): Promise<AuthLogi
   const catalog = await get<{ sites: AuthLoginSite[] }>(ApiEndpoints.authLoginSites, { signal });
   return catalog.sites;
 }
+
+export function checkAuthSite(baseURL: string, signal: AbortSignal) {
+  return post<{ latency_ms: number }>(ApiEndpoints.authSiteCheck, { base_url: baseURL }, { signal });
+}

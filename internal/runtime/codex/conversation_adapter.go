@@ -64,6 +64,9 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 		return contract.TurnResult{Status: contract.TurnFailed, Error: inputErr}
 	}
 	defer cleanup()
+	if request.ImageToolGuidance != "" {
+		blocks = append([]PromptContentBlock{TextBlock(request.ImageToolGuidance)}, blocks...)
+	}
 	if memory := contract.MemoryReference(request.RuntimeMemory); memory != "" {
 		blocks = append([]PromptContentBlock{TextBlock(memory)}, blocks...)
 	}
@@ -87,6 +90,7 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 			Model:                  request.Model,
 			SessionID:              sessionID,
 			ClientUserMessageID:    string(request.ID),
+			Locale:                 request.Locale,
 			Prompt:                 blocks,
 			TextOnlyUserInput:      request.Interaction == contract.InteractionTextOnly,
 			StreamReasoningSummary: request.StreamReasoningSummary,

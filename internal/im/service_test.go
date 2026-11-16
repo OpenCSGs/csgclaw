@@ -964,6 +964,36 @@ func TestDeliverMessageReplacesExistingMessageWithSameIDAndSender(t *testing.T) 
 	}
 }
 
+func TestDeliverMessageRefreshCreatedAtMovesReplacementToLatestPosition(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{
+		CurrentUserID: "u-admin",
+		Users:         []User{{ID: "manager", Name: "manager"}},
+		Rooms:         []Room{{ID: "room-1", Title: "Ops", Type: apitypes.RoomTypeAutonomous, Members: []string{"manager"}}},
+	})
+	first, err := svc.DeliverMessage(DeliverMessageRequest{
+		RoomID: "room-1", SenderID: "manager", MessageID: "act-1", Content: "pending", Transient: true,
+		Metadata: map[string]any{"csgclaw": map[string]any{"delivery_kind": "activity"}},
+	})
+	if err != nil || first.RoomSequence != 0 {
+		t.Fatalf("transient delivery sequence = %d, error = %v", first.RoomSequence, err)
+	}
+	intervening, err := svc.DeliverMessage(DeliverMessageRequest{RoomID: "room-1", SenderID: "manager", MessageID: "intervening", Content: "confirmed"})
+	if err != nil || intervening.RoomSequence == 0 {
+		t.Fatalf("intervening delivery sequence = %d, error = %v", intervening.RoomSequence, err)
+	}
+	final, err := svc.DeliverMessage(DeliverMessageRequest{RoomID: "room-1", SenderID: "manager", MessageID: "act-1", Content: "complete", RefreshCreatedAt: true})
+	if err != nil {
+		t.Fatalf("DeliverMessage(final) error = %v", err)
+	}
+	if final.CreatedAt.Before(intervening.CreatedAt) || final.RoomSequence <= intervening.RoomSequence {
+		t.Fatalf("final delivery time %s and sequence %d must follow %s and %d", final.CreatedAt, final.RoomSequence, intervening.CreatedAt, intervening.RoomSequence)
+	}
+	messages, err := svc.ListMessages("room-1")
+	if err != nil || len(messages) != 2 || messages[0].ID != intervening.ID || messages[1].ID != final.ID {
+		t.Fatalf("unexpected transcript order: %+v, error = %v", messages, err)
+	}
+}
+
 func TestListRoomsUsersAndMessages(t *testing.T) {
 	earlier := time.Date(2026, 4, 1, 9, 0, 0, 0, time.UTC)
 	later := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)

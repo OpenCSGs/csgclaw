@@ -1,5 +1,6 @@
 import {
   agentMatchesUser,
+  appendReplyToThreadView,
   applyIMEvent,
   removeAttachmentFromThreadView,
   appendMessageToData,
@@ -509,6 +510,48 @@ describe("conversation model helpers", () => {
     });
 
     expect(next.rooms[0].messages.map((item) => item.id)).toEqual(["general-message"]);
+  });
+
+  it("moves a finalized progress message after confirmation received during the turn", () => {
+    const current = {
+      rooms: [
+        room("general", "2026-05-15T00:00:00Z", {
+          messages: [
+            message("turn-final", "2026-05-15T00:00:00Z", "agent"),
+            message("confirmation", "2026-05-15T00:01:00Z", "user"),
+          ],
+        }),
+      ],
+      users: [],
+    };
+
+    const next = appendMessageToData(current, "general", {
+      ...message("turn-final", "2026-05-15T00:02:00Z", "agent"),
+      content: "已提交生成任务。",
+    });
+
+    expect(next.rooms[0].messages.map((item) => item.id)).toEqual(["confirmation", "turn-final"]);
+    expect(next.rooms[0].messages[1].content).toBe("已提交生成任务。");
+  });
+
+  it("moves a finalized thread reply after confirmation and updates the thread summary", () => {
+    const root = message("root", "2026-05-15T00:00:00Z");
+    const relatesTo = { rel_type: THREAD_RELATION_TYPE, event_id: root.id };
+    const progress = { ...message("turn-final", "2026-05-15T00:01:00Z", "agent"), relates_to: relatesTo };
+    const confirmation = { ...message("confirmation", "2026-05-15T00:02:00Z", "user"), relates_to: relatesTo };
+    const final = { ...progress, created_at: "2026-05-15T00:03:00Z", content: "已提交生成任务。" };
+    const thread = {
+      room_id: "direct",
+      root,
+      replies: [progress, confirmation],
+      summary: { root_id: root.id, reply_count: 2, latest_reply: confirmation },
+    };
+
+    const next = appendReplyToThreadView(thread, final);
+
+    expect(next?.replies).toEqual([confirmation, final]);
+    expect(next?.summary).toEqual({ root_id: root.id, reply_count: 2, latest_reply: final });
+    expect(next?.root?.thread).toEqual(next?.summary);
   });
 
   it("applies room messages cleared events as authoritative room updates", () => {

@@ -49,7 +49,7 @@ export type AuthController = {
   dismissNotice: () => void;
   error: string;
   login: (environment?: AuthEnvironmentDraft) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: () => Promise<boolean>;
   notice: AuthNotice | null;
   pending: boolean;
   setEnvironment: (environment: AuthEnvironmentDraft) => void;
@@ -166,7 +166,7 @@ export function useAuthController(t: TranslateFn): AuthController {
 
   const logout = useCallback(async () => {
     if (busyAction) {
-      return;
+      return false;
     }
     setBusyAction("logout");
     setAuthError("");
@@ -188,8 +188,10 @@ export function useAuthController(t: TranslateFn): AuthController {
         tone: "success",
       });
       setLoginPending(false);
+      return true;
     } catch (err) {
       setAuthError(errorMessage(err, t("csghubLogoutFailed")));
+      return false;
     } finally {
       setBusyAction("");
     }

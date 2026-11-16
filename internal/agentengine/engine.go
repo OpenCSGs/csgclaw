@@ -8,6 +8,7 @@ import (
 	"csgclaw/internal/agentmemory"
 	"csgclaw/internal/diagnostics"
 	agentidentity "csgclaw/internal/identity"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	"fmt"
 	"log/slog"
@@ -36,15 +37,16 @@ type conversationRuntimeAdapter interface {
 // identity, pending interactions, replay-safe event delivery, and terminal
 // result idempotency.
 type Engine struct {
-	lifecycle     *lifecycle.Coordinator
-	memory        atomic.Pointer[agentmemory.Store]
-	generateImage imageGenerator
-	generateVideo videoGenerator
-	agents        AgentInterface
-	runtimes      conversationRuntimeResolver
-	files         *FileStore
-	extensions    runtimeExtensionScopes
-	interactions  InteractionCoordinator
+	lifecycle            *lifecycle.Coordinator
+	memory               atomic.Pointer[agentmemory.Store]
+	generateImage        imageGenerator
+	imageGenerationModes func(*modelprovider.ImageGenerationConfig) modelcap.ImageGeneration
+	generateVideo        videoGenerator
+	agents               AgentInterface
+	runtimes             conversationRuntimeResolver
+	files                *FileStore
+	extensions           runtimeExtensionScopes
+	interactions         InteractionCoordinator
 
 	mu             sync.Mutex
 	active         map[conversationIdentity]*activeTurn
@@ -284,7 +286,14 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if c.engine.agents != nil {
 		selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
 		if err == nil {
-			turn.ctx = contract.WithImageGenerationHandler(turn.ctx, c.imageHandler(turn, sink, selected.Spec.Model.ImageGeneration, runtimeRequest.Input))
+			imageModel := selected.Spec.Model.ImageGeneration
+			imageHandler, imagePreflight := c.imageHandler(turn, sink, imageModel, runtimeRequest.Input)
+			turn.ctx = contract.WithImageGenerationHandler(turn.ctx, imageHandler)
+			turn.ctx = contract.WithImageGenerationPreflight(turn.ctx, imagePreflight)
+			if imageModel != nil && c.engine.imageGenerationModes != nil {
+				modes := c.engine.imageGenerationModes(imageModel)
+				runtimeRequest.ImageToolGuidance = fmt.Sprintf("Current image tool capabilities: text-to-image=%t, reference-image editing=%t. If the requested operation is unavailable, explain the limitation and ask the user to configure a compatible image model.", modes.TextToImage, modes.ImageToImage)
+			}
 			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, c.videoHandler(turn, sink, selected.Spec.Model.VideoGeneration, runtimeRequest.Input))
 		}
 	}

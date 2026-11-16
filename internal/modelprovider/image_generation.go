@@ -12,6 +12,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"csgclaw/internal/modelcap"
 )
 
 // ImageGenerationConfig references shared provider credentials, never copies them.
@@ -60,6 +62,47 @@ type GeneratedImage struct {
 type ImageGenerationOptions struct {
 	Size       string `json:"size,omitempty"`
 	Resolution string `json:"resolution,omitempty"`
+}
+
+// ValidateImageGenerationMode checks known capabilities for the requested operation.
+// Availability and model configuration are checked by the caller.
+func ValidateImageGenerationMode(modes modelcap.ImageGeneration, edit bool) error {
+	if modes == (modelcap.ImageGeneration{}) {
+		return nil
+	}
+	if edit && !modes.ImageToImage {
+		return &ImageGenerationError{
+			Code:    "image_edit_unsupported",
+			Message: "The configured model has no declared reference-image editing support. Configure a model that supports image-to-image.",
+		}
+	}
+	if !edit && !modes.TextToImage {
+		return &ImageGenerationError{
+			Code:    "image_generation_unsupported",
+			Message: "The configured model requires a reference image. Configure a model that supports text-to-image to generate from text.",
+		}
+	}
+	return nil
+}
+
+// ResolveImageGenerationOptions supplies defaults only for verified provider routes.
+func ResolveImageGenerationOptions(provider, model string, edit bool, options ImageGenerationOptions) ImageGenerationOptions {
+	if provider != "opencsg" || edit {
+		return options
+	}
+	var defaultSize string
+	switch model {
+	case "Qwen/Qwen-Image-2512-test":
+		defaultSize = "1024x1024"
+	case "Qwen-Image-2512":
+		defaultSize = "1536x1024"
+	default:
+		return options
+	}
+	if strings.TrimSpace(options.Size) == "" && strings.TrimSpace(options.Resolution) == "" {
+		options.Size = defaultSize
+	}
+	return options
 }
 
 // GenerateImage requests one image, editing the provided references when present.

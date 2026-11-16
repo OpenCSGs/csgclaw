@@ -8,6 +8,7 @@ import (
 	"csgclaw/internal/channel/csgclaw/delivery"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/participant"
 	"encoding/base64"
@@ -90,7 +91,7 @@ func TestImageEditRetryHTTPUsesCapturedModelAndReferences(t *testing.T) {
 	}))
 	defer provider.Close()
 	svc := mustNewSeededService(t, []agent.Agent{{ID: "agent-alice", Name: "Alice", Role: agent.RoleWorker, AgentProfile: agent.AgentProfile{Provider: agent.ProviderCodex, ModelID: "chat-model"}}})
-	svc.Models().SetLLMConfig(config.LLMConfig{Providers: map[string]config.ProviderConfig{"fixture": {BaseURL: provider.URL + "/v1", APIKey: "test-secret", ImageModels: []string{"vendor-image"}}}})
+	svc.Models().SetLLMConfig(config.LLMConfig{Providers: map[string]config.ProviderConfig{"fixture": {BaseURL: provider.URL + "/v1", APIKey: "test-secret", ImageModels: []string{"vendor-image"}, ImageMetadata: map[string]modelcap.ImageGeneration{"vendor-image": {ImageToImage: true}}}}})
 	engine := agentengine.New(svc)
 	imSvc, err := im.NewServiceFromPath(filepath.Join(t.TempDir(), "im", "state.json"))
 	if err != nil {

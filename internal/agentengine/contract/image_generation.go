@@ -24,6 +24,19 @@ type ImageGenerationTask struct {
 }
 
 type imageGenerationKey struct{}
+type imageGenerationPreflightKey struct{}
+
+func WithImageGenerationPreflight(ctx context.Context, check func(bool) error) context.Context {
+	return context.WithValue(ctx, imageGenerationPreflightKey{}, check)
+}
+
+func CheckImageGeneration(ctx context.Context, edit bool) error {
+	if check, ok := ctx.Value(imageGenerationPreflightKey{}).(func(bool) error); ok {
+		return check(edit)
+	}
+	return nil
+}
+
 type ImageGenerationHandler func(context.Context, string, string, []int, modelprovider.ImageGenerationOptions) error
 
 func WithImageGenerationHandler(ctx context.Context, handler ImageGenerationHandler) context.Context {

@@ -1278,6 +1278,22 @@ export function mergeConversationMessageSnapshot(
   };
 }
 
+function mergeMessageIntoTimeline(messages: readonly IMMessage[], message: IMMessage): IMMessage[] {
+  const existingIndex = messages.findIndex((item) => item.id === message.id);
+  if (existingIndex < 0) {
+    return [...messages, message];
+  }
+
+  const existing = messages[existingIndex];
+  const merged = newerProgressMessage(existing, message);
+  const previousTime = Date.parse(existing.created_at || "");
+  const nextTime = Date.parse(merged.created_at || "");
+  if (Number.isFinite(previousTime) && Number.isFinite(nextTime) && nextTime > previousTime) {
+    return [...messages.filter((_, index) => index !== existingIndex), merged];
+  }
+  return messages.map((item, index) => (index === existingIndex ? merged : item));
+}
+
 export function appendMessageToData<T extends IMData | null | undefined>(
   current: T,
   conversationID: string | null | undefined,
@@ -1294,16 +1310,7 @@ export function appendMessageToData<T extends IMData | null | undefined>(
     if (room.id !== conversationID) {
       return room;
     }
-    const existingIndex = room.messages.findIndex((item) => item.id === message.id);
-    if (existingIndex >= 0) {
-      return {
-        ...room,
-        messages: room.messages.map((item, index) =>
-          index === existingIndex ? newerProgressMessage(item, message) : item,
-        ),
-      };
-    }
-    return { ...room, messages: [...room.messages, message] };
+    return { ...room, messages: mergeMessageIntoTimeline(room.messages, message) };
   });
   return { ...current, rooms: sortConversations(rooms) };
 }
@@ -1355,27 +1362,11 @@ export function appendReplyToThreadView(
   if (!current || !message || threadRootID(message) !== (current.summary?.root_id || current.root?.id)) {
     return current;
   }
-  if (current.replies?.some((item) => item.id === message.id)) {
-    const replies = current.replies.map((item) =>
-      item.id === message.id ? newerProgressMessage(item, message) : item,
-    );
-    const summary = {
-      ...(current.summary ?? {}),
-      reply_count: replies.length,
-      latest_reply: replies[replies.length - 1],
-    };
-    return {
-      ...current,
-      root: current.root ? { ...current.root, thread: summary } : current.root,
-      replies,
-      summary,
-    };
-  }
-  const replies = [...(current.replies ?? []), message];
+  const replies = mergeMessageIntoTimeline(current.replies ?? [], message);
   const summary = {
     ...(current.summary ?? {}),
     reply_count: replies.length,
-    latest_reply: message,
+    latest_reply: replies[replies.length - 1],
   };
   return {
     ...current,

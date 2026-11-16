@@ -34,14 +34,15 @@ import (
 )
 
 const (
-	appServerTurnInterruptTimeout      = 5 * time.Second
-	appServerStdoutExitGracePeriod     = 250 * time.Millisecond
-	appServerStdoutExitBufferBytes     = 1 << 20
-	appServerTrackedTurnLimit          = 256
-	appServerPublishFileToolName       = "csgclaw_publish_file"
-	appServerUploadFileToolName        = "csgclaw_upload_file"
-	appServerMaxPublishedFileNameBytes = 255
-	appServerMaxUploadBytes            = 50 << 20
+	appServerTurnInterruptTimeout         = 5 * time.Second
+	appServerStdoutExitGracePeriod        = 250 * time.Millisecond
+	appServerStdoutExitBufferBytes        = 1 << 20
+	appServerTrackedTurnLimit             = 256
+	appServerPublishFileToolName          = "csgclaw_publish_file"
+	appServerUploadFileToolName           = "csgclaw_upload_file"
+	appServerMaxPublishedFileNameBytes    = 255
+	appServerMaxUploadBytes               = 50 << 20
+	mediaGenerationConfirmationQuestionID = "confirm_generation"
 )
 
 const appServerDeveloperInstructions = `- Base each new turn on the current message or event. Use earlier requests and attachments only when relevant to it.
@@ -437,6 +438,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	waiter.mu.Unlock()
 	defer func() { live.removeAppServerTurnWaiter(sessionID, waiter) }()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
+	turnCtx = context.WithValue(turnCtx, mediaGenerationLocaleKey{}, mediaGenerationLocale(req.Locale))
 	live.setAppServerTurnContext(sessionID, waiter, turnCtx)
 	defer func() {
 		cancelTurn()
@@ -1170,6 +1172,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 			return appServerDynamicToolResponse(false, "image generation is unavailable in read-only mode"), nil
 		}
 		var args struct {
+			Operation       string `json:"operation"`
 			Prompt          string `json:"prompt"`
 			ReferenceImages []int  `json:"reference_images"`
 			modelprovider.ImageGenerationOptions
@@ -1177,9 +1180,31 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if json.Unmarshal(params.Arguments, &args) != nil {
 			return appServerDynamicToolResponse(false, "invalid image generation arguments"), nil
 		}
+		if args.Operation != "" && strings.TrimSpace(args.Resolution) != "" {
+			return appServerDynamicToolResponse(false, "invalid_image_arguments: omit resolution; use size only for explicitly requested dimensions"), nil
+		}
+		switch args.Operation {
+		case "edit":
+			if len(args.ReferenceImages) == 0 {
+				return appServerDynamicToolResponse(false, "image_reference_required: editing requires the original attached image"), nil
+			}
+		case "generate":
+			if len(args.ReferenceImages) > 0 {
+				return appServerDynamicToolResponse(false, "invalid_image_operation: use edit for requests with reference images"), nil
+			}
+		case "": // Existing tool definitions infer the operation from references.
+		default:
+			return appServerDynamicToolResponse(false, "invalid_image_operation: use generate or edit"), nil
+		}
 		ctx, ok := live.appServerTurnContext(params.ThreadID, params.TurnID)
 		if !ok {
 			return appServerDynamicToolResponse(false, "image generation requires an active turn"), nil
+		}
+		if err := contract.CheckImageGeneration(ctx, len(args.ReferenceImages) > 0); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
+		}
+		if err := m.confirmMediaGeneration(ctx, runtimeID, params, appServerRequestID(req.ID), "image", args.Prompt, mediaGenerationDetails(mediaGenerationLocaleFromContext(ctx), args.ImageGenerationOptions.Size, 0, len(args.ReferenceImages))); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		if err := contract.GenerateImage(ctx, params.CallID, args.Prompt, args.ReferenceImages, args.ImageGenerationOptions); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
@@ -1202,6 +1227,9 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		ctx, ok := live.appServerTurnContext(params.ThreadID, params.TurnID)
 		if !ok {
 			return appServerDynamicToolResponse(false, "video generation requires an active turn"), nil
+		}
+		if err := m.confirmMediaGeneration(ctx, runtimeID, params, appServerRequestID(req.ID), "video", args.Prompt, mediaGenerationDetails(mediaGenerationLocaleFromContext(ctx), args.Size, args.Seconds, len(args.ReferenceImages))); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds}, args.ReferenceImages...); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
@@ -1264,6 +1292,130 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 	case <-ctx.Done():
 		return appServerDynamicToolResponse(false, "File publication canceled."), nil
 	}
+}
+
+type mediaGenerationLocaleKey struct{}
+
+type mediaGenerationConfirmationText struct {
+	header, questionPrefix, revisionHint, confirm, confirmDescription, cancel, cancelDescription string
+}
+
+func mediaGenerationLocale(locale string) string {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(locale)), "zh") {
+		return "zh"
+	}
+	return "en"
+}
+
+func mediaGenerationLocaleFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return "en"
+	}
+	locale, _ := ctx.Value(mediaGenerationLocaleKey{}).(string)
+	return mediaGenerationLocale(locale)
+}
+
+func mediaGenerationConfirmationTextFor(locale, kind string) mediaGenerationConfirmationText {
+	if mediaGenerationLocale(locale) == "zh" {
+		medium := "图片"
+		if kind == "video" {
+			medium = "视频"
+		}
+		return mediaGenerationConfirmationText{
+			header:             "确认" + medium + "生成",
+			questionPrefix:     "请确认将发送给" + medium + "模型的提示词：",
+			revisionHint:       "如需修改，请在下方输入具体要求。",
+			confirm:            "确认生成",
+			confirmDescription: "将此提示词发送给当前配置的" + medium + "模型。",
+			cancel:             "取消",
+			cancelDescription:  "不生成" + medium + "。",
+		}
+	}
+	return mediaGenerationConfirmationText{
+		header:             "Confirm " + kind + " generation",
+		questionPrefix:     "Review the prompt that will be sent to the " + kind + " model:",
+		revisionHint:       "To revise it, enter your requested changes below.",
+		confirm:            "Generate",
+		confirmDescription: "Send this prompt to the configured " + kind + " model.",
+		cancel:             "Cancel",
+		cancelDescription:  "Do not generate " + kind + " media.",
+	}
+}
+
+func (m *appServerManager) confirmMediaGeneration(ctx context.Context, runtimeID string, params appServerDynamicToolCallParams, serverRequestID, kind, prompt, details string) error {
+	if m.deps.UserInput == nil {
+		return errors.New("media generation confirmation is unavailable")
+	}
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return errors.New("media generation prompt is required")
+	}
+	copy := mediaGenerationConfirmationTextFor(mediaGenerationLocaleFromContext(ctx), kind)
+	question := copy.questionPrefix + "\n\n" + prompt
+	if details != "" {
+		question += "\n\n" + details
+	}
+	question += "\n\n" + copy.revisionHint
+	decision, err := m.deps.UserInput.Request(context.Background(), PendingUserInputRequest{
+		Execution: activity.ExecutionRef{
+			RuntimeKind: agentruntime.KindCodex,
+			RuntimeID:   runtimeID,
+			SessionID:   params.ThreadID,
+			TurnID:      params.TurnID,
+			ToolCallID:  params.CallID,
+			ToolKind:    params.Tool,
+		},
+		ServerRequestID: serverRequestID,
+		Questions: []activity.UserInputQuestionSnapshot{{
+			ID:       mediaGenerationConfirmationQuestionID,
+			Header:   copy.header,
+			Question: question,
+			IsOther:  true,
+			Options: []activity.UserInputOptionSnapshot{
+				{Label: copy.confirm, Description: copy.confirmDescription},
+				{Label: copy.cancel, Description: copy.cancelDescription},
+			},
+		}},
+		RequestedAt: time.Now().UTC(),
+		AutoResolve: 4 * time.Minute,
+	})
+	if err != nil {
+		return fmt.Errorf("media generation was not confirmed: %w", err)
+	}
+	answers := decision.Response.Answers[mediaGenerationConfirmationQuestionID].Answers
+	if len(answers) > 0 && answers[0] == copy.confirm {
+		return nil
+	}
+	if len(answers) > 0 && strings.HasPrefix(answers[0], "user_note:") {
+		return fmt.Errorf("the user requested prompt changes: %s; do not generate until a revised prompt is confirmed", strings.TrimSpace(strings.TrimPrefix(answers[0], "user_note:")))
+	}
+	return errors.New("the user declined media generation")
+}
+
+func mediaGenerationDetails(locale, size string, seconds, referenceCount int) string {
+	parts := make([]string, 0, 3)
+	if mediaGenerationLocale(locale) == "zh" {
+		if size = strings.TrimSpace(size); size != "" {
+			parts = append(parts, "尺寸："+size)
+		}
+		if seconds > 0 {
+			parts = append(parts, fmt.Sprintf("时长：%d 秒", seconds))
+		}
+		if referenceCount > 0 {
+			parts = append(parts, fmt.Sprintf("参考图片：%d 张", referenceCount))
+		}
+		return strings.Join(parts, "\n")
+	}
+	if size = strings.TrimSpace(size); size != "" {
+		parts = append(parts, "Size: "+size)
+	}
+	if seconds > 0 {
+		parts = append(parts, fmt.Sprintf("Duration: %d seconds", seconds))
+	}
+	if referenceCount > 0 {
+		parts = append(parts, fmt.Sprintf("Reference images: %d", referenceCount))
+	}
+	return strings.Join(parts, "\n")
 }
 
 func uploadAppServerWorkspaceFile(ctx context.Context, spec SessionSpec, args appServerUploadFileArgs) error {
@@ -2650,8 +2802,18 @@ func redactSecretishLine(line string) string {
 func appServerGenerateImageToolSpec() map[string]any {
 	return map[string]any{
 		"name":        "csgclaw_generate_image",
-		"description": "Generate or edit one image from the user's requested description and optional reference images using this Agent's configured image generation model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile; do not retry automatically.",
-		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"reference_images": appServerReferenceImagesSchema(modelprovider.MaxImageEditReferences), "size": map[string]any{"type": "string", "description": "Output dimensions supported by the configured image model, for example 1024x1024."}, "resolution": map[string]any{"type": "string", "description": "Provider-specific resolution tier. Use only when required by the configured provider and the supported tier is known."}, "prompt": map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."}}, "required": []string{"prompt"}, "additionalProperties": false},
+		"description": "Generate a new image from text or edit an attached image using the Agent's configured image model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. Use edit for changes to an original image. Ask the user before generating a replacement if editing is unavailable or fails. Report unsupported operations and invalid requests without retrying or guessing parameters. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"operation":        map[string]any{"type": "string", "enum": []string{"generate", "edit"}},
+				"reference_images": appServerReferenceImagesSchema(modelprovider.MaxImageEditReferences),
+				"size":             map[string]any{"type": "string", "description": "Output dimensions, for example 1024x1024. Omit unless the user explicitly supplied dimensions. CSGClaw applies model-specific defaults where available."},
+				"prompt":           map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."},
+			},
+			"required":             []string{"operation", "prompt"},
+			"additionalProperties": false,
+		},
 	}
 }
 

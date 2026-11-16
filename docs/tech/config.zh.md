@@ -173,7 +173,7 @@ Agent 可以在档案中单独选择可选的图片生成服务商和模型，�
 服务商声明的 `text-to-image` 和 `image-to-image` 模型单独缓存在 `image_models` 中；缺少任务元数据时，也会识别已适配的 GPT Image 型号。
 模型下拉列表从 `image_metadata` 读取服务商声明的输入能力。已有目录可通过重新检查服务商连接更新标签。
 连接检查会刷新该缓存，但目录声明不代表当前账号或上游适配器已通过真实生图请求。
-在网页对话中上传图片后，可以让 Agent 编辑图片或参考图片生成。所选模型须支持 OpenAI 兼容的 multipart `POST /v1/images/edits` 并返回 `b64_json` 或在 `data[0].url` 中提供可下载的图片链接。纯文字请求使用 `POST /v1/images/generations`。
+在网页对话中上传图片后，可以让 Agent 编辑图片或参考图片生成。所选模型须支持 OpenAI 兼容的 multipart `POST /v1/images/edits` 并返回 `b64_json` 或在 `data[0].url` 中提供可下载的图片链接。纯文字请求使用 `POST /v1/images/generations`。 CSGClaw 会在发送请求前检查模型目录中的文生图和图生图能力。目录中未标明能力的生图模型可以用于文生图。参考图编辑需要目录明确声明支持，或使用内置支持编辑的 GPT Image 模型。收到 HTTP 400 后，Agent 会报告错误并结束本轮生图请求。如果编辑失败后想重新生成整张图，请在新一轮明确提出重绘。
 
 ### 视频生成模型
 
