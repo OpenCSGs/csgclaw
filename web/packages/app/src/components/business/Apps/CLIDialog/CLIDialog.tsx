@@ -1,6 +1,6 @@
 import { createUUID } from "@/shared/lib/uuid";
 import { useEffect, useRef, useState } from "react";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, Info, LoaderCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   createAppResource,
@@ -193,35 +193,34 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
         </DialogHeader>
         <DialogBody className={`${styles.settingsBody} ${styles.scrollableSettingsBody}`}>
           <div className={styles.cliStatus}>
-            {requestError ? (
+            {requestError || storedError ? (
               <DismissibleAlert
                 className={`${styles.cliError} ${styles.resourceError}`}
-                messageKey={requestError}
+                messageKey={requestError || `${resource?.last_error_code}:${storedError}`}
                 closeLabel={t("close")}
               >
                 <CircleAlert size={16} aria-hidden="true" />
-                <span role="alert">{requestError}</span>
+                <span role="alert">{requestError || storedError}</span>
               </DismissibleAlert>
             ) : null}
-            {storedError ? (
-              <DismissibleAlert
-                className={`${styles.cliError} ${styles.resourceError}`}
-                messageKey={`${resource?.last_error_code}:${storedError}`}
-                closeLabel={t("close")}
-              >
-                <CircleAlert size={16} aria-hidden="true" />
-                <span role="alert">{storedError}</span>
-              </DismissibleAlert>
+            {active || cleanupPending || !(requestError || storedError) ? (
+              <p className={styles.cliNotice} role="status" aria-live="polite">
+                {active ? (
+                  <LoaderCircle className="motion-safe:animate-spin" size={16} aria-hidden="true" />
+                ) : (
+                  <Info size={16} aria-hidden="true" />
+                )}
+                <span>
+                  {active
+                    ? t(stages[operation?.stage ?? ""] ?? "feishuCLIPreparing")
+                    : cleanupPending
+                      ? t("cliCleanupRequired")
+                      : resource
+                        ? appAuthorizationSummary(resource, t) || appStatus(resource, t)
+                        : t("appStatusNeedsConfiguration")}
+                </span>
+              </p>
             ) : null}
-            <p role="status" aria-live="polite">
-              {active
-                ? t(stages[operation?.stage ?? ""] ?? "feishuCLIPreparing")
-                : cleanupPending
-                  ? t("cliCleanupRequired")
-                  : resource
-                    ? appAuthorizationSummary(resource, t) || appStatus(resource, t)
-                    : t("appStatusNeedsConfiguration")}
-            </p>
           </div>
           {cleanupPending && !active && operation?.failure_stage && stages[operation.failure_stage] ? (
             <p className={styles.hint}>{t("cliCleanupFailedStage", { stage: t(stages[operation.failure_stage]) })}</p>
