@@ -276,9 +276,10 @@ function StartTaskForm({
   const composerHelpId = `${panelID}-composer-help`;
   const draftInput = messageInput(draft);
   const draftFileCount = promptMentions.fileReferences(draft).length;
+  const cloudOffline = Boolean(selectedCloud && selectedCloud.status !== "online");
   const cannotSend =
     busy ||
-    Boolean(selectedCloud && selectedCloud.status !== "online") ||
+    cloudOffline ||
     resourcePicker.active ||
     !canSendResources(draftInput.content, draftInput.resource_refs, attachments.length + draftFileCount) ||
     Boolean(modelMissing);
@@ -318,6 +319,15 @@ function StartTaskForm({
     editor.focus();
   }
 
+  function insertSuggestedCommand(name: string) {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.setRangeText(`${slashCommandInputText(name).trimEnd()}\n`, 0, 0, "preserve");
+    promptMentions.change(editor);
+    setSlashQuery(null);
+    editor.focus();
+  }
+
   function addAttachments(files: File[]) {
     if (busy || cloudTarget || !files.length) return;
     const selection = selectAttachmentFiles(files, attachments);
@@ -349,15 +359,12 @@ function StartTaskForm({
     const fileReferences = selectedCloud ? [] : promptMentions.fileReferences(prompt);
     if (
       inFlight.current ||
+      cloudOffline ||
       (!empty && !canSendResources(input.content, input.resource_refs, attachments.length + fileReferences.length))
     )
       return;
     if (!selectedCloud && !selectedAgent && !selectedTeam && selected !== "solo") {
       setError(t("taskEntryMissingTarget"));
-      return;
-    }
-    if (selectedCloud && selectedCloud.status !== "online") {
-      setError(t("cloudChatOffline"));
       return;
     }
     if (!empty && selectedCloud && !confirmed && consent.request(() => void start(false, prompt, true))) return;
@@ -697,7 +704,7 @@ function StartTaskForm({
                         return;
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
-                        void start();
+                        if (!cannotSend) void start();
                       }
                     }}
                   />
@@ -783,20 +790,21 @@ function StartTaskForm({
                   </PopoverRoot>
                 ) : null}
                 {actionSuggestions.length ? (
-                  <div className="flex flex-wrap items-center gap-2" aria-label={t("suggestedActions")}>
+                  <div className={styles.actionSuggestions} role="group" aria-label={t("suggestedActions")}>
                     <span>{t("suggestedActions")}</span>
                     {actionSuggestions.map((suggestion) => (
                       <Button
                         key={suggestion.name}
                         size="sm"
-                        variant="secondaryGray"
+                        variant="secondaryColor"
+                        className={styles.suggestionButton}
                         disabled={busy}
-                        onClick={() => applySlashCandidate(suggestion.name)}
+                        onClick={() => insertSuggestedCommand(suggestion.name)}
                       >
-                        /{suggestion.name}
+                        / {suggestion.name}
                       </Button>
                     ))}
-                    <small>{t("suggestedActionsOnly")}</small>
+                    <span>{t("taskEntryInsertSuggestedCommand")}</span>
                   </div>
                 ) : null}
                 <span id={composerHelpId} className="sr-only">
@@ -938,7 +946,7 @@ function StartTaskForm({
                 </DismissibleInlineError>
               ) : null}
             </div>
-            {selectedCloud && selectedCloud.status !== "online" ? <p role="status">{t("cloudChatOffline")}</p> : null}
+            {cloudOffline ? <p role="status">{t("cloudChatOffline")}</p> : null}
             {error ? (
               <p role="alert" className={styles.error}>
                 {error}

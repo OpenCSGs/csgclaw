@@ -207,6 +207,25 @@ describe("task presets", () => {
 
 describe("StartTaskPage task preparation", () => {
   beforeEach(() => vi.mocked(sendMessageRequest).mockReset());
+  it("adds a suggested command before the original draft and waits for explicit send", async () => {
+    vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
+    const { create } = setup();
+    const user = userEvent.setup();
+    const prompt = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    const draft = "我想创建智能体。\n它需要监控 Token 用量。";
+    const content = `/创建智能体\n${draft}`;
+    fireEvent.change(prompt, { target: { value: draft } });
+
+    await user.click(screen.getByRole("button", { name: "/ 创建智能体" }));
+    expect(prompt).toHaveValue(content);
+    expect(prompt).toHaveFocus();
+    expect(create).not.toHaveBeenCalled();
+    expect(sendMessageRequest).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() => expect(sendMessageRequest).toHaveBeenCalledWith(expect.objectContaining({ content })));
+  });
+
   it("renders and sends the first task on HTTP without crypto.randomUUID", async () => {
     const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
     vi.stubGlobal("crypto", { getRandomValues });
@@ -746,6 +765,22 @@ describe("cloud task targets", () => {
     setup();
     await userEvent.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
     expect(await screen.findByRole("button", { name: /合同条款审阅/ })).toBeDisabled();
+  });
+
+  it("keeps one offline notice and preserves the draft when Enter is pressed", async () => {
+    const offline = { ...cloudAgentFixture[0], status: "offline" as const };
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([offline]));
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([offline]);
+    const { create } = setup(`/new?cloud=${offline.id}`);
+    const user = userEvent.setup();
+    expect(await screen.findByText("cloudChatOffline")).toHaveAttribute("role", "status");
+    const prompt = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    await user.type(prompt, "Hello{Enter}");
+    expect(prompt).toHaveValue("Hello");
+    expect(screen.getByRole("button", { name: "taskEntryStart" })).toBeDisabled();
+    expect(screen.getAllByText("cloudChatOffline")).toHaveLength(1);
+    expect(screen.queryByRole("dialog", { name: "cloudPrivacyTitle" })).not.toBeInTheDocument();
+    expect(create).not.toHaveBeenCalled();
   });
 });
 
