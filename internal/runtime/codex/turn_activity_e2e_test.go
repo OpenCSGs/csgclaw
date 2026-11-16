@@ -96,6 +96,9 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 						if !waitForRelease(r.Context()) {
 							return
 						}
+						if mode == "reasoning_text" {
+							item["summary"] = []map[string]any{{"type": "summary_text", "text": "thinking"}}
+						}
 						if mode == "reasoning_snapshot" {
 							item["summary"] = []map[string]any{
 								{"type": "summary_text", "text": "First"},
@@ -153,7 +156,7 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			go func() {
 				done <- rt.PromptTurn(promptCtx, h.RuntimeID, PromptRequest{
 					SessionID: thread, Prompt: []PromptContentBlock{TextBlock("continue working")},
-					StreamReasoningSummary: mode == "reasoning_summary" || mode == "reasoning_snapshot",
+					StreamReasoningSummary: reasoning,
 				})
 			}()
 			select {
@@ -195,7 +198,7 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			}
 			if reasoning {
 				waitForTestReasoningStart(t, ctx, events, done)
-				if mode == "reasoning_summary" {
+				if mode == "reasoning_summary" || mode == "reasoning_text" {
 					select {
 					case event := <-events:
 						if event.Kind != activity.RuntimeEventReasoningSummary || event.MessageID == "" || event.Text != "thinking" {

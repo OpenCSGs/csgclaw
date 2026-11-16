@@ -206,3 +206,109 @@ func TestAppServerCompletesReasoningSummary(t *testing.T) {
 		})
 	}
 }
+
+func TestAppServerReasoningDeltaSources(t *testing.T) {
+	type delta struct {
+		source string
+		index  any
+		text   string
+	}
+	for _, test := range []struct {
+		name    string
+		deltas  []delta
+		summary []string
+		content []string
+		want    []string
+	}{
+		{
+			name:    "Qwen deltas and matching summary",
+			deltas:  []delta{{"text", 0, "First"}, {"text", 0, " second"}},
+			summary: []string{"First second"}, want: []string{"First", " second"},
+		},
+		{
+			name:    "Qwen summary fills missing suffix",
+			deltas:  []delta{{"text", 0, "First"}},
+			summary: []string{"First second"}, want: []string{"First", " second"},
+		},
+		{
+			name:    "text first ignores interleaved summary",
+			deltas:  []delta{{"text", 0, "First"}, {"summaryText", 0, "Different"}, {"text", 0, " second"}, {"summaryText", 0, " summary"}},
+			summary: []string{"Different summary", "Other"}, content: []string{"First second"}, want: []string{"First", " second"},
+		},
+		{
+			name:    "summary first ignores interleaved text",
+			deltas:  []delta{{"summaryText", 0, "First"}, {"text", 0, "Different"}, {"summaryText", 0, " second"}},
+			summary: []string{"First second"}, content: []string{"Different text"}, want: []string{"First", " second"},
+		},
+		{
+			name:    "text without content ignores unrelated summary",
+			deltas:  []delta{{"text", 0, "First"}},
+			summary: []string{"Different summary", "Other"}, want: []string{"First"},
+		},
+		{
+			name:    "text content snapshot fills suffix",
+			deltas:  []delta{{"text", 0, "First"}},
+			summary: []string{"Different summary"}, content: []string{"First second"}, want: []string{"First", " second"},
+		},
+		{
+			name:    "repeated text in one source is intentional",
+			deltas:  []delta{{"text", 0, "ha"}, {"text", 0, "ha"}},
+			summary: []string{"haha"}, want: []string{"ha", "ha"},
+		},
+		{
+			name:    "content indices preserve part order",
+			deltas:  []delta{{"text", 1, "Second"}, {"text", 0, "First"}},
+			content: []string{"First", "Second"}, want: []string{"First", "\n\nSecond"},
+		},
+		{
+			name:    "invalid or empty delta does not select source",
+			deltas:  []delta{{"text", 0, ""}, {"text", -1, "invalid"}, {"text", "invalid", "invalid"}, {"summaryText", 0, "Summary"}},
+			summary: []string{"Summary"}, want: []string{"Summary"},
+		},
+		{
+			name:    "content snapshot without deltas",
+			content: []string{"First", "Second"}, want: []string{"First\n\nSecond"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			sink := &recordingSink{}
+			manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+			live := &liveSession{spec: SessionSpec{RuntimeID: "runtime", Profile: testProfile()}, session: &Session{SessionID: "thread"}}
+			manager.sessions["runtime"] = live
+			waiter, err := live.registerAppServerTurnWaiter("thread")
+			if err != nil {
+				t.Fatal(err)
+			}
+			waiter.setTurnID("turn")
+			waiter.streamReasoningSummary = true
+			notify := func(method string, fields map[string]any) {
+				t.Helper()
+				fields["threadId"], fields["turnId"], fields["itemId"] = "thread", "turn", "reasoning"
+				manager.handleAppServerNotification("runtime", live, appServerNotification{Method: method, Params: mustJSONRaw(t, fields)})
+			}
+			notify("item/started", map[string]any{"item": map[string]any{"id": "reasoning", "type": "reasoning"}})
+			for _, delta := range test.deltas {
+				indexKey := "summaryIndex"
+				if delta.source == "text" {
+					indexKey = "contentIndex"
+				}
+				notify("item/reasoning/"+delta.source+"Delta", map[string]any{indexKey: delta.index, "delta": delta.text})
+			}
+			item := map[string]any{"id": "reasoning", "type": "reasoning", "summary": test.summary, "content": test.content}
+			notify("item/completed", map[string]any{"item": item})
+			notify("item/completed", map[string]any{"item": item})
+			for _, source := range []string{"text", "summaryText"} {
+				notify("item/reasoning/"+source+"Delta", map[string]any{"delta": "late"})
+			}
+			events := sink.snapshot()
+			if len(events) != len(test.want)+2 || events[0].Kind != activity.RuntimeEventReasoningStarted || events[len(events)-1].Kind != activity.RuntimeEventReasoningCompleted {
+				t.Fatalf("unexpected reasoning lifecycle: %+v", events)
+			}
+			for i, text := range test.want {
+				if event := events[i+1]; event.Kind != activity.RuntimeEventReasoningSummary || event.Text != text {
+					t.Fatalf("event %d = %+v, want %q", i, event, text)
+				}
+			}
+		})
+	}
+}

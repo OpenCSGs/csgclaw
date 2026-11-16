@@ -1812,10 +1812,15 @@ with a string at `delta.thinking`. A `content_block_stop` with the same
 `index` ends that block. Another thinking block can follow a tool call.
 
 Send `Prefer: csgclaw-reasoning-summary` with `stream: true` to receive a
-model-provided Codex summary when available. The preference is optional.
+model-provided Codex reasoning text or summary when available. The preference is optional.
 A server that applies it returns `Preference-Applied: csgclaw-reasoning-summary`.
-Older servers can ignore the preference and respond normally. Session sends the summary as display text and
-does not forward raw reasoning or emit Anthropic signatures.
+Older servers can ignore the preference and respond normally. For each reasoning
+item, Session displays the first nonempty `textDelta` or `summaryTextDelta` stream
+as `thinking_delta`. Other delta sources for that item are ignored to avoid
+duplicate output. Completion snapshots only append missing text from the selected
+source. Qwen snapshots stored in `summary` can complete a matching text prefix.
+The existing preference name is retained for compatibility. Thinking blocks carry
+display text without Anthropic signatures.
 
 A `tool_use` block identifies the tool and
 carries its redacted input in `input_json_delta`. The following `content_block_stop`

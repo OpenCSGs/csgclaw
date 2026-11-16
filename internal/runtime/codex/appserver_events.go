@@ -339,8 +339,8 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	switch method {
 	case "item/reasoning/textDelta", "item/reasoning/summaryTextDelta", "item/reasoning/summaryPartAdded", "item/mcpToolCall/progress":
 		turnID := appServerNotificationTurnID(params)
-		if method == "item/reasoning/summaryTextDelta" {
-			m.handleReasoningSummaryDelta(runtimeID, live, threadID, turnID, params)
+		if method == "item/reasoning/summaryTextDelta" || method == "item/reasoning/textDelta" {
+			m.handleReasoningDelta(runtimeID, live, threadID, turnID, method, params)
 		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
 			turnID:   turnID,
@@ -422,7 +422,8 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 				kind = activitypkg.RuntimeEventReasoningCompleted
 				if summary {
 					parts, _ := item["summary"].([]any)
-					text, firstCompletion := waiter.completeReasoningSummary(itemID, parts)
+					content, _ := item["content"].([]any)
+					text, firstCompletion := waiter.completeReasoningSummary(itemID, parts, content)
 					if !firstCompletion {
 						return
 					}
@@ -510,18 +511,23 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 }
 
 type appServerReasoningSummary struct {
+	source    string
 	parts     map[int]*strings.Builder
 	completed bool
 }
 
-func (m *appServerManager) handleReasoningSummaryDelta(runtimeID string, live *liveSession, threadID, turnID string, params map[string]any) {
+func (m *appServerManager) handleReasoningDelta(runtimeID string, live *liveSession, threadID, turnID, method string, params map[string]any) {
 	itemID := appServerString(params, "itemId")
 	text, _ := params["delta"].(string)
 	if itemID == "" || text == "" {
 		return
 	}
+	indexKey := "summaryIndex"
+	if method == "item/reasoning/textDelta" {
+		indexKey = "contentIndex"
+	}
 	index := 0
-	if value, exists := params["summaryIndex"]; exists {
+	if value, exists := params[indexKey]; exists {
 		var err error
 		index, err = strconv.Atoi(appServerRequestIDValue(value))
 		if err != nil || index < 0 {
@@ -530,7 +536,7 @@ func (m *appServerManager) handleReasoningSummaryDelta(runtimeID string, live *l
 	}
 	waiter := live.appServerTurnWaiter(threadID)
 	if active, summary := waiter.reasoningStream(turnID); active && summary {
-		if waiter.recordReasoningSummaryDelta(itemID, index, text) {
+		if waiter.recordReasoningSummaryDelta(itemID, method, index, text) {
 			m.publishReasoningSummary(runtimeID, threadID, turnID, itemID, text)
 		}
 	}
@@ -548,13 +554,16 @@ func (w *appServerTurnWaiter) reasoningSummary(itemID string) *appServerReasonin
 	return summary
 }
 
-func (w *appServerTurnWaiter) recordReasoningSummaryDelta(itemID string, index int, text string) bool {
+func (w *appServerTurnWaiter) recordReasoningSummaryDelta(itemID, source string, index int, text string) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	summary := w.reasoningSummary(itemID)
-	if summary.completed {
+	if summary.completed || (summary.source != "" && summary.source != source) {
 		return false
 	}
+	// A provider can report both reasoning text and a summary for one item.
+	// Keep the first delta source so the append-only stream displays it once.
+	summary.source = source
 	part := summary.parts[index]
 	if part == nil {
 		part = &strings.Builder{}
@@ -566,7 +575,7 @@ func (w *appServerTurnWaiter) recordReasoningSummaryDelta(itemID string, index i
 	return index == 0
 }
 
-func (w *appServerTurnWaiter) completeReasoningSummary(itemID string, snapshot []any) (string, bool) {
+func (w *appServerTurnWaiter) completeReasoningSummary(itemID string, snapshot, content []any) (string, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	summary := w.reasoningSummary(itemID)
@@ -579,6 +588,26 @@ func (w *appServerTurnWaiter) completeReasoningSummary(itemID string, snapshot [
 		parts[index] = part.String()
 	}
 	summary.parts = nil
+
+	if summary.source == "item/reasoning/textDelta" || (summary.source == "" && len(snapshot) == 0) {
+		if len(content) > 0 {
+			snapshot = content
+		} else {
+			// Qwen stores its completed text in summary. Use that snapshot only
+			// when it extends every observed part of the selected text stream.
+			for index, text := range parts {
+				if index >= len(snapshot) {
+					snapshot = nil
+					break
+				}
+				fullText, _ := snapshot[index].(string)
+				if !strings.HasPrefix(fullText, text) {
+					snapshot = nil
+					break
+				}
+			}
+		}
+	}
 
 	streamed := parts[0]
 	for index, value := range snapshot {
