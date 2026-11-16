@@ -441,6 +441,33 @@ describe("new task member mentions", () => {
     }
   });
 
+  it.each(["click", "keyboard"])("retries a failed shared directory request via %s", async (activation) => {
+    vi.mocked(fetchWorkspaceDirectory).mockRejectedValue(new Error("unreadable"));
+    try {
+      setup("/new?team=team-1", "test-model", { configuration: { workspace_dir: "/shared-project" } });
+      const user = userEvent.setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "@");
+      expect(await screen.findByText("chatWorkspaceFilesLoadFailed")).toBeVisible();
+      expect(screen.getByRole("option", { name: /Manager/ })).toBeVisible();
+      const retry = screen.getByRole("button", { name: "retry" });
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+        entries: [{ name: "guide.md", path: "guide.md", type: "file" }],
+      });
+      if (activation === "keyboard") {
+        await user.tab();
+        expect(retry).toHaveFocus();
+        await user.keyboard("{Enter}");
+      } else {
+        await user.click(retry);
+      }
+      expect(await screen.findByRole("option", { name: /guide.md/ })).toBeVisible();
+      expect(editor).toHaveFocus();
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
   it("groups team members and files from the selected shared workspace", async () => {
     vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
       entries: [{ name: "guide.md", path: "guide.md", type: "file" }],

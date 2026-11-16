@@ -144,6 +144,7 @@ function StartTaskForm({
   const composing = useRef(false);
   const upload = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const mentionRetryRef = useRef<HTMLButtonElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const pageRef = useRef<HTMLElement>(null);
   const panelTrigger = useRef<HTMLButtonElement>(null);
@@ -604,7 +605,8 @@ function StartTaskForm({
                       promptMentions.sync(event.currentTarget);
                       syncSlash(event.currentTarget);
                     }}
-                    onBlur={() => {
+                    onBlur={(event) => {
+                      if (event.relatedTarget === mentionRetryRef.current && mentionRetryRef.current) return;
                       promptMentions.dismiss();
                       setSlashQuery(null);
                     }}
@@ -633,8 +635,13 @@ function StartTaskForm({
                     }}
                     disabled={busy}
                     onKeyDown={(event) => {
-                      if (composing.current || isComposerKeyboardEventComposing(event) || promptMentions.keyDown(event))
+                      if (composing.current || isComposerKeyboardEventComposing(event)) return;
+                      if (event.key === "Tab" && !event.shiftKey && mentionRetryRef.current) {
+                        event.preventDefault();
+                        mentionRetryRef.current.focus();
                         return;
+                      }
+                      if (promptMentions.keyDown(event)) return;
                       if (
                         handleSlashPickerNavigation({
                           event,
@@ -681,21 +688,46 @@ function StartTaskForm({
                         if (event.target === editorRef.current) event.preventDefault();
                       }}
                     >
-                      {promptMentions.candidates.length ? (
-                        <MentionPicker
-                          groupPeopleAndFiles
-                          showRole={false}
-                          className={`${styles.mentions} ${styles.peopleAndFiles}`}
-                          users={promptMentions.candidates}
-                          activeIndex={promptMentions.activeIndex}
-                          onSelect={promptMentions.choose}
-                          t={t}
-                        />
-                      ) : promptMentions.directoryStatus ? (
-                        <div className={styles.mentionStatus} role="status">
-                          <div>{promptMentions.directoryStatus.path}/</div>
-                          <div>{t(promptMentions.directoryStatus.message)}</div>
-                        </div>
+                      {promptMentions.candidates.length || promptMentions.directoryStatus ? (
+                        <>
+                          {promptMentions.candidates.length ? (
+                            <MentionPicker
+                              groupPeopleAndFiles
+                              showRole={false}
+                              className={`${styles.mentions} ${styles.peopleAndFiles}`}
+                              users={promptMentions.candidates}
+                              activeIndex={promptMentions.activeIndex}
+                              onSelect={promptMentions.choose}
+                              t={t}
+                            />
+                          ) : null}
+                          {promptMentions.directoryStatus ? (
+                            <div className={styles.mentionStatus}>
+                              <div role="status">
+                                {promptMentions.directoryStatus.path ? (
+                                  <div>{promptMentions.directoryStatus.path}/</div>
+                                ) : null}
+                                {t(promptMentions.directoryStatus.message)}
+                              </div>
+                              {promptMentions.directoryStatus.retry ? (
+                                <Button
+                                  ref={mentionRetryRef}
+                                  size="sm"
+                                  variant="tertiaryGray"
+                                  onBlur={(event) => {
+                                    if (event.relatedTarget !== editorRef.current) promptMentions.dismiss();
+                                  }}
+                                  onClick={() => {
+                                    editorRef.current?.focus();
+                                    promptMentions.directoryStatus?.retry?.();
+                                  }}
+                                >
+                                  {t("retry")}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </>
                       ) : (
                         <SlashPicker
                           className={styles.mentions}

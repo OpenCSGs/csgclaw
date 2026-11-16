@@ -1,3 +1,4 @@
+import { apiErrorCode } from "@/api/client";
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import type { MentionPickerUser } from "@/components/business/ConversationPane";
 import { useQuery } from "@tanstack/react-query";
@@ -236,16 +237,19 @@ export function useTaskPromptMentions({
   return {
     candidates,
     directoryStatus:
-      mention && directory && !disabled && !candidates.length
+      mention && !disabled && workspaceAgentID && (listing.isError || !candidates.some((item) => item.fileReference))
         ? {
             path: directory,
             message: listing.isError
-              ? ("agentWorkspaceLoadFailed" as const)
+              ? apiErrorCode(listing.error) === "unauthorized"
+                ? ("chatWorkspaceFilesAuthenticationRequired" as const)
+                : ("chatWorkspaceFilesLoadFailed" as const)
               : listing.isPending
                 ? ("agentWorkspaceLoading" as const)
                 : listing.data?.entries?.length
                   ? ("workspaceSearchNoResults" as const)
                   : ("agentWorkspaceEmpty" as const),
+            retry: listing.isError ? () => void listing.refetch() : undefined,
           }
         : null,
     mentionRanges: scopedMentions
