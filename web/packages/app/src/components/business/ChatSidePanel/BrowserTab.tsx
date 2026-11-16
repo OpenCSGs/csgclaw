@@ -1,6 +1,6 @@
 import chatSidePanelStyles from "./ChatSidePanel.module.css";
 import { useNativeBrowser } from "./useNativeBrowser";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, RefreshCw } from "lucide-react";
 import { Button, EmptyState, LinkButton, TextInput, Tooltip } from "@/components/ui";
 import { normalizeBrowserURL } from "@/models/fileReferences";
@@ -8,6 +8,7 @@ import type { TranslateFn } from "@/models/conversations";
 
 export function BrowserTab({
   url,
+  html,
   active,
   onNavigate,
   onPopup,
@@ -16,6 +17,7 @@ export function BrowserTab({
   t,
 }: {
   url: string;
+  html?: string;
   active: boolean;
   onNavigate: (url: string) => void;
   onPopup: (url: string) => void;
@@ -28,6 +30,20 @@ export function BrowserTab({
   const [invalid, setInvalid] = useState(false);
   const [history, setHistory] = useState(() => ({ urls: url ? [url] : [], index: url ? 0 : -1 }));
   const previousURL = useRef(url);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  useLayoutEffect(() => {
+    if (html === undefined) return;
+    let sent = false;
+    const receive = (event: MessageEvent) => {
+      const frame = frameRef.current?.contentWindow;
+      if (sent || !frame || event.source !== frame || event.data?.type !== "csgclaw:html-preview-ready") return;
+      sent = true;
+      // The sandbox has an opaque origin, so only the checked frame receives content.
+      frame.postMessage({ type: "csgclaw:html-preview", html }, "*");
+    };
+    window.addEventListener("message", receive);
+    return () => window.removeEventListener("message", receive);
+  }, [html, url, reload]);
   useEffect(() => {
     const previous = previousURL.current;
     previousURL.current = url;
@@ -43,7 +59,7 @@ export function BrowserTab({
       );
     }
   }, [native.available, url]);
-  const externalURL = normalizeBrowserURL(address) || normalizeBrowserURL(url);
+  const externalURL = html === undefined ? normalizeBrowserURL(address) || normalizeBrowserURL(url) : "";
   return (
     <section className="chat-browser-tab" aria-label={t("chatBrowser")}>
       <form
@@ -194,6 +210,7 @@ export function BrowserTab({
             ) : null}
           </div>
           <iframe
+            ref={frameRef}
             key={`${url}:${reload}`}
             src={url}
             title={t("chatBrowser")}

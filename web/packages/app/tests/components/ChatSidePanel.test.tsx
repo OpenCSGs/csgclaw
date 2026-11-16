@@ -394,14 +394,13 @@ describe("shared chat sidebar", () => {
       .mockResolvedValue(
         new Response("<canvas></canvas><script>startGame()</script>", { headers: { "Content-Type": "text/html" } }),
       );
-    let revision = 0;
-    const createURL = vi.spyOn(URL, "createObjectURL").mockImplementation(() => `blob:game-${++revision}`);
-    const revokeURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const previewURL = new URL("html-preview.html", document.baseURI).href;
     const view = render(<Harness />, { wrapper: createQueryWrapper().wrapper });
     try {
       await user.click(screen.getByRole("button", { name: "Files" }));
       await user.click(await screen.findByRole("button", { name: /^game.html/ }));
-      expect(await screen.findByTitle("Browser")).toHaveAttribute("src", "blob:game-1");
+      const initialFrame = await screen.findByTitle("Browser");
+      expect(initialFrame).toHaveAttribute("src", previewURL);
       expect(screen.queryByTitle("HTML preview document")).not.toBeInTheDocument();
       expect(screen.getByRole("textbox", { name: "Web address" })).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledWith(
@@ -410,8 +409,17 @@ describe("shared chat sidebar", () => {
       );
       fetchMock.mockResolvedValue(new Response("<h1>Updated</h1>", { headers: { "Content-Type": "text/html" } }));
       await user.click(screen.getByRole("button", { name: "Refresh" }));
-      await waitFor(() => expect(screen.getByTitle("Browser")).toHaveAttribute("src", "blob:game-2"));
-      expect(revokeURL).toHaveBeenCalledWith("blob:game-1");
+      await waitFor(() => expect(screen.getByTitle("Browser")).not.toBe(initialFrame));
+      const refreshed = screen.getByTitle<HTMLIFrameElement>("Browser");
+      const post = vi.spyOn(refreshed.contentWindow!, "postMessage");
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: refreshed.contentWindow,
+          data: { type: "csgclaw:html-preview-ready" },
+          origin: "null",
+        }),
+      );
+      expect(post).toHaveBeenCalledExactlyOnceWith({ type: "csgclaw:html-preview", html: "<h1>Updated</h1>" }, "*");
       const address = screen.getByRole("textbox", { name: "Web address" });
       await user.clear(address);
       await user.type(address, "https://example.org/{Enter}");
@@ -419,18 +427,15 @@ describe("shared chat sidebar", () => {
       const gameTab = screen.getByRole("tab", { name: "game.html" });
       const gamePanel = document.getElementById(gameTab.getAttribute("aria-controls")!)!;
       expect(gamePanel).not.toBeVisible();
-      expect(within(gamePanel).getByTitle("Browser")).toHaveAttribute("src", "blob:game-2");
-      expect(revokeURL).not.toHaveBeenCalledWith("blob:game-2");
+      expect(within(gamePanel).getByTitle("Browser")).toBe(refreshed);
       await user.click(screen.getByRole("tab", { name: "game.html" }));
-      expect(screen.getByRole("textbox", { name: "Web address" })).toHaveValue("blob:game-2");
+      expect(screen.getByRole("textbox", { name: "Web address" })).toHaveValue(previewURL);
       await user.click(screen.getByRole("button", { name: "Close tab game.html" }));
       expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
-      expect(revokeURL).toHaveBeenCalledWith("blob:game-2");
+      expect(refreshed).not.toBeInTheDocument();
     } finally {
       view.unmount();
       fetchMock.mockRestore();
-      createURL.mockRestore();
-      revokeURL.mockRestore();
     }
   });
 

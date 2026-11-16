@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="referrer" content="no-referrer" />
+    <title>HTML preview</title>
+  </head>
+  <body>
+    <script>
+      // HTTP documents do not inherit the application's script policy like Blob URLs do.
+      // The response and embedding iframe keep this document in an opaque sandbox.
+      const parentOrigin = new URL(location.href).origin;
+      function receiveHTML(event) {
+        if (
+          window.parent === window ||
+          event.source !== window.parent ||
+          event.origin !== parentOrigin ||
+          event.data?.type !== "csgclaw:html-preview" ||
+          typeof event.data.html !== "string"
+        ) {
+          return;
+        }
+        window.removeEventListener("message", receiveHTML);
+        document.open();
+        document.write(event.data.html);
+        document.close();
+      }
+      window.addEventListener("message", receiveHTML);
+      window.parent.postMessage({ type: "csgclaw:html-preview-ready" }, parentOrigin);
+    </script>
+  </body>
+</html>

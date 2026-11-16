@@ -23,6 +23,7 @@ export function HTMLBrowserTab({
 }) {
   const [url, setURL] = useState("");
   const [sourceURL, setSourceURL] = useState("");
+  const [html, setHTML] = useState<string>();
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
@@ -30,8 +31,8 @@ export function HTMLBrowserTab({
     const bridge = getDesktopBridge();
     const id = createUUID();
     let disposed = false;
-    let objectURL = "";
     setURL("");
+    setHTML(undefined);
     setError(false);
     async function load() {
       const file =
@@ -48,12 +49,13 @@ export function HTMLBrowserTab({
       if (disposed) return;
       const next = bridge
         ? (await bridge.browserCommand({ id, action: "previewHTML", html: text, sourceKey }))?.url
-        : (objectURL = URL.createObjectURL(new Blob([text], { type: "text/html;charset=utf-8" })));
+        : new URL("html-preview.html", document.baseURI).href;
       if (disposed) {
         if (bridge) await bridge.browserCommand({ id, action: "releaseHTML" });
         return;
       }
       if (!next) throw new Error("HTML preview URL is unavailable.");
+      if (!bridge) setHTML(text);
       setSourceURL(next);
       setURL(next);
     }
@@ -63,7 +65,6 @@ export function HTMLBrowserTab({
     return () => {
       disposed = true;
       controller.abort();
-      if (objectURL) URL.revokeObjectURL(objectURL);
       if (bridge) void bridge.browserCommand({ id, action: "releaseHTML" }).catch(() => {});
     };
   }, [item, revision, sourceKey]);
@@ -72,6 +73,7 @@ export function HTMLBrowserTab({
     <BrowserTab
       key={revision}
       url={url}
+      html={url === sourceURL ? html : undefined}
       active={active}
       onNavigate={setURL}
       onPopup={onPopup}
