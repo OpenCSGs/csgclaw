@@ -105,6 +105,21 @@ function Harness({
 }
 
 describe("AgentDetailPane metadata editing", () => {
+  it("returns to Profile when a routed tab is cleared without remounting", async () => {
+    const user = userEvent.setup();
+    const onProfileTabChange = vi.fn();
+    const { rerender } = render(<Harness onProfileTabChange={onProfileTabChange} />);
+
+    await user.click(screen.getByRole("button", { name: t("agentInstructions") }));
+    expect(onProfileTabChange).toHaveBeenCalledWith("instructions");
+
+    rerender(<Harness requestedProfileTab="instructions" onProfileTabChange={onProfileTabChange} />);
+    expect(screen.getByRole("button", { name: t("agentInstructions") })).toHaveAttribute("aria-current", "location");
+
+    rerender(<Harness onProfileTabChange={onProfileTabChange} />);
+    expect(screen.getByRole("button", { name: t("agentProfileTab") })).toHaveAttribute("aria-current", "location");
+  });
+
   it("shows a dismissible standard error when skill descriptions cannot be read", async () => {
     const user = userEvent.setup();
     render(<Harness workspaceSupported skillsError="Some skill descriptions could not be read." />);

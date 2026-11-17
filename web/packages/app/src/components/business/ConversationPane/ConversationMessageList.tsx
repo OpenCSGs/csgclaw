@@ -284,6 +284,7 @@ const MessageListContent = memo(function MessageListContent({
                         key={`${message.id}:${theme}`}
                         content={message.content}
                         message={message}
+                        allowLegacyToolFormat={Boolean(messageAgent)}
                         showTurnProgress={!collaboration}
                         progressControls={renderTurnControls?.(message)}
                         videoMessages={embeddedVideos}

@@ -14,6 +14,7 @@ export type CitationSelectHandler = (selection: CitationSelection) => void;
 export type MessageLike = {
   id?: string;
   attachments?: readonly MessageAttachment[] | null;
+  metadata?: IMMessage["metadata"];
   mentions?: readonly MessageMention[] | null;
   [key: string]: unknown;
 };
@@ -55,6 +56,7 @@ export type ParsedStructuredMessage = StructuredMessagePayload | ActionCardPaylo
 export type ProgressControlSlots = { header?: ReactNode; footer?: ReactNode };
 
 export type MessageContentProps = {
+  allowLegacyToolFormat?: boolean;
   videoMessages?: IMMessage[];
   progressControls?: ProgressControlSlots | null;
   showTurnProgress?: boolean;

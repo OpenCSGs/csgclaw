@@ -767,6 +767,7 @@ function ThreadMessage({
               key={`${message.id}:${theme}`}
               content={message.content}
               message={message}
+              allowLegacyToolFormat={Boolean(messageAgent)}
               showTurnProgress={showTurnProgress}
               enableLongMessageCollapse={!showTurnProgress}
               progressControls={progressControls}

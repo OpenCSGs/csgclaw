@@ -82,6 +82,7 @@ export function SettingsPage() {
       <DialogContent
         ref={dialogRef}
         className={styles.dialog}
+        overlayClassName={styles.backdrop}
         aria-describedby={undefined}
         onOpenAutoFocus={() => {
           triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;

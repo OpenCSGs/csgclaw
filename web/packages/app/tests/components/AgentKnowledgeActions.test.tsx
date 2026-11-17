@@ -6,7 +6,6 @@ import { AgentDetailPane } from "@/components/business/AgentDetails";
 import { agentToDraft, type AgentLike, type JSONRecord } from "@/models/agents";
 import type { MCPServer } from "@/models/mcp";
 import { createTranslator } from "@/shared/i18n";
-import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import { createQueryWrapper } from "../helpers/queryClient";
 
 const worker: AgentLike = { id: "worker-1", name: "Worker", role: "worker", runtime_kind: "codex" };
@@ -120,7 +119,6 @@ async function openRemoval(user: ReturnType<typeof userEvent.setup>) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  localStorage.removeItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY);
 });
 
 describe("Knowledge enablement after removal", () => {

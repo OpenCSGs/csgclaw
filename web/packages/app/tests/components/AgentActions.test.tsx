@@ -9,7 +9,6 @@ import { MemoryRouter } from "react-router-dom";
 import { AgentRow } from "@/pages/AgentPage/components";
 import { AgentDetailPane, AgentView, NotificationParticipantDetailPane } from "@/components/business/AgentDetails";
 import { agentToDraft, type AgentDraft } from "@/models/agents";
-import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import { createTranslator } from "@/shared/i18n";
 import buttonStyles from "csgclaw-ui/testing/Button/Button.module.css";
 
@@ -201,7 +200,6 @@ it.each(["codex", "dsh"])("opens the managed connector catalog for a %s Agent", 
 describe("agent action visibility", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
-    window.localStorage.removeItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY);
   });
 
   it.each(["codex", "dsh"] as const)(
@@ -1730,7 +1728,6 @@ describe("agent action visibility", () => {
   it("omits activity and navigates to profile sections from the horizontal tabs", async () => {
     const user = userEvent.setup();
     const draft = agentToDraft(worker);
-    window.localStorage.setItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY, "activity");
     render(
       <AgentDetailPane
         item={worker}
@@ -1772,7 +1769,7 @@ describe("agent action visibility", () => {
     expect(screen.queryByText("Request options")).not.toBeInTheDocument();
   });
 
-  it("restores the last selected profile tab after remounting", async () => {
+  it("opens Profile after remounting even with a previously saved tab", async () => {
     const user = userEvent.setup();
     const draft = agentToDraft(worker);
     const props = {
@@ -1792,16 +1789,19 @@ describe("agent action visibility", () => {
       onInvite: vi.fn(),
       onOpenDM: vi.fn(),
     };
+    window.localStorage.setItem("csgclaw.im.agentProfileActiveTab", "channels");
     const { unmount } = render(<AgentDetailPane {...props} />);
+    expect(screen.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-current", "location");
 
     await user.click(screen.getByRole("button", { name: "Channels" }));
-    expect(window.localStorage.getItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY)).toBe("channels");
+    expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
     unmount();
 
     render(<AgentDetailPane {...props} />);
 
-    expect(screen.getByRole("button", { name: "Channels" })).toHaveAttribute("aria-current", "location");
-    expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-current", "location");
+    expect(screen.queryByRole("region", { name: "Channels" })).not.toBeInTheDocument();
+    window.localStorage.removeItem("csgclaw.im.agentProfileActiveTab");
   });
 });
 

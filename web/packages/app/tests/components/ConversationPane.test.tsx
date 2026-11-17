@@ -834,7 +834,8 @@ describe("ConversationPane", () => {
     });
 
     expect(screen.getAllByText("Choose a color").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Choose a color" })).toBeInTheDocument();
+    const answerMode = within(screen.getByRole("region", { name: "questionAnswerMode" }));
+    expect(answerMode.getByRole("heading", { name: "Choose a color" })).toBeInTheDocument();
     expect(screen.getByRole("timer")).toBeInTheDocument();
     const card = within(screen.getByRole("region", { name: "questionRequest" }));
     expect(card.getByText("Choose a color")).toBeInTheDocument();

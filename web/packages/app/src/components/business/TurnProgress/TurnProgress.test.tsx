@@ -48,7 +48,7 @@ describe("TurnProgress", () => {
     const user = userEvent.setup();
     const { rerender } = render(<TurnProgress progress={progress} t={t} renderText={renderText} />);
     await user.click(screen.getByRole("button", { name: /第 1 条：cat README.md/ }));
-    expect(screen.getByText("contents")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "输出" })).toHaveTextContent("contents");
     rerender(
       <TurnProgress progress={{ ...progress, revision: 2, status: "succeeded" }} t={t} renderText={renderText} />,
     );
