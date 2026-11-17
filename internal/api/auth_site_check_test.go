@@ -11,8 +11,13 @@ import (
 
 func TestAuthSiteCheckProbesLocalLoginWithoutFollowingRedirect(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/tenant/sso/login" || r.URL.RawQuery != "" || r.Header.Get("Authorization") != "" {
+		query := r.URL.Query()
+		if r.Method != http.MethodGet || r.URL.Path != "/tenant/sso/login" || r.Header.Get("Authorization") != "" {
 			t.Errorf("unexpected probe request: %s", r.URL)
+		}
+		if len(query) != 1 || query.Get("redirect_url") != "http://127.0.0.1"+authCallbackPath {
+			http.Error(w, "invalid redirect_url", http.StatusBadRequest)
+			return
 		}
 		http.Redirect(w, r, "/do-not-follow", http.StatusFound)
 	}))
