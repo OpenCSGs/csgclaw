@@ -49,6 +49,16 @@ describe("compaction results", () => {
     expect(screen.getByText(new RegExp(en))).toBeInTheDocument();
     expect(screen.queryByText(/Refresh|contextCompactReason_/)).not.toBeInTheDocument();
   });
+  it("explains unsupported task sessions without suggesting an ineffective retry", () => {
+    const saved: CompactionOperation = {
+      ...operation,
+      targets: [{ ...operation.targets[0], status: "unsupported", reason: "scoped_session_unsupported" }],
+    };
+    const view = render(<ContextCompactionCard operation={saved} t={t} />);
+    expect(screen.getByText(/独立任务或子线程会话/)).toHaveTextContent("无需反复重试");
+    view.rerender(<ContextCompactionCard operation={saved} t={createTranslator("en")} />);
+    expect(screen.getByText(/separate task or thread session/)).toHaveTextContent("repeated retries are unnecessary");
+  });
   it("does not invent a specific cause when a saved result has no recognized reason", () => {
     render(
       <ContextCompactionCard
@@ -117,4 +127,15 @@ describe("compaction results", () => {
     expect(screen.getByRole("status")).toHaveTextContent("正在压缩上下文");
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
+});
+
+it("keeps the batch summary for a single-member compress-all operation", () => {
+  render(
+    <ContextCompactionCard
+      operation={{ ...operation, batch: true, targets: [{ ...operation.targets[0], status: "unnecessary" }] }}
+      t={t}
+    />,
+  );
+  expect(screen.getByText("批量压缩已结束")).toBeInTheDocument();
+  expect(screen.getByText("跳过 1 个 Agent")).toBeInTheDocument();
 });

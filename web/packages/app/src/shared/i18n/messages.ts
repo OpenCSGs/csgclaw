@@ -641,7 +641,7 @@ export const messages = {
       "无法确认原始来源，请切回安装时的 Hub 环境。自建或其他工具管理的技能请在原来源更新。",
     skillUpdatesCheckAgain: "重新检查",
     skillUpdatesNoRelease: "此技能还没有可安装的已发布版本。",
-    skillUpdatesLibrary: "技能库",
+    skillUpdatesLibrary: "全局技能库",
     skillUpdatesChanges: "{count} 个文件有变化",
     skillUpdatesFile_added: "新增",
     skillUpdatesFile_modified: "修改",
@@ -1253,6 +1253,8 @@ export const messages = {
     contextCompactStatus_busy: "Agent 正在工作，请本轮完成后再操作",
     contextCompactStatus_unavailable:
       "无法访问原会话，本次未压缩。请先确认该 Agent 能正常回复；若回复失败，请导出该轮执行诊断。",
+    contextCompactReason_scoped_session_unsupported:
+      "该上下文属于独立任务或子线程会话，当前手动压缩仅支持房间主会话。本次已跳过，可继续正常执行，无需反复重试。",
     contextCompactReason_session_binding_missing:
       "该房间的会话绑定与上下文统计不一致，本次未压缩。请先向该 Agent 发送一条消息，待回复结束且用量更新后再压缩。",
     contextCompactReason_session_identity_changed:
@@ -4196,7 +4198,7 @@ export const messages = {
       "The original source could not be confirmed. Switch to the Hub used for installation. Update custom or externally managed skills at their source.",
     skillUpdatesCheckAgain: "Check again",
     skillUpdatesNoRelease: "This skill has no installable published release yet.",
-    skillUpdatesLibrary: "Skill library",
+    skillUpdatesLibrary: "Global skill library",
     skillUpdatesChanges: "{count} changed files",
     skillUpdatesFile_added: "Added",
     skillUpdatesFile_modified: "Modified",
@@ -4826,6 +4828,8 @@ export const messages = {
     contextCompactStatus_busy: "Agent is working. Try again after this turn.",
     contextCompactStatus_unavailable:
       "The original session could not be accessed. Nothing was compacted. Confirm this Agent can reply; if the reply fails, export that turn's execution diagnostics.",
+    contextCompactReason_scoped_session_unsupported:
+      "This context belongs to a separate task or thread session. Manual compaction currently supports only the room's main session. It was skipped; work can continue normally and repeated retries are unnecessary.",
     contextCompactReason_session_binding_missing:
       "The room's session binding does not match its saved context usage. Nothing was compacted. Send this Agent a message, then wait for its reply and updated usage before compacting.",
     contextCompactReason_session_identity_changed:

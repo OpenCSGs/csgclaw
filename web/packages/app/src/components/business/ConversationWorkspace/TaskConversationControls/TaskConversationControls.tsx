@@ -21,6 +21,7 @@ export function TaskConversationControls({
   onNewTask,
   cloudSendDisabled = false,
   onCompactingChange,
+  onCompactionAccepted,
 }: {
   conversation: IMConversation;
   participants: ConversationWorkingParticipant[];
@@ -29,6 +30,7 @@ export function TaskConversationControls({
   onNewTask?: (agentID?: string, configuration?: TaskConfiguration) => void;
   cloudSendDisabled?: boolean;
   onCompactingChange?: (busy: boolean) => void;
+  onCompactionAccepted?: () => void;
 }) {
   const controller = useOptionalWorkspaceControllerContext();
   const entry = controller?.taskEntry;
@@ -88,6 +90,7 @@ export function TaskConversationControls({
       <ConversationContextUsage
         key={`usage:${conversation.id}`}
         onCompactingChange={onCompactingChange}
+        onCompactionAccepted={onCompactionAccepted}
         conversation={conversation}
         participants={participants}
         agents={agents}

@@ -166,7 +166,11 @@ func testContextNativeDSH(t *testing.T, mode string) {
 
 	if mode == "manual_compact" {
 		calls := requests.Load()
-		result, err := rt.Conversation(h.RuntimeID).(contract.ConversationCompactor).Compact(ctx, contract.CompactRequest{ConversationKey: "room:test", Usage: *snapshot})
+		starts := 0
+		result, err := rt.Conversation(h.RuntimeID).(contract.ConversationCompactor).Compact(ctx, contract.CompactRequest{ConversationKey: "room:test", Usage: *snapshot, OnStarted: func() error { starts++; return nil }})
+		if starts != 1 {
+			t.Fatalf("native compaction start notifications=%d", starts)
+		}
 		if err != nil || result.Status != "completed" {
 			log, _ := os.ReadFile(filepath.Join(root, "agent", hostStateDirName, stderrFileName))
 			t.Fatalf("manual compaction: %+v %v\n%s", result, err, log)

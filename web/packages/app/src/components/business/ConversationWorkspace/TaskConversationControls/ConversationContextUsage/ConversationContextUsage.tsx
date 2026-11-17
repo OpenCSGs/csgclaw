@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CircleGauge, LoaderCircle, X } from "lucide-react";
 import { Button, Tooltip, PopoverRoot, PopoverTrigger, PopoverContent, PopoverClose } from "@/components/ui";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
@@ -9,6 +9,7 @@ import { localIdentitiesMatch, type IMConversation, type TranslateFn } from "@/m
 import { contextUsageRatio, formatContextAmount, latestContextUsage, type ContextUsage } from "@/models/modelMetadata";
 import {
   conversationCompacting,
+  compactionTargetNotice,
   manualCompactionEligible,
   messageCompaction,
   type CompactionOperation,
@@ -24,18 +25,27 @@ export function ConversationContextUsage({
   participants,
   t,
   onCompactingChange,
+  onCompactionAccepted,
 }: {
   conversation: IMConversation;
   agents: AgentLike[];
   participants: ConversationWorkingParticipant[];
   t: TranslateFn;
   onCompactingChange?: (busy: boolean) => void;
+  onCompactionAccepted?: () => void;
 }) {
   const hoverPanel = useHoverContextPanel();
   const [sending, setSending] = useState(false);
   const [pending, setPending] = useState<Pick<CompactionOperation, "id" | "epoch">>();
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const activeScope = useRef<{ id: string; epoch: number } | null>(null);
+  useLayoutEffect(() => {
+    activeScope.current = { id: conversation.id, epoch: conversation.context_usage_epoch ?? 0 };
+    return () => {
+      activeScope.current = null;
+    };
+  }, [conversation.id, conversation.context_usage_epoch]);
   const entries = agents.filter(
     (agent) =>
       Boolean(agent.id) &&
@@ -81,10 +91,10 @@ export function ConversationContextUsage({
     setError("");
   }, [conversation.context_usage_epoch]);
   if (conversation.cloud_agent || !entries.length) return null;
-  const submit = async (targets: AgentLike[]) => {
+  const submit = async (targets: AgentLike[], batch = false) => {
     setError("");
     setNotice("");
-    if (targets.length === 1 && !manualCompactionEligible(usageFor(targets[0]))) {
+    if (!batch && targets.length === 1 && !manualCompactionEligible(usageFor(targets[0]))) {
       setNotice(
         t(
           usageFor(targets[0])?.used_tokens == null
@@ -94,18 +104,30 @@ export function ConversationContextUsage({
       );
       return;
     }
+    const stillCurrent = () =>
+      activeScope.current?.id === conversation.id &&
+      activeScope.current.epoch === (conversation.context_usage_epoch ?? 0);
     setSending(true);
     try {
       const operation = await compactRoomContext(
         conversation.id,
         targets.map((agent) => agent.id!),
         createUUID(),
+        batch,
       );
+      if (!stillCurrent() || operation.epoch !== (conversation.context_usage_epoch ?? 0)) return;
+      if (!operation.started_at) {
+        const target = operation.targets[0];
+        if (target) setNotice(compactionTargetNotice(target, t));
+        return;
+      }
       if (operation.running) setPending({ id: operation.id, epoch: operation.epoch });
+      hoverPanel.onOpenChange(false);
+      onCompactionAccepted?.();
     } catch (cause) {
-      setError(localizeAPIError(cause, t));
+      if (stillCurrent()) setError(localizeAPIError(cause, t));
     } finally {
-      setSending(false);
+      if (activeScope.current?.id === conversation.id) setSending(false);
     }
   };
   const action = (all: boolean, disabled: boolean, busy: boolean, click: () => void) => {
@@ -142,7 +164,9 @@ export function ConversationContextUsage({
         >
           <div className={styles.header}>
             <strong>{t("contextCompactContext")}</strong>
-            {!conversation.is_direct ? action(true, sending || running, running, () => void submit(entries)) : null}
+            {!conversation.is_direct
+              ? action(true, sending || running, running, () => void submit(entries, true))
+              : null}
             <PopoverClose asChild>
               <Button variant="tertiaryGray" size="sm" iconOnly aria-label={t("contextCompactClose")}>
                 <X size={16} />

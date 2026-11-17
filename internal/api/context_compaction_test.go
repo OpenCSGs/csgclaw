@@ -47,6 +47,11 @@ type compactAPIConversation struct {
 
 func (c *compactAPIConversation) Compact(ctx context.Context, req contract.CompactRequest) (contract.CompactResult, error) {
 	c.calls.Add(1)
+	if req.OnStarted != nil && (c.result == nil || c.result.Status == "failed" || c.result.Status == "completed") {
+		if err := req.OnStarted(); err != nil {
+			return contract.CompactResult{}, err
+		}
+	}
 	gate := c.gate
 	if gate == nil {
 		gate = make(chan struct{})
@@ -255,7 +260,7 @@ func TestCompactionFailureReasonSurvivesHTTPRefreshAndRestart(t *testing.T) {
 			h := &Handler{im: service, agentEngine: &compactAPIEngine{conversation: native}, participant: participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{ID: "p", Channel: "csgclaw", Type: "agent", AgentID: "worker", ChannelUserRef: "user-worker"}}))}
 			router := h.Routes()
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, httptest.NewRequest("POST", "/api/v1/rooms/r/context:compact", strings.NewReader(`{"request_id":"reason","agent_ids":["worker"]}`)))
+			router.ServeHTTP(w, httptest.NewRequest("POST", "/api/v1/rooms/r/context:compact", strings.NewReader(`{"request_id":"reason","agent_ids":["worker"],"batch":true}`)))
 			if w.Code != 202 {
 				t.Fatalf("HTTP %d: %s", w.Code, w.Body.String())
 			}
@@ -287,6 +292,60 @@ func TestCompactionFailureReasonSurvivesHTTPRefreshAndRestart(t *testing.T) {
 			}
 			if *room.ContextUsage["user-worker"].UsedTokens != used {
 				t.Fatal("failed compaction changed usage")
+			}
+		})
+	}
+}
+
+func TestSingleCompactionPreStartSkipHasNoMessage(t *testing.T) {
+	for _, tc := range []contract.CompactResult{
+		{Status: "unsupported", Reason: modelcap.CompactionScopedSessionUnsupported},
+		{Status: "busy"}, {Status: "no_history"}, {Status: "unknown"}, {Status: "unnecessary"},
+		{Status: "unavailable", Reason: modelcap.CompactionRestoreFailed},
+	} {
+		t.Run(tc.Status, func(t *testing.T) {
+			used := int64(50000)
+			service := im.NewServiceFromBootstrap(im.Bootstrap{CurrentUserID: "user-admin", Users: []im.User{{ID: "user-admin"}, {ID: "user-worker"}}, Rooms: []im.Room{{ID: "r", Members: []string{"user-admin", "user-worker"}, ContextUsage: map[string]modelcap.ContextUsage{"user-worker": {SessionID: "saved", UsedTokens: &used, ContextWindow: 100000}}}}})
+			gate := make(chan struct{})
+			close(gate)
+			native := &compactAPIConversation{gate: gate, result: &tc}
+			h := &Handler{im: service, agentEngine: &compactAPIEngine{conversation: native}, participant: participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{ID: "p", Channel: "csgclaw", Type: "agent", AgentID: "worker", ChannelUserRef: "user-worker"}}))}
+			router := h.Routes()
+			for i := 0; i < 2; i++ {
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, httptest.NewRequest("POST", "/api/v1/rooms/r/context:compact", strings.NewReader(fmt.Sprintf(`{"request_id":"skip-%d","agent_ids":["worker"]}`, i))))
+				var op modelcap.CompactionOperation
+				_ = json.Unmarshal(w.Body.Bytes(), &op)
+				if w.Code != 200 || op.StartedAt != "" || op.Running || op.Targets[0].Status != tc.Status || op.Targets[0].Reason != tc.Reason {
+					t.Fatalf("HTTP %d result=%+v", w.Code, op)
+				}
+				room, _ := service.Room("r")
+				if len(room.Messages) != 0 {
+					t.Fatal("pre-start skip created a message")
+				}
+			}
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest("POST", "/api/v1/rooms/r/context:compact", strings.NewReader(`{"request_id":"batch","agent_ids":["worker"],"batch":true}`)))
+			if w.Code != 202 {
+				t.Fatalf("batch HTTP %d: %s", w.Code, w.Body.String())
+			}
+			deadline := time.Now().Add(time.Second)
+			for {
+				room, _ := service.Room("r")
+				if len(room.Messages) != 1 {
+					t.Fatal("batch did not create one card")
+				}
+				op := im.MessageCompaction(room.Messages[0])
+				if !op.Running {
+					if !op.Batch || op.Targets[0].Status != tc.Status || op.Targets[0].Reason != tc.Reason {
+						t.Fatalf("batch=%+v", op)
+					}
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("batch stuck")
+				}
+				time.Sleep(time.Millisecond)
 			}
 		})
 	}

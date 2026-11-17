@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,14 +22,25 @@ func (c *conversation) Compact(ctx context.Context, req contract.CompactRequest)
 	defer release()
 	proc.mu.Lock()
 	key := ""
+	scopedSession := false
 	for binding, session := range proc.meta.Sessions {
-		if session == req.Usage.SessionID && contract.LogicalRuntimeSessionKey(binding) == string(req.ConversationKey) {
+		if session != req.Usage.SessionID {
+			continue
+		}
+		logical := contract.LogicalRuntimeSessionKey(binding)
+		if logical == string(req.ConversationKey) {
 			key = binding
 			break
+		}
+		if strings.HasPrefix(logical, string(req.ConversationKey)+":task:") || strings.HasPrefix(logical, string(req.ConversationKey)+":thread:") {
+			scopedSession = true
 		}
 	}
 	proc.mu.Unlock()
 	if key == "" {
+		if scopedSession {
+			return contract.CompactResult{Status: "unsupported", Reason: modelcap.CompactionScopedSessionUnsupported}, nil
+		}
 		return contract.CompactResult{Status: "unavailable", Reason: modelcap.CompactionBindingMissing}, nil
 	}
 	// Resume exactly the saved binding without applying current memory policy or
@@ -70,8 +82,21 @@ func (c *conversation) Compact(ctx context.Context, req contract.CompactRequest)
 	}
 	defer response.Body.Close()
 	var result contract.CompactResult
-	if err = json.NewDecoder(response.Body).Decode(&result); err != nil {
-		return contract.CompactResult{Status: "uncertain"}, nil
+	decoder := json.NewDecoder(response.Body)
+	started := false
+	for {
+		if err = decoder.Decode(&result); err != nil {
+			return contract.CompactResult{Status: "uncertain"}, nil
+		}
+		if result.Status != "running" {
+			break
+		}
+		if !started && req.OnStarted != nil {
+			if err := req.OnStarted(); err != nil {
+				return contract.CompactResult{Status: "uncertain"}, nil
+			}
+		}
+		started = true
 	}
 	if result.Usage != nil {
 		saved := req.Usage
