@@ -68,6 +68,7 @@ import {
   NotifierControls,
   reasoningEffortLabel,
   RuntimeOptionsFields,
+  AgentSaveError,
 } from "@/components/business/ProfileControls";
 import {
   agentProfilePageSaveDisabled,
@@ -1050,17 +1051,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         />
         {error ? <InlineError>{error}</InlineError> : null}
         {visibleSaveError ? (
-          <InlineError className={"whitespace-pre-wrap break-words"} role="alert">
+          <AgentSaveError billingURL={saveBillingURL} t={t}>
             {visibleSaveError}
-            {saveBillingURL ? (
-              <>
-                {" "}
-                <a className="agent-billing-action" href={saveBillingURL} target="_blank" rel="noopener noreferrer">
-                  {t("rechargeAccount")}
-                </a>
-              </>
-            ) : null}
-          </InlineError>
+          </AgentSaveError>
         ) : null}
         {modelSaveBlockedOutsideProfile ? (
           <InlineError role="status" className="flex flex-wrap items-center justify-between gap-2">

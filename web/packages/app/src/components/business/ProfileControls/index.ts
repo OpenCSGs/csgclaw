@@ -15,3 +15,5 @@ export * from "./reasoningLabels";
 export * from "./RuntimeOptionsFields";
 export * from "./types";
 export * from "./utils";
+
+export * from "./AgentSaveError";
