@@ -1,10 +1,30 @@
 import { ModelPicker } from "@/components/business/AgentModelFields";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
-import { Field, Select } from "@/components/ui";
+import { Field, Select, Tooltip } from "@/components/ui";
 import type { AgentDraft } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import { modelProviderAvatarPath, type ModelProviderSelectOption } from "@/models/modelProviders";
+import capabilityUnknownIcon from "./assets/capability-unknown.svg";
+import imageToImageIcon from "./assets/image-to-image.svg";
+import textToImageIcon from "./assets/text-to-image.svg";
 import styles from "./AgentMediaModelFields.module.css";
+
+function ImageCapabilityBadge({ icon, label, description }: { icon: string; label: string; description: string }) {
+  return (
+    <>
+      {" "}
+      <Tooltip disableHoverableContent content={description} contentProps={{ side: "top", sideOffset: 6 }}>
+        <span className={styles.capabilityBadge}>
+          <span className={styles.capabilityIcon} aria-hidden="true">
+            <img src={icon} alt="" />
+          </span>
+          <span aria-hidden="true">{label}</span>
+          <span className="sr-only">{description}</span>
+        </span>
+      </Tooltip>
+    </>
+  );
+}
 
 export function AgentMediaModelFields({
   draft,
@@ -80,13 +100,36 @@ export function AgentMediaModelFields({
             <ModelPicker
               value={imageModelID}
               models={imageModels}
-              modelBadges={(model) => {
+              renderOptionLabel={(model) => {
                 const capabilities = selectedImageProvider?.imageMetadata?.[model];
-                if (!capabilities) return [t("profileImageCapabilityUnknown")];
-                const labels = [];
-                if (capabilities.textToImage) labels.push(t("profileImageCapabilityText"));
-                if (capabilities.imageToImage) labels.push(t("profileImageCapabilityReference"));
-                return labels;
+                return (
+                  <span className={styles.imageModelOption}>
+                    <ModelOptionLabel model={model} showAvatar={false} />{" "}
+                    <span className={styles.capabilityBadges}>
+                      {!capabilities && (
+                        <ImageCapabilityBadge
+                          icon={capabilityUnknownIcon}
+                          label={t("profileImageCapabilityUnknownShort")}
+                          description={t("profileImageCapabilityUnknown")}
+                        />
+                      )}
+                      {capabilities?.textToImage && (
+                        <ImageCapabilityBadge
+                          icon={textToImageIcon}
+                          label={t("profileImageCapabilityTextShort")}
+                          description={t("profileImageCapabilityText")}
+                        />
+                      )}
+                      {capabilities?.imageToImage && (
+                        <ImageCapabilityBadge
+                          icon={imageToImageIcon}
+                          label={t("profileImageCapabilityReferenceShort")}
+                          description={t("profileImageCapabilityReference")}
+                        />
+                      )}
+                    </span>
+                  </span>
+                );
               }}
               disabled={busy || selectedImageProvider?.disabled || !imageProviderID || !imageModels.length}
               label={t("profileImageModel")}
