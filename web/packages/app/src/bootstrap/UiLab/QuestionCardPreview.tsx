@@ -51,6 +51,7 @@ function QuestionCardDemo() {
       <QuestionCard
         title={t("questionRequest")}
         status={t("questionStatusPending")}
+        deadline={t("questionDeadline", { time: "14:30" })}
         questions={questions}
         labels={{
           answer: t("questionAnswer"),

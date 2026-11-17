@@ -1,7 +1,7 @@
 import agentQuestionComposerStyles from "./AgentQuestionComposer.module.css";
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRight, ChevronLeft, ChevronRight, CircleHelp, Clock3, LockKeyhole, Pencil, X } from "lucide-react";
-import { InlineError, TextInput, Button, IconButton } from "@/components/ui";
+import { CircleHelp, Clock3, LockKeyhole, Pencil, X } from "lucide-react";
+import { InlineError, TextInput, Button, IconButton, QuestionCard } from "@/components/ui";
 import { questionOptions } from "@/models/agentActivity";
 import { resolveUserByLocalIdentity, type TranslateFn, type UsersById } from "@/models/conversations";
 import type { QuestionAnswerMode } from "./useQuestionAnswerMode";
@@ -54,7 +54,7 @@ export function AgentQuestionComposer({
   const request = mode.selected.content.question!;
   const question = request.questions[mode.questionIndex];
   const options = questionOptions(question);
-  const currentAnswer = mode.answers[question.id] ?? {};
+  const selectedOption = mode.answers[question.id]?.optionIndex;
   const finalQuestion = mode.questionIndex === request.questions.length - 1;
   const showFreeform = question.is_other || options.length === 0;
   const hasText = mode.text.trim().length > 0;
@@ -72,128 +72,95 @@ export function AgentQuestionComposer({
   }
 
   return (
-    <section className={agentQuestionComposerStyles["question-composer"]} aria-label={t("questionAnswerMode")}>
+    <div className={agentQuestionComposerStyles["question-composer-card"]}>
       {statusSlot}
-      <header className={agentQuestionComposerStyles["question-composer-header"]}>
-        <h2>{question.question}</h2>
-        <nav
-          className={agentQuestionComposerStyles["question-composer-navigation"]}
-          aria-label={t("questionNavigation")}
-        >
-          <QuestionExpirationCountdown autoResolveAt={request.auto_resolve_at} t={t} />
-          <IconButton
-            disabled={mode.busy || mode.questionIndex === 0}
-            icon={<ChevronLeft size={18} />}
-            label={t("questionPrevious")}
-            size="sm"
-            variant="tertiaryColor"
-            onClick={mode.previousQuestion}
-          />
-          <span role="status" aria-live="polite">
-            {t("questionProgressCompact", { current: mode.questionIndex + 1, total: request.questions.length })}
-          </span>
-          <IconButton
-            disabled={mode.busy || finalQuestion}
-            icon={<ChevronRight size={18} />}
-            label={t("questionNext")}
-            size="sm"
-            variant="tertiaryColor"
-            onClick={mode.nextQuestion}
-          />
+      <QuestionCard
+        fullWidth
+        title={question.header || t("questionRequest")}
+        accessibleLabel={t("questionAnswerMode")}
+        questions={request.questions.map((item) => ({
+          id: item.id,
+          prompt: item.question,
+          options: questionOptions(item).map(({ label, description }) => {
+            const recommended = label.endsWith(recommendedSuffix);
+            return {
+              label: recommended ? label.slice(0, -recommendedSuffix.length) : label,
+              description,
+              badge: recommended ? t("questionRecommended") : undefined,
+            };
+          }),
+        }))}
+        labels={{
+          answer: t("questionAnswer"),
+          navigation: t("questionNavigation"),
+          previous: t("questionPrevious"),
+          next: t("questionNext"),
+          progress: (current, total) => t("questionProgressCompact", { current, total }),
+        }}
+        pagination={{
+          index: mode.questionIndex,
+          onChange: (index) => (index < mode.questionIndex ? mode.previousQuestion() : mode.nextQuestion()),
+        }}
+        selection={selectedOption === undefined ? null : { questionId: question.id, optionIndex: selectedOption - 1 }}
+        disabled={mode.busy}
+        optionMode="radio"
+        showAnswer={false}
+        letterShortcuts={false}
+        onAnswer={(_, index) => {
+          if (index !== undefined) mode.chooseOption(index + 1);
+        }}
+        footerMeta={<QuestionExpirationCountdown autoResolveAt={request.auto_resolve_at} t={t} />}
+        footerActions={
           <IconButton
             disabled={mode.busy}
-            icon={<X size={19} />}
+            icon={<X size={16} />}
             label={t("questionClose")}
             size="sm"
             variant="tertiaryColor"
             onClick={mode.closeRequest}
           />
-        </nav>
-      </header>
+        }
+      >
+        {showFreeform ? (
+          <div className={agentQuestionComposerStyles["question-composer-input-row"]}>
+            <span className={agentQuestionComposerStyles["question-input-icon"]}>
+              {question.is_secret ? (
+                <LockKeyhole aria-hidden="true" size={18} />
+              ) : (
+                <Pencil aria-hidden="true" size={18} />
+              )}
+            </span>
+            <TextInput
+              size="sm"
+              key={question.id}
+              autoFocus
+              type={question.is_secret ? "password" : "text"}
+              autoComplete="off"
+              value={mode.text}
+              disabled={mode.busy}
+              aria-label={question.is_secret ? t("questionSecretAnswer") : t("questionFreeformAnswer")}
+              placeholder={question.is_secret ? t("questionSecretPlaceholder") : t("questionTypeAnswer")}
+              onChange={(event) => mode.setText(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  advanceFreeform();
+                }
+              }}
+            />
+            <Button disabled={mode.busy} variant={hasText ? "primary" : "tertiaryGray"} onClick={advanceFreeform}>
+              {hasText ? t("questionNext") : t("questionSkip")}
+            </Button>
+          </div>
+        ) : null}
 
-      {options.length > 0 ? (
-        <div
-          className={agentQuestionComposerStyles["question-composer-options"]}
-          role="radiogroup"
-          aria-label={question.question}
-        >
-          {options.map((option, index) => {
-            const optionIndex = index + 1;
-            const selected = currentAnswer.optionIndex === optionIndex;
-            const recommended = option.label.endsWith(recommendedSuffix);
-            const visibleLabel = recommended ? option.label.slice(0, -recommendedSuffix.length) : option.label;
-            return (
-              <button
-                key={`${optionIndex}:${option.label}`}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                className={`${agentQuestionComposerStyles["question-composer-option"]} ${selected ? "selected" : ""}`}
-                disabled={mode.busy}
-                onClick={() => mode.chooseOption(optionIndex)}
-              >
-                <span className={agentQuestionComposerStyles["question-option-number"]}>{optionIndex}</span>
-                <span className={agentQuestionComposerStyles["question-option-copy"]}>
-                  <span className={agentQuestionComposerStyles["question-option-title"]}>
-                    <strong>{visibleLabel}</strong>
-                    {recommended ? (
-                      <span className={agentQuestionComposerStyles["question-recommended-badge"]}>
-                        {t("questionRecommended")}
-                      </span>
-                    ) : null}
-                  </span>
-                  {option.description ? <small>{option.description}</small> : null}
-                </span>
-                <ArrowRight
-                  className={agentQuestionComposerStyles["question-option-arrow"]}
-                  aria-hidden="true"
-                  size={20}
-                />
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {showFreeform ? (
-        <div className={agentQuestionComposerStyles["question-composer-input-row"]}>
-          <span className={agentQuestionComposerStyles["question-input-icon"]}>
-            {question.is_secret ? (
-              <LockKeyhole aria-hidden="true" size={18} />
-            ) : (
-              <Pencil aria-hidden="true" size={18} />
-            )}
-          </span>
-          <TextInput
-            variant="plain"
-            key={question.id}
-            autoFocus
-            type={question.is_secret ? "password" : "text"}
-            autoComplete="off"
-            value={mode.text}
-            disabled={mode.busy}
-            aria-label={question.is_secret ? t("questionSecretAnswer") : t("questionFreeformAnswer")}
-            placeholder={question.is_secret ? t("questionSecretPlaceholder") : t("questionTypeAnswer")}
-            onChange={(event) => mode.setText(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                advanceFreeform();
-              }
-            }}
-          />
-          <Button disabled={mode.busy} variant={hasText ? "primary" : "tertiaryGray"} onClick={advanceFreeform}>
-            {hasText ? t("questionNext") : t("questionSkip")}
-          </Button>
-        </div>
-      ) : null}
-
-      {mode.error ? (
-        <InlineError className={`${agentQuestionComposerStyles["question-composer-error"]}`} role="alert">
-          {mode.error}
-        </InlineError>
-      ) : null}
-    </section>
+        {mode.error ? (
+          <InlineError className={`${agentQuestionComposerStyles["question-composer-error"]}`} role="alert">
+            {mode.error}
+          </InlineError>
+        ) : null}
+      </QuestionCard>
+    </div>
   );
 }
 

@@ -1,16 +1,24 @@
 .card {
   box-sizing: border-box;
+  container: question-card / inline-size;
   width: 420px;
   max-width: 100%;
   padding: var(--csgclaw-ui-space-4);
   border: 1px solid var(--csgclaw-ui-line);
   border-radius: var(--csgclaw-ui-radius-4xl);
-  background: var(--csgclaw-ui-panel);
+  background: var(
+    --csgclaw-ui-question-card-background,
+    var(--csgclaw-ui-panel)
+  );
   color: var(--csgclaw-ui-text);
   font: var(--csgclaw-ui-font-weight-normal) var(--csgclaw-ui-text-xs-size) /
     1.55 var(--csgclaw-ui-font-family-text);
   letter-spacing: 0.01em;
   overflow-wrap: anywhere;
+}
+
+.fullWidth {
+  width: 100%;
 }
 
 .header {
@@ -38,6 +46,7 @@
 }
 
 .prompt {
+  margin: 0;
   font-size: var(--csgclaw-ui-text-sm-size);
   font-weight: var(--csgclaw-ui-font-weight-semibold);
   line-height: var(--csgclaw-ui-text-sm-semibold-line-height);
@@ -86,7 +95,7 @@
   background: var(--csgclaw-ui-panel-strong);
 }
 
-.option[aria-pressed="true"] {
+.option:is([aria-pressed="true"], [aria-checked="true"]) {
   border-color: var(--csgclaw-ui-primary);
   background: var(--csgclaw-ui-control-selected-background);
 }
@@ -126,6 +135,15 @@
   display: block;
 }
 
+.badge {
+  display: inline-block;
+  margin-top: var(--csgclaw-ui-space-1);
+  padding-inline: var(--csgclaw-ui-space-2);
+  border-radius: var(--csgclaw-ui-radius-sm);
+  background: var(--csgclaw-ui-panel-strong);
+  color: var(--csgclaw-ui-muted);
+}
+
 .optionLabel {
   font-weight: var(--csgclaw-ui-font-weight-medium);
 }
@@ -146,7 +164,7 @@
   border-radius: 50%;
 }
 
-.option[aria-pressed="true"] .indicator {
+.option:is([aria-pressed="true"], [aria-checked="true"]) .indicator {
   border-color: var(--csgclaw-ui-primary);
   background: var(--csgclaw-ui-primary);
   box-shadow: inset 0 0 0 3px var(--csgclaw-ui-panel);
@@ -176,8 +194,28 @@
   font-variant-numeric: tabular-nums;
 }
 
+.deadline > svg {
+  flex: none;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--csgclaw-ui-space-2);
+  max-width: 100%;
+  margin-inline-start: auto;
+}
+
+@container question-card (width < 22rem) {
+  .meta {
+    flex-basis: 100%;
+  }
+}
+
 .navigation {
   display: flex;
+  flex: none;
   gap: 6px;
 }
 
