@@ -87,7 +87,7 @@ enqueue:
 	out := make([]SkillSummary, 0, len(items))
 	for index, item := range items {
 		if present[index] {
-			item.Source = records[item.Name].SourceKind()
+			applySummaryOrigin(&item, records[item.Name])
 			out = append(out, item)
 		}
 	}
@@ -147,7 +147,7 @@ func ListSummariesPage(ctx context.Context, root string, q resourcequery.Query, 
 		if !present {
 			return nil, meta, resourcequery.ErrChanged
 		}
-		item.Source = records[item.Name].SourceKind()
+		applySummaryOrigin(&item, records[item.Name])
 		items = append(items, item)
 	}
 	return items, meta, nil
@@ -192,7 +192,9 @@ func readSkillSummary(ctx context.Context, root *os.Root, name string) (SkillSum
 			break
 		}
 		if strings.TrimSpace(line) == "---" {
-			item.Description, err = parseSkillDescription([]byte(metadata.String()))
+			var parsed skillMetadata
+			parsed, err = parseSkillMetadata([]byte(metadata.String()))
+			item.Description, item.Version = parsed.Description, parsed.Version
 			if err != nil {
 				item.Error = "invalid_metadata"
 			}
@@ -202,4 +204,14 @@ func readSkillSummary(ctx context.Context, root *os.Root, name string) (SkillSum
 	}
 	item.Error = "invalid_metadata"
 	return item, true
+}
+
+func applySummaryOrigin(item *SkillSummary, record skillinstall.Record) {
+	item.Source = record.SourceKind()
+	if item.Source == skillinstall.SourceBuiltin {
+		// Builtin versions are integrity fingerprints rather than release labels.
+		item.Version = ""
+	} else if record.Version != "" {
+		item.Version = record.Version
+	}
 }

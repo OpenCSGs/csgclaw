@@ -23,6 +23,7 @@ var ErrSkillInvalid = errors.New("skill directory must contain SKILL.md")
 
 type SkillSummary struct {
 	Name        string               `json:"name"`
+	Version     string               `json:"version,omitempty"`
 	Description string               `json:"description,omitempty"`
 	Error       string               `json:"error,omitempty"`
 	Source      string               `json:"source,omitempty"`
@@ -90,6 +91,7 @@ func List(root string) ([]SkillSummary, error) {
 		items = append(items, SkillSummary{
 			Install:     origin,
 			Name:        entry.Name(),
+			Version:     metadata.Version,
 			Description: metadata.Description,
 			Source:      records[entry.Name()].SourceKind(),
 			Directory:   absoluteSkillDirectory(filepath.Join(root, entry.Name())),
@@ -224,11 +226,6 @@ func readSkillMetadata(path string) (skillMetadata, error) {
 		return skillMetadata{}, fmt.Errorf("parse skill frontmatter %q: %w", path, err)
 	}
 	return metadata, nil
-}
-
-func parseSkillDescription(frontmatter []byte) (string, error) {
-	meta, err := parseSkillMetadata(frontmatter)
-	return meta.Description, err
 }
 
 func parseSkillMetadata(frontmatter []byte) (skillMetadata, error) {

@@ -12,6 +12,7 @@ export function ResourceListCard({
   icon,
   badge,
   titleBadge,
+  titleMetadata,
   actions,
   active,
   onOpen,
@@ -22,12 +23,15 @@ export function ResourceListCard({
   icon: ReactNode;
   badge?: ReactNode;
   titleBadge?: ReactNode;
+  titleMetadata?: string;
   actions?: ReactNode;
   active?: boolean;
   onOpen: () => void;
 }) {
   return (
-    <article className={`${styles.card} ${active ? styles.active : ""}`}>
+    <article
+      className={`${styles.card} ${active ? styles.active : ""} ${titleMetadata ? styles.withTitleMetadata : ""}`}
+    >
       <button
         type="button"
         data-csg-control="resource-card"
@@ -44,6 +48,11 @@ export function ResourceListCard({
               {title}
             </span>
             {titleBadge}
+            {titleMetadata ? (
+              <span className={styles.titleMetadata} title={titleMetadata}>
+                {titleMetadata}
+              </span>
+            ) : null}
           </span>
           <span className={styles.description}>{description || title}</span>
           {badge}

@@ -102,6 +102,26 @@
   min-width: 0;
   max-width: 45%;
 }
+.withTitleMetadata .titleRow {
+  flex-wrap: nowrap;
+  column-gap: 10px;
+}
+.withTitleMetadata .title {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+.titleMetadata {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 60%;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 @media (max-width: 720px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);

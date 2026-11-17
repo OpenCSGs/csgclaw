@@ -49,7 +49,10 @@ func workspaceSkillSummaries(ctx context.Context, root string, agent Agent, item
 				}
 			}
 		}
-		out = append(out, contract.SkillSummary{Enabled: skill.Enabled(agent.SkillStates, item.Name), Name: item.Name, Description: item.Description, Source: item.Source, Error: item.Error})
+		if item.Source == skillinstall.SourceBuiltin {
+			item.Version = ""
+		}
+		out = append(out, contract.SkillSummary{Enabled: skill.Enabled(agent.SkillStates, item.Name), Name: item.Name, Version: item.Version, Description: item.Description, Source: item.Source, Error: item.Error})
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

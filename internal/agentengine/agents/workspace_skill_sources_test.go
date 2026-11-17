@@ -248,3 +248,15 @@ func TestWorkspaceSkillSourceUnavailableFilesRemainUnknown(t *testing.T) {
 		t.Fatalf("missing bundle summary = %+v, %v", summaries, err)
 	}
 }
+
+func TestWorkspaceSkillSummariesIncludeAgentCopyVersion(t *testing.T) {
+	workspace, agent, root := newSkillSourceWorkspace(t, RuntimeKindCodex, RoleWorker)
+	writeWorkspaceFileAt(t, root, "release/SKILL.md", "---\ndescription: Agent copy\nversion: 9.0.0\n---\n", 0600)
+	if err := skillinstall.Update(root, "release", &skillinstall.Record{Source: skillinstall.SourceMarket, Version: "v1.2.3"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	items, err := workspace.SkillSummaries(context.Background(), agent.ID)
+	if err != nil || len(items) != 1 || items[0].Version != "v1.2.3" || items[0].Source != skillinstall.SourceMarket {
+		t.Fatalf("agent metadata=%+v err=%v", items, err)
+	}
+}

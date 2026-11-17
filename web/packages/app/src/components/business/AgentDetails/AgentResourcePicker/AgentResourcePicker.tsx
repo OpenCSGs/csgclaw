@@ -9,6 +9,7 @@ import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
 import { knowledgeBaseMCPServer } from "@/models/knowledgeBases";
 import { isRemoteMCPInstalled, mcpManagedKnowledgeBaseSource, mcpServerDisplayName } from "@/models/mcp";
 import type { SkillSummary } from "@/models/skillhub";
+import { skillMetadataLabel } from "@/models/skillLibrary";
 import { ResourceFeaturedIcon } from "@/components/business/ResourceListCard";
 import { SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/business/Icons";
 import { SkillMarketPreview } from "./SkillMarketPreview";
@@ -72,13 +73,19 @@ export function AgentResourcePicker({
     kind === "skill"
       ? picker.skills
           .filter((skill) => !picker.enabledNames.has(skill.name))
-          .map((skill) => ({ name: skill.name, label: skill.name, description: skill.description }))
+          .map((skill) => ({
+            name: skill.name,
+            label: skill.name,
+            description: skill.description,
+            metadata: skillMetadataLabel(skill, t),
+          }))
       : picker.globalServers
           .filter((server) => Boolean(mcpManagedKnowledgeBaseSource(server.config)) === (kind === "knowledge"))
           .map((server) => ({
             name: server.name,
             label: mcpServerDisplayName(server),
             description: server.description,
+            metadata: undefined,
           }));
   const visibleLibrary = knowledgeReady ? library.filter((item) => match(item.label, item.description)) : [];
   async function finish(operation: Promise<boolean>) {
@@ -103,6 +110,7 @@ export function AgentResourcePicker({
           name: skill.name,
           recommended: skill.recommended,
           description: skill.description,
+          metadata: skillMetadataLabel(skill, t),
           installed: false,
           actionLabel: skillActionLabel(skill),
           update: picker.skillAction(skill) === "replace",
@@ -116,6 +124,7 @@ export function AgentResourcePicker({
             name: server.name,
             recommended: server.recommended,
             description: server.description,
+            metadata: undefined,
             installed: picker.globalServers.some(
               (item) => picker.enabledNames.has(item.name) && isRemoteMCPInstalled([item], server),
             ),
@@ -131,6 +140,7 @@ export function AgentResourcePicker({
               name: item.name,
               recommended: item.recommended,
               description: item.unavailableReason || item.description,
+              metadata: undefined,
               installed: false,
               actionLabel: undefined,
               unavailable: item.availability !== "available",
@@ -275,6 +285,7 @@ export function AgentResourcePicker({
                       <ResourcePickerCopy
                         name={item.label + (enabled ? ` · ${t("profileResourceEnabled")}` : "")}
                         description={item.description}
+                        metadata={item.metadata}
                       />
                     </ResourcePickerRow>
                   );
@@ -321,6 +332,7 @@ export function AgentResourcePicker({
                             item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null
                           }
                           description={item.description}
+                          metadata={item.metadata}
                           onOpen={item.open}
                         />
                         <Button
