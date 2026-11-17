@@ -3446,6 +3446,22 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 		_, _ = fmt.Fprintln(os.Stderr, "api_key = sk-secret")
 		_, _ = fmt.Fprintln(os.Stderr, "provider rejected", os.Getenv("OPENAI_API_KEY"))
 		os.Exit(2)
+	case "compaction-history-error", "compaction-history-invalid":
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			params, _ := msg["params"].(map[string]any)
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "thread/resume":
+				return rpcResult(msg["id"], map[string]any{"threadId": params["threadId"]}), true
+			case "thread/read":
+				if mode == "compaction-history-error" {
+					return rpcError(msg["id"], -32000, "history inaccessible"), true
+				}
+				return rpcResult(msg["id"], "invalid-history"), true
+			}
+			return nil, false
+		})
 	case "resume-fallback":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {

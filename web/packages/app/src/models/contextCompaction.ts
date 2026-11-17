@@ -6,6 +6,7 @@ export type CompactionTarget = {
   user_id: string;
   name: string;
   status: string;
+  reason?: string;
   before?: ContextUsage;
   after?: ContextUsage;
 };
@@ -31,6 +32,7 @@ export function messageCompaction(message: IMMessage): CompactionOperation | und
         typeof target !== "object" ||
         typeof target.agent_id !== "string" ||
         typeof target.name !== "string" ||
+        (target.reason !== undefined && typeof target.reason !== "string") ||
         typeof target.status !== "string",
     )
   )

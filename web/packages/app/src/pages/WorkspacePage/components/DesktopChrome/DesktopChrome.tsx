@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { useEffect, useState, type PropsWithChildren } from "react";
-import { ArrowLeft, ArrowRight, PanelLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight, PanelLeft, RotateCw } from "lucide-react";
 import { Button, Tooltip } from "@/components/ui";
 import { getDesktopBridge, type DesktopPlatform } from "@/shared/platform/desktopBridge";
 import type { TranslateFn } from "@/models/conversations";
@@ -51,6 +51,18 @@ export function DesktopChrome({
       <header className={styles.titlebar} data-focused={focused} aria-label={t("desktopTitlebar")}>
         <div className={styles.leading}>
           <DesktopHistoryControls t={t} />
+          <Tooltip content={`${t("desktopReload")} (${platform === "darwin" ? "⌘R" : "Ctrl+R / F5"})`}>
+            <Button
+              size="sm"
+              variant="tertiaryGray"
+              iconOnly
+              aria-label={t("desktopReload")}
+              aria-keyshortcuts={platform === "darwin" ? "Meta+R" : "Control+R F5"}
+              onClick={() => window.location.reload()}
+            >
+              <RotateCw size={16} />
+            </Button>
+          </Tooltip>
           <Tooltip content={t(collapsed ? "expandSidebar" : "collapseSidebar")}>
             <Button
               size="sm"

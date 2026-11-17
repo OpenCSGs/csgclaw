@@ -29,7 +29,7 @@ func (c *conversation) Compact(ctx context.Context, req contract.CompactRequest)
 	}
 	proc.mu.Unlock()
 	if key == "" {
-		return contract.CompactResult{Status: "unavailable"}, nil
+		return contract.CompactResult{Status: "unavailable", Reason: modelcap.CompactionBindingMissing}, nil
 	}
 	// Resume exactly the saved binding without applying current memory policy or
 	// creating another native conversation.
@@ -39,7 +39,7 @@ func (c *conversation) Compact(ctx context.Context, req contract.CompactRequest)
 	if !ready {
 		var resumed sessionResult
 		if err := proc.client.call(ctx, "session/resume", map[string]any{"sessionId": req.Usage.SessionID, "cwd": proc.workspace, "mcpServers": proc.mcp}, &resumed, nil); err != nil {
-			return contract.CompactResult{Status: "unavailable"}, nil
+			return contract.CompactResult{Status: "unavailable", Reason: modelcap.CompactionRestoreFailed}, nil
 		}
 		proc.mu.Lock()
 		proc.ready[req.Usage.SessionID] = true

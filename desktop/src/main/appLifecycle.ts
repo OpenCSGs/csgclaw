@@ -516,6 +516,16 @@ export class AppLifecycle {
         ],
       },
       {
+        label: "View",
+        submenu: [
+          {
+            label: "Reload",
+            accelerator: "Command+R",
+            click: () => this.windowManager?.window?.webContents.reload(),
+          },
+        ],
+      },
+      {
         label: "Window",
         submenu: [
           { label: "Open CSGClaw", accelerator: "CmdOrCtrl+Shift+O", click: () => this.show() },

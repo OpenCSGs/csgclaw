@@ -6,7 +6,7 @@ import path from "node:path";
 import { runInNewContext } from "node:vm";
 import { DesktopIPC } from "../shared/desktopBridge.types";
 // The options are pure; Electron's Node module export is not used by this helper.
-import { windowChromeOptions } from "./windowChrome";
+import { isDesktopReloadShortcut, windowChromeOptions } from "./windowChrome";
 test("macOS chrome keeps native traffic lights inside the application toolbar", () => {
   const options = windowChromeOptions("darwin", true);
   assert.equal(options.titleBarStyle, "hidden");
@@ -44,21 +44,26 @@ test("onboarding controls match the paper background even when the application i
 
 function createChromeHarness() {
   let destroyed = false;
+  let focused = true;
   type Sender = { sender: unknown; senderFrame: { url: string } };
   const handlers = new Map<
     string,
     (event: Sender, input?: unknown) => unknown
   >();
   const overlays: unknown[] = [];
+  let reloads = 0;
+  let rendererFocuses = 0;
   const webContents = Object.assign(new EventEmitter(), {
     mainFrame: { url: "http://localhost:18080/" },
     isDestroyed: () => destroyed,
     send: () => undefined,
+    reload: () => reloads++,
+    focus: () => rendererFocuses++,
   });
   const window = Object.assign(new EventEmitter(), {
     webContents,
     isDestroyed: () => destroyed,
-    isFocused: () => true,
+    isFocused: () => focused,
     isFullScreen: () => false,
     setBackgroundColor: () => undefined,
     setTitleBarOverlay: (value: unknown) => overlays.push(value),
@@ -111,7 +116,17 @@ function createChromeHarness() {
   const sender = { sender: webContents, senderFrame: webContents.mainFrame };
   const change = (input: unknown, event: Sender = sender) =>
     handlers.get(DesktopIPC.setWindowChromeAppearance)!(event, input);
-  return { window, webContents, nativeTheme, overlays, handlers, change };
+  return {
+    window,
+    webContents,
+    nativeTheme,
+    overlays,
+    handlers,
+    change,
+    reloads: () => reloads,
+    setFocused: (value: boolean) => { focused = value; },
+    rendererFocuses: () => rendererFocuses,
+  };
 }
 
 test("temporary chrome survives system-theme changes and restores the latest theme", () => {
@@ -181,4 +196,39 @@ test("window destruction removes IPC and listeners without accessing the destroy
   assert.equal(h.handlers.size, 0);
   assert.equal(h.nativeTheme.listenerCount("updated"), 0);
   assert.equal(h.webContents.listenerCount("did-start-navigation"), 0);
+  assert.equal(h.webContents.listenerCount("before-input-event"), 0);
+  assert.equal(h.webContents.listenerCount("did-finish-load"), 0);
+});
+
+test("a reloaded document regains focus without activating a background window", () => {
+  const h = createChromeHarness();
+  h.webContents.emit("did-finish-load");
+  assert.equal(h.rendererFocuses(), 1);
+  h.setFocused(false);
+  h.webContents.emit("did-finish-load");
+  assert.equal(h.rendererFocuses(), 1);
+});
+
+test("Reload uses the platform shortcut and ignores key-up and modified commands", () => {
+  const input = { type: "keyDown", key: "r", control: false, meta: false, alt: false, shift: false } as Electron.Input;
+  assert.equal(isDesktopReloadShortcut({ ...input, meta: true }, "darwin"), true);
+  assert.equal(isDesktopReloadShortcut({ ...input, control: true }, "darwin"), false);
+  for (const platform of ["win32", "linux"] as const) {
+    assert.equal(isDesktopReloadShortcut({ ...input, control: true }, platform), true);
+    assert.equal(isDesktopReloadShortcut({ ...input, key: "F5" }, platform), true);
+    assert.equal(isDesktopReloadShortcut({ ...input, meta: true }, platform), false);
+    for (const ignored of [{ type: "keyUp" }, { alt: true }, { shift: true }])
+      assert.equal(isDesktopReloadShortcut({ ...input, control: true, ...ignored } as Electron.Input, platform), false);
+  }
+});
+
+test("Reload only reloads the renderer once per key press", () => {
+  const h = createChromeHarness();
+  let prevented = 0;
+  const event = { preventDefault: () => prevented++ };
+  const input = { type: "keyDown", key: "r", control: true, meta: false, alt: false, shift: false };
+  h.webContents.emit("before-input-event", event, input);
+  h.webContents.emit("before-input-event", event, { ...input, isAutoRepeat: true });
+  assert.equal(prevented, 2);
+  assert.equal(h.reloads(), 1);
 });

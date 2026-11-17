@@ -27,6 +27,41 @@ const usage: ContextUsage = {
   updated_at: "",
 };
 describe("compaction results", () => {
+  it.each([
+    ["session_binding_missing", "会话绑定与上下文统计不一致", "Send this Agent a message"],
+    ["session_identity_changed", "运行时返回了不同的会话", "Send this Agent a message"],
+    ["session_restore_failed", "无法恢复原会话", "export that turn's execution diagnostics"],
+    ["session_history_unreadable", "读取原会话历史失败", "Try again later"],
+    ["session_history_invalid", "会话历史格式异常", "Check the Codex runtime version"],
+    ["agent_unavailable", "在「智能体」检查", "Check this Agent in Agents"],
+    ["member_removed", "在房间成员列表确认", "Check the room member list"],
+  ])("explains %s with actionable guidance in both languages", (reason, zh, en) => {
+    const saved = JSON.parse(
+      JSON.stringify({
+        ...operation,
+        targets: [{ ...operation.targets[0], status: "unavailable", reason }],
+      }),
+    ) as CompactionOperation;
+    const view = render(<ContextCompactionCard operation={saved} t={t} />);
+    expect(screen.getByText(new RegExp(zh))).toBeInTheDocument();
+    expect(screen.queryByText(/刷新/)).not.toBeInTheDocument();
+    view.rerender(<ContextCompactionCard operation={saved} t={createTranslator("en")} />);
+    expect(screen.getByText(new RegExp(en))).toBeInTheDocument();
+    expect(screen.queryByText(/Refresh|contextCompactReason_/)).not.toBeInTheDocument();
+  });
+  it("does not invent a specific cause when a saved result has no recognized reason", () => {
+    render(
+      <ContextCompactionCard
+        operation={{
+          ...operation,
+          targets: [{ ...operation.targets[0], status: "unavailable", reason: "unrecognized" }],
+        }}
+        t={t}
+      />,
+    );
+    expect(screen.getByText(/无法访问原会话/)).toHaveTextContent("导出该轮执行诊断");
+    expect(screen.queryByText(/刷新/)).not.toBeInTheDocument();
+  });
   it("explains missing measurements without duplicated completion or a false promise", () => {
     render(
       <ContextCompactionCard

@@ -122,6 +122,7 @@ func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map
 		}
 		if !slices.Contains(room.Members, target.UserID) {
 			target.Status = "unavailable"
+			target.Reason = modelcap.CompactionMemberRemoved
 			continue
 		}
 		currentUsage, exists := room.ContextUsage[target.UserID]
@@ -152,8 +153,12 @@ func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map
 			target.Status = "failed"
 			if nativeErr, ok := err.(*contract.TurnError); ok {
 				switch nativeErr.Code {
-				case contract.ErrorAgentUnavailable, contract.ErrorConversationNotResumable:
+				case contract.ErrorAgentUnavailable:
 					target.Status = "unavailable"
+					target.Reason = modelcap.CompactionAgentUnavailable
+				case contract.ErrorConversationNotResumable:
+					target.Status = "unavailable"
+					target.Reason = modelcap.CompactionRestoreFailed
 				case contract.ErrorConversationBusy:
 					target.Status = "busy"
 				}
@@ -163,6 +168,7 @@ func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map
 			}
 		} else {
 			target.Status = result.Status
+			target.Reason = result.Reason
 			target.After = modelcap.CloneUsage(result.Usage)
 		}
 		// Recheck epoch after the asynchronous boundary before saving any counters.

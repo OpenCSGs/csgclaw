@@ -12,6 +12,18 @@ import {
 import { isTrustedMainFrame } from "./navigationPolicy";
 
 export const desktopTitlebarHeight = 48;
+
+export function isDesktopReloadShortcut(
+  input: Electron.Input,
+  platform: NodeJS.Platform,
+): boolean {
+  if (input.type !== "keyDown" || input.alt || input.shift) return false;
+  if (input.key.toLowerCase() === "r")
+    return platform === "darwin"
+      ? input.meta && !input.control
+      : input.control && !input.meta;
+  return platform !== "darwin" && input.key === "F5" && !input.control && !input.meta;
+}
 export function windowChromeOptions(
   platform: NodeJS.Platform,
   dark: boolean,
@@ -98,6 +110,18 @@ export function installWindowChrome(
     updateTheme();
   };
   webContents.on("did-start-navigation", resetAppearance);
+  const reload = (event: Electron.Event, input: Electron.Input) => {
+    if (!isDesktopReloadShortcut(input, process.platform)) return;
+    event.preventDefault();
+    if (!input.isAutoRepeat) webContents.reload();
+  };
+  webContents.on("before-input-event", reload);
+  // A replaced main document must regain renderer focus after a native Reload.
+  // Do not activate a background window when a navigation finishes.
+  const restoreRendererFocus = () => {
+    if (!window.isDestroyed() && window.isFocused()) webContents.focus();
+  };
+  webContents.on("did-finish-load", restoreRendererFocus);
   nativeTheme.on("updated", updateTheme);
   window.on("focus", publish);
   window.on("blur", publish);
@@ -108,5 +132,7 @@ export function installWindowChrome(
     ipcMain.removeHandler(DesktopIPC.getWindowState);
     ipcMain.removeHandler(DesktopIPC.setWindowChromeAppearance);
     webContents.removeListener("did-start-navigation", resetAppearance);
+    webContents.removeListener("before-input-event", reload);
+    webContents.removeListener("did-finish-load", restoreRendererFocus);
   });
 }
