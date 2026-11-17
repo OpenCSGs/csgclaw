@@ -62,7 +62,15 @@ function setup(
     }
     if (path === "/api/v1/skills/remote") {
       return Response.json({
-        items: [{ name: "Review", description: "Review changes", remote_path: "team/review", remote_ref: "main" }],
+        items: [
+          {
+            name: "Review",
+            description: "Review changes",
+            remote_path: "team/review",
+            remote_ref: "main",
+            version: "1.4.2",
+          },
+        ],
         total: 1,
       });
     }
@@ -332,3 +340,15 @@ describe("Agent skill market preview", () => {
     expect(screen.getByRole("button", { name: t("iaSkillsUpdate") })).toHaveClass("btn-secondary-gray");
   });
 });
+
+it.each(["zh", "en"] as const)(
+  "shows the market version in the Agent skill picker and preview in %s",
+  async (locale) => {
+    const { user, t } = setup(locale);
+    await user.click(screen.getByRole("radio", { name: t("profileSkillMarket") }));
+    const row = await screen.findByRole("button", { name: "Review" });
+    expect(within(row).getByText(`${t("iaSkillsBadgeMarket")} · v1.4.2`)).toBeInTheDocument();
+    await user.click(row);
+    expect(within(screen.getAllByRole("dialog").at(-1)!).getByText("v1.4.2")).toBeInTheDocument();
+  },
+);

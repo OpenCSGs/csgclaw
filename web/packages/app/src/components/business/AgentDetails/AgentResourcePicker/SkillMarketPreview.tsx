@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { SkillDetailFiles } from "@/components/business/SkillDetailFiles";
 import type { SkillSummary } from "@/models/skillhub";
+import { skillLibraryVersion, skillVersionLabel } from "@/models/skillLibrary";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./SkillMarketPreview.module.css";
 
@@ -61,6 +62,9 @@ export function SkillMarketPreview({
             <div className={styles.titleRow}>
               <DialogTitle>{skill.name}</DialogTitle>
               <span className={styles.origin}>{t("profileSkillMarket")}</span>
+              <span className={styles.origin}>
+                {skillVersionLabel(skillLibraryVersion(skill)) || t("iaSkillsUnversioned")}
+              </span>
             </div>
             <DialogDescription>{skill.description || skill.name}</DialogDescription>
           </div>

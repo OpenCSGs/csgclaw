@@ -269,6 +269,7 @@ export type AgentSkillSummary = {
   description?: string;
   error?: string;
   source?: string;
+  version?: string;
 };
 
 export function fetchAgentSkillSummaries(agentID: string, signal?: AbortSignal): Promise<AgentSkillSummary[]> {

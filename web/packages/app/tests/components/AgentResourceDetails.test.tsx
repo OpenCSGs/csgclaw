@@ -143,3 +143,11 @@ it.each([true, false])("ignores the previous probe result after reopening (succe
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "测试连接" })).toBeEnabled();
 });
+
+it("shows the Agent copy's installed version alongside its source", () => {
+  render(<AgentResourceDetails {...props} skill={{ name: "alpha", source: "market", version: "1.2.3" }} />, {
+    wrapper: createQueryWrapper().wrapper,
+  });
+  expect(screen.getByText("技能市场")).toBeInTheDocument();
+  expect(screen.getByText("v1.2.3")).toBeInTheDocument();
+});

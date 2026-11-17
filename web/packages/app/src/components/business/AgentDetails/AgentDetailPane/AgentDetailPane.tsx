@@ -111,6 +111,7 @@ import type { LocaleCode } from "@/models/conversations";
 import { mcpServerDisplayName } from "@/models/mcp";
 import type { MCPServer } from "@/models/mcp";
 import type { SlashSkillOption } from "@/models/slashCommands";
+import { skillMetadataLabel } from "@/models/skillLibrary";
 import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { renderMarkdown } from "@/components/business/MessageContent/markdown";
 import "@/components/business/MessageContent/MessageContent.css";
@@ -2566,6 +2567,7 @@ function AgentSkillsPanel({
               key={skill.name}
               title={skill.name}
               description={skill.description}
+              titleMetadata={skillMetadataLabel(skill, t)}
               icon={<AgentSkillFeaturedIcon />}
               onOpen={() => onOpenDetail(skill)}
               actions={

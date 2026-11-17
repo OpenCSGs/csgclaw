@@ -1,4 +1,5 @@
 import { skillOriginKind, type SkillSummary } from "./skillhub";
+import type { TranslateFn } from "./conversations";
 
 export function skillDirectory(skill: SkillSummary): string {
   return skill.directory?.trim() || skill.discovery?.path.trim() || "";
@@ -14,7 +15,25 @@ export function skillLibrarySource(skill: SkillSummary): string {
 // Builtin installation versions are integrity fingerprints, not release labels.
 export function skillLibraryVersion(skill: SkillSummary): string {
   const source = skillLibrarySource(skill);
-  return source === "builtin" || source === "system" ? "" : skill.install?.version || skill.discovery?.version || "";
+  return source === "builtin" || source === "system"
+    ? ""
+    : skill.install?.version || skill.discovery?.version || skill.version || "";
+}
+
+export function skillMetadataLabel(skill: SkillSummary, t: TranslateFn): string {
+  const origin = skillOriginKind({ ...skill, source: skill.install?.source || skill.source });
+  const source =
+    skill.discovery?.tool ||
+    t(
+      {
+        builtin: "iaSkillsBadgeBuiltin",
+        market: "iaSkillsBadgeMarket",
+        local: "iaSkillsBadgeLocal",
+        unknown: "profileSkillSourceUnknown",
+      }[origin],
+    );
+  const version = skillVersionLabel(skillLibraryVersion(skill));
+  return origin === "builtin" ? source : `${source} · ${version || t("iaSkillsUnversioned")}`;
 }
 
 // A deduplicated skill remains discoverable under every app that installed it,

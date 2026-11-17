@@ -64,28 +64,42 @@ export function ResourcePickerCopy({
   name,
   titleBadge,
   description,
+  metadata,
   onOpen,
 }: {
   name: string;
   titleBadge?: ReactNode;
   description?: string;
+  metadata?: string;
   onOpen?: (trigger: HTMLButtonElement) => void;
 }) {
   const copy = (
     <>
-      <strong>
-        {name}
+      <span className={styles.copyHeading}>
+        <strong className={styles.name} title={name}>
+          {name}
+        </strong>
         {titleBadge}
-      </strong>
-      <span>{description}</span>
+        {metadata ? (
+          <span className={styles.metadata} title={metadata}>
+            {metadata}
+          </span>
+        ) : null}
+      </span>
+      <span className={styles.copyDescription}>{description}</span>
     </>
   );
   return onOpen ? (
-    <button type="button" className={styles.copy} aria-label={name} onClick={(event) => onOpen(event.currentTarget)}>
+    <button
+      type="button"
+      className={classNames(styles.copy, metadata && styles.withMetadata)}
+      aria-label={name}
+      onClick={(event) => onOpen(event.currentTarget)}
+    >
       {copy}
     </button>
   ) : (
-    <span className={styles.copy}>{copy}</span>
+    <span className={classNames(styles.copy, metadata && styles.withMetadata)}>{copy}</span>
   );
 }
 

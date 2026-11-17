@@ -1,3 +1,4 @@
+import { createTranslator } from "@/shared/i18n";
 import { describe, expect, it } from "vitest";
 import {
   matchesSkillQuery,
@@ -7,6 +8,7 @@ import {
   skillSourceDirectories,
   skillVersionLabel,
   skillLibraryVersion,
+  skillMetadataLabel,
 } from "@/models/skillLibrary";
 import type { SkillSummary } from "@/models/skillhub";
 const shared: SkillSummary = {
@@ -103,4 +105,17 @@ describe("selected skill version sources", () => {
     ).toBe("2.7.0");
     expect(skillLibraryVersion({ ...shared, discovery: { ...shared.discovery!, version: "0.9.1" } })).toBe("0.9.1");
   });
+});
+
+it("formats the selected copy's source and version without exposing builtin fingerprints", () => {
+  const t = createTranslator("zh");
+  expect(skillMetadataLabel({ name: "copy", source: "market", version: "1.2.3" }, t)).toBe("技能市场 · v1.2.3");
+  expect(
+    skillMetadataLabel(
+      { name: "copy", source: "local", version: "9.0.0", install: { source: "local", version: "1.0.0" } },
+      t,
+    ),
+  ).toBe("本地上传 · v1.0.0");
+  expect(skillMetadataLabel({ name: "copy", source: "builtin", version: "a".repeat(64) }, t)).toBe("内建");
+  expect(skillMetadataLabel({ name: "copy", source: "unknown" }, t)).toBe("来源未知 · 未声明版本");
 });

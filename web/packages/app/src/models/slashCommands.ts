@@ -11,6 +11,7 @@ export type SlashSkillOption = {
   description?: string;
   name: string;
   source?: string;
+  version?: string;
 };
 
 export type SlashPickerCandidate = {
