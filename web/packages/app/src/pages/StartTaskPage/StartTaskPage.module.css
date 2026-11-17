@@ -61,6 +61,7 @@
   position: relative;
 }
 .composer {
+  --composer-content-inset: 16px;
   container: start-task-composer / inline-size;
   display: flex;
   flex-direction: column;
@@ -132,7 +133,23 @@
   align-items: flex-start;
   gap: 6px;
   min-height: 148px;
-  padding: 16px 16px 8px;
+  padding: 16px var(--composer-content-inset) 8px;
+}
+.actionSuggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 0 var(--composer-content-inset) 6px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+.actionSuggestions .suggestionButton {
+  --button-shadow: none;
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: inherit;
 }
 .promptEditor {
   position: relative;
