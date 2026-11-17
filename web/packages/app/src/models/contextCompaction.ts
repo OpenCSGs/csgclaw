@@ -1,4 +1,4 @@
-import type { IMConversation, IMMessage } from "./conversations";
+import type { IMConversation, IMMessage, TranslateFn } from "./conversations";
 import type { ContextUsage } from "./modelMetadata";
 
 export type CompactionTarget = {
@@ -15,6 +15,7 @@ export type CompactionOperation = {
   id: string;
   epoch: number;
   running: boolean;
+  batch?: boolean;
   started_at: string;
   finished_at?: string;
   targets: CompactionTarget[];
@@ -37,6 +38,7 @@ export function messageCompaction(message: IMMessage): CompactionOperation | und
     )
   )
     return;
+  if (op.batch !== undefined && typeof op.batch !== "boolean") return;
   if (op.revision !== undefined && (!Number.isSafeInteger(op.revision) || op.revision < 0)) return;
   return op as CompactionOperation;
 }
@@ -62,4 +64,23 @@ export function newerCompactionMessage<T extends IMMessage>(previous: T, incomin
   if (!old || !next || old.id !== next.id || (old.epoch ?? 0) !== (next.epoch ?? 0)) return incoming;
   if ((old.revision ?? 0) > (next.revision ?? 0) || (!old.running && next.running)) return previous;
   return incoming;
+}
+
+const failureReasons = new Set([
+  "scoped_session_unsupported",
+  "session_binding_missing",
+  "session_identity_changed",
+  "session_restore_failed",
+  "session_history_unreadable",
+  "session_history_invalid",
+  "agent_unavailable",
+  "member_removed",
+]);
+
+export function compactionTargetNotice(target: CompactionTarget, t: TranslateFn): string {
+  return t(
+    ["unavailable", "unsupported"].includes(target.status) && target.reason && failureReasons.has(target.reason)
+      ? `contextCompactReason_${target.reason}`
+      : `contextCompactStatus_${target.status}`,
+  );
 }

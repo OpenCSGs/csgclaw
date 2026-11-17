@@ -5,6 +5,7 @@ type CompactionOperation struct {
 	Revision   uint64             `json:"revision"`
 	ID         string             `json:"id"`
 	Epoch      uint64             `json:"epoch"`
+	Batch      bool               `json:"batch,omitempty"`
 	Running    bool               `json:"running"`
 	StartedAt  string             `json:"started_at"`
 	FinishedAt string             `json:"finished_at,omitempty"`
@@ -25,13 +26,14 @@ type CompactionTarget struct {
 type CompactionFailureReason string
 
 const (
-	CompactionBindingMissing    CompactionFailureReason = "session_binding_missing"
-	CompactionIdentityChanged   CompactionFailureReason = "session_identity_changed"
-	CompactionRestoreFailed     CompactionFailureReason = "session_restore_failed"
-	CompactionHistoryUnreadable CompactionFailureReason = "session_history_unreadable"
-	CompactionHistoryInvalid    CompactionFailureReason = "session_history_invalid"
-	CompactionAgentUnavailable  CompactionFailureReason = "agent_unavailable"
-	CompactionMemberRemoved     CompactionFailureReason = "member_removed"
+	CompactionScopedSessionUnsupported CompactionFailureReason = "scoped_session_unsupported"
+	CompactionBindingMissing           CompactionFailureReason = "session_binding_missing"
+	CompactionIdentityChanged          CompactionFailureReason = "session_identity_changed"
+	CompactionRestoreFailed            CompactionFailureReason = "session_restore_failed"
+	CompactionHistoryUnreadable        CompactionFailureReason = "session_history_unreadable"
+	CompactionHistoryInvalid           CompactionFailureReason = "session_history_invalid"
+	CompactionAgentUnavailable         CompactionFailureReason = "agent_unavailable"
+	CompactionMemberRemoved            CompactionFailureReason = "member_removed"
 )
 
 func ManualCompactionEligible(u *ContextUsage) bool {

@@ -1,4 +1,4 @@
-import { render, screen, within, waitFor } from "@testing-library/react";
+import { act, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TaskConversationControls } from "../TaskConversationControls";
@@ -150,13 +150,15 @@ it("submits one scoped operation and shows the returned result", async () => {
     id: "request",
     epoch: 0,
     running: false,
-    started_at: "",
+    started_at: "2026-11-17T00:00:00Z",
     targets: [{ agent_id: "agent-0", user_id: "u-0", name: "Agent 0", status: "no_history" }],
   });
   render(<TaskConversationControls agents={agents} t={t} participants={participants} conversation={room} />);
   await userEvent.click(screen.getByRole("button", { name: "上下文已使用 20%" }));
   await userEvent.click(screen.getByRole("button", { name: "压缩上下文" }));
-  await waitFor(() => expect(compactRoomContext).toHaveBeenCalledWith("room-one", ["agent-0"], expect.any(String)));
+  await waitFor(() =>
+    expect(compactRoomContext).toHaveBeenCalledWith("room-one", ["agent-0"], expect.any(String), false),
+  );
   expect(screen.queryByText("暂无可压缩的历史，无需压缩")).not.toBeInTheDocument();
 });
 
@@ -264,7 +266,7 @@ it("keeps a current-epoch response pending until its status card arrives", async
     id: "current-operation",
     epoch: 1,
     running: true,
-    started_at: "",
+    started_at: "2026-11-17T00:00:00Z",
     targets: [],
   };
   vi.mocked(compactRoomContext).mockResolvedValueOnce(operation);
@@ -275,7 +277,8 @@ it("keeps a current-epoch response pending until its status card arrives", async
   await userEvent.click(screen.getByRole("button", { name: "上下文已使用 20%" }));
   await userEvent.click(screen.getByRole("button", { name: "压缩上下文" }));
   await waitFor(() => expect(onCompactingChange).toHaveBeenLastCalledWith(true));
-  expect(screen.getByRole("button", { name: "压缩上下文" })).toBeDisabled();
+  await userEvent.hover(screen.getByRole("button", { name: "上下文已使用 20%" }));
+  expect(await screen.findByRole("button", { name: "压缩上下文" })).toBeDisabled();
   view.rerender(
     <TaskConversationControls
       {...props}
@@ -304,4 +307,146 @@ it("keeps a current-epoch response pending until its status card arrives", async
   );
   await waitFor(() => expect(onCompactingChange).toHaveBeenLastCalledWith(false));
   expect(screen.getByRole("button", { name: "压缩上下文" })).toBeEnabled();
+});
+
+it.each([
+  [false, true],
+  [true, true],
+  [false, false],
+  [true, false],
+])("reveals the persisted status card for a collaboration request (all=%s, running=%s)", async (all, running) => {
+  const accepted = vi.fn();
+  vi.mocked(compactRoomContext).mockResolvedValueOnce({
+    id: "accepted",
+    epoch: 0,
+    running,
+    started_at: "2026-11-17T00:00:00Z",
+    targets: [],
+  });
+  render(
+    <TaskConversationControls
+      agents={agents}
+      t={t}
+      participants={[]}
+      onCompactionAccepted={accepted}
+      conversation={{
+        ...room,
+        type: "on_demand",
+        is_direct: false,
+        members: ["user-admin", "u-0", "u-1"],
+        context_usage: { "u-0": usage, "u-1": usage },
+      }}
+    />,
+  );
+  await userEvent.hover(screen.getByRole("button", { name: "上下文最高已使用 20%" }));
+  await userEvent.click(
+    all
+      ? screen.getByRole("button", { name: "压缩全部上下文" })
+      : screen.getAllByRole("button", { name: "压缩上下文" })[0],
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(accepted).toHaveBeenCalledTimes(1);
+});
+
+it("keeps stale-usage no-op feedback in the panel without seeking a nonexistent card", async () => {
+  const accepted = vi.fn();
+  vi.mocked(compactRoomContext).mockResolvedValueOnce({
+    id: "no-op",
+    epoch: 0,
+    running: false,
+    started_at: "",
+    targets: [{ agent_id: "agent-0", user_id: "u-0", name: "Agent 0", status: "unnecessary" }],
+  });
+  render(
+    <TaskConversationControls
+      agents={agents}
+      t={t}
+      participants={participants}
+      conversation={room}
+      onCompactionAccepted={accepted}
+    />,
+  );
+  await userEvent.hover(screen.getByRole("button", { name: "上下文已使用 20%" }));
+  await userEvent.click(screen.getByRole("button", { name: "压缩上下文" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("当前上下文较少，无需压缩");
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(accepted).not.toHaveBeenCalled();
+});
+
+it.each(["clear", "unmount"])("ignores an accepted response after %s", async (change) => {
+  let resolve!: (operation: CompactionOperation) => void;
+  vi.mocked(compactRoomContext).mockImplementationOnce(
+    () =>
+      new Promise<CompactionOperation>((accept) => {
+        resolve = accept;
+      }),
+  );
+  const accepted = vi.fn();
+  const props = { agents, t, participants, onCompactionAccepted: accepted };
+  const view = render(<TaskConversationControls {...props} conversation={room} />);
+  await userEvent.hover(screen.getByRole("button", { name: "上下文已使用 20%" }));
+  await userEvent.click(screen.getByRole("button", { name: "压缩上下文" }));
+  if (change === "clear")
+    view.rerender(<TaskConversationControls {...props} conversation={{ ...room, context_usage_epoch: 1 }} />);
+  else view.unmount();
+  await act(async () =>
+    resolve({ id: "late", epoch: 0, running: true, started_at: "2026-11-17T00:00:00Z", targets: [] }),
+  );
+  expect(accepted).not.toHaveBeenCalled();
+});
+
+it("keeps a real pre-start rejection in the context panel with its specific reason", async () => {
+  const accepted = vi.fn();
+  vi.mocked(compactRoomContext).mockResolvedValueOnce({
+    id: "unsupported",
+    epoch: 0,
+    running: false,
+    started_at: "",
+    targets: [
+      {
+        agent_id: "agent-0",
+        user_id: "u-0",
+        name: "Agent 0",
+        status: "unsupported",
+        reason: "scoped_session_unsupported",
+      },
+    ],
+  });
+  render(
+    <TaskConversationControls
+      agents={agents}
+      t={t}
+      participants={participants}
+      conversation={room}
+      onCompactionAccepted={accepted}
+    />,
+  );
+  await userEvent.hover(screen.getByRole("button", { name: "上下文已使用 20%" }));
+  await userEvent.click(screen.getByRole("button", { name: "压缩上下文" }));
+  const panel = screen.getByRole("dialog");
+  expect(await within(panel).findByText(/该上下文属于独立任务或子线程会话/)).toBeInTheDocument();
+  expect(accepted).not.toHaveBeenCalled();
+});
+it("submits compress-all as a batch even for one eligible Agent", async () => {
+  vi.mocked(compactRoomContext).mockResolvedValueOnce({
+    id: "batch",
+    epoch: 0,
+    batch: true,
+    running: false,
+    started_at: "2026-11-17T00:00:00Z",
+    targets: [],
+  });
+  render(
+    <TaskConversationControls
+      agents={[agents[0]]}
+      t={t}
+      participants={[]}
+      conversation={{ ...room, is_direct: false, type: "on_demand", context_usage: { "u-0": usage } }}
+    />,
+  );
+  await userEvent.hover(screen.getByRole("button", { name: "上下文最高已使用 20%" }));
+  await userEvent.click(screen.getByRole("button", { name: "压缩全部上下文" }));
+  await waitFor(() =>
+    expect(compactRoomContext).toHaveBeenLastCalledWith("room-one", ["agent-0"], expect.any(String), true),
+  );
 });

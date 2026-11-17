@@ -97,16 +97,20 @@ func TestManualCompactionPrerequisiteReasons(t *testing.T) {
 	for _, tc := range []struct {
 		name, mode, saved, requested string
 		reason                       modelcap.CompactionFailureReason
+		binding, status              string
 	}{
-		{"binding missing", "resume-fallback", "saved", "other", modelcap.CompactionBindingMissing},
-		{"identity changed", "resume-success", "saved", "saved", modelcap.CompactionIdentityChanged},
-		{"history unreadable", "compaction-history-error", "saved", "saved", modelcap.CompactionHistoryUnreadable},
-		{"history invalid", "compaction-history-invalid", "saved", "saved", modelcap.CompactionHistoryInvalid},
+		{"binding missing", "resume-fallback", "saved", "other", modelcap.CompactionBindingMissing, "room:test", "unavailable"},
+		{"identity changed", "resume-success", "saved", "saved", modelcap.CompactionIdentityChanged, "room:test", "unavailable"},
+		{"history unreadable", "compaction-history-error", "saved", "saved", modelcap.CompactionHistoryUnreadable, "room:test", "unavailable"},
+		{"history invalid", "compaction-history-invalid", "saved", "saved", modelcap.CompactionHistoryInvalid, "room:test", "unavailable"},
+		{"task session", "resume-fallback", "saved", "saved", modelcap.CompactionScopedSessionUnsupported, "room:test:task:7", "unsupported"},
+		{"thread session", "resume-fallback", "saved", "saved", modelcap.CompactionScopedSessionUnsupported, "room:test:thread:root", "unsupported"},
+		{"other room task", "resume-fallback", "saved", "saved", modelcap.CompactionBindingMissing, "room:other:task:7", "unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			withAppServerHelperCommand(t, tc.mode)
 			spec := testAppServerSessionSpec(t.TempDir())
-			spec.ConversationSessions = map[string]string{"room:test": tc.saved}
+			spec.ConversationSessions = map[string]string{tc.binding: tc.saved}
 			manager := newAppServerManager(testAppServerManagerDeps())
 			if _, err := manager.Start(context.Background(), spec); err != nil {
 				t.Fatal(err)
@@ -116,8 +120,8 @@ func TestManualCompactionPrerequisiteReasons(t *testing.T) {
 			used := int64(50000)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			result, err := runtime.CompactConversation(ctx, spec.RuntimeID, contract.CompactRequest{ConversationKey: "room:test", Usage: modelcap.ContextUsage{SessionID: tc.requested, UsedTokens: &used, ContextWindow: 100000}})
-			if err != nil || result.Status != "unavailable" || result.Reason != tc.reason {
+			result, err := runtime.CompactConversation(ctx, spec.RuntimeID, contract.CompactRequest{ConversationKey: "room:test", Usage: modelcap.ContextUsage{SessionID: tc.requested, UsedTokens: &used, ContextWindow: 100000}, OnStarted: func() error { t.Error("rejected prerequisite announced compaction start"); return nil }})
+			if err != nil || result.Status != tc.status || result.Reason != tc.reason {
 				t.Fatalf("result=%+v err=%v", result, err)
 			}
 			if result.Usage != nil {

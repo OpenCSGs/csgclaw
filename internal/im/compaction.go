@@ -49,7 +49,7 @@ func (s *Service) StartContextCompaction(roomID string, op modelcap.CompactionOp
 	}
 	for _, m := range room.Messages {
 		if previous := MessageCompaction(m); previous != nil && previous.ID == op.ID {
-			if len(previous.Targets) != len(op.Targets) {
+			if len(previous.Targets) != len(op.Targets) || (previous.Batch || len(previous.Targets) > 1) != (op.Batch || len(op.Targets) > 1) {
 				return op, false, ErrCompactionConflict
 			}
 			for i, t := range op.Targets {
@@ -61,7 +61,7 @@ func (s *Service) StartContextCompaction(roomID string, op modelcap.CompactionOp
 		}
 	}
 	// No-op single clicks stay in the panel. Batches retain all skip outcomes.
-	if len(op.Targets) == 1 && op.Targets[0].Status != "pending" {
+	if !op.Batch && len(op.Targets) == 1 && op.Targets[0].Status != "pending" && op.Targets[0].Status != "running" {
 		return op, false, nil
 	}
 	op.Revision = 1

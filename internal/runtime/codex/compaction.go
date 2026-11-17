@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var errCompactionIdentityChanged = errors.New("saved conversation identity changed")
@@ -48,14 +49,25 @@ func (r *Runtime) CompactConversation(ctx context.Context, runtimeID string, req
 	}
 	live.mu.Lock()
 	key := ""
+	scopedSession := false
 	for binding, session := range live.conversationSessions {
-		if session == req.Usage.SessionID && contract.LogicalRuntimeSessionKey(binding) == string(req.ConversationKey) {
+		if session != req.Usage.SessionID {
+			continue
+		}
+		logical := contract.LogicalRuntimeSessionKey(binding)
+		if logical == string(req.ConversationKey) {
 			key = binding
 			break
+		}
+		if strings.HasPrefix(logical, string(req.ConversationKey)+":task:") || strings.HasPrefix(logical, string(req.ConversationKey)+":thread:") {
+			scopedSession = true
 		}
 	}
 	live.mu.Unlock()
 	if key == "" {
+		if scopedSession {
+			return contract.CompactResult{Status: "unsupported", Reason: modelcap.CompactionScopedSessionUnsupported}, nil
+		}
 		return contract.CompactResult{Status: "unavailable", Reason: modelcap.CompactionBindingMissing}, nil
 	}
 	thread := req.Usage.SessionID
@@ -111,6 +123,14 @@ func (r *Runtime) CompactConversation(ctx context.Context, runtimeID string, req
 		live.mu.Unlock()
 		manager.publishContextUsage(runtimeID, live, thread, nil, "snapshot")
 	}()
+	if err := ctx.Err(); err != nil {
+		return contract.CompactResult{}, err
+	}
+	if req.OnStarted != nil {
+		if err := req.OnStarted(); err != nil {
+			return contract.CompactResult{}, err
+		}
+	}
 	manager.publishContextUsage(runtimeID, live, thread, nil, "item/started")
 	if _, err = live.appClient.request(ctx, "thread/compact/start", map[string]any{"threadId": thread}); err != nil {
 		return contract.CompactResult{Status: "uncertain"}, nil

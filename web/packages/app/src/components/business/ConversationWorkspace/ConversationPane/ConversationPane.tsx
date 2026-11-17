@@ -727,12 +727,13 @@ function ConversationPaneContent({
           toolbar={
             <TaskConversationControls
               conversation={conversation}
-              participants={collaboration ? [] : workingParticipantsWithActivity}
+              participants={workingParticipantsWithActivity}
               agents={agents}
               t={t}
               onNewTask={onNewTask}
               cloudSendDisabled={composerDisabled}
               onCompactingChange={(busy) => setCompactionSubmission(busy ? conversation.id : "")}
+              onCompactionAccepted={onFollowLatest}
             />
           }
           hideWorkingContextUsage

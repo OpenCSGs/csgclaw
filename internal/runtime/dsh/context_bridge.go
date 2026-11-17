@@ -84,7 +84,8 @@ export function apply(ctx) {
   const descriptor = new URL('./context-control.json', import.meta.url);
   const jobs = new Set();
   const server = createServer(async (req, res) => {
-    const reply = (status, usage, reason) => { res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({status, usage, reason})); };
+    res.setHeader('Content-Type','application/x-ndjson');
+    const reply = (status, usage, reason) => { res.end(JSON.stringify({status, usage, reason}) + '\n'); };
     if (req.method !== 'POST' || req.url !== '/compact' || req.headers.authorization !== 'Bearer ' + token) { res.statusCode=403; return res.end(); }
     let body='';
     for await (const part of req) { body+=part; if(body.length>4096){res.statusCode=413;return res.end();} }
@@ -93,6 +94,11 @@ export function apply(ctx) {
     const agent=ctx.agents.get(session);
     if (!agent) return reply('unavailable', undefined, 'session_restore_failed');
     const controller=new AbortController();
+    const dispose=ctx.on('session/event', (activeSession,event) => {
+      if (activeSession.header.id === session && event.type === 'compaction/start') {
+        res.write(JSON.stringify({status:'running'}) + '\n');
+      }
+    });
     const job=ctx.compaction.compactNow(agent,controller.signal);
     jobs.add(job);
     try {
@@ -104,7 +110,7 @@ export function apply(ctx) {
     } catch(error) {
       const status={busy:'busy',cancelled:'interrupted',changed:'interrupted',summary:'failed',commit:'uncertain',persistence:'uncertain'}[error?.code] ?? 'failed';
       reply(status);
-    } finally {jobs.delete(job);}
+    } finally {dispose();jobs.delete(job);}
   });
   ctx.effect(async () => {
     await new Promise((resolve,reject) => {server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});

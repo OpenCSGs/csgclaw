@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/conv"
+	"csgclaw/internal/im"
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/participant"
 	"encoding/json"
@@ -23,6 +24,7 @@ func (h *Handler) compactRoomContext(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AgentIDs  []string `json:"agent_ids"`
 		RequestID string   `json:"request_id"`
+		Batch     bool     `json:"batch"`
 	}
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&req) != nil || len(req.AgentIDs) == 0 || len(req.AgentIDs) > 100 || strings.TrimSpace(req.RequestID) == "" || len(req.RequestID) > 128 {
 		writeCodedAPIError(w, 400, "invalid_request", "Agent IDs and request ID are required")
@@ -39,7 +41,7 @@ func (h *Handler) compactRoomContext(w http.ResponseWriter, r *http.Request) {
 		writeCodedAPIError(w, 403, "context_compaction_forbidden", "Room is not accessible")
 		return
 	}
-	op := modelcap.CompactionOperation{ID: req.RequestID, Epoch: room.ContextUsageEpoch}
+	op := modelcap.CompactionOperation{ID: req.RequestID, Epoch: room.ContextUsageEpoch, Batch: req.Batch || len(req.AgentIDs) > 1}
 	keys := map[string]agentengine.ConversationKey{}
 	seen := map[string]bool{}
 	for _, id := range req.AgentIDs {
@@ -82,6 +84,19 @@ func (h *Handler) compactRoomContext(w http.ResponseWriter, r *http.Request) {
 		}
 		op.Targets = append(op.Targets, target)
 	}
+	// Replays use the persisted operation. A fresh single request only creates a
+	// card when the adapter signals that native compaction has started.
+	replay := false
+	for _, message := range room.Messages {
+		if previous := im.MessageCompaction(message); previous != nil && previous.ID == op.ID {
+			replay = true
+			break
+		}
+	}
+	if !replay && !op.Batch && len(op.Targets) == 1 && op.Targets[0].Status == "pending" {
+		h.compactSingleRoomContext(w, r, room.ID, keys, op)
+		return
+	}
 	op, created, err := h.im.StartContextCompaction(room.ID, op)
 	if err != nil {
 		writeCodedAPIError(w, 409, "context_compaction_conflict", "Compaction state changed; refresh the conversation")
@@ -89,19 +104,10 @@ func (h *Handler) compactRoomContext(w http.ResponseWriter, r *http.Request) {
 	}
 	payload, _ := json.Marshal(op)
 	if created {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Minute)
+		ctx, cancel := h.roomCompactionContext(r)
 		go func() {
-			if h.eventStreamShutdown != nil {
-				go func() {
-					select {
-					case <-h.eventStreamShutdown:
-						cancel()
-					case <-ctx.Done():
-					}
-				}()
-			}
 			defer cancel()
-			h.runRoomCompaction(ctx, room.ID, keys, op)
+			h.runRoomCompaction(ctx, room.ID, keys, op, nil)
 		}()
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -110,7 +116,53 @@ func (h *Handler) compactRoomContext(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = w.Write(payload)
 }
-func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map[string]agentengine.ConversationKey, op modelcap.CompactionOperation) {
+func (h *Handler) roomCompactionContext(r *http.Request) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Minute)
+	if h.eventStreamShutdown != nil {
+		go func() {
+			select {
+			case <-h.eventStreamShutdown:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+	}
+	return ctx, cancel
+}
+
+func (h *Handler) compactSingleRoomContext(w http.ResponseWriter, r *http.Request, roomID string, keys map[string]agentengine.ConversationKey, op modelcap.CompactionOperation) {
+	ctx, cancel := h.roomCompactionContext(r)
+	started := make(chan modelcap.CompactionOperation, 1)
+	finished := make(chan modelcap.CompactionOperation, 1)
+	go func() {
+		defer cancel()
+		finished <- h.runRoomCompaction(ctx, roomID, keys, op, func(current *modelcap.CompactionOperation) error {
+			saved, created, err := h.im.StartContextCompaction(roomID, *current)
+			if err != nil {
+				return err
+			}
+			if !created {
+				return im.ErrCompactionConflict
+			}
+			*current = saved
+			snapshot := saved
+			snapshot.Targets = append([]modelcap.CompactionTarget(nil), saved.Targets...)
+			started <- snapshot
+			return nil
+		})
+	}()
+	select {
+	case op = <-started:
+	case op = <-finished:
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if op.StartedAt != "" {
+		w.WriteHeader(http.StatusAccepted)
+	}
+	_ = json.NewEncoder(w).Encode(op)
+}
+
+func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map[string]agentengine.ConversationKey, op modelcap.CompactionOperation, begin func(*modelcap.CompactionOperation) error) modelcap.CompactionOperation {
 	for i := range op.Targets {
 		target := &op.Targets[i]
 		if target.Status != "pending" {
@@ -118,7 +170,7 @@ func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map
 		}
 		room, ok := h.im.Room(roomID)
 		if !ok || room.ContextUsageEpoch != op.Epoch {
-			return
+			return op
 		}
 		if !slices.Contains(room.Members, target.UserID) {
 			target.Status = "unavailable"
@@ -136,8 +188,8 @@ func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map
 			continue
 		}
 		target.Status = "running"
-		if h.im.UpdateContextCompaction(roomID, op) != nil {
-			return
+		if op.StartedAt != "" && h.im.UpdateContextCompaction(roomID, op) != nil {
+			return op
 		}
 		compactor, ok := h.agentEngine.Conversations(target.AgentID).(contract.ConversationCompactor)
 		if !ok {
@@ -145,6 +197,9 @@ func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map
 			continue
 		}
 		request := contract.CompactRequest{ConversationKey: keys[target.AgentID], Usage: *target.Before}
+		if begin != nil {
+			request.OnStarted = func() error { return begin(&op) }
+		}
 		if room.Configuration != nil {
 			request.RoomConfiguration = &contract.RoomConfiguration{RoomID: room.ID, Configuration: *room.Configuration}
 		}
@@ -173,7 +228,10 @@ func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map
 		}
 		// Recheck epoch after the asynchronous boundary before saving any counters.
 		if current, exists := h.im.Room(roomID); !exists || current.ContextUsageEpoch != op.Epoch {
-			return
+			return op
+		}
+		if op.StartedAt == "" {
+			continue
 		}
 		if target.After != nil {
 			if _, err := h.im.RecordCompactedContextUsage(roomID, target.UserID, *target.After, op.Epoch); err != nil {
@@ -181,10 +239,13 @@ func (h *Handler) runRoomCompaction(ctx context.Context, roomID string, keys map
 			}
 		}
 		if h.im.UpdateContextCompaction(roomID, op) != nil {
-			return
+			return op
 		}
 	}
 	op.Running = false
-	op.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	_ = h.im.UpdateContextCompaction(roomID, op)
+	if op.StartedAt != "" {
+		op.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		_ = h.im.UpdateContextCompaction(roomID, op)
+	}
+	return op
 }

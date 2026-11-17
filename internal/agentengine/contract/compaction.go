@@ -11,6 +11,9 @@ type CompactRequest struct {
 	RoomConfiguration *RoomConfiguration
 	ConversationKey   ConversationKey
 	Usage             modelcap.ContextUsage
+	// OnStarted is called once after prerequisites pass and before compaction work.
+	// A failed callback must stop the operation where the native API permits it.
+	OnStarted func() error
 }
 type CompactResult struct {
 	Status string                           `json:"status"`

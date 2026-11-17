@@ -1,19 +1,9 @@
 import { useEffect, useState } from "react";
 import { LoaderCircle, Minimize2 } from "lucide-react";
-import type { CompactionOperation, CompactionTarget } from "@/models/contextCompaction";
+import { compactionTargetNotice, type CompactionOperation, type CompactionTarget } from "@/models/contextCompaction";
 import { formatContextSize } from "@/models/modelMetadata";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./ContextCompactionCard.module.css";
-
-const unavailableReasons = new Set([
-  "session_binding_missing",
-  "session_identity_changed",
-  "session_restore_failed",
-  "session_history_unreadable",
-  "session_history_invalid",
-  "agent_unavailable",
-  "member_removed",
-]);
 
 export function CompactionTargetResult({ target, t }: { target: CompactionTarget; t: TranslateFn }) {
   const before = target.before?.used_tokens;
@@ -45,13 +35,7 @@ export function CompactionTargetResult({ target, t }: { target: CompactionTarget
           )}
         </>
       ) : (
-        <span>
-          {t(
-            target.status === "unavailable" && target.reason && unavailableReasons.has(target.reason)
-              ? `contextCompactReason_${target.reason}`
-              : `contextCompactStatus_${target.status}`,
-          )}
-        </span>
+        <span>{compactionTargetNotice(target, t)}</span>
       )}
     </div>
   );
@@ -66,7 +50,7 @@ export function ContextCompactionCard({ operation, t }: { operation: CompactionO
   }, [operation.running]);
   const end = operation.finished_at ? new Date(operation.finished_at).getTime() : now;
   const seconds = Math.max(0, Math.floor((end - new Date(operation.started_at).getTime()) / 1000));
-  const single = operation.targets.length === 1 ? operation.targets[0] : undefined;
+  const single = !operation.batch && operation.targets.length === 1 ? operation.targets[0] : undefined;
   const completed = operation.targets.filter((target) => target.status === "completed").length;
   const skipped = operation.targets.filter((target) =>
     ["unnecessary", "no_history", "unknown", "busy", "unavailable", "unsupported"].includes(target.status),
