@@ -16,7 +16,7 @@ import (
 
 const PrivateNetworkEnv = "CSGCLAW_BROWSER_ALLOW_PRIVATE_NETWORK"
 
-var ErrEgressDenied = errors.New("browser destination is not public; private-network browsing requires administrator opt-in")
+var ErrEgressDenied = errors.New("browser destination is neither public nor loopback; private-network browsing requires administrator opt-in")
 
 type egressPolicy struct {
 	allowPrivate bool
@@ -66,7 +66,7 @@ func (p *egressPolicy) destination(ctx context.Context, address string) ([]netip
 		return nil, "", errors.New("browser destination has no addresses")
 	}
 	for _, ip := range ips {
-		if !p.allowPrivate && !publicAddress(ip) {
+		if !p.allowPrivate && !ip.Unmap().IsLoopback() && !publicAddress(ip) {
 			return nil, "", ErrEgressDenied
 		}
 	}

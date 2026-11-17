@@ -180,3 +180,57 @@ it("forwards Space as a key so focused form controls can be activated", async ()
     expect(browserCommand).toHaveBeenCalledWith("room", "shared", { action: "key", key: "Space" }, "test-control", "1"),
   );
 });
+
+it("waits for a frame captured after viewport resizing before accepting input", async () => {
+  let resize!: () => void;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: () => void) {
+        resize = callback;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  let finishResize!: (value: BrowserSession) => void;
+  vi.mocked(browserCommand).mockImplementation((_room, _id, command) =>
+    command.action === "resize"
+      ? new Promise((resolve) => {
+          finishResize = resolve;
+        })
+      : Promise.resolve(session),
+  );
+  const user = userEvent.setup();
+  render(<AgentBrowserTab roomID="room" session={session} active t={createTranslator("en")} />);
+  await user.click(screen.getByRole("button", { name: "Take control" }));
+  const image = await screen.findByRole("img", { name: "Interactive browser view" });
+  fireEvent.load(image);
+  const type = screen.getByRole("button", { name: "Type" });
+  await waitFor(() => expect(type).toBeEnabled());
+  act(() => resize());
+  await waitFor(() => expect(finishResize).toBeDefined());
+  expect(type).toBeDisabled();
+  // A load event from the previously displayed image must not re-enable input.
+  fireEvent.load(image);
+  expect(type).toBeDisabled();
+  fireEvent.click(image);
+  expect(vi.mocked(browserCommand).mock.calls.some((call) => call[2].action === "pointer")).toBe(false);
+  let fresh!: (value: { blob: Blob; revision: string }) => void;
+  vi.mocked(fetchBrowserFrame).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        fresh = resolve;
+      }),
+  );
+  await act(async () => {
+    finishResize(session);
+  });
+  expect(type).toBeDisabled();
+  await waitFor(() => expect(fresh).toBeDefined(), { timeout: 2000 });
+  await act(async () => {
+    fresh({ blob: new Blob(["resized"]), revision: "2" });
+  });
+  fireEvent.load(image);
+  await waitFor(() => expect(type).toBeEnabled());
+});

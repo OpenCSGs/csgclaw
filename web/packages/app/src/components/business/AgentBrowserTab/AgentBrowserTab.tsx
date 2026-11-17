@@ -15,6 +15,8 @@ import { normalizeBrowserURL } from "@/models/fileReferences";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./AgentBrowserTab.module.css";
 
+const viewActions = new Set(["resize", "scroll", "navigate", "back", "forward", "reload"]);
+
 const keys = new Set([
   "Enter",
   "Space",
@@ -49,6 +51,9 @@ export function AgentBrowserTab({
   const [frameControl, setFrameControl] = useState("");
   const [frameRevision, setFrameRevision] = useState("");
   const [inputReady, setInputReady] = useState(false);
+  const [capturedView, setCapturedView] = useState(0);
+  const viewEpoch = useRef(0);
+  const pendingViewChanges = useRef(0);
   const displayedRevision = useRef("");
   const [changing, setChanging] = useState(false);
   const changingRef = useRef(false);
@@ -85,9 +90,10 @@ export function AgentBrowserTab({
     let objectURL = "";
     async function poll() {
       try {
+        const epoch = viewEpoch.current;
         const captured = await fetchBrowserFrame(roomID, session.id, controller.signal, controlToken);
         const blob = captured.blob;
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || epoch !== viewEpoch.current || pendingViewChanges.current > 0) return;
         const next = URL.createObjectURL(blob);
         const previous = objectURL;
         objectURL = next;
@@ -95,6 +101,7 @@ export function AgentBrowserTab({
         setFrame(next);
         setFrameControl(controlToken);
         setFrameRevision(captured.revision);
+        setCapturedView(epoch);
         if (previous) URL.revokeObjectURL(previous);
       } catch (cause) {
         if (!controller.signal.aborted) {
@@ -160,14 +167,21 @@ export function AgentBrowserTab({
     }
   }
   function command(value: BrowserCommand) {
-    if (changingRef.current || (value.action !== "resize" && !controlled)) return Promise.resolve(false);
+    if (changingRef.current || (value.action !== "resize" && (!controlled || pendingViewChanges.current > 0)))
+      return Promise.resolve(false);
     if (value.action === "resize" && session.user_controlled && !controlToken) return Promise.resolve(false);
+    const changesView = viewActions.has(value.action);
+    if (changesView) {
+      pendingViewChanges.current++;
+      viewEpoch.current++;
+      setInputReady(false);
+    }
     const current = ++revision.current;
     setBusy(true);
     setError(false);
     const pending = queue.current.then(async () => {
-      if (!mounted.current) return false;
       try {
+        if (!mounted.current) return false;
         const result = await browserCommand(roomID, session.id, value, controlToken, frameRevision);
         if (mounted.current && value.action === "navigate") setAddress(result.url);
         return true;
@@ -175,6 +189,11 @@ export function AgentBrowserTab({
         if (mounted.current) setError(true);
         return false;
       } finally {
+        if (changesView) {
+          pendingViewChanges.current--;
+          viewEpoch.current++;
+          if (mounted.current) setInputReady(false);
+        }
         if (mounted.current && current === revision.current) setBusy(false);
       }
     });
@@ -356,7 +375,12 @@ export function AgentBrowserTab({
             tabIndex={active && controlled ? 0 : -1}
             aria-disabled={!controlled}
             onLoad={() => {
-              if (controlToken && frameControl === controlToken) {
+              if (
+                controlToken &&
+                frameControl === controlToken &&
+                capturedView === viewEpoch.current &&
+                pendingViewChanges.current === 0
+              ) {
                 displayedRevision.current = frameRevision;
                 setInputReady(true);
               }

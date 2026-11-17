@@ -18,26 +18,80 @@ import (
 	"github.com/go-rod/rod/lib/launcher"
 )
 
-func TestBrowserBlocksPrivateNetworkByDefault(t *testing.T) {
+func TestBrowserAllowsLoopbackByDefault(t *testing.T) {
 	if _, ok := launcher.LookPath(); !ok && os.Getenv("CSGCLAW_BROWSER_BIN") == "" {
 		t.Skip("Chromium is not installed")
 	}
-	t.Setenv("CSGCLAW_BROWSER_ALLOW_PRIVATE_NETWORK", "false")
-	var hits atomic.Int32
-	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.Write([]byte("<h1>Private network fixture</h1>"))
-	}))
-	defer site.Close()
+	t.Setenv(PrivateNetworkEnv, "")
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/redirect" {
+			http.Redirect(w, r, "/form", http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, "<h1>Local loopback page</h1>")
+	})
+	ipv4 := httptest.NewServer(handler)
+	defer ipv4.Close()
+	_, port, _ := net.SplitHostPort(strings.TrimPrefix(ipv4.URL, "http://"))
+	urls := []string{ipv4.URL, "http://localhost:" + port, ipv4.URL + "/redirect"}
+	listener, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Fatal("IPv6 loopback listener: ", err)
+	}
+	ipv6 := httptest.NewUnstartedServer(handler)
+	ipv6.Listener = listener
+	ipv6.Start()
+	defer ipv6.Close()
+	urls = append(urls, ipv6.URL)
 	service := New()
 	defer service.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if _, err := service.Open(ctx, "egress", site.URL); err == nil {
-		t.Fatal("browser read a loopback service without private-network opt-in")
+	for _, address := range urls {
+		t.Run(address, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			state, err := service.Open(ctx, "loopback", address)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer service.CloseSession(ctx, "loopback", state.ID)
+			snapshot, err := service.Snapshot(ctx, "loopback", state.ID)
+			if err != nil || !strings.Contains(snapshot.Content, "Local loopback page") {
+				t.Fatalf("loopback snapshot: %v %s", err, snapshot.Content)
+			}
+			png, err := service.Screenshot(ctx, "loopback", state.ID, false)
+			if err != nil || !strings.HasPrefix(string(png), "\x89PNG\r\n\x1a\n") {
+				t.Fatalf("loopback screenshot: %v", err)
+			}
+		})
 	}
-	if hits.Load() != 0 {
-		t.Fatalf("private service received %d requests", hits.Load())
+}
+
+func TestBrowserDefaultDestinationPolicy(t *testing.T) {
+	policy := newEgressPolicy(false)
+	policy.lookup = func(ctx context.Context, network, host string) ([]netip.Addr, error) {
+		switch host {
+		case "localhost", "local.test":
+			return []netip.Addr{netip.MustParseAddr("::1"), netip.MustParseAddr("127.0.0.1")}, nil
+		case "mixed.test":
+			return []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("10.0.0.1")}, nil
+		default:
+			return nil, fmt.Errorf("unknown fixture host: %s", host)
+		}
+	}
+	for _, address := range []string{"127.0.0.1:3000", "127.9.8.7:3000", "[::1]:3000", "[::ffff:127.0.0.1]:3000", "localhost:3000", "local.test:3000", "8.8.8.8:443"} {
+		if _, _, err := policy.destination(context.Background(), address); err != nil {
+			t.Errorf("allowed %s: %v", address, err)
+		}
+	}
+	for _, address := range []string{"10.0.0.1:80", "192.168.1.1:80", "172.16.0.1:80", "169.254.169.254:80", "[fc00::1]:80", "0.0.0.0:80", "mixed.test:80"} {
+		if _, _, err := policy.destination(context.Background(), address); !errors.Is(err, ErrEgressDenied) {
+			t.Errorf("blocked %s: %v", address, err)
+		}
+	}
+	policy.allowPrivate = true
+	if _, _, err := policy.destination(context.Background(), "192.168.1.1:80"); err != nil {
+		t.Fatalf("administrator private-network opt-in: %v", err)
 	}
 }
 
@@ -61,7 +115,7 @@ func TestBrowserProxyPinsDNSAndRejectsCONNECT(t *testing.T) {
 		if calls.Add(1) == 1 {
 			return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
 		}
-		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+		return []netip.Addr{netip.MustParseAddr("10.0.0.1")}, nil
 	}
 	var dialed []string
 	policy.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -107,27 +161,36 @@ func TestBrowserProxyBlocksRedirectsAndSubresources(t *testing.T) {
 	defer private.Close()
 	public := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/redirect" {
-			http.Redirect(w, r, private.URL+"/redirect-target", 302)
+			http.Redirect(w, r, "http://private.test/redirect-target", 302)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<h1>Public page</h1><iframe src="%s/frame"></iframe><img src="%s/image"><script src="%s/script"></script><script>fetch('%s/fetch').catch(()=>{})</script>`, private.URL, private.URL, private.URL, private.URL)
+		fmt.Fprintf(w, `<h1>Public page</h1><iframe src="%s/frame"></iframe><img src="%s/image"><script src="%s/script"></script><script>fetch('%s/fetch').catch(()=>{})</script>`, "http://private.test", "http://private.test", "http://private.test", "http://private.test")
 	}))
 	defer public.Close()
 	s := New()
 	defer s.Close()
 	s.policy.lookup = func(ctx context.Context, network, host string) ([]netip.Addr, error) {
+		if host == "private.test" {
+			return []netip.Addr{netip.MustParseAddr("10.0.0.1")}, nil
+		}
 		if host != "public.test" {
 			return nil, errors.New("unknown test host")
 		}
 		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
 	}
 	s.policy.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
-		if !strings.HasPrefix(address, "8.8.8.8:") {
+		switch {
+		case strings.HasPrefix(address, "8.8.8.8:"):
+			return (&net.Dialer{}).DialContext(ctx, network, strings.TrimPrefix(public.URL, "http://"))
+		case strings.HasPrefix(address, "10.0.0.1:"):
+			// If policy enforcement regresses, expose the attempted request to
+			// the private fixture so the assertion below observes the breach.
+			return (&net.Dialer{}).DialContext(ctx, network, strings.TrimPrefix(private.URL, "http://"))
+		default:
 			t.Errorf("unchecked destination dialed: %s", address)
 			return nil, ErrEgressDenied
 		}
-		return (&net.Dialer{}).DialContext(ctx, network, strings.TrimPrefix(public.URL, "http://"))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()

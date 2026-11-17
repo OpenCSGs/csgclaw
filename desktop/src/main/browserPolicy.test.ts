@@ -69,3 +69,16 @@ test("HTML storage partitions are stable per source and separate from ordinary b
   assert.notEqual(htmlPreviewPartition("http://127.0.0.1:18081", "room-a:file-a"), first);
   assert.notEqual(first, "persist:csgclaw-browser");
 });
+
+
+test("ordinary browser tabs allow IPv4 and IPv6 loopback services by default", () => {
+  const origin = "http://127.0.0.1:18080";
+  for (const address of [
+    "http://localhost:3000/",
+    "http://127.0.0.1:3000/",
+    "http://127.2.3.4:3000/",
+    "http://[::1]:3000/",
+  ]) {
+    assert.equal(browserURL(address, origin), address);
+  }
+});
