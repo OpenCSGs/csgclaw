@@ -762,6 +762,7 @@ export const messages = {
     taskEntrySessionOptionsHint: "此处显示智能体默认配置。独立的会话配置尚未开放。",
     desktopTitlebar: "应用标题栏",
     desktopBack: "返回上一页面",
+    desktopReload: "重新加载",
     desktopForward: "前往下一页面",
     chatPreviewReload: "刷新预览",
     chatFiles: "文件",
@@ -1250,7 +1251,22 @@ export const messages = {
     contextCompactStatus_no_history: "暂无可压缩的历史，无需压缩",
     contextCompactStatus_unknown: "已跳过：本次操作没有可用的上下文用量",
     contextCompactStatus_busy: "Agent 正在工作，请本轮完成后再操作",
-    contextCompactStatus_unavailable: "原有会话不可用，请刷新会话状态",
+    contextCompactStatus_unavailable:
+      "无法访问原会话，本次未压缩。请先确认该 Agent 能正常回复；若回复失败，请导出该轮执行诊断。",
+    contextCompactReason_session_binding_missing:
+      "该房间的会话绑定与上下文统计不一致，本次未压缩。请先向该 Agent 发送一条消息，待回复结束且用量更新后再压缩。",
+    contextCompactReason_session_identity_changed:
+      "运行时返回了不同的会话，已停止压缩以保护原有历史。请先向该 Agent 发送消息确认能正常继续，再压缩当前会话。",
+    contextCompactReason_session_restore_failed:
+      "运行时无法恢复原会话，本次未压缩。请先向该 Agent 发送消息确认能否正常回复；若回复也失败，请导出该轮执行诊断排查。",
+    contextCompactReason_session_history_unreadable:
+      "读取原会话历史失败，本次未压缩。请稍后重试；若 Agent 也无法正常回复，请导出失败一轮的执行诊断。",
+    contextCompactReason_session_history_invalid:
+      "运行时返回的会话历史格式异常，本次未压缩。请检查 Codex 运行时版本，并在 Agent 回复失败时导出该轮执行诊断。",
+    contextCompactReason_agent_unavailable:
+      "Agent 运行时不可用，本次未压缩。请在「智能体」检查该 Agent 的运行状态，恢复正常后再压缩。",
+    contextCompactReason_member_removed:
+      "该 Agent 已不在当前房间，本次已跳过。请在房间成员列表确认成员，按需重新添加后再操作。",
     contextCompactStatus_unsupported: "当前运行时不支持手动压缩",
     contextCompactStatus_failed: "压缩失败，请检查模型服务后重试",
     contextCompactStatus_interrupted: "压缩已中断，请核对会话状态",
@@ -4302,6 +4318,7 @@ export const messages = {
       "These are the agent defaults. Independent conversation settings are not available yet.",
     desktopTitlebar: "Application title bar",
     desktopBack: "Back to previous page",
+    desktopReload: "Reload",
     desktopForward: "Forward to next page",
     chatPreviewReload: "Reload preview",
     chatFiles: "Files",
@@ -4807,7 +4824,22 @@ export const messages = {
     contextCompactStatus_no_history: "No compactable history yet.",
     contextCompactStatus_unknown: "Skipped: context usage was unavailable for this operation.",
     contextCompactStatus_busy: "Agent is working. Try again after this turn.",
-    contextCompactStatus_unavailable: "The original session is unavailable. Refresh its state.",
+    contextCompactStatus_unavailable:
+      "The original session could not be accessed. Nothing was compacted. Confirm this Agent can reply; if the reply fails, export that turn's execution diagnostics.",
+    contextCompactReason_session_binding_missing:
+      "The room's session binding does not match its saved context usage. Nothing was compacted. Send this Agent a message, then wait for its reply and updated usage before compacting.",
+    contextCompactReason_session_identity_changed:
+      "The runtime returned a different session. Compaction was stopped to protect the original history. Send this Agent a message to confirm it can continue, then compact the current session.",
+    contextCompactReason_session_restore_failed:
+      "The runtime could not restore the original session. Nothing was compacted. Send this Agent a message to check whether it can reply; if that fails too, export that turn's execution diagnostics.",
+    contextCompactReason_session_history_unreadable:
+      "The original session history could not be read. Nothing was compacted. Try again later; if the Agent also cannot reply, export the failed turn's execution diagnostics.",
+    contextCompactReason_session_history_invalid:
+      "The runtime returned invalid session history. Nothing was compacted. Check the Codex runtime version and export execution diagnostics if an Agent reply fails.",
+    contextCompactReason_agent_unavailable:
+      "The Agent runtime is unavailable. Nothing was compacted. Check this Agent in Agents and restore it to a working state before compacting.",
+    contextCompactReason_member_removed:
+      "This Agent is no longer in the room and was skipped. Check the room member list and add it again if needed.",
     contextCompactStatus_unsupported: "This runtime does not support manual compaction.",
     contextCompactStatus_failed: "Compaction failed. Check the model service before retrying.",
     contextCompactStatus_interrupted: "Compaction was interrupted. Check the session state.",

@@ -5,6 +5,16 @@ import { formatContextSize } from "@/models/modelMetadata";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./ContextCompactionCard.module.css";
 
+const unavailableReasons = new Set([
+  "session_binding_missing",
+  "session_identity_changed",
+  "session_restore_failed",
+  "session_history_unreadable",
+  "session_history_invalid",
+  "agent_unavailable",
+  "member_removed",
+]);
+
 export function CompactionTargetResult({ target, t }: { target: CompactionTarget; t: TranslateFn }) {
   const before = target.before?.used_tokens;
   const after = target.after?.used_tokens;
@@ -35,7 +45,13 @@ export function CompactionTargetResult({ target, t }: { target: CompactionTarget
           )}
         </>
       ) : (
-        <span>{t(`contextCompactStatus_${target.status}`)}</span>
+        <span>
+          {t(
+            target.status === "unavailable" && target.reason && unavailableReasons.has(target.reason)
+              ? `contextCompactReason_${target.reason}`
+              : `contextCompactStatus_${target.status}`,
+          )}
+        </span>
       )}
     </div>
   );

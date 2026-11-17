@@ -13,8 +13,9 @@ type CompactRequest struct {
 	Usage             modelcap.ContextUsage
 }
 type CompactResult struct {
-	Status string                 `json:"status"`
-	Usage  *modelcap.ContextUsage `json:"usage,omitempty"`
+	Status string                           `json:"status"`
+	Reason modelcap.CompactionFailureReason `json:"reason,omitempty"`
+	Usage  *modelcap.ContextUsage           `json:"usage,omitempty"`
 }
 
 // ConversationCompactor is optional so unsupported runtimes fail explicitly.

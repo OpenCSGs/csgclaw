@@ -45,7 +45,7 @@ func TestManualCompactionResumeFailurePreservesOriginalBinding(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	result, err := runtime.CompactConversation(ctx, spec.RuntimeID, contract.CompactRequest{ConversationKey: "room:test", Usage: modelcap.ContextUsage{SessionID: "saved-history-thread", ModelID: spec.Profile.ModelID, UsedTokens: &used, ContextWindow: 100000}})
-	if err != nil || result.Status != "unavailable" {
+	if err != nil || result.Status != "unavailable" || result.Reason != modelcap.CompactionRestoreFailed {
 		t.Fatalf("resume failure result: %+v %v", result, err)
 	}
 	live := manager.liveSession(spec.RuntimeID)
@@ -88,6 +88,40 @@ func TestManualCompactionStrictResumeChecksSavedThreadIdentity(t *testing.T) {
 			defer live.mu.Unlock()
 			if live.conversationSessions["room:test"] != test.saved || live.loadedConversations["room:test"] == test.wantError || live.filePublishingThreads[test.saved] {
 				t.Fatalf("strict resume changed binding/capabilities: %v", live.conversationSessions)
+			}
+		})
+	}
+}
+
+func TestManualCompactionPrerequisiteReasons(t *testing.T) {
+	for _, tc := range []struct {
+		name, mode, saved, requested string
+		reason                       modelcap.CompactionFailureReason
+	}{
+		{"binding missing", "resume-fallback", "saved", "other", modelcap.CompactionBindingMissing},
+		{"identity changed", "resume-success", "saved", "saved", modelcap.CompactionIdentityChanged},
+		{"history unreadable", "compaction-history-error", "saved", "saved", modelcap.CompactionHistoryUnreadable},
+		{"history invalid", "compaction-history-invalid", "saved", "saved", modelcap.CompactionHistoryInvalid},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withAppServerHelperCommand(t, tc.mode)
+			spec := testAppServerSessionSpec(t.TempDir())
+			spec.ConversationSessions = map[string]string{"room:test": tc.saved}
+			manager := newAppServerManager(testAppServerManagerDeps())
+			if _, err := manager.Start(context.Background(), spec); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+			runtime := New(Dependencies{Manager: manager})
+			used := int64(50000)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			result, err := runtime.CompactConversation(ctx, spec.RuntimeID, contract.CompactRequest{ConversationKey: "room:test", Usage: modelcap.ContextUsage{SessionID: tc.requested, UsedTokens: &used, ContextWindow: 100000}})
+			if err != nil || result.Status != "unavailable" || result.Reason != tc.reason {
+				t.Fatalf("result=%+v err=%v", result, err)
+			}
+			if result.Usage != nil {
+				t.Fatal("failed prerequisite returned fabricated usage")
 			}
 		})
 	}

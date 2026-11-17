@@ -10,6 +10,8 @@ import (
 	"fmt"
 )
 
+var errCompactionIdentityChanged = errors.New("saved conversation identity changed")
+
 func (a *ConversationAdapter) Compact(ctx context.Context, req contract.CompactRequest) (contract.CompactResult, error) {
 	backend, ok := a.runtime.(interface {
 		CompactConversation(context.Context, string, contract.CompactRequest) (contract.CompactResult, error)
@@ -54,18 +56,22 @@ func (r *Runtime) CompactConversation(ctx context.Context, runtimeID string, req
 	}
 	live.mu.Unlock()
 	if key == "" {
-		return contract.CompactResult{Status: "unavailable"}, nil
+		return contract.CompactResult{Status: "unavailable", Reason: modelcap.CompactionBindingMissing}, nil
 	}
 	thread := req.Usage.SessionID
 	if err := manager.resumeCompactionThread(ctx, live, key, thread); err != nil {
 		if ctx.Err() != nil {
 			return contract.CompactResult{}, ctx.Err()
 		}
-		return contract.CompactResult{Status: "unavailable"}, nil
+		reason := modelcap.CompactionRestoreFailed
+		if errors.Is(err, errCompactionIdentityChanged) {
+			reason = modelcap.CompactionIdentityChanged
+		}
+		return contract.CompactResult{Status: "unavailable", Reason: reason}, nil
 	}
 	raw, readErr := live.appClient.request(ctx, "thread/read", map[string]any{"threadId": thread, "includeTurns": true})
 	if readErr != nil {
-		return contract.CompactResult{Status: "unavailable"}, nil
+		return contract.CompactResult{Status: "unavailable", Reason: modelcap.CompactionHistoryUnreadable}, nil
 	}
 	var history struct {
 		Thread struct {
@@ -73,7 +79,7 @@ func (r *Runtime) CompactConversation(ctx context.Context, runtimeID string, req
 		} `json:"thread"`
 	}
 	if json.Unmarshal(raw, &history) != nil {
-		return contract.CompactResult{Status: "unavailable"}, nil
+		return contract.CompactResult{Status: "unavailable", Reason: modelcap.CompactionHistoryInvalid}, nil
 	}
 	if len(history.Thread.Turns) == 0 {
 		return contract.CompactResult{Status: "no_history"}, nil
@@ -133,7 +139,7 @@ func (m *appServerManager) resumeCompactionThread(ctx context.Context, live *liv
 	current, loaded := live.conversationSessions[key], live.loadedConversations[key]
 	live.mu.Unlock()
 	if current != thread {
-		return fmt.Errorf("saved conversation binding changed")
+		return fmt.Errorf("%w: binding changed", errCompactionIdentityChanged)
 	}
 	if loaded {
 		return nil
@@ -143,7 +149,7 @@ func (m *appServerManager) resumeCompactionThread(ctx context.Context, live *liv
 		return err
 	}
 	if resumed != thread {
-		return fmt.Errorf("resume returned a different conversation")
+		return fmt.Errorf("%w: resume returned a different conversation", errCompactionIdentityChanged)
 	}
 	live.mu.Lock()
 	defer live.mu.Unlock()

@@ -40,8 +40,9 @@ func (compactAPIAgents) Get(_ context.Context, id string, _ agentengine.AgentGet
 
 type compactAPIConversation struct {
 	agentengine.ConversationInterface
-	calls atomic.Int32
-	gate  chan struct{}
+	calls  atomic.Int32
+	gate   chan struct{}
+	result *contract.CompactResult
 }
 
 func (c *compactAPIConversation) Compact(ctx context.Context, req contract.CompactRequest) (contract.CompactResult, error) {
@@ -55,6 +56,9 @@ func (c *compactAPIConversation) Compact(ctx context.Context, req contract.Compa
 	case <-gate:
 	case <-ctx.Done():
 		return contract.CompactResult{}, ctx.Err()
+	}
+	if c.result != nil {
+		return *c.result, nil
 	}
 	if req.Usage.SessionID == "failure" {
 		return contract.CompactResult{Status: "failed"}, nil
@@ -229,5 +233,61 @@ func TestManualSingleThenBatchKeepsContextAfterRefreshAndRestart(t *testing.T) {
 		if snapshot := room.ContextUsage[user]; snapshot.UsedTokens == nil || *snapshot.UsedTokens != 1000 {
 			t.Fatalf("refresh/restart lost %s: %+v", user, snapshot)
 		}
+	}
+}
+
+func TestCompactionFailureReasonSurvivesHTTPRefreshAndRestart(t *testing.T) {
+	for _, reason := range []modelcap.CompactionFailureReason{modelcap.CompactionBindingMissing, modelcap.CompactionRestoreFailed, modelcap.CompactionIdentityChanged, modelcap.CompactionHistoryUnreadable, modelcap.CompactionHistoryInvalid, modelcap.CompactionAgentUnavailable, modelcap.CompactionMemberRemoved} {
+		t.Run(string(reason), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "state.json")
+			used := int64(50000)
+			usage := modelcap.ContextUsage{SessionID: "saved", UsedTokens: &used, ContextWindow: 100000}
+			if err := im.SaveBootstrap(path, im.Bootstrap{CurrentUserID: "user-admin", Users: []im.User{{ID: "user-admin"}, {ID: "user-worker"}}, Rooms: []im.Room{{ID: "r", Members: []string{"user-admin", "user-worker"}, ContextUsage: map[string]modelcap.ContextUsage{"user-worker": usage}}}}); err != nil {
+				t.Fatal(err)
+			}
+			service, err := im.NewServiceFromPath(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gate := make(chan struct{})
+			close(gate)
+			native := &compactAPIConversation{gate: gate, result: &contract.CompactResult{Status: "unavailable", Reason: reason}}
+			h := &Handler{im: service, agentEngine: &compactAPIEngine{conversation: native}, participant: participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{ID: "p", Channel: "csgclaw", Type: "agent", AgentID: "worker", ChannelUserRef: "user-worker"}}))}
+			router := h.Routes()
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest("POST", "/api/v1/rooms/r/context:compact", strings.NewReader(`{"request_id":"reason","agent_ids":["worker"]}`)))
+			if w.Code != 202 {
+				t.Fatalf("HTTP %d: %s", w.Code, w.Body.String())
+			}
+			deadline := time.Now().Add(2 * time.Second)
+			for {
+				room, _ := service.Room("r")
+				op := im.MessageCompaction(room.Messages[0])
+				if !op.Running {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("compaction did not finish")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			w = httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/bootstrap", nil))
+			if w.Code != 200 || !strings.Contains(w.Body.String(), string(reason)) {
+				t.Fatalf("refresh lost reason: %d", w.Code)
+			}
+			restarted, err := im.NewServiceFromPath(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			room, _ := restarted.Room("r")
+			op := im.MessageCompaction(room.Messages[0])
+			if op.Targets[0].Reason != reason || op.Running {
+				t.Fatalf("saved result=%+v", op)
+			}
+			if *room.ContextUsage["user-worker"].UsedTokens != used {
+				t.Fatal("failed compaction changed usage")
+			}
+		})
 	}
 }

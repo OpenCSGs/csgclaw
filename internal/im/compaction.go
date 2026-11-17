@@ -94,6 +94,7 @@ func (s *Service) UpdateContextCompaction(roomID string, op modelcap.CompactionO
 			for j := range op.Targets {
 				if !slices.Contains(room.Members, op.Targets[j].UserID) {
 					op.Targets[j].Status = "unavailable"
+					op.Targets[j].Reason = modelcap.CompactionMemberRemoved
 				}
 			}
 			room.Messages[i].Metadata = compactionMetadata(op)
