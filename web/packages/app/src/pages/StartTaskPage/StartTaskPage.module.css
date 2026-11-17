@@ -193,6 +193,11 @@
 .fileMention {
   color: var(--primary);
 }
+.slashCommand {
+  color: var(--mention);
+  background: var(--primary-soft);
+  border-radius: var(--radius-sm);
+}
 @media (forced-colors: active) {
   .promptMirror {
     display: none;
