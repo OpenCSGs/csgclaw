@@ -136,18 +136,6 @@ export function MediaGeneration({
                   {label}
                 </div>
               ) : null}
-              {state === "failed" && !result ? (
-                <div className={`${styles.overlay} ${styles.failure}`}>
-                  {failureMessage && failureMessage !== label ? (
-                    <span>{failureMessage}</span>
-                  ) : (
-                    <span role="status" aria-busy={busy}>
-                      {label}
-                    </span>
-                  )}
-                  {actions}
-                </div>
-              ) : null}
               {variation ? (
                 <span className={styles.variation} aria-hidden="true">
                   {index + 1}
@@ -171,25 +159,21 @@ export function MediaGeneration({
           </div>
         ) : null}
         <div className={styles.statusLine}>
-          {state !== "failed" ||
-          result ||
-          (failureMessage && failureMessage !== label) ? (
-            <span role="status" aria-busy={busy}>
-              {label}
-            </span>
-          ) : null}
+          <span role="status" aria-busy={busy}>
+            {label}
+          </span>
           {state === "pending" && value !== undefined ? (
             <span className={styles.percent}>{Math.round(value)}%</span>
           ) : null}
           {state === "completed" ? actions : null}
         </div>
-        {state === "failed" && result ? (
-          <>
+        {state === "failed" && (failureMessage || actions) ? (
+          <div className={styles.failure}>
             {failureMessage && failureMessage !== label ? (
               <div>{failureMessage}</div>
             ) : null}
             {actions}
-          </>
+          </div>
         ) : null}
         {details}
         {feedback}

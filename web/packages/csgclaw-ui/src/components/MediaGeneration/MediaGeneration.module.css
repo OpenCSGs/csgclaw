@@ -137,32 +137,13 @@ button.frame {
 }
 
 .failure {
+  display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: var(--csgclaw-ui-space-4);
+  align-items: flex-start;
+  gap: var(--csgclaw-ui-space-2);
   color: var(--csgclaw-ui-danger-text);
-  text-align: center;
-}
-
-.failure > span {
-  max-width: 260px;
-}
-
-.failure button {
-  box-sizing: border-box;
-  height: 30px;
-  padding: 0 var(--csgclaw-ui-space-3);
-  border: 1.5px solid var(--csgclaw-ui-button-neutral-border);
-  border-radius: var(--csgclaw-ui-radius-md);
-  background: transparent;
-  color: var(--csgclaw-ui-text);
-  font: var(--csgclaw-ui-font-weight-medium) var(--csgclaw-ui-space-3)/1.55
-    var(--csgclaw-ui-font-family-text);
-  letter-spacing: -0.01em;
-}
-
-.failure button:hover:not(:disabled) {
-  background: var(--csgclaw-ui-button-neutral-hover-background);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .variation {
