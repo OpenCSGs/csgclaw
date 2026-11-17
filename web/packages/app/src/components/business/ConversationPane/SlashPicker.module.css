@@ -7,7 +7,9 @@
 .slash-picker {
   left: 12px;
   right: auto;
-  max-height: min(352px, calc(100dvh - 220px));
+  height: min(352px, max(120px, calc(100dvh - 220px)));
+  max-height: 100dvh;
+  overflow-anchor: none;
   padding: 8px;
   border-color: rgba(148, 163, 184, 0.18);
   border-radius: 18px;

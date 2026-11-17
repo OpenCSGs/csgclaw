@@ -17,11 +17,24 @@ import {
   renderComposerSegments,
   serializeComposerSegments,
 } from "@/models/composer";
+import { normalizeSlashShorthandForPayload } from "@/models/slashCommands";
 
 const skill: ResourceSnapshot = { source: "skill", id: "review", type: "skill", name: "review" };
 const app: ResourceSnapshot = { source: "app", id: "installation-a", type: "connector", name: "GitLab" };
 
 describe("会话资源选择", () => {
+  it.each([
+    ["/Create Agent", "/创建智能体"],
+    ["/Create Room", "/创建房间"],
+  ])("preserves the localized command after leading whitespace: %s", (localized, canonical) => {
+    const prefix = "\n\t\u00a0";
+    const content = `${prefix}${localized} help`;
+    const expected = `${prefix}${canonical} help`;
+
+    expect(normalizeSlashShorthandForPayload(content)).toBe(expected);
+    expect(resourceMessageInput([], content)).toEqual({ content: expected, resource_refs: [] });
+  });
+
   it("相同资源去重，并保持正文和不同来源的身份", () => {
     const segments = addResources(
       [{ type: "text", text: "检查 MR" }],

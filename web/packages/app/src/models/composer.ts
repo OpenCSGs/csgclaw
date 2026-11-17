@@ -888,6 +888,19 @@ export function removeAdjacentMentionToken(
     return false;
   }
   const sibling = direction === "backward" ? token.nextSibling : token.previousSibling;
+  if (direction === "backward" && isComposerShortcutToken(token)) {
+    const caret = document.createRange();
+    caret.setStartBefore(token);
+    caret.collapse(true);
+    token.remove();
+    if (sibling instanceof Text && sibling.data.startsWith(" ")) {
+      sibling.deleteData(0, 1);
+      if (!sibling.data) sibling.remove();
+    }
+    selection.removeAllRanges();
+    selection.addRange(caret);
+    return true;
+  }
   token.remove();
   if (sibling?.nodeType === Node.TEXT_NODE && sibling.textContent === " ") {
     sibling.remove();
@@ -907,6 +920,9 @@ export function findAdjacentMentionToken(
 ): HTMLElement | null {
   if (node.nodeType === Node.TEXT_NODE) {
     if (direction === "backward" && offset > 0) {
+      if (offset === 1 && node.textContent?.startsWith(" ") && isComposerShortcutToken(node.previousSibling)) {
+        return node.previousSibling;
+      }
       return null;
     }
     if (direction === "forward" && offset < (node.textContent?.length ?? 0)) {
@@ -920,7 +936,21 @@ export function findAdjacentMentionToken(
   }
   const index = direction === "backward" ? offset - 1 : offset;
   const sibling = node.childNodes[index];
+  if (
+    direction === "backward" &&
+    sibling?.nodeType === Node.TEXT_NODE &&
+    sibling.textContent === " " &&
+    isComposerShortcutToken(sibling.previousSibling)
+  ) {
+    return sibling.previousSibling;
+  }
   return isComposerTokenNode(sibling) ? sibling : null;
+}
+
+function isComposerShortcutToken(node: Node | null | undefined): node is HTMLElement {
+  return (
+    node instanceof HTMLElement && (Boolean(node.dataset.composerSlashToken) || node.dataset.resourceType === "skill")
+  );
 }
 
 function isComposerTokenNode(node: Node | null | undefined): node is HTMLElement {
