@@ -1761,8 +1761,9 @@ Runtime 报告开始推理时，流会打开一个 `thinking` 内容块。块内
 模型向 Codex 提供思考文字或摘要时，接口会将其作为展示文本输出。服务端接受该偏好时返回
 `Preference-Applied: csgclaw-reasoning-summary`，旧服务端可忽略该偏好并正常回答。
 每个思考项使用最先到达的非空 `textDelta` 或 `summaryTextDelta` 作为展示来源，
-逐段发送 `thinking_delta`，忽略同一项的另一类增量以避免重复。
-结束快照只补齐选定来源尚未发送的文字。Qwen 放在 `summary` 中的完成快照可补齐匹配的文字前缀。
+所有段按到达顺序立即发送 `thinking_delta`，段编号变化时添加空行，忽略同一项的另一类增量以避免重复。
+结束快照按段核对已发送的文字，只追加匹配前缀之后尚未发送的内容。较早段的缺失文字也追加在流末尾。
+Qwen 放在 `summary` 中的完成快照可补齐匹配的文字前缀。
 现有请求头名称为兼容旧客户端继续保留，思考块承载展示文字，不包含 Anthropic 签名。
 
 工具名称由 `tool_use` 返回，工具参数由 `input_json_delta` 返回，

@@ -1816,9 +1816,11 @@ model-provided Codex reasoning text or summary when available. The preference is
 A server that applies it returns `Preference-Applied: csgclaw-reasoning-summary`.
 Older servers can ignore the preference and respond normally. For each reasoning
 item, Session displays the first nonempty `textDelta` or `summaryTextDelta` stream
-as `thinking_delta`. Other delta sources for that item are ignored to avoid
-duplicate output. Completion snapshots only append missing text from the selected
-source. Qwen snapshots stored in `summary` can complete a matching text prefix.
+as `thinking_delta`. All parts stream immediately in arrival order, with paragraph
+breaks when the part index changes. Other delta sources for that item are ignored
+to avoid duplicate output. Completion snapshots append only matching suffixes not
+yet sent for each part of the selected source. Missing earlier text is appended at
+the end of the stream. Qwen snapshots stored in `summary` can complete a matching text prefix.
 The existing preference name is retained for compatibility. Thinking blocks carry
 display text without Anthropic signatures.
 

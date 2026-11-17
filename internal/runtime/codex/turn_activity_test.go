@@ -158,11 +158,17 @@ func TestAppServerCompletesReasoningSummary(t *testing.T) {
 		want     []string
 	}{
 		{name: "snapshot only", snapshot: []string{"First", "Second"}, want: []string{"First\n\nSecond"}},
-		{name: "complete prefix and later part", deltas: map[int]string{0: "Fi", 1: "Second"}, snapshot: []string{"First", "Second"}, want: []string{"Fi", "rst\n\nSecond"}},
-		{name: "missing earlier part", deltas: map[int]string{1: "Sec"}, snapshot: []string{"First", "Second"}, want: []string{"First\n\nSecond"}},
+		{name: "complete prefix and later part", deltas: map[int]string{0: "Fi", 1: "Second"}, snapshot: []string{"First", "Second"}, want: []string{"Fi", "\n\nSecond", "\n\nrst"}},
+		{name: "missing earlier part", deltas: map[int]string{1: "Sec"}, snapshot: []string{"First", "Second"}, want: []string{"Sec", "\n\nFirst\n\nond"}},
 		{name: "no duplicate", deltas: map[int]string{0: "First"}, snapshot: []string{"First"}, want: []string{"First"}},
+		{name: "no duplicate across parts", deltas: map[int]string{0: "First", 1: "Second"}, snapshot: []string{"First", "Second"}, want: []string{"First", "\n\nSecond"}},
+		{name: "last part suffix", deltas: map[int]string{0: "First", 1: "Sec"}, snapshot: []string{"First", "Second"}, want: []string{"First", "\n\nSec", "ond"}},
+		{name: "each part suffix", deltas: map[int]string{0: "Fi", 1: "Sec"}, snapshot: []string{"First", "Second"}, want: []string{"Fi", "\n\nSec", "\n\nrst\n\nond"}},
+		{name: "same text in separate parts", deltas: map[int]string{0: "Same", 1: "Same"}, snapshot: []string{"Same", "Same"}, want: []string{"Same", "\n\nSame"}},
 		{name: "no snapshot", deltas: map[int]string{0: "First", 1: "Second"}, want: []string{"First", "\n\nSecond"}},
 		{name: "divergent snapshot", deltas: map[int]string{0: "First"}, snapshot: []string{"Rewritten", "Second"}, want: []string{"First", "\n\nSecond"}},
+		{name: "divergent later part", deltas: map[int]string{0: "First", 1: "Second"}, snapshot: []string{"First", "Rewritten"}, want: []string{"First", "\n\nSecond"}},
+		{name: "shorter later part", deltas: map[int]string{0: "First", 1: "Second"}, snapshot: []string{"First", "Sec"}, want: []string{"First", "\n\nSecond"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			sink := &recordingSink{}
@@ -256,9 +262,14 @@ func TestAppServerReasoningDeltaSources(t *testing.T) {
 			summary: []string{"haha"}, want: []string{"ha", "ha"},
 		},
 		{
-			name:    "content indices preserve part order",
+			name:    "content indices preserve arrival order",
 			deltas:  []delta{{"text", 1, "Second"}, {"text", 0, "First"}},
-			content: []string{"First", "Second"}, want: []string{"First", "\n\nSecond"},
+			content: []string{"First", "Second"}, want: []string{"Second", "\n\nFirst"},
+		},
+		{
+			name:    "Qwen snapshot completes each streamed part",
+			deltas:  []delta{{"text", 0, "Fi"}, {"text", 1, "Sec"}},
+			summary: []string{"First", "Second"}, want: []string{"Fi", "\n\nSec", "\n\nrst\n\nond"},
 		},
 		{
 			name:    "invalid or empty delta does not select source",
@@ -308,6 +319,68 @@ func TestAppServerReasoningDeltaSources(t *testing.T) {
 				if event := events[i+1]; event.Kind != activity.RuntimeEventReasoningSummary || event.Text != text {
 					t.Fatalf("event %d = %+v, want %q", i, event, text)
 				}
+			}
+		})
+	}
+}
+
+func TestAppServerReasoningPartsStreamBeforeCompletion(t *testing.T) {
+	for _, source := range []string{"text", "summaryText"} {
+		t.Run(source, func(t *testing.T) {
+			sink := &recordingSink{}
+			manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+			live := &liveSession{spec: SessionSpec{RuntimeID: "runtime", Profile: testProfile()}, session: &Session{SessionID: "thread"}}
+			manager.sessions["runtime"] = live
+			waiter, err := live.registerAppServerTurnWaiter("thread")
+			if err != nil {
+				t.Fatal(err)
+			}
+			waiter.setTurnID("turn")
+			waiter.streamReasoningSummary = true
+			notify := func(method string, fields map[string]any) {
+				t.Helper()
+				fields["threadId"], fields["turnId"], fields["itemId"] = "thread", "turn", "reasoning"
+				manager.handleAppServerNotification("runtime", live, appServerNotification{Method: method, Params: mustJSONRaw(t, fields)})
+			}
+			indexKey := "summaryIndex"
+			if source == "text" {
+				indexKey = "contentIndex"
+			}
+			// Check each event before any completion notification, including a
+			// missing initial part and subsequent returns to an earlier part.
+			for i, delta := range []struct {
+				index int
+				text  string
+				want  string
+			}{
+				{2, "Third", "Third"},
+				{2, " continued", " continued"},
+				{0, "First", "\n\nFirst"},
+				{1, "Second", "\n\nSecond"},
+				{0, " again", "\n\n again"},
+				{2, " end", "\n\n end"},
+			} {
+				notify("item/reasoning/"+source+"Delta", map[string]any{indexKey: delta.index, "delta": delta.text})
+				events := sink.snapshot()
+				if len(events) != i+1 {
+					t.Fatalf("delta %d: got %d events before completion, want %d", i, len(events), i+1)
+				}
+				if event := events[i]; event.Kind != activity.RuntimeEventReasoningSummary || event.MessageID != "reasoning" || event.Text != delta.want {
+					t.Fatalf("delta %d: got %+v, want %q", i, event, delta.want)
+				}
+			}
+			item := map[string]any{"id": "reasoning", "type": "reasoning"}
+			key := "summary"
+			if source == "text" {
+				key = "content"
+			}
+			item[key] = []string{"First again", "Second", "Third continued end"}
+			notify("item/completed", map[string]any{"item": item})
+			notify("item/completed", map[string]any{"item": item})
+			notify("item/reasoning/"+source+"Delta", map[string]any{indexKey: 2, "delta": "late"})
+			events := sink.snapshot()
+			if len(events) != 7 || events[6].Kind != activity.RuntimeEventReasoningCompleted {
+				t.Fatalf("completion replayed streamed text: %+v", events)
 			}
 		})
 	}
