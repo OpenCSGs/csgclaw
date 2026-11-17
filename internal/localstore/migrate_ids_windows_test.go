@@ -3,6 +3,7 @@
 package localstore
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,31 @@ import (
 
 	"golang.org/x/sys/windows"
 )
+
+func TestCreateSiblingBackupPreservesRelativeDirectorySymlink(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".csgclaw")
+	target := "z-dependencies"
+	link := "a-dependencies"
+	writeFile(t, filepath.Join(root, target, "package.json"), "{}")
+	if err := os.Symlink(target, filepath.Join(root, link)); err != nil {
+		if errors.Is(err, windows.ERROR_PRIVILEGE_NOT_HELD) {
+			t.Skipf("Windows account cannot create symlinks: %v", err)
+		}
+		t.Fatalf("create source directory symlink: %v", err)
+	}
+
+	backup, err := CreateSiblingBackup(root, time.Now())
+	if err != nil {
+		t.Fatalf("CreateSiblingBackup() error = %v", err)
+	}
+	if got, err := os.Readlink(filepath.Join(backup, link)); err != nil || got != target {
+		t.Fatalf("backup link target = %q, error = %v, want %q", got, err, target)
+	}
+	data, err := os.ReadFile(filepath.Join(backup, link, "package.json"))
+	if err != nil || string(data) != "{}" {
+		t.Fatalf("read through backup directory symlink = %q, error = %v", data, err)
+	}
+}
 
 func TestCreateSiblingBackupWithLockedRuntimeLock(t *testing.T) {
 	parent := t.TempDir()
@@ -81,4 +107,34 @@ func TestCreateSiblingBackupWithUnreadableDSHSharedModule(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(backup, "config.toml")); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestMigrateTypedIDsWithLockedDSHProfileDependency(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".csgclaw")
+	profiles := filepath.Join("agents", "agent-worker", ".dsh", "home", "profiles")
+	locked := filepath.Join(profiles, "node_modules", "@agentclientprotocol", "sdk", "package.json")
+	writeJSON(t, filepath.Join(root, "agents", "state.json"), map[string]any{
+		"agents": []map[string]any{{"id": "agent-worker", "name": "Worker"}},
+	})
+	writeFile(t, filepath.Join(root, locked), "{}")
+
+	lockedPath, err := windows.UTF16PtrFromString(filepath.Join(root, locked))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, err := windows.CreateFile(lockedPath, windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		t.Fatalf("open dependency without sharing: %v", err)
+	}
+	defer windows.CloseHandle(handle)
+	if _, err := os.ReadFile(filepath.Join(root, locked)); err == nil {
+		t.Fatal("locked dependency is still readable")
+	}
+
+	result, err := MigrateTypedIDs(MigrateOptions{Root: root})
+	if err != nil {
+		t.Fatalf("MigrateTypedIDs() error = %v", err)
+	}
+	assertMissing(t, filepath.Join(result.BackupPath, locked))
+	assertMissing(t, filepath.Join(root, "agents", "state.json"))
 }

@@ -92,7 +92,10 @@ func probeAuthSite(ctx context.Context, client *http.Client, baseURL string) (ti
 		return 0, errors.New("invalid site address")
 	}
 	target = target.JoinPath("sso/login")
-	target.RawQuery, target.Fragment, target.ForceQuery = "", "", false
+	// Supply the required SSO parameter without sending the workspace's callback
+	// URL or login state to a site that is only being probed.
+	target.RawQuery = url.Values{"redirect_url": {"http://127.0.0.1" + authCallbackPath}}.Encode()
+	target.Fragment, target.ForceQuery = "", false
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
 		return 0, err
