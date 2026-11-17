@@ -7,7 +7,6 @@ import { PanelEmptyState } from "@/components/business/PanelEmptyState";
 import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import conversationMessageListStyles from "./ConversationMessageList.module.css";
-import conversationPaneStyles from "./ConversationPane.module.css";
 import conversationThreadsStyles from "./ConversationThreads.module.css";
 import { messageResources } from "@/models/conversationResources";
 import { useEventCallback } from "@/hooks/useEventCallback";
@@ -242,7 +241,7 @@ const MessageListContent = memo(function MessageListContent({
             <Fragment key={message.id || `message-${index}`}>
               {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
               <div
-                className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""} ${message.metadata?.image_generation || isVideoGeneration ? conversationPaneStyles["image-generation-message"] : ""}`.trim()}
+                className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}
                 data-message-id={message.id || undefined}
               >
                 <button
@@ -309,14 +308,26 @@ const MessageListContent = memo(function MessageListContent({
                     </div>
                   ) : null}
                   <DiagnosticMessageAction metadata={message.metadata} t={t} />
-                  <ImageGenerationStatus message={message} roomID={conversation.id} t={t} />
+                  {isVideoGeneration && message.metadata?.image_generation ? (
+                    <ImageGenerationStatus message={message} roomID={conversation.id} t={t} />
+                  ) : null}
                   {isVideoGeneration ? (
                     <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
                   ) : (
-                    <MessageAttachments
-                      attachments={message.attachments}
+                    <ImageGenerationStatus
+                      message={message}
+                      roomID={conversation.id}
                       t={t}
-                      onPreviewAttachment={onPreviewAttachment}
+                      result={
+                        message.attachments?.length ? (
+                          <MessageAttachments
+                            generation={Boolean(message.metadata?.image_generation)}
+                            attachments={message.attachments}
+                            t={t}
+                            onPreviewAttachment={onPreviewAttachment}
+                          />
+                        ) : null
+                      }
                     />
                   )}
                   {embeddedVideos.map((video) => (

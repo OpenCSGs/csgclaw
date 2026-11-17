@@ -1,16 +1,26 @@
-import conversationPaneStyles from "./ConversationPane.module.css";
 import generatedMediaStyles from "./GeneratedMedia.module.css";
 import { useState } from "react";
-import { Button } from "@/components/ui";
+import type { ReactNode } from "react";
+import { Button, MediaGeneration } from "@/components/ui";
 import { retryImageGenerationRequest } from "@/api/im";
 import { localizeAPIError } from "@/shared/i18n";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
 
-export function ImageGenerationStatus({ message, roomID, t }: { message: IMMessage; roomID?: string; t: TranslateFn }) {
+export function ImageGenerationStatus({
+  message,
+  roomID,
+  t,
+  result,
+}: {
+  message: IMMessage;
+  roomID?: string;
+  t: TranslateFn;
+  result?: ReactNode;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const raw = message.metadata?.image_generation;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return result ?? null;
   const task = raw as Record<string, unknown>;
   const state = String(task.state ?? "");
   const details =
@@ -33,7 +43,6 @@ export function ImageGenerationStatus({ message, roomID, t }: { message: IMMessa
     .filter(Boolean)
     .join(" · ");
   const retryable = state === "failed" || state === "delivery_failed";
-  const pending = state === "generating" || state === "delivering";
   const errorKey = String(task.error ?? "image_generation_failed");
   const knownErrors = [
     "image_model_not_configured",
@@ -62,29 +71,32 @@ export function ImageGenerationStatus({ message, roomID, t }: { message: IMMessa
     }
   }
   return (
-    <div
-      className={conversationPaneStyles["image-generation-status"]}
-      role="status"
-      aria-live="polite"
-      aria-busy={pending || busy}
-    >
-      <span>{label}</span>
-      {retryable && (detailMessage || diagnostics) ? (
-        <div className={generatedMediaStyles["image-generation-error-details"]}>
-          {detailMessage ? <p>{detailMessage}</p> : null}
-          {diagnostics ? <small>{diagnostics}</small> : null}
-        </div>
-      ) : null}
-      {retryable ? (
-        <Button size="sm" variant="secondaryGray" disabled={busy} loading={busy} onClick={() => void retry()}>
-          {t(state === "delivery_failed" ? "imageRetryDelivery" : "imageRegenerate")}
-        </Button>
-      ) : null}
-      {error ? <span role="alert">{error}</span> : null}
-      <details className={generatedMediaStyles["image-generation-prompt"]}>
-        <summary>{t("imageViewPrompt")}</summary>
-        <p>{String(task.prompt ?? message.content ?? "")}</p>
-      </details>
-    </div>
+    <MediaGeneration
+      kind="image"
+      busy={busy || state === "generating" || state === "delivering"}
+      state={retryable ? "failed" : state === "completed" ? "completed" : "pending"}
+      label={label}
+      result={result}
+      promptDisclosureLabel={t("imageViewPrompt")}
+      prompt={String(task.prompt ?? message.content ?? "")}
+      failureMessage={detailMessage}
+      feedback={error ? <span role="alert">{error}</span> : null}
+      details={
+        retryable && diagnostics ? (
+          <div className={generatedMediaStyles["image-generation-error-details"]}>
+            <small>{diagnostics}</small>
+          </div>
+        ) : null
+      }
+      actions={
+        retryable ? (
+          <>
+            <Button size="sm" variant="secondaryGray" disabled={busy} loading={busy} onClick={() => void retry()}>
+              {t(state === "delivery_failed" ? "imageRetryDelivery" : "imageRegenerate")}
+            </Button>
+          </>
+        ) : null
+      }
+    />
   );
 }

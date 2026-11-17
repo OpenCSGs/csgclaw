@@ -1,10 +1,18 @@
-import conversationPaneStyles from "./ConversationPane.module.css";
-import generatedMediaStyles from "./GeneratedMedia.module.css";
+import type { ReactNode } from "react";
+import { MediaGeneration } from "@/components/ui";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
 
-export function VideoGenerationStatus({ message, t }: { message: IMMessage; t: TranslateFn }) {
+export function VideoGenerationStatus({
+  message,
+  t,
+  result,
+}: {
+  message: IMMessage;
+  t: TranslateFn;
+  result?: ReactNode;
+}) {
   const raw = message.metadata?.video_generation;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return result ?? null;
   const task = raw as Record<string, unknown>;
   const state = String(task.state ?? "");
   const upstreamStatus = String(task.upstream_status ?? "");
@@ -26,17 +34,22 @@ export function VideoGenerationStatus({ message, t }: { message: IMMessage; t: T
       : null;
   const errorMessage = String(errorDetails?.message ?? "").trim();
   return (
-    <div className={conversationPaneStyles["image-generation-status"]} role="status" aria-live="polite">
-      <span>
-        {state === "generating" && progressLabels[upstreamStatus]
-          ? progressLabels[upstreamStatus]
-          : labels[state] || t("videoGenerating")}
-      </span>
-      {state === "failed" && errorMessage ? <p>{errorMessage}</p> : null}
-      <details className={generatedMediaStyles["image-generation-prompt"]}>
-        <summary>{t("videoViewPrompt")}</summary>
-        <p>{String(task.prompt ?? message.content ?? "")}</p>
-      </details>
-    </div>
+    <MediaGeneration
+      kind="video"
+      state={
+        state === "failed" || state === "delivery_failed"
+          ? "failed"
+          : state === "completed"
+            ? "completed"
+            : state === "generating" && upstreamStatus === "queued"
+              ? "queued"
+              : "pending"
+      }
+      label={(state === "generating" && progressLabels[upstreamStatus]) || labels[state] || t("videoGenerating")}
+      result={result}
+      promptDisclosureLabel={t("videoViewPrompt")}
+      prompt={String(task.prompt ?? message.content ?? "")}
+      failureMessage={errorMessage}
+    />
   );
 }

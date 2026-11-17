@@ -65,6 +65,8 @@ import { ToggleFoundations } from "./ToggleFoundations";
 import { CheckboxFoundations } from "./CheckboxFoundations";
 import { TooltipFoundations } from "./TooltipFoundations";
 import { SliderFoundations } from "./SliderFoundations";
+import { QuestionCardPreview } from "./QuestionCardPreview";
+import { MediaGenerationPreview } from "./MediaGenerationPreview";
 import { ProgressFoundations } from "./ProgressFoundations";
 import { UiLabNavigation, sectionFromHash } from "./UiLabNavigation";
 import "@/pages/WorkspacePage/components/WorkspaceModals/WorkspaceModals.css";
@@ -286,6 +288,12 @@ function UiLabContent() {
               </UiLabPanel>
               <UiLabPanel id="steps-foundations" active={destination} visible={isVisible("steps-foundations")}>
                 <StepsFoundations />
+              </UiLabPanel>
+              <UiLabPanel id="media-generation" active={destination} visible={isVisible("media-generation")}>
+                <MediaGenerationPreview />
+              </UiLabPanel>
+              <UiLabPanel id="question-card" active={destination} visible={isVisible("question-card")}>
+                <QuestionCardPreview />
               </UiLabPanel>
               {applicationSections.map(({ key }) => (
                 <UiLabPanel

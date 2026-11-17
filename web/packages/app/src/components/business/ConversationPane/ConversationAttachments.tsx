@@ -240,7 +240,9 @@ export function MessageAttachments({
   attachments,
   t,
   onPreviewAttachment,
+  generation = false,
 }: {
+  generation?: boolean;
   attachments?: readonly MessageAttachment[] | null;
   t: TranslateFn;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
@@ -254,7 +256,11 @@ export function MessageAttachments({
     ({ attachment }) => !isImageAttachment(attachment) && !String(attachment.media_type || "").startsWith("video/"),
   );
   return (
-    <div className={conversationPaneStyles["message-attachments"]}>
+    <div
+      className={conversationPaneStyles["message-attachments"]}
+      data-generation={generation ? "" : undefined}
+      data-single-media={generation && attachments.length === 1 && images.length + videos.length === 1 ? "" : undefined}
+    >
       {images.length > 0 ? (
         <div className={conversationPaneStyles["message-attachment-grid"]}>
           {images.map(({ attachment, index }) => (

@@ -30,6 +30,8 @@ export const labGroups = [
       { id: "footer-foundations", label: "Section footers · 区块页脚", zh: "区块页脚" },
       { id: "pagination-foundations", label: "Pagination · 分页", zh: "分页" },
       { id: "steps-foundations", label: "Progress steps · 步骤进度", zh: "步骤进度" },
+      { id: "media-generation", label: "Media generation", zh: "媒体生成" },
+      { id: "question-card", label: "Question card", zh: "提问卡片" },
       ...applicationNavItems,
     ],
   },

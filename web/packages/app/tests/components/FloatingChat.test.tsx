@@ -1,5 +1,5 @@
 import { createRef } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import { FloatingChat } from "@/pages/WorkspacePage/components/FloatingChat";
@@ -335,15 +335,16 @@ describe("FloatingChat manager prompts", () => {
       title: "manager",
     });
 
+    const composer = within(screen.getByRole("region", { name: "questionAnswerMode" }));
     expect(screen.getAllByText("Choose a scope").length).toBeGreaterThan(0);
     expect(screen.getByRole("timer")).toBeInTheDocument();
     expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "questionPrevious" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
+    expect(composer.getByRole("button", { name: "questionPrevious" })).toBeDisabled();
+    expect(composer.getByRole("button", { name: "questionNext" })).toBeEnabled();
     expect(screen.queryByLabelText("Type a message. Use / for commands or skills")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Workspace/ }));
-    await user.click(screen.getByRole("button", { name: "questionPrevious" }));
+    await user.click(composer.getByRole("button", { name: "questionPrevious" }));
     const selectedOption = screen.getByRole("radio", { name: /Workspace/ });
     expect(selectedOption).toHaveAttribute("aria-checked", "true");
     await user.click(selectedOption);

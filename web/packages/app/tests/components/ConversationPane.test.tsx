@@ -1,4 +1,3 @@
-import messageContentStyles from "@/components/business/MessageContent/MessageContent.module.css";
 import testWorkingTurnStyles from "@/components/business/ConversationPane/WorkingTurn.module.css";
 import testConversationThreadsStyles from "@/components/business/ConversationPane/ConversationThreads.module.css";
 import testConversationAttachmentsStyles from "@/components/business/ConversationPane/ConversationAttachments.module.css";
@@ -837,20 +836,28 @@ describe("ConversationPane", () => {
     expect(screen.getAllByText("Choose a color").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Choose a color" })).toBeInTheDocument();
     expect(screen.getByRole("timer")).toBeInTheDocument();
-    expect(
-      screen.getByText("Choose a color", { selector: `.${messageContentStyles["agent-question-prompt"]}` }),
-    ).toBeInTheDocument();
-    expect(document.querySelector(".message-bubble:has(> .agent-activity-card)")).toBeInTheDocument();
+    const card = within(screen.getByRole("region", { name: "questionRequest" }));
+    expect(card.getByText("Choose a color")).toBeInTheDocument();
     expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "questionPrevious" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
+    expect(
+      within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", {
+        name: "questionPrevious",
+      }),
+    ).toBeDisabled();
+    expect(
+      within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", { name: "questionNext" }),
+    ).toBeEnabled();
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Blue/ }));
     await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Choose a color" })).not.toBeInTheDocument());
     expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "questionPrevious" }));
+    await user.click(
+      within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", {
+        name: "questionPrevious",
+      }),
+    );
     const selectedOption = screen.getByRole("radio", { name: /Blue/ });
     expect(selectedOption).toHaveAttribute("aria-checked", "true");
     await user.click(selectedOption);
@@ -873,11 +880,17 @@ describe("ConversationPane", () => {
 
     expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
     expect(screen.getByRole("timer")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
+    expect(
+      within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", { name: "questionNext" }),
+    ).toBeEnabled();
     expect(screen.queryByRole("textbox", { name: "Reply in thread" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Blue/ }));
-    await user.click(screen.getByRole("button", { name: "questionPrevious" }));
+    await user.click(
+      within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", {
+        name: "questionPrevious",
+      }),
+    );
     const selectedOption = screen.getByRole("radio", { name: /Blue/ });
     expect(selectedOption).toHaveAttribute("aria-checked", "true");
     await user.click(selectedOption);

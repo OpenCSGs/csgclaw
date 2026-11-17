@@ -10,9 +10,9 @@ import {
   MCPServersPanel,
   NotifierControls,
   RuntimeOptionsFields,
+  AgentSaveError,
 } from "@/components/business/ProfileControls";
 import {
-  InlineError,
   Field,
   TextInput,
   TextArea,
@@ -522,18 +522,8 @@ export function AgentProfileModal({
         onInstructionsChange={(instructions) => onAgentDraftChange({ ...agentDraft, instructions })}
         valid={!saveDisabled}
         busy={agentBusy}
-        error={
-          agentError ? (
-            <>
-              {agentError}
-              {agentBillingURL ? (
-                <a href={agentBillingURL} target="_blank" rel="noopener noreferrer">
-                  {t("rechargeAccount")}
-                </a>
-              ) : null}
-            </>
-          ) : undefined
-        }
+        error={agentError}
+        billingURL={agentBillingURL}
         progress={agentProgress}
         authenticated={openCSGAuthenticated}
         onRequireAuth={onRequireOpenCSGAuth}
@@ -588,17 +578,9 @@ export function AgentProfileModal({
         <DialogBody className={styles.body}>
           {editor}
           {agentError ? (
-            <InlineError>
+            <AgentSaveError billingURL={agentBillingURL} t={t}>
               {agentError}
-              {agentBillingURL ? (
-                <>
-                  {" "}
-                  <a className="agent-billing-action" href={agentBillingURL} target="_blank" rel="noopener noreferrer">
-                    {t("rechargeAccount")}
-                  </a>
-                </>
-              ) : null}
-            </InlineError>
+            </AgentSaveError>
           ) : null}
           <AgentCreateProgress progress={agentProgress} t={t} />
         </DialogBody>

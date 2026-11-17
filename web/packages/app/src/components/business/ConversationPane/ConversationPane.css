@@ -1204,8 +1204,8 @@ button.composer-working-item:active {
   color: var(--white);
 }
 
-.message-row .message-bubble:has(> .agent-activity-card),
-:root[data-theme="dark"] .message-row .message-bubble:has(> .agent-activity-card) {
+.message-row .message-bubble:has(> :is(.agent-activity-card, [data-question-card])),
+:root[data-theme="dark"] .message-row .message-bubble:has(> :is(.agent-activity-card, [data-question-card])) {
   overflow: visible;
   padding: 0;
   border: 0;
