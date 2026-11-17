@@ -9,6 +9,13 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import {
   StatusBadge,
   Button,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+  DialogTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuRoot,
@@ -46,6 +53,49 @@ type Props = {
   onOpen: (id: string) => void;
 };
 const plazaBatchSize = 12;
+
+function AgentCardDescription({ description, name, t }: { description: string; name: string; t: TranslateFn }) {
+  const previewRef = useRef<HTMLParagraphElement>(null);
+  const [truncated, setTruncated] = useState(false);
+  const content = description.trim();
+
+  useEffect(() => {
+    const preview = previewRef.current;
+    if (!preview) return;
+    const measure = () => setTruncated(preview.scrollHeight > preview.clientHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(preview);
+    return () => observer.disconnect();
+  }, [content]);
+
+  return (
+    <div className={styles.description}>
+      <p ref={previewRef} className={styles.descriptionPreview}>
+        {content || t("agentPlazaNoDescription")}
+      </p>
+      {content && truncated ? (
+        <DialogRoot>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="linkColor">
+              {t("agentPlazaReadDescription")}
+            </Button>
+          </DialogTrigger>
+          <DialogContent aria-describedby={undefined}>
+            <DialogHeader>
+              <DialogTitle className={styles.descriptionTitle}>{name}</DialogTitle>
+              <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
+            </DialogHeader>
+            <DialogBody>
+              <p className={styles.fullDescription}>{content}</p>
+            </DialogBody>
+          </DialogContent>
+        </DialogRoot>
+      ) : null}
+    </div>
+  );
+}
 
 export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen, probeAvailability, loginKey }: Props) {
   const [query, setQuery] = useState("");
@@ -154,7 +204,7 @@ export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen, probeAvailabili
                   </span>
                 ) : null}
               </div>
-              <p className={styles.description}>{agent.description}</p>
+              <AgentCardDescription description={agent.description} name={agent.name} t={t} />
               <AgentPlazaMetadata agent={agent} t={t} />
               <footer>
                 <Button
