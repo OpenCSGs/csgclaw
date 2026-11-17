@@ -14,6 +14,7 @@ import {
   normalizeTextMentions,
   parseComposerSegments,
   renderComposerSegments,
+  removeAdjacentMentionToken,
   replaceComposerSlashWithSegments,
   replaceMentionQueryWithToken,
   segmentsToPlainText,
@@ -28,6 +29,25 @@ function createComposerRoot() {
   document.body.append(root);
   return root;
 }
+
+it.each([
+  { type: "slash", text: "/Create Agent" },
+  {
+    type: "resource",
+    text: "summarize",
+    resource: { source: "skill", id: "summarize", type: "skill", name: "summarize" },
+  },
+] satisfies ComposerSegment[])("deletes an entire $type shortcut after its spacer", (shortcut) => {
+  const root = createComposerRoot();
+  renderComposerSegments(root, [shortcut, { type: "text", text: " Keep this draft." }]);
+  const selection = window.getSelection()!;
+  selection.collapse(root.lastChild, 1);
+
+  expect(removeAdjacentMentionToken(root, "backward")).toBe(true);
+  expect(parseComposerSegments(root)).toEqual([{ type: "text", text: "Keep this draft." }]);
+  expect(selection.anchorOffset).toBe(0);
+  root.remove();
+});
 
 function placeCaret(textNode: Text, offset = textNode.textContent?.length ?? 0) {
   const selection = window.getSelection();

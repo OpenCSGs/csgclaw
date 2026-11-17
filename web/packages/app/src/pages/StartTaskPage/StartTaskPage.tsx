@@ -70,8 +70,10 @@ import {
 import {
   builtinSlashCommandNames,
   composerActionSuggestions,
+  matchComposerCommand,
   normalizeSlashShorthandForPayload,
   suggestedSlashCommandNames,
+  slashCommandLabel,
 } from "@/models/slashCommands";
 import {
   buildSlashPickerState,
@@ -171,6 +173,7 @@ function StartTaskForm({
   const fileInput = useRef<HTMLInputElement>(null);
   const mentionRetryRef = useRef<HTMLButtonElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const inlineSkillShortcut = useRef("");
   const pageRef = useRef<HTMLElement>(null);
   const panelTrigger = useRef<HTMLButtonElement>(null);
   const panelID = useId();
@@ -234,8 +237,14 @@ function StartTaskForm({
   const skills = useInfiniteAgentSkills(slashAgentID, slashQuery, slashEnabled, Boolean(resourceAgentID));
   const slashState = useMemo(
     () =>
-      buildSlashPickerState({ draftText: draft, enabled: slashEnabled, query: slashQuery, skillOptions: skills.items }),
-    [draft, slashEnabled, slashQuery, skills.items],
+      buildSlashPickerState({
+        draftText: draft,
+        enabled: slashEnabled,
+        query: slashQuery,
+        skillOptions: skills.items,
+        t: sidebar?.t,
+      }),
+    [draft, sidebar?.t, slashEnabled, slashQuery, skills.items],
   );
   useSlashSelection(slashState.candidates, slashIndex, setSlashIndex, JSON.stringify([slashAgentID, slashQuery]));
   if (!controller.ready || !sidebar || !controller.taskEntry) return null;
@@ -299,16 +308,20 @@ function StartTaskForm({
     const editor = editorRef.current;
     if (!editor || !name) return;
     const start = editor.value.length - editor.value.trimStart().length;
-    const end = editor.value.trimStart().startsWith("/")
-      ? start + (editor.value.slice(start).match(/^\S+/u)?.[0].length ?? 0)
-      : editor.value.length;
+    const command = matchComposerCommand(editor.value);
+    const end =
+      command?.[0].length ??
+      (editor.value.trimStart().startsWith("/")
+        ? start + (editor.value.slice(start).match(/^\S+/u)?.[0].length ?? 0)
+        : editor.value.length);
     const isCommand = builtinSlashCommandNames.includes(name) || suggestedSlashCommandNames.includes(name);
+    inlineSkillShortcut.current = isCommand || resourceAgentID ? "" : slashCommandInputText(name).trimEnd();
     if (!isCommand && resourceAgentID) {
       setResources((current) => uniqueResources([...current, { source: "skill", id: name, name, type: "skill" }]));
       editor.setRangeText("", 0, end, "end");
     } else {
       editor.setRangeText(
-        slashCommandInputText(name).trimEnd() + (end === editor.value.length ? " " : ""),
+        slashCommandInputText(slashCommandLabel(name, t)).trimEnd() + (end === editor.value.length ? " " : ""),
         start,
         end,
         "end",
@@ -322,10 +335,36 @@ function StartTaskForm({
   function insertSuggestedCommand(name: string) {
     const editor = editorRef.current;
     if (!editor) return;
-    editor.setRangeText(`${slashCommandInputText(name).trimEnd()}\n`, 0, 0, "preserve");
+    editor.setRangeText(`${slashCommandInputText(slashCommandLabel(name, t)).trimEnd()}\n`, 0, 0, "preserve");
     promptMentions.change(editor);
     setSlashQuery(null);
     editor.focus();
+  }
+
+  function removePromptShortcut(editor: HTMLTextAreaElement): boolean {
+    const caret = editor.selectionStart;
+    if (caret !== editor.selectionEnd) return false;
+
+    const command = matchComposerCommand(editor.value);
+    const skill = inlineSkillShortcut.current;
+    const trimmed = editor.value.trimStart();
+    const matchesSkill = skill && trimmed.startsWith(skill) && /^(?:\s|$)/u.test(trimmed.slice(skill.length));
+    const start = command?.[1].length ?? editor.value.length - trimmed.length;
+    const end = command?.[0].length ?? (matchesSkill ? start + skill.length : start);
+    const separator = /^[ \n]/u.test(editor.value.slice(end)) ? 1 : 0;
+    if (end > start && caret > start && caret <= end + separator) {
+      editor.setRangeText("", start, end + separator, "end");
+      inlineSkillShortcut.current = "";
+      promptMentions.change(editor);
+      syncSlash(editor);
+      return true;
+    }
+
+    if (caret === 0 && resources.at(-1)?.type === "skill") {
+      setResources((current) => current.slice(0, -1));
+      return true;
+    }
+    return false;
   }
 
   function addAttachments(files: File[]) {
@@ -689,6 +728,10 @@ function StartTaskForm({
                         return;
                       }
                       if (promptMentions.keyDown(event)) return;
+                      if (event.key === "Backspace" && removePromptShortcut(event.currentTarget)) {
+                        event.preventDefault();
+                        return;
+                      }
                       if (
                         handleSlashPickerNavigation({
                           event,
@@ -801,7 +844,7 @@ function StartTaskForm({
                         disabled={busy}
                         onClick={() => insertSuggestedCommand(suggestion.name)}
                       >
-                        / {suggestion.name}
+                        / {slashCommandLabel(suggestion.name, t)}
                       </Button>
                     ))}
                     <span>{t("taskEntryInsertSuggestedCommand")}</span>

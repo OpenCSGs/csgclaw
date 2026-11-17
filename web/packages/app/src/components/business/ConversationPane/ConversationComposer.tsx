@@ -32,7 +32,12 @@ import {
   type ComposerSegment,
 } from "@/models/composer";
 import type { TranslateFn } from "@/models/conversations";
-import { composerActionSuggestions, type SlashPickerCandidate } from "@/models/slashCommands";
+import {
+  composerActionSuggestions,
+  slashCommandLabel,
+  slashCommandDisplayDescription,
+  type SlashPickerCandidate,
+} from "@/models/slashCommands";
 import { MentionPicker } from "./MentionPicker";
 import { SlashPicker } from "./SlashPicker";
 import { AttachmentDraftStrip } from "./ConversationAttachments";
@@ -332,10 +337,10 @@ export const ConversationComposer = memo(function ConversationComposer({
                 key={suggestion.name}
                 type="button"
                 className={conversationComposerStyles["composer-action-suggestion"]}
-                title={suggestion.description}
+                title={slashCommandDisplayDescription(suggestion.name, suggestion.description, t)}
                 onClick={() => onApplySlashCandidate(suggestion.name)}
               >
-                /{suggestion.name}
+                /{slashCommandLabel(suggestion.name, t)}
               </button>
             ))}
             <small>{t("suggestedActionsOnly")}</small>

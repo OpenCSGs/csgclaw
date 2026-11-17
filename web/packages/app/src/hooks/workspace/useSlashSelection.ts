@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 
-// Keep command selection stable when another batch is inserted before suggested commands.
+// Keep the default at the top while skills replace the initial suggested-command list.
+// Preserve selection away from the top when another batch is inserted before it.
 export function useSlashSelection(
   candidates: SlashPickerCandidate[],
   index: number,
@@ -12,7 +13,7 @@ export function useSlashSelection(
   useEffect(() => {
     const old = previous.current;
     previous.current = { candidates, index, scope };
-    if (old.scope !== scope || old.index !== index || old.candidates === candidates) return;
+    if (index === 0 || old.scope !== scope || old.index !== index || old.candidates === candidates) return;
     const selected = old.candidates[old.index];
     if (!selected) return;
     const next = candidates.findIndex(

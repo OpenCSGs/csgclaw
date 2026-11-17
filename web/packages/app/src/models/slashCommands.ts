@@ -116,16 +116,44 @@ export function renderSlashCommandPreviewText(content: unknown): string {
   return String(content ?? "");
 }
 
+export function slashCommandLabel(name: string, t: (key: string) => string): string {
+  if (name === "创建智能体") return t("slashCreateAgent");
+  if (name === "创建房间") return t("slashCreateRoom");
+  return name;
+}
+
+export function slashCommandDisplayDescription(
+  name: string,
+  description: string | undefined,
+  t: (key: string) => string,
+) {
+  if (name === "创建智能体") return t("slashCreateAgentDescription");
+  if (name === "创建房间") return t("slashCreateRoomDescription");
+  return description;
+}
+
+export function matchComposerCommand(text: string) {
+  return /^(\s*)(\/(?:创建智能体|创建房间|Create Agent|Create Room|new))(?=\s|$)/u.exec(text);
+}
+
+export function canonicalizeComposerCommand(text: string): string {
+  const match = matchComposerCommand(text);
+  const alias = match?.[2];
+  if (!match || (alias !== "/Create Agent" && alias !== "/Create Room")) return text;
+  const command = alias === "/Create Agent" ? "/创建智能体" : "/创建房间";
+  return match[1] + command + text.slice(match[0].length);
+}
+
 export function composerActionSuggestions(content: string): SlashPickerCandidate[] {
   const normalized = String(content || "").trim();
   if (!normalized || normalized.startsWith("/")) {
     return [];
   }
   const result: SlashPickerCandidate[] = [];
-  if (/(创建|新建).{0,12}(智能体|agent)/iu.test(normalized)) {
+  if (/(创建|新建).{0,12}(智能体|agent)|\b(create|build)\s+(?:(?:a|an|new)\s+)*agent\b/iu.test(normalized)) {
     result.push(suggestedActionCommands[0]);
   }
-  if (/(创建|新建).{0,12}(房间|room)/iu.test(normalized)) {
+  if (/(创建|新建).{0,12}(房间|room)|\bcreate\s+(?:(?:a|new)\s+)*room\b/iu.test(normalized)) {
     result.push(suggestedActionCommands[1]);
   }
   return result;
@@ -207,6 +235,7 @@ function slashSkillCommandTextWithBody(skillName: string, body = ""): string {
 }
 
 export function normalizeSlashShorthandForPayload(text: string): string {
+  text = canonicalizeComposerCommand(text);
   const shorthand = parseSlashShorthandToPayload(text);
   if (!shorthand) {
     return text;

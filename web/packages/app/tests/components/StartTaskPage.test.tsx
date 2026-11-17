@@ -209,9 +209,9 @@ describe("StartTaskPage task preparation", () => {
   beforeEach(() => vi.mocked(sendMessageRequest).mockReset());
   it("adds a suggested command before the original draft and waits for explicit send", async () => {
     vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
-    const { create } = setup();
+    const { create } = setup("/new", "test-model", { locale: "zh" });
     const user = userEvent.setup();
-    const prompt = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    const prompt = screen.getByRole("textbox", { name: /描述任务/ });
     const draft = "我想创建智能体。\n它需要监控 Token 用量。";
     const content = `/创建智能体\n${draft}`;
     fireEvent.change(prompt, { target: { value: draft } });
@@ -222,10 +222,38 @@ describe("StartTaskPage task preparation", () => {
     expect(create).not.toHaveBeenCalled();
     expect(sendMessageRequest).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await user.click(screen.getByRole("button", { name: "开始任务" }));
     await waitFor(() => expect(sendMessageRequest).toHaveBeenCalledWith(expect.objectContaining({ content })));
   });
 
+  it.each(["/Create Agent", "/Create Room"])("removes the %s shortcut in one Backspace", (command) => {
+    setup();
+    const prompt = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "taskEntryPrompt" });
+    fireEvent.change(prompt, { target: { value: `${command}\nKeep this draft.` } });
+    prompt.setSelectionRange(command.length + 1, command.length + 1);
+
+    fireEvent.keyDown(prompt, { key: "Backspace" });
+
+    expect(prompt).toHaveValue("Keep this draft.");
+    expect(prompt.selectionStart).toBe(0);
+  });
+  it("localizes the Create Agent shortcut and preserves its command on send", async () => {
+    vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
+    setup("/new", "test-model", { locale: "en" });
+    const user = userEvent.setup();
+    const prompt = screen.getByRole("textbox", { name: /describe your task/i });
+    fireEvent.change(prompt, { target: { value: "Create an agent to summarize notes." } });
+
+    await user.click(screen.getByRole("button", { name: /\/\s*Create Agent/i }));
+    expect(prompt).toHaveValue("/Create Agent\nCreate an agent to summarize notes.");
+
+    await user.click(screen.getByRole("button", { name: "Start task" }));
+    await waitFor(() =>
+      expect(sendMessageRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ content: "/创建智能体\nCreate an agent to summarize notes." }),
+      ),
+    );
+  });
   it("renders and sends the first task on HTTP without crypto.randomUUID", async () => {
     const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
     vi.stubGlobal("crypto", { getRandomValues });

@@ -1,5 +1,10 @@
 import { serializeComposerSegments, type ComposerSegment } from "./composer";
-import { parseSlashCommand, parseSlashShorthandToPayload, normalizeSlashShorthandForPayload } from "./slashCommands";
+import {
+  canonicalizeComposerCommand,
+  parseSlashCommand,
+  parseSlashShorthandToPayload,
+  normalizeSlashShorthandForPayload,
+} from "./slashCommands";
 
 import { resourceKey, isResourceSnapshot, type ResourceReference, type ResourceSnapshot } from "./agentResources";
 export type {
@@ -58,6 +63,7 @@ export function resourceMessageInput(
   segments: readonly ComposerSegment[],
   content = serializeComposerSegments(segments),
 ) {
+  content = canonicalizeComposerCommand(content);
   const refs: ResourceReference[] = selectedResources(segments).map(({ source, id }) => ({ source, id }));
   const command = parseSlashCommand(content) ?? parseSlashShorthandToPayload(content);
   if (command?.name === "use-skill") {
