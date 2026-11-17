@@ -5,7 +5,7 @@ Codex and DSH consume this metadata..
 
 ## Configuration
 
-The existing provider APIs return `model_metadata`, keyed by model ID, with `context_window` and `context_source`.
+The existing provider APIs return `model_metadata`, keyed by model ID, with `context_window`, `context_source`, and `max_output_tokens` when the provider advertises an output limit.
 The read-only `model_defaults` map supplies automatic capacities for reset previews before saving.
 Provider updates accept `model_overrides`, keyed by model ID, with an optional `context_window` field.
 An empty override map restores automatic settings for all models of that provider.
@@ -35,6 +35,10 @@ Reasoning deltas, MCP progress, token updates, and compaction lifecycle events a
 A turn ends on native completion or failure, caller cancellation, or runtime process exit.
 
 DSH receives `contextWindow` through its native model settings.
+DSH caps each request's output at the smallest of the provider's advertised output limit, 65,536 tokens, and one quarter of the resolved context window.
+DSH uses an 8,192-token fallback when discovery provides no output limit, bounded by one quarter of the context window.
+Providers can publish each deployment's output limit as `max_output_tokens` in its `/models` entry.
+Refresh an existing provider to discover its current output limit.
 Its managed compaction patch sets `thresholdRatio: 0.75` and `maxOverflowRetries: 1`.
 The Agent runtime option `auto_compact` accepts `enabled` (default) or `disabled`.
 The small managed ACP bridge forwards DSH's existing compaction lifecycle events; it does not implement a second compaction mechanism.

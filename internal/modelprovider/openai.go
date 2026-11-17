@@ -17,12 +17,13 @@ import (
 type openAIModelsResponse struct {
 	HasMore bool `json:"has_more"`
 	Data    []struct {
-		ID            string `json:"id"`
-		ContextWindow int64  `json:"context_window"`
-		ContextLength int64  `json:"context_length"`
-		Task          any    `json:"task"`
-		Tasks         any    `json:"tasks"`
-		Availability  *struct {
+		ID              string          `json:"id"`
+		ContextWindow   int64           `json:"context_window"`
+		ContextLength   int64           `json:"context_length"`
+		MaxOutputTokens json.RawMessage `json:"max_output_tokens"`
+		Task            any             `json:"task"`
+		Tasks           any             `json:"tasks"`
+		Availability    *struct {
 			IsAvailable *bool `json:"is_available"`
 		} `json:"availability"`
 		Metadata struct {
@@ -171,7 +172,14 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 		if m.ContextWindow == 0 {
 			m.ContextWindow = item.ContextLength
 		}
-		if m.Validate() == nil && m != (modelcap.Metadata{}) {
+		if m.Validate() != nil {
+			m.ContextWindow = 0
+		}
+		var outputLimit int64
+		if json.Unmarshal(item.MaxOutputTokens, &outputLimit) == nil && outputLimit > 0 {
+			m.MaxOutputTokens = outputLimit
+		}
+		if m != (modelcap.Metadata{}) {
 			metadata[id] = m
 		}
 		var declaredTasks any = item.Task

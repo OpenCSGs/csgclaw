@@ -1067,7 +1067,24 @@ func dshProviderSettings(profile agentruntime.Profile) map[string]any {
 		inputModalities = []string{"text"}
 	}
 	metadata := profile.ModelMetadata.Normalized()
-	return map[string]any{"protocol": "chat-completions", "baseURL": profile.BaseURL, "apiKeyEnv": llmAPIKeyEnvName, "models": []map[string]any{{"id": profile.ModelID, "inputModalities": inputModalities, "contextWindow": metadata.ContextWindow, "maxTokens": max(int64(1), min(int64(8192), metadata.ContextWindow/4))}}}
+	const defaultOutputBudget = 8 * 1024
+	const maxOutputBudget = 64 * 1024
+	outputBudget := metadata.MaxOutputTokens
+	if outputBudget <= 0 {
+		outputBudget = defaultOutputBudget
+	}
+	outputBudget = max(1, min(outputBudget, maxOutputBudget, metadata.ContextWindow/4))
+	return map[string]any{
+		"protocol":  "chat-completions",
+		"baseURL":   profile.BaseURL,
+		"apiKeyEnv": llmAPIKeyEnvName,
+		"models": []map[string]any{{
+			"id":              profile.ModelID,
+			"inputModalities": inputModalities,
+			"contextWindow":   metadata.ContextWindow,
+			"maxTokens":       outputBudget,
+		}},
+	}
 }
 
 func writeStandingInstructions(root, id, name, cliPath string) error {
