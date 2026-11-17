@@ -280,6 +280,9 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 				return Agent{}, fmt.Errorf("agent name %q already exists", name)
 			}
 		}
+		if current.Name != name {
+			current.NamedBy = identityActor(ctx)
+		}
 		current.Name = name
 	}
 	if updateRequested("description", req.Description != nil) {

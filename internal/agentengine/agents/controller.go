@@ -752,6 +752,7 @@ func (s *Controller) newCodexManagerAgent(name, description, instructions, avata
 	prof := cloneProfile(profile)
 	existing, _ := s.agentSnapshot(ManagerUserID)
 	return Agent{
+		CreatedBy: existing.CreatedBy, NamedBy: existing.NamedBy,
 		SkillStates:      maps.Clone(existing.SkillStates),
 		ID:               ManagerUserID,
 		Name:             strings.TrimSpace(name),
@@ -1731,7 +1732,11 @@ func (s *Controller) Stop(ctx context.Context, id string) (Agent, error) {
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
 	}
-	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	ctx, release, err := s.LifecycleCoordinator().MutationInterrupt(ctx, canonicalAgentID(id), func() {
+		if s.interruptAgent != nil {
+			s.interruptAgent(canonicalAgentID(id))
+		}
+	})
 	if err != nil {
 		return Agent{}, err
 	}
@@ -2275,7 +2280,7 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 		return Agent{}, fmt.Errorf("agent id %q not found", id)
 	}
 	if nameExists {
-		return Agent{}, fmt.Errorf("agent name %q already exists", name)
+		return Agent{}, fmt.Errorf("agent name %q %w", name, identity.ErrNameExists)
 	}
 	switch {
 	case runtimeName == "":
@@ -2411,14 +2416,19 @@ func (s *Controller) persistStartingWorker(ctx context.Context, id, name, descri
 	}
 	if s.hasNameLockedExcept(name, id) {
 		s.mu.Unlock()
-		return fmt.Errorf("agent name %q already exists", name)
+		return fmt.Errorf("agent name %q %w", name, identity.ErrNameExists)
 	}
 
 	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, runtimeOptions, mcpServers, runtimeCredentials, runtimeInitShell, agentruntime.Info{
 		State:     agentruntime.StateCreated,
 		CreatedAt: time.Now().UTC(),
 	})
+	worker.CreatedBy, worker.NamedBy = identityActor(ctx), identityActor(ctx)
 	if exists {
+		worker.CreatedBy, worker.NamedBy = previous.CreatedBy, previous.NamedBy
+		if previous.Name != name {
+			worker.NamedBy = identityActor(ctx)
+		}
 		worker.SkillStates = maps.Clone(previous.SkillStates)
 	}
 	if exists && previousKey != worker.ID {
@@ -2466,11 +2476,16 @@ func (s *Controller) persistCreatedWorker(ctx context.Context, id, name, descrip
 	}
 	if s.hasNameLockedExcept(name, id) {
 		s.mu.Unlock()
-		return Agent{}, fmt.Errorf("agent name %q already exists", name)
+		return Agent{}, fmt.Errorf("agent name %q %w", name, identity.ErrNameExists)
 	}
 
 	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, createRuntimeExt, mcpServers, runtimeCredentials, runtimeInitShell, info)
+	worker.CreatedBy, worker.NamedBy = identityActor(ctx), identityActor(ctx)
 	if exists {
+		worker.CreatedBy, worker.NamedBy = previous.CreatedBy, previous.NamedBy
+		if previous.Name != name {
+			worker.NamedBy = identityActor(ctx)
+		}
 		worker.SkillStates = maps.Clone(previous.SkillStates)
 	}
 	s.clearRuntimeAvailabilityLocked(worker.ID)

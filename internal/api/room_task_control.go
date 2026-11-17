@@ -22,6 +22,9 @@ func (h *Handler) RecoverRoomTasks() error {
 	return h.roomTaskSvc.Recover()
 }
 func (h *Handler) handleRoomTaskEvents(w http.ResponseWriter, r *http.Request) {
+	if h.autonomousRoomTaskRead(w, r, true) {
+		return
+	}
 	if !h.requireRoomTasks(w, r) {
 		return
 	}

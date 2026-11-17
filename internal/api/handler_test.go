@@ -4556,8 +4556,19 @@ func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
 	t.Cleanup(func() { remoteSkillsHubAccessToken = previousAccessToken })
 
 	officialHub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/skills" {
-			t.Fatalf("path = %q, want /api/v1/skills", r.URL.Path)
+		if r.URL.Path == "/api/v1/skills/AIWizards/agent-builder" {
+			want := ""
+			if currentStatus.Authenticated {
+				want = "Bearer private-skill-token"
+			}
+			if r.Header.Get("Authorization") != want {
+				t.Error("release request did not preserve matching authentication")
+			}
+			writeJSON(w, 200, map[string]any{"data": map[string]any{"latest_version": "1.2.0", "versions": []any{}}})
+			return
+		}
+		if r.URL.Path != "/api/v1/agent/skills" {
+			t.Fatalf("path = %q, want /api/v1/agent/skills", r.URL.Path)
 		}
 		if got := r.URL.Query().Get("page"); got != "2" {
 			t.Fatalf("page = %q, want 2", got)
@@ -4565,14 +4576,11 @@ func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
 		if got := r.URL.Query().Get("per"); got != "16" {
 			t.Fatalf("per = %q, want 16", got)
 		}
-		if got := r.URL.Query().Get("search"); got != "agents" {
+		if got := r.URL.Query().Get("search"); got != "agents" && got != "expired" {
 			t.Fatalf("search = %q, want agents", got)
 		}
-		if got := r.URL.Query().Get("sort"); got != "trending" {
-			t.Fatalf("sort = %q, want trending", got)
-		}
-		if got := r.URL.Query().Get("source"); got != "" {
-			t.Fatalf("source = %q, want empty", got)
+		if r.URL.Query().Has("sort") || r.URL.Query().Has("source") {
+			t.Fatalf("unexpected legacy filters: %v", r.URL.Query())
 		}
 		wantAuthorization := ""
 		if currentStatus.Authenticated {
@@ -4581,9 +4589,14 @@ func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != wantAuthorization {
 			t.Fatalf("Authorization = %q, want %q", got, wantAuthorization)
 		}
+		if r.URL.Query().Get("search") == "expired" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []map[string]any{{
 				"default_branch": "dev",
+				"recommended":    true,
 				"description":    "Build agents",
 				"name":           "Skill",
 				"path":           "AIWizards/agent-builder",
@@ -4627,12 +4640,13 @@ enabled = true
 	}
 	var response struct {
 		Items []struct {
-			Name       string `json:"name"`
-			Readonly   bool   `json:"readonly"`
-			RemotePath string `json:"remote_path"`
-			RemoteRef  string `json:"remote_ref"`
-			RemoteURL  string `json:"remote_url"`
-			Source     string `json:"source"`
+			Name        string `json:"name"`
+			Recommended bool   `json:"recommended"`
+			Readonly    bool   `json:"readonly"`
+			RemotePath  string `json:"remote_path"`
+			RemoteRef   string `json:"remote_ref"`
+			RemoteURL   string `json:"remote_url"`
+			Source      string `json:"source"`
 		} `json:"items"`
 		NextPage *int `json:"next_page"`
 		Page     int  `json:"page"`
@@ -4652,7 +4666,7 @@ enabled = true
 		t.Fatalf("items = %+v, want one", response.Items)
 	}
 	item := response.Items[0]
-	if item.Name != "agent-builder" || !item.Readonly || item.RemotePath != "AIWizards/agent-builder" || item.RemoteRef != "dev" || item.Source != "official" {
+	if item.Name != "agent-builder" || !item.Readonly || !item.Recommended || item.RemotePath != "AIWizards/agent-builder" || item.RemoteRef != "dev" || item.Source != "official" {
 		t.Fatalf("item = %+v, want normalized official skill", item)
 	}
 	if want := auth.DefaultOpenCSGBaseURL + "/skills/AIWizards/agent-builder"; item.RemoteURL != want {
@@ -4708,6 +4722,13 @@ enabled = true
 			}
 		})
 	}
+	currentStatus = auth.Status{}
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/skills/remote?page=2&per=16&search=expired", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expired login status = %d, want 401; body=%s", rec.Code, rec.Body.String())
+	}
+
 }
 
 func TestHandleSkillInstallFromOfficialHub(t *testing.T) {
@@ -6833,7 +6854,7 @@ func TestHandleFeishuEventsSendsHeartbeat(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer secret")
-	rec := httptest.NewRecorder()
+	rec := newSSERecorder()
 
 	done := make(chan struct{})
 	go func() {
@@ -6841,11 +6862,17 @@ func TestHandleFeishuEventsSendsHeartbeat(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), ": ping\n\n")
+	})
 	cancel()
 	<-done
 
-	if body := rec.Body.String(); !strings.Contains(body, ": ping\n\n") {
+	if body := rec.BodyString(); !strings.Contains(body, ": ping\n\n") {
 		t.Fatalf("body = %q, want heartbeat ping", body)
 	}
 }
@@ -6905,10 +6932,9 @@ func TestHandleIMEventsExposeRoomIDOnly(t *testing.T) {
 	srv := &Handler{imBus: bus}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
+	rec := newSSERecorder()
 
 	done := make(chan struct{})
 	go func() {
@@ -6916,7 +6942,13 @@ func TestHandleIMEventsExposeRoomIDOnly(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), ": connected\n\n")
+	})
 	bus.Publish(im.Event{
 		Type:   im.EventTypeMessageCreated,
 		RoomID: "room-1",
@@ -6927,11 +6959,13 @@ func TestHandleIMEventsExposeRoomIDOnly(t *testing.T) {
 		},
 		Sender: &im.User{ID: "u-admin", Name: "admin"},
 	})
-	time.Sleep(20 * time.Millisecond)
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), `"room_id":"room-1"`)
+	})
 	cancel()
 	<-done
 
-	body := rec.Body.String()
+	body := rec.BodyString()
 	if !strings.Contains(body, `"room_id":"room-1"`) {
 		t.Fatalf("body = %q, want room_id", body)
 	}
@@ -6945,10 +6979,9 @@ func TestHandleIMEventsExposeTeamPayload(t *testing.T) {
 	srv := &Handler{imBus: bus}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
+	rec := newSSERecorder()
 
 	done := make(chan struct{})
 	go func() {
@@ -6956,7 +6989,13 @@ func TestHandleIMEventsExposeTeamPayload(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), ": connected\n\n")
+	})
 	bus.Publish(im.Event{
 		Type:   im.EventTypeTeamCreated,
 		TeamID: "team-1",
@@ -6965,11 +7004,13 @@ func TestHandleIMEventsExposeTeamPayload(t *testing.T) {
 			Title: "Weather team",
 		},
 	})
-	time.Sleep(20 * time.Millisecond)
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), `"type":"team.created"`)
+	})
 	cancel()
 	<-done
 
-	body := rec.Body.String()
+	body := rec.BodyString()
 	if !strings.Contains(body, `"type":"team.created"`) || !strings.Contains(body, `"team_id":"team-1"`) || !strings.Contains(body, `"title":"Weather team"`) {
 		t.Fatalf("body = %q, want team.created payload", body)
 	}

@@ -8,8 +8,12 @@ Codex worker runtime on the host machine.
 Before acting on a request:
 
 1. Read the local file `SOUL.md` for identity, tone, and boundaries.
-2. Read the local file `USER.md` for user preferences when present.
-3. Read the local file `IDENTITY.md` for the worker role.
+2. Read the local file `IDENTITY.md` for the worker role.
+
+CSGClaw manages long-term user memory automatically.
+Use the memory supplied with the current turn for user preferences and cross-conversation recall.
+Do not automatically read `USER.md` as memory or copy chat preferences into workspace files.
+Only edit a file for this purpose when the user explicitly requests that file as a deliverable.
 
 Use filesystem tools such as the shell to read workspace files. A URI beginning
 with `workspace:` is not an MCP resource. Never call `read_mcp_resource` or
@@ -43,11 +47,6 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
   filesystem tools, never MCP resource tools.
 - Before using a skill, check the local `skills/` directory and read the
   matching `SKILL.md`.
-- If the assignment is a direct agent task notification with
-  `csgclaw-cli task claim --task <task_id>`, claim it with
-  `csgclaw-cli task claim --task <task_id> --actor-id <your_participant_id>`
-  and report completion, failure, or blockage with
-  `csgclaw-cli task update --task <task_id> --actor-id <your_participant_id> --status <completed|failed|blocked> ...`.
 - 按照当前消息的公共资源选择规则处理显式技能调用，读取所选 slug 对应的 `SKILL.md` 并执行其中步骤。
 - Prefer local workspace skills over external discovery.
 - For registry skill search, inspect, versions, or install, read

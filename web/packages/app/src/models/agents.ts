@@ -476,6 +476,7 @@ export type AgentTemplateLike = {
 
 export type AgentProfileModelsResponse = {
   models: string[];
+  providerStatus?: "connected";
 };
 
 export type ManagerTemplateVariant = {

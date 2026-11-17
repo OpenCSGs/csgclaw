@@ -17,13 +17,15 @@ import {
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import { SkillSourceDetails } from "./SkillSourceDetails";
-import { skillDirectory, skillVersionLabel } from "@/models/skillLibrary";
+import { skillDirectory, skillLibraryVersion, skillVersionLabel } from "@/models/skillLibrary";
 import { isReadonlySkill } from "@/models/skillhub";
 import { SkillDetailFiles } from "@/components/business/SkillDetailFiles";
 import styles from "./SkillDetailDialog.module.css";
 import resourceSettingsStyles from "./ResourceSettings.module.css";
 import type { SkillSummary } from "@/models/skillhub";
 import type { TranslateFn } from "@/models/conversations";
+import type { SkillUpdateInfo } from "@/models/skillUpdates";
+import { VersionLine } from "@/components/business/SkillUpdateDialog";
 
 export type SkillDetailTarget = {
   skill: SkillSummary;
@@ -39,6 +41,8 @@ export function SkillDetailDialog({
   allowDelete = true,
   portalContainer,
   removeAction,
+  update,
+  onRequestUpdate,
 }: {
   target: SkillDetailTarget | null;
   t: TranslateFn;
@@ -55,11 +59,14 @@ export function SkillDetailDialog({
   portalContainer?: HTMLElement | null;
 
   removeAction?: { busy: boolean; onRemove: () => void };
+  update?: SkillUpdateInfo;
+  onRequestUpdate?: (name: string) => void;
 }) {
   const controller = useWorkspaceControllerContext();
   const hub = controller.hubViewProps?.hub;
   const skill = target?.skill ?? null;
   const variant = target?.variant ?? "installed";
+  const versionLabel = skill ? skillVersionLabel(skillLibraryVersion(skill)) : "";
   const [confirmOpen, setConfirmOpen] = useState(false);
   // Keep deletion errors local; hub errors depend on the selected resource type.
   const [deleteError, setDeleteError] = useState("");
@@ -104,7 +111,7 @@ export function SkillDetailDialog({
                         ? t("iaSkillsActiveVersion", {
                             version: skillVersionLabel(skill.discovery.version) || t("iaSkillsUnversioned"),
                           })
-                        : originLabel(skill, t)}
+                        : originLabel(skill, t) + (variant === "installed" && versionLabel ? ` · ${versionLabel}` : "")}
                     </span>
                   </div>
                   <SkillDescription key={skill.name} text={skill.description || skill.name} t={t} />
@@ -125,6 +132,20 @@ export function SkillDetailDialog({
                 </div>
               </DialogHeader>
               <DialogBody className={styles.body}>
+                {variant === "installed" && update?.latestVersion && onRequestUpdate ? (
+                  <section className={styles.updateNotice} aria-label={t("skillUpdatesAvailable")}>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <VersionLine current={update.localVersion} latest={update.latestVersion} t={t} />
+                      <Button variant="primary" size="sm" onClick={() => onRequestUpdate(skill.name)}>
+                        {t(update.available ? "iaSkillsUpdate" : "skillUpdatesReview")}
+                      </Button>
+                    </div>
+                    <details>
+                      <summary>{t("skillUpdatesReleaseNotes")}</summary>
+                      <p className={styles.updateNotes}>{update.changelog || t("skillUpdatesNoNotes")}</p>
+                    </details>
+                  </section>
+                ) : null}
                 {variant === "installed" && skill.discovery ? (
                   <SkillSourceDetails skill={skill} locale={controller.sidebarProps?.locale || "zh"} t={t} />
                 ) : null}

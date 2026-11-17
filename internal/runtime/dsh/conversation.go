@@ -68,10 +68,12 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 
 	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(proc.workspace, "AGENTS.md"), filepath.Join(proc.root, settingsFileName), filepath.Join(proc.root, patchFileName), filepath.Join(proc.root, contextPatchFileName))
 	diagnostics.From(ctx).RuntimeInfo("dsh", proc.profile.ModelID)
-	slog.New(diagnostics.NewServerLogHandler(proc.stderr, slog.LevelInfo, nil)).InfoContext(ctx, "model request configuration", "model", proc.profile.ModelID, "runtime_id", c.runtimeID, "session_id", sessionID, "turn_id", request.ID)
+	if proc.stderr != nil {
+		slog.New(diagnostics.NewServerLogHandler(proc.stderr, slog.LevelInfo, nil)).InfoContext(ctx, "model request configuration", "model", proc.profile.ModelID, "runtime_id", c.runtimeID, "session_id", sessionID, "turn_id", request.ID)
+	}
 	diagnostics.From(ctx).RuntimeRef(sessionID, "", "")
 	finishPrepare()
-	turn := &activeTurn{diagnostic: diagnostics.From(ctx), request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
+	turn := &activeTurn{ctx: ctx, diagnostic: diagnostics.From(ctx), request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
 	turn.tokenUsage = modelusage.Usage{ModelID: proc.profile.ModelID}
 	proc.mu.Lock()
 	proc.active[sessionID] = turn
@@ -130,6 +132,12 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	output := turn.output.String()
 	presentedFiles := append([]presentedFile(nil), turn.presentedFiles...)
 	proc.mu.Unlock()
+	var contextErr *contract.TurnError
+	if compactionFailed {
+		contextErr = &contract.TurnError{Code: contract.ErrorCode("context_compaction_failed"), Message: "Conversation compaction failed. Your history is preserved. Retry or choose a model with a larger context window."}
+	} else if contextExceeded {
+		contextErr = &contract.TurnError{Code: contract.ErrorCode("context_length_exceeded"), Message: "The input exceeds the model context window. Split the input or check the model capacity."}
+	}
 	if interactionErr != nil {
 		return contract.TurnResult{Status: contract.TurnFailed, Output: output, Dispatched: dispatched, Error: interactionErr}
 	}
@@ -142,22 +150,34 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 			return contract.TurnResult{Status: contract.TurnCanceled, Output: output, Dispatched: dispatched, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: message}}
 		}
 		result := failed(err)
-		if compactionFailed {
-			result.Error = &contract.TurnError{Code: contract.ErrorCode("context_compaction_failed"), Message: "Conversation compaction failed. Your history is preserved. Retry or choose a model with a larger context window."}
-		} else if contextExceeded {
-			result.Error = &contract.TurnError{Code: contract.ErrorCode("context_length_exceeded"), Message: "The input exceeds the model context window. Split the input or check the model capacity."}
+		if contextErr != nil {
+			result.Error = contextErr
 		}
 		result.Output = output
 		result.Dispatched = dispatched
 		return result
 	}
-	switch strings.ToLower(strings.TrimSpace(response.StopReason)) {
+	stopReason := strings.ToLower(strings.TrimSpace(response.StopReason))
+	switch stopReason {
 	case "end_turn", "max_tokens":
 		files, fileErr := authorizePresentedFiles(ctx, c.runtimeID, proc.workspace, presentedFiles)
 		if fileErr != nil {
 			return contract.TurnResult{Status: contract.TurnFailed, Output: output, Dispatched: dispatched, Error: fileErr}
 		}
-		return contract.TurnResult{Status: contract.TurnSucceeded, Output: output, Dispatched: dispatched, RuntimeFiles: files}
+		// ACP can report end_turn even when DSH failed to produce a reply.
+		// Thoughts and tool activity alone are not a deliverable.
+		if strings.TrimSpace(output) != "" || len(files) > 0 {
+			return contract.TurnResult{Status: contract.TurnSucceeded, Output: output, Dispatched: dispatched, RuntimeFiles: files}
+		}
+		turnErr := contextErr
+		if turnErr == nil {
+			if stopReason == "max_tokens" {
+				turnErr = &contract.TurnError{Code: "output_token_limit", Message: "DSH reached the output token limit before returning an answer."}
+			} else {
+				turnErr = &contract.TurnError{Code: "empty_agent_response", Message: "DSH ended the turn without returning an answer."}
+			}
+		}
+		return contract.TurnResult{Status: contract.TurnFailed, Output: output, Dispatched: dispatched, Error: turnErr}
 	case "cancelled":
 		return contract.TurnResult{Status: contract.TurnCanceled, Output: output, Dispatched: dispatched, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: "DSH turn was canceled"}}
 	default:
@@ -184,21 +204,22 @@ func (c *conversation) ensureSession(ctx context.Context, proc *process, request
 	if ready {
 		return sessionID, nil
 	}
+	mcpServers, token := proc.sessionMCPServers()
 	if exists {
 		var resumed sessionResult
-		if err := proc.client.call(ctx, "session/resume", map[string]any{"sessionId": sessionID, "cwd": proc.workspace, "mcpServers": proc.mcp}, &resumed, nil); err != nil {
+		if err := proc.client.call(ctx, "session/resume", map[string]any{"sessionId": sessionID, "cwd": proc.workspace, "mcpServers": mcpServers}, &resumed, nil); err != nil {
 			return "", &contract.TurnError{Code: contract.ErrorConversationNotResumable, Message: fmt.Sprintf("resume DSH session: %v", err)}
 		}
 		if err := configureSession(ctx, proc, sessionID, resumed.ConfigOptions); err != nil {
 			return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 		}
 		proc.mu.Lock()
-		proc.ready[sessionID] = true
+		proc.markSessionReadyLocked(sessionID, token)
 		proc.mu.Unlock()
 		return sessionID, nil
 	}
 	var created sessionResult
-	if err := proc.client.call(ctx, "session/new", map[string]any{"cwd": proc.workspace, "mcpServers": proc.mcp}, &created, nil); err != nil {
+	if err := proc.client.call(ctx, "session/new", map[string]any{"cwd": proc.workspace, "mcpServers": mcpServers}, &created, nil); err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: fmt.Sprintf("create DSH session: %v", err)}
 	}
 	if strings.TrimSpace(created.SessionID) == "" {
@@ -209,11 +230,21 @@ func (c *conversation) ensureSession(ctx context.Context, proc *process, request
 	}
 	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
 		meta.Sessions[key] = created.SessionID
-		proc.ready[created.SessionID] = true
+		proc.markSessionReadyLocked(created.SessionID, token)
 	}); err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
 	return created.SessionID, nil
+}
+
+func (p *process) markSessionReadyLocked(sessionID, token string) {
+	p.ready[sessionID] = true
+	if token != "" {
+		if p.appMCPSessionTokens == nil {
+			p.appMCPSessionTokens = make(map[string]string)
+		}
+		p.appMCPSessionTokens[sessionID] = token
+	}
 }
 
 func configureSession(ctx context.Context, proc *process, sessionID string, options []json.RawMessage) error {
@@ -351,6 +382,7 @@ func removeSessionBindings(ctx context.Context, proc *process, logicalKey, keep 
 			if proc.ready[id] {
 				active = append(active, id)
 				delete(proc.ready, id)
+				delete(proc.appMCPSessionTokens, id)
 			}
 			delete(meta.Sessions, key)
 		}

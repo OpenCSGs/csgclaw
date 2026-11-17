@@ -1,6 +1,6 @@
 import messageContentStyles from "./MessageContent.module.css";
 import { useEffect, useMemo, useState } from "react";
-import { Check, CircleHelp, Clock3, LockKeyhole, ShieldAlert, ShieldCheck, ShieldX, Wrench, X } from "lucide-react";
+import { Check, ShieldAlert, ShieldCheck, ShieldX, Wrench, X } from "lucide-react";
 import { decideChannelActivity } from "@/api/agentActivities";
 import { errorMessage } from "@/api/client";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
@@ -14,7 +14,7 @@ import type {
   AgentActivityQuestion,
 } from "@/models/agentActivity";
 import type { TranslateFn } from "@/models/conversations";
-import { Button } from "@/components/ui";
+import { Button, QuestionCard } from "@/components/ui";
 
 type AgentActivityCardProps = {
   activity: AgentActivityPayload;
@@ -52,89 +52,43 @@ function QuestionActivityCard({
       ? deadline.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : "";
   return (
-    <section
-      className={`agent-activity-card ${messageContentStyles["agent-activity-question"]} status-${question.status}`}
-    >
-      <div className={messageContentStyles["agent-activity-header"]}>
-        <span className={messageContentStyles["agent-activity-icon"]} aria-hidden="true">
-          <CircleHelp size={17} />
-        </span>
-        <div className={messageContentStyles["agent-activity-title-group"]}>
-          <div className="agent-activity-title">{t("questionRequest")}</div>
-          <div className={messageContentStyles["agent-activity-subtitle"]}>
-            {pending ? t("questionWaitingForAnswer") : questionStatusLabel(question.status, t)}
-          </div>
-        </div>
-        <span className={`${messageContentStyles["agent-activity-badge"]} status-${question.status}`} role="status">
-          {questionStatusLabel(question.status, t)}
-        </span>
-      </div>
-      {deadlineLabel ? (
-        <div className={messageContentStyles["agent-question-timeout"]}>
-          <Clock3 aria-hidden="true" size={14} />
-          <span>
-            {pending
-              ? t("questionDeadline", { time: deadlineLabel })
-              : t("questionHadDeadline", { time: deadlineLabel })}
-          </span>
-        </div>
-      ) : null}
-      <div className={messageContentStyles["agent-question-list"]}>
-        {question.questions.map((item, questionIndex) => {
-          const answer = question.answers?.[item.id];
-          return (
-            <section key={item.id} className={messageContentStyles["agent-question-item"]}>
-              <div className={messageContentStyles["agent-question-heading"]}>
-                <span>{t("questionProgress", { current: questionIndex + 1, total: question.questions.length })}</span>
-                <strong>{item.header}</strong>
-                {item.is_secret ? <LockKeyhole aria-label={t("questionSecretAnswer")} size={14} /> : null}
-              </div>
-              <p className={messageContentStyles["agent-question-prompt"]}>{item.question}</p>
-              {pending ? (
-                <div className={messageContentStyles["agent-question-options"]}>
-                  {questionOptions(item).map((option, optionIndex) => (
-                    <button
-                      key={`${optionIndex}:${option.label}`}
-                      type="button"
-                      onClick={() => onSelect?.(question.id, item.id, optionIndex + 1)}
-                    >
-                      <span>{optionIndex + 1}</span>
-                      <span>
-                        <strong>{option.label}</strong>
-                        {option.description ? <small>{option.description}</small> : null}
-                      </span>
-                    </button>
-                  ))}
-                  {questionOptions(item).length === 0 ? (
-                    <Button size="sm" variant="secondaryColor" onClick={() => onSelect?.(question.id, item.id)}>
-                      {t("questionAnswer")}
-                    </Button>
-                  ) : null}
-                </div>
-              ) : answer ? (
-                <div className={messageContentStyles["agent-question-resolution"]}>
-                  {answer.skipped
-                    ? t("questionSkipped")
-                    : answer.secret
-                      ? t("questionSecretRecorded")
-                      : answer.option_label || answer.text || t("questionAnswered")}
-                </div>
-              ) : null}
-            </section>
-          );
-        })}
-      </div>
-      {pending ? (
-        <Button
-          className={messageContentStyles["agent-question-answer-button"]}
-          size="sm"
-          variant="primary"
-          onClick={() => onSelect?.(question.id)}
-        >
-          {t("questionAnswer")}
-        </Button>
-      ) : null}
-    </section>
+    <QuestionCard
+      key={question.id}
+      title={t("questionRequest")}
+      status={questionStatusLabel(question.status, t)}
+      deadline={
+        deadlineLabel ? t(pending ? "questionDeadline" : "questionHadDeadline", { time: deadlineLabel }) : undefined
+      }
+      questions={question.questions.map((item) => {
+        const answer = question.answers?.[item.id];
+        return {
+          id: item.id,
+          heading: item.header,
+          prompt: item.question,
+          privateAnswerLabel: item.is_secret ? t("questionSecretAnswer") : undefined,
+          options: pending ? questionOptions(item) : [],
+          resolution: answer
+            ? answer.skipped
+              ? t("questionSkipped")
+              : answer.secret || item.is_secret
+                ? t("questionSecretRecorded")
+                : answer.option_label || answer.text || t("questionAnswered")
+            : undefined,
+        };
+      })}
+      labels={{
+        answer: t("questionAnswer"),
+        navigation: t("questionNavigation"),
+        previous: t("questionPrevious"),
+        next: t("questionNext"),
+        progress: (current, total) => t("questionProgressCompact", { current, total }),
+      }}
+      onAnswer={
+        pending && onSelect
+          ? (id, index) => onSelect(question.id, id, index === undefined ? undefined : index + 1)
+          : undefined
+      }
+    />
   );
 }
 

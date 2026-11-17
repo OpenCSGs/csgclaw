@@ -20,6 +20,7 @@ import {
   isOnDemandConversation,
   resolveAgentForUser,
   resolveConversationUser,
+  RoomTypes,
 } from "@/models/conversations";
 import { MessagePreviewText } from "@/components/business/MessageContent";
 import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/business/Icons";
@@ -29,7 +30,11 @@ import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import { classNames } from "@/shared/lib/classNames";
-import { conversationPendingQuestionCount, threadPendingQuestionCount } from "@/models/agentActivity";
+import {
+  conversationPendingQuestionCount,
+  isAutonomousCoordinationNotice,
+  threadPendingQuestionCount,
+} from "@/models/agentActivity";
 import styles from "./WorkspaceRows.module.css";
 import type { DragEvent, ReactNode } from "react";
 import type { AgentLike } from "@/models/agents";
@@ -311,9 +316,13 @@ export function WorkspaceConversationRow({
   t: TranslateFn;
   usersById: UsersById;
 }) {
-  const lastMessage = conversation.messages[conversation.messages.length - 1];
   const isDirect = isDirectConversation(conversation);
   const onDemand = !isDirect && isOnDemandConversation(conversation);
+  const messages =
+    !isDirect && conversation.type === RoomTypes.autonomous
+      ? conversation.messages.filter((message) => !isAutonomousCoordinationNotice(message))
+      : conversation.messages;
+  const lastMessage = messages.at(-1);
   const displayUser = isDirect ? resolveConversationUser(conversation, currentUserID, usersById) : null;
   const directAgent = isDirect && displayUser ? resolveAgentForUser(agents, displayUser) : null;
   const directAgentRunning = isAgentAvailable(directAgent);
@@ -371,7 +380,13 @@ export function WorkspaceConversationRow({
       <span className={styles.conversationTail}>
         {isDirect ? null : (
           <span className={classNames(styles.roomModeBadge, onDemand && styles.roomModeBadgeOnDemand)}>
-            {t(onDemand ? "onDemandCollaborationTag" : "freeCollaborationTag")}
+            {t(
+              conversation.type === "autonomous"
+                ? "autonomousCollaboration"
+                : onDemand
+                  ? "onDemandCollaborationTag"
+                  : "freeCollaborationTag",
+            )}
           </span>
         )}
         <span className={styles.time}>{formatSidebarTime(lastMessage?.created_at, locale, t)}</span>

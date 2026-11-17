@@ -1,7 +1,14 @@
+import { newerCompactionMessage } from "./contextCompaction";
+import {
+  isNotificationBotAgent,
+  partitionWorkspaceAgentItems,
+  resolveAgentChannelUserID,
+  type AgentLike,
+} from "@/models/agents";
 import { resourceMessageText } from "./conversationResources";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { newerProgressMessage } from "@/models/turnProgress";
-import type { ContextUsage } from "@/models/modelMetadata";
+import { normalizeContextUsage, latestContextUsage, type ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
 import {
   isToolDeliveryMessage,
@@ -40,6 +47,7 @@ export type IMUser = {
   agent_id?: string | null;
   agent_state?: "archived" | "deleted" | "";
   deleted_at?: string | null;
+  legacy_notifier?: boolean | null;
   accent_hex?: string | null;
   avatar?: string | null;
   description?: string | null;
@@ -69,7 +77,7 @@ export const HUMAN_CHANNELS: Record<HumanChannelID, { id: HumanChannelID; name: 
   },
 };
 
-export type MessageMention = string | { id?: string | null };
+export type MessageMention = string | { id?: string | null; name?: string | null };
 export const THREAD_RELATION_TYPE = "m.thread";
 
 export type IMMessageEvent = {
@@ -158,6 +166,8 @@ function videoGenerationParentMessageID(message: IMMessage): string {
 }
 
 export type IMConversation = {
+  context_usage_epoch?: number;
+  context_usage?: Record<string, ContextUsage>;
   created_by?: string;
   cloud_agent?: { agent_id: string; connection_id: string; user_id: string };
   configuration?: TaskConfiguration;
@@ -180,6 +190,7 @@ export type IMConversation = {
   messages: IMMessage[];
   search_match?: IMMessage | null;
   notify_all_agents?: boolean | null;
+  autonomous_state?: { source_id: string; receipts?: string[]; paused?: boolean } | null;
   threads?: ThreadState[] | null;
   title?: string | null;
 };
@@ -187,6 +198,7 @@ export type IMConversation = {
 export const RoomTypes = {
   free: "free",
   onDemand: "on_demand",
+  autonomous: "autonomous",
 } as const;
 
 export type RoomType = (typeof RoomTypes)[keyof typeof RoomTypes];
@@ -223,6 +235,7 @@ export type ParticipantWorkUpdate = {
   status?: {
     phase: "working" | "thinking";
     context_usage?: ContextUsage;
+    context_usage_epoch?: number;
     sequence: number;
     stage?: ParticipantWorkStage | null;
     thinking?: {
@@ -851,11 +864,63 @@ export function isDirectConversation(conversation: { is_direct?: boolean | null 
 }
 
 export function roomType(conversation: { type?: RoomType | null } | null | undefined): RoomType {
-  return conversation?.type === RoomTypes.onDemand ? RoomTypes.onDemand : RoomTypes.free;
+  return conversation?.type === RoomTypes.autonomous
+    ? RoomTypes.autonomous
+    : conversation?.type === RoomTypes.onDemand
+      ? RoomTypes.onDemand
+      : RoomTypes.free;
 }
 
 export function isOnDemandConversation(conversation: { type?: RoomType | null } | null | undefined): boolean {
   return roomType(conversation) === RoomTypes.onDemand;
+}
+
+export function roomInviteCandidates(
+  conversation: IMConversation | null | undefined,
+  users: readonly IMUser[] | undefined,
+  agents: readonly AgentLike[],
+): IMUser[] {
+  if (!conversation) return [];
+  const { workerAgentItems } = partitionWorkspaceAgentItems(agents);
+  const agentIDsByUserID = new Map<string, string>();
+  for (const agent of workerAgentItems) {
+    const agentID = stripLocalIdentityPrefixes(agent.id ?? "");
+    const userID = stripLocalIdentityPrefixes(resolveAgentChannelUserID(agent));
+    if (agentID && userID && !agent.archived_at) agentIDsByUserID.set(userID, agentID);
+  }
+  return availableRoomUsers(conversation, users).filter((user) => {
+    const agentID = agentIDsByUserID.get(stripLocalIdentityPrefixes(user.id));
+    return (
+      Boolean(agentID) &&
+      (!user.agent_id || stripLocalIdentityPrefixes(user.agent_id) === agentID) &&
+      !user.participants?.some((participant) => participant.type === "notification")
+    );
+  });
+}
+
+export function roomExternalMessageCandidates(
+  conversation: IMConversation | null | undefined,
+  users: readonly IMUser[] | undefined,
+  agents: readonly AgentLike[],
+): IMUser[] {
+  return availableRoomUsers(conversation, users).filter(
+    (user) =>
+      user.participants?.some((participant) => participant.type === "notification") ||
+      isNotificationBotAgent(resolveAgentForUser(agents, user)),
+  );
+}
+
+function availableRoomUsers(conversation: IMConversation | null | undefined, users: readonly IMUser[] = []): IMUser[] {
+  if (!conversation) return [];
+  return users.filter(
+    (user) =>
+      user.role !== "cloud" &&
+      !user.agent_state &&
+      !user.deleted_at &&
+      !user.legacy_notifier &&
+      normalizeComparable(user.role) !== "notifier" &&
+      !conversation.members.some((memberID) => localIdentitiesMatch(memberID, user.id)),
+  );
 }
 
 export function resolveRoomInviterID(
@@ -1022,6 +1087,28 @@ export function applyIMEvent<T extends IMData | null | undefined>(
     return current;
   }
 
+  if (event.type === "participant.work.updated" && event.work && !event.work.thread_root_id) {
+    const work = event.work;
+    const usage = normalizeContextUsage(work.status?.context_usage);
+    if (!usage || !work.user_id || work.reason !== "status_updated") return current;
+    return {
+      ...current,
+      rooms: current.rooms.map((room) => {
+        if (room.id !== work.room_id || !room.members.some((id) => localIdentitiesMatch(id, work.user_id))) return room;
+        const epoch = work.status?.context_usage_epoch ?? 0;
+        const currentEpoch = room.context_usage_epoch ?? 0;
+        if (epoch < currentEpoch) return room;
+        const previous = epoch === currentEpoch ? room.context_usage?.[work.user_id] : undefined;
+        if (previous && Date.parse(previous.updated_at) > Date.parse(usage.updated_at)) return room;
+        return {
+          ...room,
+          context_usage_epoch: epoch,
+          context_usage: { ...(epoch === currentEpoch ? room.context_usage : {}), [work.user_id]: usage },
+        };
+      }),
+    };
+  }
+
   if (event.type === "room.attachment_deleted" && event.room_id && event.attachment_id) {
     const attachmentID = event.attachment_id;
     return {
@@ -1144,6 +1231,10 @@ export function isAgentRosterEvent(event: IMServerEvent | null | undefined): boo
 
 // HTTP snapshots carry the server's transcript order. Messages received over SSE
 // after the snapshot was taken remain at the end, with newer progress preserved.
+export function newerConversationMessage(previous: IMMessage, incoming: IMMessage): IMMessage {
+  return newerCompactionMessage(previous, newerProgressMessage(previous, incoming));
+}
+
 export function mergeConversationMessageSnapshot(
   current: IMData | null,
   roomID: string,
@@ -1161,7 +1252,7 @@ export function mergeConversationMessageSnapshot(
     if (isThreadReply(message) || (message.id && seen.has(message.id))) continue;
     if (message.id) seen.add(message.id);
     const previous = message.id ? existing.get(message.id) : undefined;
-    let merged = previous ? newerProgressMessage(previous, message) : message;
+    let merged = previous ? newerConversationMessage(previous, message) : message;
     // Progress revisions do not version thread summaries or attachments. Accept
     // the server values unless that field changed locally while fetching.
     const before = beforeRequest.get(message.id);
@@ -1192,6 +1283,22 @@ export function mergeConversationMessageSnapshot(
   };
 }
 
+function mergeMessageIntoTimeline(messages: readonly IMMessage[], message: IMMessage): IMMessage[] {
+  const existingIndex = messages.findIndex((item) => item.id === message.id);
+  if (existingIndex < 0) {
+    return [...messages, message];
+  }
+
+  const existing = messages[existingIndex];
+  const merged = newerConversationMessage(existing, message);
+  const previousTime = Date.parse(existing.created_at || "");
+  const nextTime = Date.parse(merged.created_at || "");
+  if (Number.isFinite(previousTime) && Number.isFinite(nextTime) && nextTime > previousTime) {
+    return [...messages.filter((_, index) => index !== existingIndex), merged];
+  }
+  return messages.map((item, index) => (index === existingIndex ? merged : item));
+}
+
 export function appendMessageToData<T extends IMData | null | undefined>(
   current: T,
   conversationID: string | null | undefined,
@@ -1208,16 +1315,7 @@ export function appendMessageToData<T extends IMData | null | undefined>(
     if (room.id !== conversationID) {
       return room;
     }
-    const existingIndex = room.messages.findIndex((item) => item.id === message.id);
-    if (existingIndex >= 0) {
-      return {
-        ...room,
-        messages: room.messages.map((item, index) =>
-          index === existingIndex ? newerProgressMessage(item, message) : item,
-        ),
-      };
-    }
-    return { ...room, messages: [...room.messages, message] };
+    return { ...room, messages: mergeMessageIntoTimeline(room.messages, message) };
   });
   return { ...current, rooms: sortConversations(rooms) };
 }
@@ -1269,27 +1367,11 @@ export function appendReplyToThreadView(
   if (!current || !message || threadRootID(message) !== (current.summary?.root_id || current.root?.id)) {
     return current;
   }
-  if (current.replies?.some((item) => item.id === message.id)) {
-    const replies = current.replies.map((item) =>
-      item.id === message.id ? newerProgressMessage(item, message) : item,
-    );
-    const summary = {
-      ...(current.summary ?? {}),
-      reply_count: replies.length,
-      latest_reply: replies[replies.length - 1],
-    };
-    return {
-      ...current,
-      root: current.root ? { ...current.root, thread: summary } : current.root,
-      replies,
-      summary,
-    };
-  }
-  const replies = [...(current.replies ?? []), message];
+  const replies = mergeMessageIntoTimeline(current.replies ?? [], message);
   const summary = {
     ...(current.summary ?? {}),
     reply_count: replies.length,
-    latest_reply: message,
+    latest_reply: replies[replies.length - 1],
   };
   return {
     ...current,
@@ -1307,12 +1389,27 @@ export function upsertConversationInData<T extends IMData | null | undefined>(
     return current;
   }
 
-  const existing = current.rooms.some((item) => item.id === conversation.id);
-  const normalized = normalizeRoom(conversation);
+  const previous = current.rooms.find((item) => item.id === conversation.id);
+  const existing = Boolean(previous);
+  let normalized = normalizeRoom(conversation);
+  normalized = normalizeRoom({ ...normalized, ...mergeRoomContextUsage(previous, normalized) });
   const rooms = existing
     ? current.rooms.map((item) => (item.id === conversation.id ? normalized : item))
     : [normalized, ...current.rooms];
   return { ...current, rooms: sortConversations(rooms) };
+}
+
+function mergeRoomContextUsage(previous: IMConversation | undefined, incoming: IMConversation) {
+  const previousEpoch = previous?.context_usage_epoch ?? 0;
+  const incomingEpoch = incoming.context_usage_epoch ?? 0;
+  if (incomingEpoch < previousEpoch)
+    return { context_usage_epoch: previousEpoch, context_usage: previous?.context_usage };
+  if (incomingEpoch > previousEpoch)
+    return { context_usage_epoch: incomingEpoch, context_usage: incoming.context_usage };
+  const usage = { ...previous?.context_usage };
+  for (const [id, snapshot] of Object.entries(incoming.context_usage ?? {}))
+    usage[id] = latestContextUsage(usage[id], snapshot)!;
+  return { context_usage_epoch: incomingEpoch, context_usage: usage };
 }
 
 export function mergeRoomMetadataUpdateInData<T extends IMData | null | undefined>(
@@ -1331,12 +1428,14 @@ export function mergeRoomMetadataUpdateInData<T extends IMData | null | undefine
     item.id === conversation.id
       ? {
           ...item,
+          ...mergeRoomContextUsage(item, conversation),
           title: conversation.title,
           custom_title: Boolean(conversation.custom_title),
           archived: Boolean(conversation.archived),
           pinned: Boolean(conversation.pinned),
           configuration: conversation.configuration,
           notify_all_agents: conversation.notify_all_agents ?? item.notify_all_agents,
+          autonomous_state: conversation.autonomous_state,
         }
       : item,
   );
@@ -1412,5 +1511,11 @@ export function normalizeRoom(room: IMConversation): IMConversation {
     ...room,
     messages: room.messages ?? [],
     threads: room.threads ?? [],
+    context_usage: Object.fromEntries(
+      Object.entries(room.context_usage ?? {}).flatMap(([id, value]) => {
+        const usage = normalizeContextUsage(value);
+        return usage && room.members.some((member) => localIdentitiesMatch(member, id)) ? [[id, usage]] : [];
+      }),
+    ),
   };
 }

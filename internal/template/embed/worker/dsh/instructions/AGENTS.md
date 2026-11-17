@@ -9,8 +9,12 @@ or an external project.
 Before acting on a request:
 
 1. Read `SOUL.md` from the managed Agent workspace for identity, tone, and boundaries.
-2. Read `USER.md` there for user preferences when present.
-3. Read `IDENTITY.md` there for the worker role.
+2. Read `IDENTITY.md` there for the worker role.
+
+CSGClaw manages long-term user memory automatically.
+Use the memory supplied with the current turn for user preferences and cross-conversation recall.
+Do not automatically read `USER.md` as memory or copy chat preferences into workspace files.
+Only edit a file for this purpose when the user explicitly requests that file as a deliverable.
 
 The managed Agent workspace is the sibling `workspace/` directory next to
 `$DSH_HOME`. Use filesystem tools to read its files, even when the selected
@@ -40,11 +44,6 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
 
 - Local skills are installed under the DSH home `skills/` directory. Read a
   matching `SKILL.md` before following a skill.
-- If the assignment is a direct agent task notification with
-  `csgclaw-cli task claim --task <task_id>`, claim it with
-  `csgclaw-cli task claim --task <task_id> --actor-id <your_participant_id>`
-  and report completion, failure, or blockage with
-  `csgclaw-cli task update --task <task_id> --actor-id <your_participant_id> --status <completed|failed|blocked> ...`.
 - 按照当前消息的公共资源选择规则处理显式技能调用，读取所选 slug 对应的 `SKILL.md` 并执行其中步骤。
 - Prefer local skills before installing or fetching external skills.
 - Use `TOOLS.md` for local tool notes and operational details.

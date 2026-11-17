@@ -404,18 +404,11 @@ func TestBuildRemoteTemplateFilesPreservesDSHWorkspace(t *testing.T) {
 	}
 }
 
-func TestRemoteStoreListMergesOrganizationAndAgentTemplatesByNamespacePath(t *testing.T) {
+func TestRemoteStoreListPreservesCommunityOrderAndRecommendation(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/api/v1/organization/agentichub/codes":
-			if got, want := r.Header.Get("Authorization"), "Bearer access-token"; got != want {
-				t.Errorf("organization templates authorization = %q, want %q", got, want)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{
-				"name": "official-bot", "path": "agentichub/official-bot", "default_branch": "main",
-			}}})
 		case r.URL.Path == "/api/v1/agent/templates":
 			if got, want := r.URL.Query().Get("type"), "csgclaw"; got != want {
 				t.Errorf("agent template type = %q, want %q", got, want)
@@ -425,7 +418,7 @@ func TestRemoteStoreListMergesOrganizationAndAgentTemplatesByNamespacePath(t *te
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{
 				{
-					"id": 1, "type": "csgclaw", "name": "alice/personal-bot",
+					"id": 1, "type": "csgclaw", "recommended": true, "name": "alice/personal-bot",
 					"metadata": map[string]any{
 						"repo_path":    "alice/personal-bot",
 						"runtime_kind": "codex",
@@ -440,8 +433,11 @@ func TestRemoteStoreListMergesOrganizationAndAgentTemplatesByNamespacePath(t *te
 						},
 					},
 				},
+				{"id": 3, "type": "csgclaw", "name": "Official Bot", "metadata": map[string]any{"repo_path": "agentichub/official-bot"}},
 				{"id": 2, "type": "langflow", "name": "Ignored", "metadata": map[string]any{"repo_path": "alice/ignored"}},
 			}})
+		case r.URL.Path == "/api/v1/codes/agentichub/official-bot":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"default_branch": "main"}})
 		case r.URL.Path == "/api/v1/codes/alice/personal-bot":
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
 				"name": "personal-bot", "path": "alice/personal-bot", "default_branch": "main",
@@ -466,16 +462,19 @@ func TestRemoteStoreListMergesOrganizationAndAgentTemplatesByNamespacePath(t *te
 	if got, want := len(items), 2; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
-	if got, want := items[0].ID, "agentichub/official-bot"; got != want {
-		t.Fatalf("List()[0].ID = %q, want %q", got, want)
-	}
-	if got, want := items[1].ID, "alice/personal-bot"; got != want {
+	if got, want := items[1].ID, "agentichub/official-bot"; got != want {
 		t.Fatalf("List()[1].ID = %q, want %q", got, want)
 	}
-	if got := items[1].Metadata; got == nil || got.SensitiveCheck == nil {
-		t.Fatalf("List()[1].Metadata = %#v, want sensitive check from OpenCSG templates response", got)
+	if got, want := items[0].ID, "alice/personal-bot"; got != want {
+		t.Fatalf("List()[0].ID = %q, want %q", got, want)
+	}
+	if !items[0].Recommended || items[1].Recommended {
+		t.Fatalf("recommendations = %+v", items)
+	}
+	if got := items[0].Metadata; got == nil || got.SensitiveCheck == nil {
+		t.Fatalf("List()[0].Metadata = %#v, want sensitive check from OpenCSG templates response", got)
 	} else if got.SensitiveCheck.Status != "Fail" || got.SensitiveCheck.FailureDetails[0].Message != "checker result" {
-		t.Fatalf("List()[1].Metadata.SensitiveCheck = %#v", got.SensitiveCheck)
+		t.Fatalf("List()[0].Metadata.SensitiveCheck = %#v", got.SensitiveCheck)
 	}
 }
 
@@ -937,6 +936,28 @@ func TestRemoteStoreFetchWorkspaceRestoresCodexMemorySummary(t *testing.T) {
 	}
 	if got, want := string(data), "# Remote memory\n"; got != want {
 		t.Fatalf("memory summary = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteStoreListReportsManifestRequestFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/agent/templates":
+			_, _ = io.WriteString(w, `{"data":[{"type":"csgclaw","metadata":{"repo_path":"agentichub/demo"}}],"total":1}`)
+		case "/api/v1/codes/agentichub/demo":
+			_, _ = io.WriteString(w, `{"data":{"default_branch":"main"}}`)
+		case "/api/v1/codes/agentichub/demo/blob/agent.toml":
+			w.WriteHeader(http.StatusServiceUnavailable)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	items, err := NewRemoteStore(srv.URL, "").List(t.Context())
+	var upstream *RemoteAPIError
+	if len(items) != 0 || !errors.As(err, &upstream) || upstream.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("List() = %v, %v; want upstream 503", items, err)
 	}
 }
 

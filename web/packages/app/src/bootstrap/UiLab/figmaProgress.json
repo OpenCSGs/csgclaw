@@ -1,0 +1,617 @@
+{
+  "source": "https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=1154-89940",
+  "captured": "2026-10-30",
+  "bars": [
+    {
+      "id": "1085:57381",
+      "kind": "bar",
+      "value": 0,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 2.819999999999993
+    },
+    {
+      "id": "1086:270",
+      "kind": "bar",
+      "value": 0,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 2.5
+    },
+    {
+      "id": "1087:57395",
+      "kind": "bar",
+      "value": 0,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 2.5,
+      "bubbleRight": 0,
+      "bubbleLeft": 4
+    },
+    {
+      "id": "1087:57694",
+      "kind": "bar",
+      "value": 0,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 2.5,
+      "bubbleRight": 0,
+      "bubbleLeft": 4
+    },
+    {
+      "id": "1086:160",
+      "kind": "bar",
+      "value": 0,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 13.75
+    },
+    {
+      "id": "1085:57383",
+      "kind": "bar",
+      "value": 10,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 10.069999999999993
+    },
+    {
+      "id": "1086:260",
+      "kind": "bar",
+      "value": 10,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 10
+    },
+    {
+      "id": "1087:57390",
+      "kind": "bar",
+      "value": 10,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 10,
+      "bubbleRight": -20,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57682",
+      "kind": "bar",
+      "value": 10,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 10,
+      "bubbleRight": -20,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:145",
+      "kind": "bar",
+      "value": 10,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 22.439999999999998
+    },
+    {
+      "id": "1085:57393",
+      "kind": "bar",
+      "value": 20,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 20.150000000000006
+    },
+    {
+      "id": "1086:250",
+      "kind": "bar",
+      "value": 20,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 20
+    },
+    {
+      "id": "1087:57385",
+      "kind": "bar",
+      "value": 20,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 20,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57670",
+      "kind": "bar",
+      "value": 20,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 20,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:135",
+      "kind": "bar",
+      "value": 20,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 31.620000000000005
+    },
+    {
+      "id": "1085:57398",
+      "kind": "bar",
+      "value": 30,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 30.22
+    },
+    {
+      "id": "1086:240",
+      "kind": "bar",
+      "value": 30,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 30
+    },
+    {
+      "id": "1087:57375",
+      "kind": "bar",
+      "value": 30,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 30,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57658",
+      "kind": "bar",
+      "value": 30,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 30,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:125",
+      "kind": "bar",
+      "value": 30,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 40.25
+    },
+    {
+      "id": "1085:57403",
+      "kind": "bar",
+      "value": 40,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 40.29
+    },
+    {
+      "id": "1086:230",
+      "kind": "bar",
+      "value": 40,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 40
+    },
+    {
+      "id": "1087:57365",
+      "kind": "bar",
+      "value": 40,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 40,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57646",
+      "kind": "bar",
+      "value": 40,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 40,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:150",
+      "kind": "bar",
+      "value": 40,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 49.06
+    },
+    {
+      "id": "1085:57408",
+      "kind": "bar",
+      "value": 50,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 50.36
+    },
+    {
+      "id": "1086:220",
+      "kind": "bar",
+      "value": 50,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 100
+    },
+    {
+      "id": "1087:57355",
+      "kind": "bar",
+      "value": 50,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 100,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57688",
+      "kind": "bar",
+      "value": 50,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 100,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:120",
+      "kind": "bar",
+      "value": 50,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 57.5
+    },
+    {
+      "id": "1085:57413",
+      "kind": "bar",
+      "value": 60,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 60.44
+    },
+    {
+      "id": "1086:265",
+      "kind": "bar",
+      "value": 60,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 60
+    },
+    {
+      "id": "1087:57345",
+      "kind": "bar",
+      "value": 60,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 60,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57676",
+      "kind": "bar",
+      "value": 60,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 60,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:155",
+      "kind": "bar",
+      "value": 60,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 66.13
+    },
+    {
+      "id": "1085:57418",
+      "kind": "bar",
+      "value": 70,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 70.51
+    },
+    {
+      "id": "1086:255",
+      "kind": "bar",
+      "value": 70,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 70
+    },
+    {
+      "id": "1087:57380",
+      "kind": "bar",
+      "value": 70,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 70,
+      "bubbleRight": -20,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57664",
+      "kind": "bar",
+      "value": 70,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 70,
+      "bubbleRight": -20,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:140",
+      "kind": "bar",
+      "value": 70,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 74.66
+    },
+    {
+      "id": "1085:57423",
+      "kind": "bar",
+      "value": 80,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 80.58
+    },
+    {
+      "id": "1086:245",
+      "kind": "bar",
+      "value": 80,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 80
+    },
+    {
+      "id": "1087:57370",
+      "kind": "bar",
+      "value": 80,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 80,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57652",
+      "kind": "bar",
+      "value": 80,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 80,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:130",
+      "kind": "bar",
+      "value": 80,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 83.37
+    },
+    {
+      "id": "1085:57428",
+      "kind": "bar",
+      "value": 90,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 90.66
+    },
+    {
+      "id": "1086:235",
+      "kind": "bar",
+      "value": 90,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 90
+    },
+    {
+      "id": "1087:57360",
+      "kind": "bar",
+      "value": 90,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 90,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57640",
+      "kind": "bar",
+      "value": 90,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 90,
+      "bubbleRight": -21,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:115",
+      "kind": "bar",
+      "value": 90,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 92
+    },
+    {
+      "id": "1085:57433",
+      "kind": "bar",
+      "value": 100,
+      "label": "Right",
+      "width": 320,
+      "height": 20,
+      "fillPercent": 100
+    },
+    {
+      "id": "1086:225",
+      "kind": "bar",
+      "value": 100,
+      "label": "Bottom",
+      "width": 320,
+      "height": 36,
+      "fillPercent": 100
+    },
+    {
+      "id": "1087:57350",
+      "kind": "bar",
+      "value": 100,
+      "label": "Top floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 100,
+      "bubbleRight": -24,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1087:57634",
+      "kind": "bar",
+      "value": 100,
+      "label": "Bottom floating",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 100,
+      "bubbleRight": -24,
+      "bubbleLeft": null
+    },
+    {
+      "id": "1086:110",
+      "kind": "bar",
+      "value": 100,
+      "label": "False",
+      "width": 320,
+      "height": 8,
+      "fillPercent": 100
+    }
+  ],
+  "circles": [
+    {
+      "id": "1084:2716",
+      "size": "md",
+      "shape": "Circle",
+      "width": 240,
+      "height": 240
+    },
+    {
+      "id": "1084:3005",
+      "size": "lg",
+      "shape": "Circle",
+      "width": 280,
+      "height": 280
+    },
+    {
+      "id": "1084:2896",
+      "size": "sm",
+      "shape": "Circle",
+      "width": 200,
+      "height": 200
+    },
+    {
+      "id": "1084:2981",
+      "size": "xs",
+      "shape": "Circle",
+      "width": 160,
+      "height": 160
+    },
+    {
+      "id": "1084:3128",
+      "size": "md",
+      "shape": "Half circle",
+      "width": 240,
+      "height": 132
+    },
+    {
+      "id": "1084:3122",
+      "size": "lg",
+      "shape": "Half circle",
+      "width": 280,
+      "height": 154
+    },
+    {
+      "id": "1084:3115",
+      "size": "sm",
+      "shape": "Half circle",
+      "width": 200,
+      "height": 110
+    },
+    {
+      "id": "1084:3109",
+      "size": "xs",
+      "shape": "Half circle",
+      "width": 160,
+      "height": 88
+    },
+    {
+      "id": "1157:90228",
+      "size": "xxs",
+      "shape": "Circle",
+      "width": 64,
+      "height": 86
+    },
+    {
+      "id": "1157:90287",
+      "size": "xxs",
+      "shape": "Half circle",
+      "width": 64,
+      "height": 53
+    }
+  ]
+}

@@ -1521,7 +1521,7 @@ func (r *Runtime) resolveAgent(h agentruntime.Handle) (AgentRef, error) {
 		return AgentRef{}, fmt.Errorf("resolved agent is incomplete")
 	}
 	if value, ok := r.conversationSettings.Load(h.RuntimeID); ok {
-		if settings, applied := value.(*conversationconfig.State).Current(); applied {
+		if settings, applied := value.(*codexConversationState).Current(); applied {
 			agentRef.Profile, agentRef.RuntimeOptions = settings.Profile, maps.Clone(settings.Options)
 		}
 	}
@@ -2190,7 +2190,7 @@ type runtimeMetadata struct {
 // Increment whenever the engine-facing dynamic tool set or schema changes.
 // Persisted Codex threads cannot acquire new dynamic tools through thread/resume,
 // so an older version must rotate to a fresh thread on the next conversation turn.
-const engineDynamicToolsVersion = 5
+const engineDynamicToolsVersion = 7
 
 type sessionMetadata struct {
 	DynamicToolsVersion            int               `json:"dynamic_tools_version,omitempty"`

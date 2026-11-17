@@ -8,7 +8,6 @@ import (
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/modelusage"
-	"csgclaw/internal/processgroup"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,19 +34,20 @@ import (
 )
 
 const (
-	appServerTurnInterruptTimeout      = 5 * time.Second
-	appServerStdoutExitGracePeriod     = 250 * time.Millisecond
-	appServerStdoutExitBufferBytes     = 1 << 20
-	appServerTrackedTurnLimit          = 256
-	appServerPublishFileToolName       = "csgclaw_publish_file"
-	appServerUploadFileToolName        = "csgclaw_upload_file"
-	appServerMaxPublishedFileNameBytes = 255
-	appServerMaxUploadBytes            = 50 << 20
+	appServerTurnInterruptTimeout         = 5 * time.Second
+	appServerStdoutExitGracePeriod        = 250 * time.Millisecond
+	appServerStdoutExitBufferBytes        = 1 << 20
+	appServerTrackedTurnLimit             = 256
+	appServerPublishFileToolName          = "csgclaw_publish_file"
+	appServerUploadFileToolName           = "csgclaw_upload_file"
+	appServerMaxPublishedFileNameBytes    = 255
+	appServerMaxUploadBytes               = 50 << 20
+	mediaGenerationConfirmationQuestionID = "confirm_generation"
 )
 
-const appServerDeveloperInstructions = `- Base each new turn on the latest user message. Use earlier requests and attachments as context only when they are relevant to that message.
-- Do not resume unfinished work from earlier turns unless the latest user message asks to continue or clearly depends on that work. An unanswered or failed request does not authorize a retry.
-- When the latest user message is only a greeting, thanks, or acknowledgement, reply directly without using tools or inspecting earlier attachments.` +
+const appServerDeveloperInstructions = `- Base each new turn on the current message or event. Use earlier requests and attachments only when relevant to it.
+- Do not resume unfinished work from earlier turns unless the current message or event asks to continue or clearly depends on that work. An unanswered or failed request does not authorize a retry.
+- For a casual greeting, thanks, or acknowledgment, follow the current conversation policy and keep any reply short. Do not inspect earlier attachments or run unrelated tools.` +
 	"\n" + runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy
 
 var appServerStopTimeout = 3 * time.Second
@@ -155,11 +155,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		// Keep completed-turn exports timely; this does not block the turn itself.
 		cmd.Env = append(cmd.Env, "OTEL_BSP_SCHEDULE_DELAY=1000")
 	}
-	logStartOffset := int64(0)
-	if info, err := stderrFile.Stat(); err == nil {
-		logStartOffset = info.Size()
-	}
-	cmd.Stderr = stderrFile
+
 	if sysProcAttr := newSessionSysProcAttr(); sysProcAttr != nil {
 		cmd.SysProcAttr = sysProcAttr
 	}
@@ -178,7 +174,8 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		return nil, fmt.Errorf("codex app-server stdout pipe: %w", err)
 	}
 	cmd.Stdout = stdoutWriter
-	if err := processgroup.Start(cmd); err != nil {
+	workerLog, err := diagnostics.StartWithStderr(cmd, stderrFile, "codex", spec.RuntimeID)
+	if err != nil {
 		_ = stdoutWriter.Close()
 		_ = stdout.Close()
 		_ = stdin.Close()
@@ -189,10 +186,10 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 
 	_ = stdoutWriter.Close()
 
-	diagnosticObserver := diagnostics.NewRuntimeObserver(spec.StderrPath, spec.RuntimeID, cmd.Process.Pid, logStartOffset, stderrFile)
+	diagnosticObserver := workerLog.Observer
 	diagnosticObserver.Bind(ctx)
 	defer diagnosticObserver.End(ctx)
-	logger := slog.New(diagnostics.NewServerLogHandler(stderrFile, slog.LevelInfo, nil))
+	logger := slog.New(diagnostics.NewServerLogHandler(workerLog, slog.LevelInfo, nil))
 	appClient := newAppServerClient(stdin, logger)
 	conversationSessions := cloneConversationSessions(spec.ConversationSessions)
 	if conversationSessions == nil {
@@ -210,7 +207,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		mcpCatalogRevision:    spec.MCPCatalogRevision,
 		cmd:                   cmd,
 		stdin:                 stdin,
-		stderr:                stderrFile,
+		stderr:                workerLog,
 		done:                  make(chan struct{}),
 		spec:                  spec,
 		appClient:             appClient,
@@ -340,7 +337,7 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 	}
 	if live.cmd != nil && live.cmd.Process != nil {
 		if err := stopProcess(live.cmd.Process.Pid); err != nil {
-			return err
+			return fmt.Errorf("stop tracked app-server pid=%d: %w", live.cmd.Process.Pid, err)
 		}
 	}
 
@@ -351,7 +348,10 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 		live.mu.Lock()
 		stopErr := live.stopErr
 		live.mu.Unlock()
-		return stopErr
+		if stopErr != nil {
+			return fmt.Errorf("cleanup tracked app-server pid=%d: %w", live.cmd.Process.Pid, stopErr)
+		}
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timeout.C:
@@ -408,19 +408,25 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
-	selectedModel, err := live.resolveTurnModel(req.Model)
+	spec := roomThreadSpec(ctx, live.spec)
+	model := req.Model
+	if _, scoped := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); scoped && model == nil {
+		selected := turnModelFromProfile(spec.Profile)
+		model = &selected
+	}
+	selectedModel, err := live.resolveTurnModel(model)
 	if err != nil {
 		return PromptResponse{}, err
 	}
 
 	live.diagnosticObserver.Bind(ctx)
 	defer live.diagnosticObserver.End(ctx)
-	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": live.spec.WorkspaceDir, "stderr_path": live.spec.StderrPath, "profile": live.spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
-	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
+	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": spec.WorkspaceDir, "stderr_path": spec.StderrPath, "profile": spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
+	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(spec.WorkspaceDir, "AGENTS.md"), filepath.Join(spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
 	diagnostics.From(ctx).Capture("runtime.turn_model", selectedModel)
 	diagnostics.From(ctx).RuntimeInfo("codex", selectedModel.ModelID)
 	live.appClient.logInfoContext(ctx, "model request configuration", "model", selectedModel.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
-	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, req.Model != nil)
+	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, model != nil)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
@@ -428,16 +434,18 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	waiter.mu.Lock()
 	waiter.diagnostic = diagnostics.From(ctx)
 	waiter.textOnlyUserInput = req.TextOnlyUserInput
+	waiter.streamReasoningSummary = req.StreamReasoningSummary
 	waiter.mu.Unlock()
 	defer func() { live.removeAppServerTurnWaiter(sessionID, waiter) }()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
+	turnCtx = context.WithValue(turnCtx, mediaGenerationLocaleKey{}, mediaGenerationLocale(req.Locale))
 	live.setAppServerTurnContext(sessionID, waiter, turnCtx)
 	defer func() {
 		cancelTurn()
 		live.clearAppServerTurnContext(sessionID, waiter)
 	}()
 
-	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
+	params := appServerTurnStartParamsForContext(ctx, live.spec, sessionID, promptInput, req.ClientUserMessageID)
 	applyTurnModelParams(params, selectedModel)
 	turnStartAt := time.Now()
 	live.appClient.logDebugContext(ctx, "codex app-server turn start request",
@@ -792,6 +800,14 @@ func (m *appServerManager) ensureLiveSession(ctx context.Context, handle Session
 	if live := m.liveSession(runtimeID); live != nil {
 		return live, nil
 	}
+	// A room-scoped turn acquired a lease on the process during preparation.
+	// A crashed process can only be recovered by the next preparation, with
+	// the base Agent settings for the default thread.
+	if ctx != nil {
+		if _, scoped := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); scoped {
+			return nil, os.ErrNotExist
+		}
+	}
 	if m.deps.HydrateSession == nil {
 		return nil, os.ErrNotExist
 	}
@@ -869,7 +885,7 @@ func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSe
 }
 
 func (m *appServerManager) startThread(ctx context.Context, live *liveSession, publishFiles bool) (string, error) {
-	params := appServerThreadStartParams(live.spec, publishFiles)
+	params := roomThreadParams(ctx, appServerThreadStartParams(roomThreadSpec(ctx, live.spec), publishFiles))
 	raw, err := live.appClient.request(ctx, "thread/start", params)
 	if err != nil {
 		return "", err
@@ -878,7 +894,7 @@ func (m *appServerManager) startThread(ctx context.Context, live *liveSession, p
 }
 
 func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, threadID string) (string, error) {
-	params := appServerThreadResumeParams(live.spec, threadID)
+	params := roomThreadParams(ctx, appServerThreadResumeParams(roomThreadSpec(ctx, live.spec), threadID))
 	raw, err := live.appClient.request(ctx, "thread/resume", params)
 	if err != nil {
 		return "", err
@@ -894,12 +910,14 @@ func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, 
 }
 
 func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]any {
+	// Standing policy belongs to the native thread. Reapply on start/resume,
+	// not on ordinary turn/start; dynamic room facts travel in that turn's input.
 	spec.Profile = spec.Profile.Normalized()
 	params := map[string]any{
 		"cwd":                    spec.WorkspaceDir,
 		"persistExtendedHistory": true,
 		"experimentalRawEvents":  false,
-		"developerInstructions":  appServerDeveloperInstructions,
+		"developerInstructions":  threadDeveloperInstructions(spec),
 	}
 	if publishFiles {
 		// Native tools are immutable on resume; enforce the current mode in the call handler.
@@ -966,7 +984,7 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	params := map[string]any{
 		"threadId":              strings.TrimSpace(threadID),
 		"cwd":                   spec.WorkspaceDir,
-		"developerInstructions": appServerDeveloperInstructions,
+		"developerInstructions": threadDeveloperInstructions(spec),
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
@@ -981,8 +999,20 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	return params
 }
 
+func threadDeveloperInstructions(spec SessionSpec) string {
+	return runtimeinstructions.StandingInstructions(spec.AgentID, spec.AgentName, spec.Profile.Env["CSGCLAW_CLI"]) + "\n\n" + appServerDeveloperInstructions
+}
+
 func appServerTurnStartParams(spec SessionSpec, threadID string, prompt string) map[string]any {
 	return appServerTurnStartParamsWithInput(spec, threadID, []map[string]any{{"type": "text", "text": prompt}}, "")
+}
+
+func appServerTurnStartParamsForContext(ctx context.Context, spec SessionSpec, threadID string, input []map[string]any, clientUserMessageID string) map[string]any {
+	params := appServerTurnStartParamsWithInput(roomThreadSpec(ctx, spec), threadID, input, clientUserMessageID)
+	if room, ok := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); ok {
+		params["cwd"] = room.WorkspaceDir
+	}
+	return params
 }
 
 func appServerTurnStartParamsWithInput(spec SessionSpec, threadID string, input []map[string]any, clientUserMessageID string) map[string]any {
@@ -1142,16 +1172,41 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 			return appServerDynamicToolResponse(false, "image generation is unavailable in read-only mode"), nil
 		}
 		var args struct {
-			Prompt string `json:"prompt"`
+			Operation       string `json:"operation"`
+			Prompt          string `json:"prompt"`
+			ReferenceImages []int  `json:"reference_images"`
+			modelprovider.ImageGenerationOptions
 		}
 		if json.Unmarshal(params.Arguments, &args) != nil {
 			return appServerDynamicToolResponse(false, "invalid image generation arguments"), nil
+		}
+		if args.Operation != "" && strings.TrimSpace(args.Resolution) != "" {
+			return appServerDynamicToolResponse(false, "invalid_image_arguments: omit resolution; use size only for explicitly requested dimensions"), nil
+		}
+		switch args.Operation {
+		case "edit":
+			if len(args.ReferenceImages) == 0 {
+				return appServerDynamicToolResponse(false, "image_reference_required: editing requires the original attached image"), nil
+			}
+		case "generate":
+			if len(args.ReferenceImages) > 0 {
+				return appServerDynamicToolResponse(false, "invalid_image_operation: use edit for requests with reference images"), nil
+			}
+		case "": // Existing tool definitions infer the operation from references.
+		default:
+			return appServerDynamicToolResponse(false, "invalid_image_operation: use generate or edit"), nil
 		}
 		ctx, ok := live.appServerTurnContext(params.ThreadID, params.TurnID)
 		if !ok {
 			return appServerDynamicToolResponse(false, "image generation requires an active turn"), nil
 		}
-		if err := contract.GenerateImage(ctx, params.CallID, args.Prompt); err != nil {
+		if err := contract.CheckImageGeneration(ctx, len(args.ReferenceImages) > 0); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
+		}
+		if err := m.confirmMediaGeneration(ctx, runtimeID, params, appServerRequestID(req.ID), "image", args.Prompt, mediaGenerationDetails(mediaGenerationLocaleFromContext(ctx), args.ImageGenerationOptions.Size, 0, len(args.ReferenceImages))); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
+		}
+		if err := contract.GenerateImage(ctx, params.CallID, args.Prompt, args.ReferenceImages, args.ImageGenerationOptions); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "Image generated and delivered to the current conversation. Do not generate again or publish another copy. Continue responding using the original chat model."), nil
@@ -1161,9 +1216,10 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 			return appServerDynamicToolResponse(false, "video generation is unavailable in read-only mode"), nil
 		}
 		var args struct {
-			Prompt  string `json:"prompt"`
-			Size    string `json:"size"`
-			Seconds int    `json:"seconds"`
+			Prompt          string `json:"prompt"`
+			Size            string `json:"size"`
+			Seconds         int    `json:"seconds"`
+			ReferenceImages []int  `json:"reference_images"`
 		}
 		if json.Unmarshal(params.Arguments, &args) != nil {
 			return appServerDynamicToolResponse(false, "invalid video generation arguments"), nil
@@ -1172,7 +1228,10 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if !ok {
 			return appServerDynamicToolResponse(false, "video generation requires an active turn"), nil
 		}
-		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds}); err != nil {
+		if err := m.confirmMediaGeneration(ctx, runtimeID, params, appServerRequestID(req.ID), "video", args.Prompt, mediaGenerationDetails(mediaGenerationLocaleFromContext(ctx), args.Size, args.Seconds, len(args.ReferenceImages))); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
+		}
+		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds}, args.ReferenceImages...); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "Video generation was submitted. Briefly acknowledge submission without describing a transient status such as still generating, downloading, completed, or delivered. The attached task card is the source of truth and updates automatically. Do not publish another copy."), nil
@@ -1189,7 +1248,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if !ok {
 			return appServerDynamicToolResponse(false, "file upload is unavailable outside an active turn"), nil
 		}
-		if err := uploadAppServerWorkspaceFile(uploadCtx, live.spec, args); err != nil {
+		if err := uploadAppServerWorkspaceFile(uploadCtx, roomThreadSpec(uploadCtx, live.spec), args); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "File uploaded successfully. Continue by calling the MCP parse tool with its file ID."), nil
@@ -1233,6 +1292,130 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 	case <-ctx.Done():
 		return appServerDynamicToolResponse(false, "File publication canceled."), nil
 	}
+}
+
+type mediaGenerationLocaleKey struct{}
+
+type mediaGenerationConfirmationText struct {
+	header, questionPrefix, revisionHint, confirm, confirmDescription, cancel, cancelDescription string
+}
+
+func mediaGenerationLocale(locale string) string {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(locale)), "zh") {
+		return "zh"
+	}
+	return "en"
+}
+
+func mediaGenerationLocaleFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return "en"
+	}
+	locale, _ := ctx.Value(mediaGenerationLocaleKey{}).(string)
+	return mediaGenerationLocale(locale)
+}
+
+func mediaGenerationConfirmationTextFor(locale, kind string) mediaGenerationConfirmationText {
+	if mediaGenerationLocale(locale) == "zh" {
+		medium := "图片"
+		if kind == "video" {
+			medium = "视频"
+		}
+		return mediaGenerationConfirmationText{
+			header:             "确认" + medium + "生成",
+			questionPrefix:     "请确认将发送给" + medium + "模型的提示词：",
+			revisionHint:       "如需修改，请在下方输入具体要求。",
+			confirm:            "确认生成",
+			confirmDescription: "将此提示词发送给当前配置的" + medium + "模型。",
+			cancel:             "取消",
+			cancelDescription:  "不生成" + medium + "。",
+		}
+	}
+	return mediaGenerationConfirmationText{
+		header:             "Confirm " + kind + " generation",
+		questionPrefix:     "Review the prompt that will be sent to the " + kind + " model:",
+		revisionHint:       "To revise it, enter your requested changes below.",
+		confirm:            "Generate",
+		confirmDescription: "Send this prompt to the configured " + kind + " model.",
+		cancel:             "Cancel",
+		cancelDescription:  "Do not generate " + kind + " media.",
+	}
+}
+
+func (m *appServerManager) confirmMediaGeneration(ctx context.Context, runtimeID string, params appServerDynamicToolCallParams, serverRequestID, kind, prompt, details string) error {
+	if m.deps.UserInput == nil {
+		return errors.New("media generation confirmation is unavailable")
+	}
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return errors.New("media generation prompt is required")
+	}
+	copy := mediaGenerationConfirmationTextFor(mediaGenerationLocaleFromContext(ctx), kind)
+	question := copy.questionPrefix + "\n\n" + prompt
+	if details != "" {
+		question += "\n\n" + details
+	}
+	question += "\n\n" + copy.revisionHint
+	decision, err := m.deps.UserInput.Request(context.Background(), PendingUserInputRequest{
+		Execution: activity.ExecutionRef{
+			RuntimeKind: agentruntime.KindCodex,
+			RuntimeID:   runtimeID,
+			SessionID:   params.ThreadID,
+			TurnID:      params.TurnID,
+			ToolCallID:  params.CallID,
+			ToolKind:    params.Tool,
+		},
+		ServerRequestID: serverRequestID,
+		Questions: []activity.UserInputQuestionSnapshot{{
+			ID:       mediaGenerationConfirmationQuestionID,
+			Header:   copy.header,
+			Question: question,
+			IsOther:  true,
+			Options: []activity.UserInputOptionSnapshot{
+				{Label: copy.confirm, Description: copy.confirmDescription},
+				{Label: copy.cancel, Description: copy.cancelDescription},
+			},
+		}},
+		RequestedAt: time.Now().UTC(),
+		AutoResolve: 4 * time.Minute,
+	})
+	if err != nil {
+		return fmt.Errorf("media generation was not confirmed: %w", err)
+	}
+	answers := decision.Response.Answers[mediaGenerationConfirmationQuestionID].Answers
+	if len(answers) > 0 && answers[0] == copy.confirm {
+		return nil
+	}
+	if len(answers) > 0 && strings.HasPrefix(answers[0], "user_note:") {
+		return fmt.Errorf("the user requested prompt changes: %s; do not generate until a revised prompt is confirmed", strings.TrimSpace(strings.TrimPrefix(answers[0], "user_note:")))
+	}
+	return errors.New("the user declined media generation")
+}
+
+func mediaGenerationDetails(locale, size string, seconds, referenceCount int) string {
+	parts := make([]string, 0, 3)
+	if mediaGenerationLocale(locale) == "zh" {
+		if size = strings.TrimSpace(size); size != "" {
+			parts = append(parts, "尺寸："+size)
+		}
+		if seconds > 0 {
+			parts = append(parts, fmt.Sprintf("时长：%d 秒", seconds))
+		}
+		if referenceCount > 0 {
+			parts = append(parts, fmt.Sprintf("参考图片：%d 张", referenceCount))
+		}
+		return strings.Join(parts, "\n")
+	}
+	if size = strings.TrimSpace(size); size != "" {
+		parts = append(parts, "Size: "+size)
+	}
+	if seconds > 0 {
+		parts = append(parts, fmt.Sprintf("Duration: %d seconds", seconds))
+	}
+	if referenceCount > 0 {
+		parts = append(parts, fmt.Sprintf("Reference images: %d", referenceCount))
+	}
+	return strings.Join(parts, "\n")
 }
 
 func uploadAppServerWorkspaceFile(ctx context.Context, spec SessionSpec, args appServerUploadFileArgs) error {
@@ -1519,13 +1702,24 @@ func appServerPromptInput(req PromptRequest) ([]map[string]any, error) {
 		return nil, fmt.Errorf("prompt input is required")
 	}
 	input := make([]map[string]any, 0, len(req.Prompt))
+	appendText := func(text string) {
+		// Codex concatenates separate text inputs without adding a separator.
+		// Keep logical prompt blocks distinct, as appServerPromptText does,
+		// while retaining the position of native image inputs.
+		if len(input) > 0 && input[len(input)-1]["type"] == "text" {
+			previous := input[len(input)-1]
+			previous["text"] = previous["text"].(string) + "\n\n" + text
+			return
+		}
+		input = append(input, map[string]any{"type": "text", "text": text})
+	}
 	for _, block := range req.Prompt {
 		switch {
 		case block.Text != nil:
 			if strings.TrimSpace(block.Text.Text) == "" {
 				return nil, fmt.Errorf("prompt text is required")
 			}
-			input = append(input, map[string]any{"type": "text", "text": block.Text.Text})
+			appendText(block.Text.Text)
 		case block.LocalImage != nil:
 			path := strings.TrimSpace(block.LocalImage.Path)
 			if path == "" {
@@ -1537,7 +1731,7 @@ func appServerPromptInput(req PromptRequest) ([]map[string]any, error) {
 			if text == "" {
 				return nil, fmt.Errorf("prompt resource is empty")
 			}
-			input = append(input, map[string]any{"type": "text", "text": text})
+			appendText(text)
 		default:
 			return nil, fmt.Errorf("unsupported prompt content block for codex app-server")
 		}
@@ -1587,6 +1781,8 @@ type appServerTurnWaiter struct {
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
 	progressSequence         uint64
+	streamReasoningSummary   bool
+	reasoningSummaries       map[string]*appServerReasoningSummary
 	structuredOutputBoundary bool
 	textOnlyUserInput        bool
 }
@@ -1977,6 +2173,24 @@ func (w *appServerTurnWaiter) wake(result appServerTurnResult) {
 	}
 }
 
+func (w *appServerTurnWaiter) reasoningStream(turnID string) (active, summary bool) {
+	if w == nil {
+		return false, false
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if !w.accepted || (turnID != "" && w.turnID != turnID) {
+		return false, false
+	}
+	if _, ended := w.terminalResults[w.turnID]; ended {
+		return false, false
+	}
+	if _, ended := w.terminalResults[""]; ended {
+		return false, false
+	}
+	return true, w.streamReasoningSummary
+}
+
 func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter {
 	if s == nil {
 		return nil
@@ -2174,6 +2388,13 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 	defer cancelRead()
 	var history <-chan map[string]any
 	var readVersion uint64
+	var updates appServerTurnUpdates
+	live.mu.Lock()
+	if !live.compactingThreads[waiter.threadID] {
+		updates.inputs = contract.TurnInputUpdatesFromContext(ctx)
+	}
+	live.mu.Unlock()
+	defer updates.stop()
 
 	finish := func(result appServerTurnResult) (PromptResponse, error) {
 		cancelRead()
@@ -2198,6 +2419,9 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			}
 			if result.progress || result.started {
 				quiet.Reset(quietTurnInterval)
+				if updates.waitCompaction {
+					updates.schedule()
+				}
 			}
 			if result.activity != "" {
 				now := time.Now()
@@ -2219,6 +2443,10 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			if result.success || result.err != nil {
 				return finish(result)
 			}
+		case <-updates.inputs.Ready:
+			updates.schedule()
+		case <-updates.due:
+			updates.flush(ctx, live, waiter)
 		case <-quiet.C:
 			quiet.Reset(quietTurnInterval)
 			if turnID := waiter.currentTurnID(); history == nil && turnID != "" && live.appClient != nil {
@@ -2460,6 +2688,9 @@ func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSess
 	reader.drain()
 	cleanupErr := stopProcessTree(live.cmd.Process.Pid)
 	<-stdoutDone
+	if live.stderr != nil {
+		live.stderr.Drain()
+	}
 	live.mu.Lock()
 	live.stopErr = cleanupErr
 	live.mu.Unlock()
@@ -2571,13 +2802,33 @@ func redactSecretishLine(line string) string {
 func appServerGenerateImageToolSpec() map[string]any {
 	return map[string]any{
 		"name":        "csgclaw_generate_image",
-		"description": "Generate one image from the user's requested description using this Agent's configured image generation model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile; do not retry automatically.",
-		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."}}, "required": []string{"prompt"}, "additionalProperties": false},
+		"description": "Generate a new image from text or edit an attached image using the Agent's configured image model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. Use edit for changes to an original image. Ask the user before generating a replacement if editing is unavailable or fails. Report unsupported operations and invalid requests without retrying or guessing parameters. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"operation":        map[string]any{"type": "string", "enum": []string{"generate", "edit"}},
+				"reference_images": appServerReferenceImagesSchema(modelprovider.MaxImageEditReferences),
+				"size":             map[string]any{"type": "string", "description": "Output dimensions, for example 1024x1024. Omit unless the user explicitly supplied dimensions. CSGClaw applies model-specific defaults where available."},
+				"prompt":           map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."},
+			},
+			"required":             []string{"operation", "prompt"},
+			"additionalProperties": false,
+		},
 	}
 }
 
 func appServerGenerateVideoToolSpec() map[string]any {
-	return map[string]any{"name": "csgclaw_generate_video", "description": "Generate one video using this Agent's configured video model and deliver it to the conversation. Omit size or seconds unless the user explicitly supplied them; CSGClaw applies the selected model's advertised defaults and validates explicit values.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string"}, "size": map[string]any{"type": "string", "description": "Optional provider-advertised size value. Do not convert it to width x height or guess a value."}, "seconds": map[string]any{"type": "integer", "minimum": 1, "description": "Optional requested duration. Omit when the user did not specify one."}}, "required": []string{"prompt"}, "additionalProperties": false}}
+	return map[string]any{"name": "csgclaw_generate_video", "description": "Generate one video with an optional first-frame reference image using this Agent's configured video model and deliver it to the conversation. Omit size or seconds unless the user explicitly supplied them; CSGClaw applies the selected model's advertised defaults and validates explicit values.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"reference_images": appServerReferenceImagesSchema(1), "prompt": map[string]any{"type": "string"}, "size": map[string]any{"type": "string", "description": "Optional provider-advertised size value. Do not convert it to width x height or guess a value."}, "seconds": map[string]any{"type": "integer", "minimum": 1, "description": "Optional requested duration. Omit when the user did not specify one."}}, "required": []string{"prompt"}, "additionalProperties": false}}
+}
+
+func appServerReferenceImagesSchema(maxItems int) map[string]any {
+	return map[string]any{
+		"type":        "array",
+		"description": "Indices of the attached images the user wants to use as references. Use the numbered image labels in the current turn. Omit for text-only generation.",
+		"items":       map[string]any{"type": "integer", "minimum": 1},
+		"uniqueItems": true,
+		"maxItems":    maxItems,
+	}
 }
 
 // Explicit per-thread values override settings retained by cold-resumed threads.

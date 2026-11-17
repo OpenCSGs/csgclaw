@@ -5,7 +5,6 @@ import (
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelusage"
-	"csgclaw/internal/processgroup"
 	"csgclaw/internal/runtime/conversationconfig"
 	skill "csgclaw/internal/skill/state"
 	"csgclaw/internal/taskconfig"
@@ -96,7 +95,7 @@ type process struct {
 	cmd                  *exec.Cmd
 	stdin                io.WriteCloser
 	client               *acpClient
-	stderr               *os.File
+	stderr               *diagnostics.StderrLog
 	root                 string
 	workspace            string
 	profile              agentruntime.Profile
@@ -109,14 +108,16 @@ type process struct {
 	extensionExecutables map[string]string
 	done                 chan struct{}
 
-	metadataMu    sync.Mutex
-	mu            sync.Mutex
-	active        map[string]*activeTurn
-	inFlightTurns int
-	ready         map[string]bool
+	metadataMu          sync.Mutex
+	mu                  sync.Mutex
+	active              map[string]*activeTurn
+	inFlightTurns       int
+	ready               map[string]bool
+	appMCPSessionTokens map[string]string
 }
 
 type activeTurn struct {
+	ctx              context.Context
 	tokenUsage       modelusage.Usage
 	tokenRequests    map[string]bool
 	diagnostic       *diagnostics.Record
@@ -126,6 +127,7 @@ type activeTurn struct {
 	sink             contract.EventSink
 	seq              uint64
 	output           strings.Builder
+	thoughtPrefixes  map[string][]int64
 	tools            map[string]contract.ToolActivity
 	presentedFiles   []presentedFile
 	presentedPaths   map[string]bool
@@ -274,6 +276,9 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 		if err := os.Remove(filepath.Join(layout.WorkspaceRoot, "AGENTS.md")); err != nil {
 			return fmt.Errorf("remove duplicate DSH workspace instructions: %w", err)
 		}
+	}
+	if err := writeStandingInstructions(root, agentID, req.AgentName, req.Profile.Env["CSGCLAW_CLI"]); err != nil {
+		return err
 	}
 	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), req.Profile); err != nil {
 		return err
@@ -436,6 +441,9 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if meta.Sessions == nil {
 		meta.Sessions = map[string]string{}
 	}
+	if err := writeStandingInstructions(root, ref.ID, ref.Name, ref.Profile.Env["CSGCLAW_CLI"]); err != nil {
+		return agentruntime.StateUnknown, err
+	}
 	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), ref.Profile); err != nil {
 		return agentruntime.StateUnknown, err
 	}
@@ -484,10 +492,6 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	if err != nil {
 		return nil, fmt.Errorf("open DSH stderr log: %w", err)
 	}
-	logStartOffset := int64(0)
-	if info, err := stderr.Stat(); err == nil {
-		logStartOffset = info.Size()
-	}
 	args := dshLaunchArgs(root, enablePresent)
 	if r.deps.DisableNativeMemory {
 		args = append(args[:4], args[6:]...)
@@ -496,7 +500,6 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	configureProcessGroup(cmd)
 	cmd.Dir = workspace
 	cmd.Env = environment
-	cmd.Stderr = stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		stderr.Close()
@@ -507,14 +510,15 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 		stderr.Close()
 		return nil, err
 	}
-	if err := processgroup.Start(cmd); err != nil {
+	workerLog, err := diagnostics.StartWithStderr(cmd, stderr, "dsh", meta.RuntimeID)
+	if err != nil {
 		stderr.Close()
 		diagnostics.ReportFailure(ctx, "runtime.process_start", err, map[string]any{"runtime_id": meta.RuntimeID, "stderr_path": stderr.Name()})
 		return nil, fmt.Errorf("start DSH ACP process: %w", err)
 	}
 	client := newACPClient(stdout, stdin)
 	proc := &process{
-		diagnosticObserver: diagnostics.NewRuntimeObserver(stderr.Name(), meta.RuntimeID, cmd.Process.Pid, logStartOffset, stderr), cmd: cmd, stdin: stdin, client: client, stderr: stderr, root: root, workspace: workspace, profile: profile.Normalized(), mcp: mcp, meta: meta, environment: append([]string(nil), environment...), extensionDigests: extensionDigests, extensionExecutables: extensionExecutables, done: make(chan struct{}), active: map[string]*activeTurn{}, ready: map[string]bool{}}
+		diagnosticObserver: workerLog.Observer, cmd: cmd, stdin: stdin, client: client, stderr: workerLog, root: root, workspace: workspace, profile: profile.Normalized(), mcp: mcp, meta: meta, environment: append([]string(nil), environment...), extensionDigests: extensionDigests, extensionExecutables: extensionExecutables, done: make(chan struct{}), active: map[string]*activeTurn{}, ready: map[string]bool{}}
 	client.setHandlers(
 		func(request serverRequest) { r.handleServerRequest(proc, request) },
 		func(note notification) { r.handleNotification(proc, note) },
@@ -536,19 +540,19 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	if err := client.call(initCtx, "initialize", map[string]any{"protocolVersion": 1, "clientCapabilities": map[string]any{}}, &initialized, nil); err != nil {
 		_ = terminateProcessTree(cmd.Process.Pid, true)
 		_ = cmd.Wait()
-		stderr.Close()
+		_ = workerLog.Close()
 		return nil, fmt.Errorf("initialize DSH ACP: %w", err)
 	}
 	if initialized.ProtocolVersion != 1 {
 		_ = terminateProcessTree(cmd.Process.Pid, true)
 		_ = cmd.Wait()
-		stderr.Close()
+		_ = workerLog.Close()
 		return nil, fmt.Errorf("DSH ACP protocol version %d is unsupported", initialized.ProtocolVersion)
 	}
 	if requiresHTTPMCP(mcp) && !initialized.AgentCapabilities.MCPCapabilities.HTTP {
 		_ = terminateProcessTree(cmd.Process.Pid, true)
 		_ = cmd.Wait()
-		stderr.Close()
+		_ = workerLog.Close()
 		return nil, fmt.Errorf("DSH ACP does not advertise HTTP MCP support required by this Agent")
 	}
 	proc.imagePrompts = initialized.AgentCapabilities.PromptCapabilities.Image
@@ -558,7 +562,7 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	}); err != nil {
 		_ = terminateProcessTree(cmd.Process.Pid, true)
 		_ = cmd.Wait()
-		stderr.Close()
+		_ = workerLog.Close()
 		return nil, err
 	}
 	proc.diagnosticObserver.Bind(ctx)
@@ -641,6 +645,7 @@ func (r *Runtime) waitProcess(proc *process) {
 			code = exit.ExitCode()
 		}
 	}
+	proc.stderr.Drain()
 	proc.diagnosticObserver.Exit(code, waitErr, cleanupErr)
 	_ = proc.stderr.Close()
 	_ = proc.updateMetadata(func(meta *runtimeMetadata) {
@@ -654,6 +659,7 @@ func (r *Runtime) waitProcess(proc *process) {
 		delete(r.processes, proc.meta.RuntimeID)
 	}
 	r.mu.Unlock()
+	_ = os.Remove(filepath.Join(proc.root, "context-control.json"))
 	close(proc.done)
 }
 
@@ -1061,5 +1067,27 @@ func dshProviderSettings(profile agentruntime.Profile) map[string]any {
 		inputModalities = []string{"text"}
 	}
 	metadata := profile.ModelMetadata.Normalized()
-	return map[string]any{"protocol": "chat-completions", "baseURL": profile.BaseURL, "apiKeyEnv": llmAPIKeyEnvName, "models": []map[string]any{{"id": profile.ModelID, "inputModalities": inputModalities, "contextWindow": metadata.ContextWindow, "maxTokens": max(int64(1), min(int64(8192), metadata.ContextWindow/4))}}}
+	const defaultOutputBudget = 8 * 1024
+	const maxOutputBudget = 64 * 1024
+	outputBudget := metadata.MaxOutputTokens
+	if outputBudget <= 0 {
+		outputBudget = defaultOutputBudget
+	}
+	outputBudget = max(1, min(outputBudget, maxOutputBudget, metadata.ContextWindow/4))
+	return map[string]any{
+		"protocol":  "chat-completions",
+		"baseURL":   profile.BaseURL,
+		"apiKeyEnv": llmAPIKeyEnvName,
+		"models": []map[string]any{{
+			"id":              profile.ModelID,
+			"inputModalities": inputModalities,
+			"contextWindow":   metadata.ContextWindow,
+			"maxTokens":       outputBudget,
+		}},
+	}
+}
+
+func writeStandingInstructions(root, id, name, cliPath string) error {
+	text := runtimeinstructions.StandingInstructions(id, name, cliPath)
+	return os.WriteFile(filepath.Join(root, "standing-instructions.txt"), []byte(text), 0600)
 }

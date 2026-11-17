@@ -39,6 +39,42 @@ it("limits rendered options and shows the visible portion after scrolling", () =
   expect(screen.getAllByRole("option").length).toBeLessThanOrEqual(24);
 });
 
+it("keeps the last option in view when keyboard selection wraps", () => {
+  const candidates = Array.from({ length: 60 }, (_, index) => ({ name: `command-${index}`, type: "command" as const }));
+  const props = { candidates, t: createTranslator("en"), onSelect: vi.fn() };
+  const { rerender } = render(<SlashPicker {...props} />);
+  const list = screen.getByRole("listbox");
+  let scrollTop = 0;
+
+  // jsdom does not calculate layout or clamp scrollTop to the scrollable height.
+  Object.defineProperties(list, {
+    clientHeight: { value: 352 },
+    scrollTop: {
+      get: () => scrollTop,
+      set: (value: number) => {
+        const contentHeight = Array.from(list.children).reduce((height, child) => {
+          const style = (child as HTMLElement).style;
+          return height + (parseFloat(style.height) || 0) + (parseFloat(style.marginBlockEnd) || 0);
+        }, 0);
+        scrollTop = Math.max(0, Math.min(value, contentHeight - list.clientHeight));
+      },
+    },
+  });
+
+  handleSlashPickerNavigation({
+    event: { key: "ArrowUp", preventDefault: vi.fn() } as unknown as KeyboardEvent<HTMLElement>,
+    candidates,
+    activeIndex: 0,
+    pickerOpen: true,
+    onIndexChange: (activeIndex) => rerender(<SlashPicker {...props} activeIndex={activeIndex} />),
+    onApply: vi.fn(),
+    onDismiss: vi.fn(),
+  });
+
+  expect(screen.getByRole("option", { selected: true })).toHaveAttribute("aria-posinset", "60");
+  expect(list.scrollTop + list.clientHeight).toBe(60 * 44 - 4);
+});
+
 it("continues keyboard selection into the next batch and preserves selection on failure", async () => {
   const onIndexChange = vi.fn();
   const loadMore = vi.fn().mockResolvedValue(true);

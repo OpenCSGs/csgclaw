@@ -22,12 +22,14 @@ const skillFileName = "SKILL.md"
 var ErrSkillInvalid = errors.New("skill directory must contain SKILL.md")
 
 type SkillSummary struct {
-	Name        string           `json:"name"`
-	Description string           `json:"description,omitempty"`
-	Error       string           `json:"error,omitempty"`
-	Source      string           `json:"source,omitempty"`
-	Discovery   *discovery.Skill `json:"discovery,omitempty"`
-	Directory   string           `json:"directory,omitempty"`
+	Name        string               `json:"name"`
+	Version     string               `json:"version,omitempty"`
+	Description string               `json:"description,omitempty"`
+	Error       string               `json:"error,omitempty"`
+	Source      string               `json:"source,omitempty"`
+	Discovery   *discovery.Skill     `json:"discovery,omitempty"`
+	Directory   string               `json:"directory,omitempty"`
+	Install     *skillinstall.Record `json:"install,omitempty"`
 }
 
 func SkillsRoot() (string, error) {
@@ -75,13 +77,22 @@ func List(root string) ([]SkillSummary, error) {
 		if info.IsDir() {
 			continue
 		}
-		description, err := skillDescription(skillPath)
+		metadata, err := readSkillMetadata(skillPath)
 		if err != nil {
 			return nil, err
 		}
+		var origin *skillinstall.Record
+		if record, ok := records[entry.Name()]; ok {
+			if record.SourceKind() == skillinstall.SourceLocal && record.Version == "" {
+				record.Version = metadata.Version
+			}
+			origin = &record
+		}
 		items = append(items, SkillSummary{
+			Install:     origin,
 			Name:        entry.Name(),
-			Description: description,
+			Version:     metadata.Version,
+			Description: metadata.Description,
 			Source:      records[entry.Name()].SourceKind(),
 			Directory:   absoluteSkillDirectory(filepath.Join(root, entry.Name())),
 		})
@@ -193,30 +204,41 @@ func resolveInstalledDir(root, cleanName string) (string, error) {
 	return skillDir, nil
 }
 
-func skillDescription(path string) (string, error) {
+type skillMetadata struct {
+	Description string `yaml:"description"`
+	Version     string `yaml:"version"`
+	Metadata    struct {
+		Version string `yaml:"version"`
+	} `yaml:"metadata"`
+}
+
+func readSkillMetadata(path string) (skillMetadata, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("read skill file %q: %w", path, err)
+		return skillMetadata{}, fmt.Errorf("read skill file %q: %w", path, err)
 	}
 	frontmatter, ok := extractFrontmatter(data)
 	if !ok {
-		return "", nil
+		return skillMetadata{}, nil
 	}
-	description, err := parseSkillDescription(frontmatter)
+	metadata, err := parseSkillMetadata(frontmatter)
 	if err != nil {
-		return "", fmt.Errorf("parse skill frontmatter %q: %w", path, err)
+		return skillMetadata{}, fmt.Errorf("parse skill frontmatter %q: %w", path, err)
 	}
-	return description, nil
+	return metadata, nil
 }
 
-func parseSkillDescription(frontmatter []byte) (string, error) {
-	var meta struct {
-		Description string `yaml:"description"`
-	}
+func parseSkillMetadata(frontmatter []byte) (skillMetadata, error) {
+	var meta skillMetadata
 	if err := yaml.Unmarshal(frontmatter, &meta); err != nil {
-		return "", err
+		return skillMetadata{}, err
 	}
-	return strings.TrimSpace(meta.Description), nil
+	meta.Description = strings.TrimSpace(meta.Description)
+	meta.Version = strings.TrimSpace(meta.Version)
+	if meta.Version == "" {
+		meta.Version = strings.TrimSpace(meta.Metadata.Version)
+	}
+	return meta, nil
 }
 
 func extractFrontmatter(data []byte) ([]byte, bool) {

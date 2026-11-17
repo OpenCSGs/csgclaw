@@ -142,7 +142,8 @@ export function useChatTools({
     [openTab],
   );
   const openActivity = useCallback(
-    (entryID?: string) => openTab({ id: "activity", kind: "activity", entryID }),
+    (entryID?: string, agentID?: string, turnID?: string, requestID?: string) =>
+      openTab({ id: "activity", kind: "activity", entryID, agentID, turnID, requestID }),
     [openTab],
   );
   const openSources = useCallback(

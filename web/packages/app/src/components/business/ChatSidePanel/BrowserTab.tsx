@@ -1,6 +1,6 @@
 import chatSidePanelStyles from "./ChatSidePanel.module.css";
 import { useNativeBrowser } from "./useNativeBrowser";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, RefreshCw } from "lucide-react";
 import { Button, EmptyState, LinkButton, TextInput, Tooltip } from "@/components/ui";
 import { normalizeBrowserURL } from "@/models/fileReferences";
@@ -8,15 +8,21 @@ import type { TranslateFn } from "@/models/conversations";
 
 export function BrowserTab({
   url,
+  html,
   active,
   onNavigate,
   onPopup,
+  onOpenAddress,
+  onReload,
   t,
 }: {
   url: string;
+  html?: string;
   active: boolean;
   onNavigate: (url: string) => void;
   onPopup: (url: string) => void;
+  onOpenAddress?: (url: string) => void;
+  onReload?: () => void;
   t: TranslateFn;
 }) {
   const [address, setAddress] = useState(url);
@@ -24,6 +30,20 @@ export function BrowserTab({
   const [invalid, setInvalid] = useState(false);
   const [history, setHistory] = useState(() => ({ urls: url ? [url] : [], index: url ? 0 : -1 }));
   const previousURL = useRef(url);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  useLayoutEffect(() => {
+    if (html === undefined) return;
+    let sent = false;
+    const receive = (event: MessageEvent) => {
+      const frame = frameRef.current?.contentWindow;
+      if (sent || !frame || event.source !== frame || event.data?.type !== "csgclaw:html-preview-ready") return;
+      sent = true;
+      // The sandbox has an opaque origin, so only the checked frame receives content.
+      frame.postMessage({ type: "csgclaw:html-preview", html }, "*");
+    };
+    window.addEventListener("message", receive);
+    return () => window.removeEventListener("message", receive);
+  }, [html, url, reload]);
   useEffect(() => {
     const previous = previousURL.current;
     previousURL.current = url;
@@ -39,7 +59,7 @@ export function BrowserTab({
       );
     }
   }, [native.available, url]);
-  const externalURL = normalizeBrowserURL(address) || url;
+  const externalURL = html === undefined ? normalizeBrowserURL(address) || normalizeBrowserURL(url) : "";
   return (
     <section className="chat-browser-tab" aria-label={t("chatBrowser")}>
       <form
@@ -49,6 +69,11 @@ export function BrowserTab({
           const next = normalizeBrowserURL(address);
           setInvalid(!next);
           if (next) {
+            if (onOpenAddress && next !== url) {
+              onOpenAddress(next);
+              setAddress(url);
+              return;
+            }
             if (!native.available && next !== url) {
               setHistory((current) => ({
                 urls: [...current.urls.slice(0, current.index + 1), next],
@@ -115,7 +140,11 @@ export function BrowserTab({
               variant="tertiaryGray"
               aria-label={t("chatRefresh")}
               disabled={!url}
-              onClick={() => (native.available ? void native.command("reload") : setReload((value) => value + 1))}
+              onClick={() => {
+                if (onReload) onReload();
+                else if (native.available) void native.command("reload");
+                else setReload((value) => value + 1);
+              }}
             >
               <RefreshCw size={16} />
             </Button>
@@ -173,12 +202,15 @@ export function BrowserTab({
             className={`${chatSidePanelStyles["chat-browser-hint"]} ${chatSidePanelStyles["chat-browser-embed-hint"]}`}
           >
             <span>{t("chatBrowserEmbedHint")}</span>
-            <LinkButton href={externalURL} target="_blank" rel="noopener noreferrer" size="sm" variant="linkColor">
-              <ExternalLink size={14} />
-              {t("chatBrowserSystem")}
-            </LinkButton>
+            {externalURL ? (
+              <LinkButton href={externalURL} target="_blank" rel="noopener noreferrer" size="sm" variant="linkColor">
+                <ExternalLink size={14} />
+                {t("chatBrowserSystem")}
+              </LinkButton>
+            ) : null}
           </div>
           <iframe
+            ref={frameRef}
             key={`${url}:${reload}`}
             src={url}
             title={t("chatBrowser")}

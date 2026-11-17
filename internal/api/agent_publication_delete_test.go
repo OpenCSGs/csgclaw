@@ -15,7 +15,7 @@ import (
 	"csgclaw/internal/relay"
 )
 
-func TestArchivedAgentDeletionRequiresPublicationCancellation(t *testing.T) {
+func TestAgentDeletionRequiresPublicationCancellation(t *testing.T) {
 	engine := enginetest.NewMemoryClient(agentengine.Agent{ID: "agent-worker", Spec: agentengine.AgentSpec{Name: "worker", Role: agentengine.AgentRoleWorker, Runtime: agentengine.RuntimeSpec{Adapter: "codex"}}})
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{CurrentUserID: im.AdminUserID, Users: []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}}})
 	h := NewHandler(AgentServices{}, engine, imSvc, nil, nil, nil, nil)
@@ -35,7 +35,6 @@ func TestArchivedAgentDeletionRequiresPublicationCancellation(t *testing.T) {
 		}
 		return rec
 	}
-	request(http.MethodPost, "/api/v1/agents/agent-worker/archive", "", 200)
 	target := &relay.CommunityTarget{Type: "csgclaw", ContentID: "sandbox-slot"}
 	if err = m.QueuePublication(relay.PublishRequest{Name: "worker", SourceAgentID: "agent-worker", Visibility: "public"}, target); err != nil {
 		t.Fatal(err)
@@ -44,8 +43,8 @@ func TestArchivedAgentDeletionRequiresPublicationCancellation(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "relay_unpublish_required") {
 		t.Fatal(rec.Body.String())
 	}
-	if _, err = engine.Agents().Get(context.Background(), "agent-worker", agentengine.AgentGetOptions{}); err != nil {
-		t.Fatal("blocked deletion removed local agent")
+	if item, err := engine.Agents().Get(context.Background(), "agent-worker", agentengine.AgentGetOptions{}); err != nil || item.ArchivedAt != nil {
+		t.Fatalf("blocked deletion changed the local agent: %+v %v", item, err)
 	}
 	if err = m.Unpublish(context.Background(), "agent-worker"); err != nil {
 		t.Fatal(err)

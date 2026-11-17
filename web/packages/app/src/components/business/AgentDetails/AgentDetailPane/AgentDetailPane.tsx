@@ -4,6 +4,7 @@ import agentDetailPaneStyles from "./AgentDetailPane.module.css";
 import agentSkillsStyles from "./AgentSkills.module.css";
 import agentPublicationStyles from "./AgentPublication.module.css";
 import agentMemoryStyles from "./AgentMemory.module.css";
+import { memoryErrorMessage } from "./memoryError";
 import agentInstructionsStyles from "./AgentInstructions.module.css";
 import agentChannelsStyles from "./AgentChannels.module.css";
 import { AgentProfileHeader } from "./AgentProfileHeader";
@@ -66,6 +67,7 @@ import {
   NotifierControls,
   reasoningEffortLabel,
   RuntimeOptionsFields,
+  AgentSaveError,
 } from "@/components/business/ProfileControls";
 import {
   agentProfilePageSaveDisabled,
@@ -109,6 +111,7 @@ import type { LocaleCode } from "@/models/conversations";
 import { mcpServerDisplayName } from "@/models/mcp";
 import type { MCPServer } from "@/models/mcp";
 import type { SlashSkillOption } from "@/models/slashCommands";
+import { skillMetadataLabel } from "@/models/skillLibrary";
 import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { renderMarkdown } from "@/components/business/MessageContent/markdown";
 import "@/components/business/MessageContent/MessageContent.css";
@@ -182,6 +185,9 @@ export type AgentDetailPaneProps = {
   item: AgentLike;
   modelBusy?: boolean;
   modelError?: unknown;
+  modelDirectory?: readonly string[] | null;
+  modelSaveError?: string;
+  modelSaveBlocked?: boolean;
   modelOptions?: ModelProviderOption[];
   modelProviders?: ModelProviderCatalog | null;
   models?: string[];
@@ -189,6 +195,7 @@ export type AgentDetailPaneProps = {
   noticeTone?: AgentNoticeTone;
   notifierWebhookPublicOrigin?: string;
   onDelete: (item: AgentLike, returnFocus?: HTMLElement | null) => VoidOrPromise;
+  onRequestPermanentDelete?: (item: AgentLike, trigger: HTMLButtonElement | null) => void;
   onCheckDelete?: (item: AgentLike) => Promise<{ message: string; onResolve?: () => void } | null>;
   onDraftChange?: (draft: AgentDraft) => void;
   onInvite: AgentActionHandler;
@@ -293,6 +300,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     noticeTone = "warning",
     modelBusy = false,
     modelError = null,
+    modelDirectory,
+    modelSaveError,
+    modelSaveBlocked = false,
     onRetryModels,
     saving = false,
     linkedTemplate,
@@ -348,6 +358,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onUpgrade,
     onRecreate,
     onDelete,
+    onRequestPermanentDelete,
     onInvite,
     onDismissNotice,
     onOpenDM,
@@ -436,7 +447,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const supportsTemplateMemory = ["codex", "dsh"].includes(runtimeKind);
   const hasUnsavedChanges =
     hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
-  const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
+  const saveDisabled = modelSaveBlocked || agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
   const updateDraft = useCallback(
     (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch }),
     [draft, item, onDraftChange],
@@ -586,7 +597,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     });
   }, [draft, onDraftChange, selectedProviderID]);
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
-  const selectedProviderModels = modelIDsForProviderSelection(selectedProviderID, selectedProvider?.models ?? []);
+  const selectedProviderModels = modelIDsForProviderSelection(
+    selectedProviderID,
+    modelDirectory === undefined ? (selectedProvider?.models ?? []) : (modelDirectory ?? []),
+  );
   const selectedModelValue = draft?.model_id || "";
   const isNotifierDraft = Boolean(draft && isNotifierRuntimeDraftOnAgentPage(draft, item));
   const showMCPServers = Boolean(
@@ -647,6 +661,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const visibleActiveProfileTab = profileTabs.some((tab) => tab.id === selectedProfileTab)
     ? selectedProfileTab
     : profileTabs[0]?.id;
+  const modelSaveBlockedOutsideProfile = modelSaveBlocked && visibleActiveProfileTab !== "profile";
+  const visibleSaveError =
+    saveError || (visibleActiveProfileTab !== "profile" && !modelSaveBlockedOutsideProfile ? modelSaveError : "");
   useEffect(() => {
     if (visibleActiveProfileTab === "skills" && workspaceSupported) void onRefreshSkills?.();
   }, [item.id, visibleActiveProfileTab, workspaceSupported, onRefreshSkills]);
@@ -986,6 +1003,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 onStop={onStop}
                 onInvite={onInvite}
                 onDelete={onDelete}
+                onRequestPermanentDelete={onRequestPermanentDelete}
+                saving={saving}
                 relayPublication={
                   !agentSandboxEnabled(item) && (runtimeKind === "codex" || runtimeKind === "dsh")
                     ? relayPublication
@@ -1000,6 +1019,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                   loading={saving}
                   loadingLabel={t("agentSavingChanges")}
                   disabled={saveDisabled}
+                  title={modelSaveBlocked ? t("profileModelSelectAvailableToSave") : undefined}
                   onClick={onSave}
                 >
                   {t("agentSaveChanges")}
@@ -1018,17 +1038,19 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           }
         />
         {error ? <InlineError>{error}</InlineError> : null}
-        {saveError ? (
-          <InlineError className={"whitespace-pre-wrap break-words"} role="alert">
-            {saveError}
-            {saveBillingURL ? (
-              <>
-                {" "}
-                <a className="agent-billing-action" href={saveBillingURL} target="_blank" rel="noopener noreferrer">
-                  {t("rechargeAccount")}
-                </a>
-              </>
-            ) : null}
+        {visibleSaveError ? (
+          <AgentSaveError billingURL={saveBillingURL} t={t}>
+            {visibleSaveError}
+          </AgentSaveError>
+        ) : null}
+        {modelSaveBlockedOutsideProfile ? (
+          <InlineError role="status" className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              {t("profileModelOutsideDirectory")} {t("profileModelSelectAvailableToSave")}
+            </span>
+            <Button variant="tertiaryGray" size="sm" onClick={() => selectProfileTab("profile")}>
+              {t("profileModelOpenConfiguration")}
+            </Button>
           </InlineError>
         ) : null}
         {notice ? (
@@ -1133,6 +1155,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                     draft={draft}
                     modelBusy={modelBusy}
                     modelError={modelError}
+                    modelDirectory={modelDirectory}
+                    modelSaveError={modelSaveError}
+                    modelSaveBlocked={modelSaveBlocked}
                     onRetryModels={onRetryModels}
                     onRequireOpenCSGAuth={onRequireOpenCSGAuth}
                     providerOptions={providerOptions}
@@ -1936,7 +1961,7 @@ function AgentMemoryPanel({ agentID, onMemoryChange, portalContainer, t }: Agent
       const value = await fetchAgentMemoryDocument(agentID);
       if (request === loadRequest.current.sequence) setDocument(value);
     } catch (error) {
-      if (request === loadRequest.current.sequence) setLoadError(errorMessage(error, t("agentMemoryLoadFailed")));
+      if (request === loadRequest.current.sequence) setLoadError(memoryErrorMessage(error, t));
     } finally {
       if (request === loadRequest.current.sequence) setLoading(false);
     }
@@ -2007,7 +2032,7 @@ function AgentMemoryPanel({ agentID, onMemoryChange, portalContainer, t }: Agent
       setConfirmation(null);
       await onMemoryChange?.();
     } catch (error) {
-      setLoadError(errorMessage(error, t("agentMemoryUpdateFailed")));
+      setLoadError(memoryErrorMessage(error, t));
     } finally {
       setUpdating(false);
     }
@@ -2108,10 +2133,21 @@ function AgentMemoryPanel({ agentID, onMemoryChange, portalContainer, t }: Agent
 
         <div className={agentMemoryStyles["agent-memory-content"]}>
           {document?.last_error ? (
-            <InlineError>
-              <div>{t("agentMemoryLastError")}</div>
-              <div>{document.last_error.message}</div>
+            <InlineError className={agentMemoryStyles["agent-memory-error"]} role="alert">
+              <strong>
+                {t(
+                  document.last_error.operation === "initialization"
+                    ? "agentMemoryHistoryError"
+                    : "agentMemoryUpdateError",
+                )}
+              </strong>
+              <p>{memoryErrorMessage(document.last_error.message, t)}</p>
+              {document.status === "pending" ? <p>{t("agentMemoryErrorRetrying")}</p> : null}
               <small>{new Date(document.last_error.at).toLocaleString()}</small>
+              <details>
+                <summary>{t("agentMemoryErrorDetails")}</summary>
+                <pre>{document.last_error.message}</pre>
+              </details>
             </InlineError>
           ) : document?.status === "failed" ? (
             <p role="status">{t("agentMemoryLearningFailed")}</p>
@@ -2485,6 +2521,7 @@ function AgentSkillsPanel({
               key={skill.name}
               title={skill.name}
               description={skill.description}
+              titleMetadata={skillMetadataLabel(skill, t)}
               icon={<AgentSkillFeaturedIcon />}
               onOpen={() => onOpenDetail(skill)}
               actions={
@@ -2689,6 +2726,7 @@ type AgentActionsMenuProps = {
   isManager: boolean;
   item: AgentLike;
   onDelete: AgentDetailPaneProps["onDelete"];
+  onRequestPermanentDelete?: AgentDetailPaneProps["onRequestPermanentDelete"];
   onInvite: AgentActionHandler;
   onPublish?: (target: AgentTemplatePublishTarget) => VoidOrPromise;
   onStart: AgentActionHandler;
@@ -2697,6 +2735,7 @@ type AgentActionsMenuProps = {
   publishBusy: boolean;
   publishDisabled: boolean;
   running: boolean;
+  saving: boolean;
   t: TranslateFn;
   upgradeNeeded: boolean;
 };
@@ -2709,6 +2748,7 @@ function AgentActionsMenu({
   incomplete,
   isManager,
   running,
+  saving,
   upgradeNeeded,
   canPublishLocal,
   canPublishCommunity,
@@ -2718,10 +2758,12 @@ function AgentActionsMenu({
   onStop,
   onInvite,
   onDelete,
+  onRequestPermanentDelete,
   onPublish,
   relayPublication,
 }: AgentActionsMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const notification = isNotificationBotAgent(item);
   const hasOtherActions = SHOW_AGENT_LIFECYCLE_ACTIONS || canPublishLocal || !isManager;
 
   const renderMenu = (relayAction?: React.ReactNode) => (
@@ -2779,18 +2821,24 @@ function AgentActionsMenu({
         {!isManager ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              danger={isNotificationBotAgent(item)}
-              disabled={busy}
-              onSelect={() => onDelete(item, triggerRef.current)}
-            >
-              {isNotificationBotAgent(item) ? (
+            <DropdownMenuItem danger={notification} disabled={busy} onSelect={() => onDelete(item, triggerRef.current)}>
+              {notification ? (
                 <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
               ) : (
                 <Archive aria-hidden="true" size={15} strokeWidth={2} />
               )}
-              <span>{t(isNotificationBotAgent(item) ? "agentDelete" : "agentArchive")}</span>
+              <span>{t(notification ? "agentDelete" : "agentArchive")}</span>
             </DropdownMenuItem>
+            {!notification && onRequestPermanentDelete && (
+              <DropdownMenuItem
+                danger
+                disabled={busy || saving}
+                onSelect={() => onRequestPermanentDelete(item, triggerRef.current)}
+              >
+                <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
+                <span>{t("agentDeleteAction")}</span>
+              </DropdownMenuItem>
+            )}
           </>
         ) : null}
       </DropdownMenuContent>

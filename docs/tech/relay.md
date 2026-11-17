@@ -46,6 +46,14 @@ retain their operation key. CSGClaw never asserts a trusted user UUID header.
 `relay.agent_id` is a relay registration identity, never a WebSocket connection ID;
 `metadata.subscription_id` is no longer used.
 
+Before login, CSGClaw loads its site picker through `GET /api/v1/auth/login-sites`.
+The local API requests `GET https://opencsg.com/relay/v1/login-sites`
+without platform credentials. The OpenCSG proxy forwards this request to
+CSGRelay's `GET /v1/login-sites`. The Relay
+response contains `sites` with IDs, HTTPS site URLs, embedded avatars, and
+localized names and descriptions. If discovery fails, the picker offers retry
+and manual URL entry.
+
 Each local API address, including its port, has a directory under
 `~/.csgclaw/relay/<address-sha256>/`. A mode-0600 `client-id` survives restarts.
 When both stored identity values are absent, `csgclaw` and

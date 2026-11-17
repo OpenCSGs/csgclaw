@@ -26,6 +26,8 @@ const (
 
 // sessionMessageLine is the on-disk jsonl shape. blob_ref points at spillover payload.
 type sessionMessageLine struct {
+	MemoryExcluded  bool                `json:"memory_excluded,omitempty"`
+	RoomSequence    uint64              `json:"room_sequence,omitempty"`
 	ID              string              `json:"id"`
 	ClientMessageID string              `json:"client_message_id,omitempty"`
 	SenderID        string              `json:"sender_id"`
@@ -51,7 +53,9 @@ type sessionMessageBlob struct {
 
 func messageToSessionLine(message Message) sessionMessageLine {
 	return sessionMessageLine{
+		MemoryExcluded:  message.MemoryExcluded,
 		ID:              message.ID,
+		RoomSequence:    message.RoomSequence,
 		ClientMessageID: message.ClientMessageID,
 		SenderID:        message.SenderID,
 		Kind:            message.Kind,
@@ -72,7 +76,9 @@ func sessionLineToMessage(line sessionMessageLine) (Message, error) {
 		return Message{}, err
 	}
 	return Message{
+		MemoryExcluded:  line.MemoryExcluded,
 		ID:              line.ID,
+		RoomSequence:    line.RoomSequence,
 		ClientMessageID: line.ClientMessageID,
 		SenderID:        line.SenderID,
 		Kind:            line.Kind,

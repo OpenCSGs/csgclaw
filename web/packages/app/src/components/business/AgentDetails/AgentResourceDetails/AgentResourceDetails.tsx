@@ -9,6 +9,7 @@ import type { MCPServer } from "@/models/mcp";
 import type { SlashSkillOption } from "@/models/slashCommands";
 import { mcpServerDisplayName, mcpServerDetailConfig, mcpManagedKnowledgeBaseSource } from "@/models/mcp";
 import { skillOriginKind } from "@/models/skillhub";
+import { skillLibraryVersion, skillVersionLabel } from "@/models/skillLibrary";
 import { WorkspaceFileTree, WorkspaceFilePreview } from "@/components/business/WorkspaceFileTree";
 import { JSONConfigEditor } from "@/components/business/HubDetailPane";
 import {
@@ -70,6 +71,7 @@ export function AgentResourceDetails({
   const enabled = skill ? skill.enabled !== false : server?.config?.enabled !== false;
   const knowledge = server && mcpManagedKnowledgeBaseSource(server.config);
   const origin = skillOriginKind(skill);
+  const version = skill ? skillVersionLabel(skillLibraryVersion(skill)) : "";
   const skillBadge =
     origin === "builtin"
       ? "iaSkillsBadgeBuiltin"
@@ -111,6 +113,7 @@ export function AgentResourceDetails({
                   {t(skill ? skillBadge : "iaKnowledgeBadgeAgenticHub")}
                 </span>
               ) : null}
+              {version ? <span className={styles.skillSourceBadge}>{version}</span> : null}
             </div>
             <DialogDescription>{skill?.description || server?.description || name}</DialogDescription>
           </div>

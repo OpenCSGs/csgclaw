@@ -1,11 +1,11 @@
-# Canonical Codex CLI artifact mapping:
-# csgclaw_goos csgclaw_goarch download_os download_arch archive_binary
+# Canonical Codex package mapping:
+# csgclaw_goos csgclaw_goarch download_os download_arch package_binary
 #
 # Used by the shell, PowerShell, and Docker build paths. Release targets are
 # maintained separately in release-platforms.txt.
-linux amd64 linux amd64 codex-x86_64-unknown-linux-musl
-linux arm64 linux arm64 codex-aarch64-unknown-linux-musl
-darwin amd64 macos x64 codex-x86_64-apple-darwin
-darwin arm64 macos arm64 codex-aarch64-apple-darwin
+linux amd64 linux amd64 codex
+linux arm64 linux arm64 codex
+darwin amd64 macos x64 codex
+darwin arm64 macos arm64 codex
 windows amd64 windows amd64 codex.exe
 windows arm64 windows arm64 codex.exe

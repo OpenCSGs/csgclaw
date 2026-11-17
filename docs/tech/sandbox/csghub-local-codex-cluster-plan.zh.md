@@ -33,13 +33,13 @@ sandbox gateway，也不会为 manager/worker 调 CSGHub `Create`。
 2. 在 Go build stage 中声明 Codex 下载根地址：
 
    ```dockerfile
-   ARG CODEX_CLI_DOWNLOAD_BASE_URL=https://csgclaw.opencsg.com/codex-cli/latest
+   ARG CODEX_CLI_DOWNLOAD_BASE_URL=https://csgclaw.opencsg.com/codex-cli
    ```
 
    `ARG` 只在下载 Codex 的 build stage 使用；安装 `curl`，并按 `TARGETARCH` 下载：
 
    ```text
-   https://csgclaw.opencsg.com/codex-cli/latest/linux/<amd64|arm64>?package=codex-cli
+   https://csgclaw.opencsg.com/codex-cli/v<version>/codex-package_<version>_linux_<amd64|arm64>.tar.gz
    ```
 
    下载的是包含 musl 原生二进制的 tar.gz。构建脚本必须：映射 `amd64`/`arm64` 到 archive
@@ -140,7 +140,7 @@ CI 从已提交的 `csgclaw-agent-sandbox.env` 读取兼容模板使用的 agent
 ## 验收
 
 1. 使用无缓存构建新 server 镜像，确认日志从
-   `https://csgclaw.opencsg.com/codex-cli/latest/linux/<arch>?package=codex-cli` 下载
+   `https://csgclaw.opencsg.com/codex-cli/v<version>/codex-package_<version>_linux_<arch>.tar.gz` 下载
    archive、打印 `codex --version`，且不再出现 Node/npm 或 Docker Hub 的 Codex 安装步骤；
    再以 `--entrypoint /usr/local/bin/codex` 运行 `codex --version`，确认 CLI 在最终镜像
    可执行。

@@ -5,7 +5,7 @@ Codex and DSH consume this metadata..
 
 ## Configuration
 
-The existing provider APIs return `model_metadata`, keyed by model ID, with `context_window` and `context_source`.
+The existing provider APIs return `model_metadata`, keyed by model ID, with `context_window`, `context_source`, and `max_output_tokens` when the provider advertises an output limit.
 The read-only `model_defaults` map supplies automatic capacities for reset previews before saving.
 Provider updates accept `model_overrides`, keyed by model ID, with an optional `context_window` field.
 An empty override map restores automatic settings for all models of that provider.
@@ -35,6 +35,10 @@ Reasoning deltas, MCP progress, token updates, and compaction lifecycle events a
 A turn ends on native completion or failure, caller cancellation, or runtime process exit.
 
 DSH receives `contextWindow` through its native model settings.
+DSH caps each request's output at the smallest of the provider's advertised output limit, 65,536 tokens, and one quarter of the resolved context window.
+DSH uses an 8,192-token fallback when discovery provides no output limit, bounded by one quarter of the context window.
+Providers can publish each deployment's output limit as `max_output_tokens` in its `/models` entry.
+Refresh an existing provider to discover its current output limit.
 Its managed compaction patch sets `thresholdRatio: 0.75` and `maxOverflowRetries: 1`.
 The Agent runtime option `auto_compact` accepts `enabled` (default) or `disabled`.
 The small managed ACP bridge forwards DSH's existing compaction lifecycle events; it does not implement a second compaction mechanism.
@@ -59,7 +63,17 @@ Image generation models show their purpose instead of a default chat window.
 The image generation request does not consume this context setting; image size limits belong to the image service and delivery path.
 Editing preserves the exact token count and the API continues to store integer tokens.
 
-The 16-pixel ring appears between the current tool activity and Stop, supports hover and keyboard focus, and follows the activity row's lifecycle.
+The 16-pixel ring remains in the conversation composer while idle and supports hover and keyboard focus.
+The IM service persists the latest main-conversation report per room and Agent in the room's `context_usage` metadata and returns it through bootstrap and room responses.
+Accepted reports atomically update only the metadata index without rewriting transcripts or accumulating usage history.
+Identical reports and work heartbeats do not cause additional writes.
+Refreshing the browser and restarting the service retain the last report without starting an Agent or model request.
+Clearing a conversation clears its snapshot and advances its persisted usage epoch, so queued or renewed leases cannot restore an older report.
+Only an explicit new usage report receives the current epoch; status-only updates preserve the previous one.
+Removing a member removes that member's saved usage.
+Thread reports never overwrite the main conversation's snapshot.
+Group conversations use the same ring, showing the highest individual occupancy rather than adding independent context windows together.
+Hovering expands a compact, scrollable list with the same statistics for each Agent, with no extra disclosure layer.
 Its tooltip shows usage, remaining tokens, capacity, source, model, automatic-compaction state, report time, and estimated-data status.
 Values over capacity retain their real percentage in the tooltip while the ring saturates at 100 percent.
 

@@ -9,7 +9,11 @@ import {
   DialogCloseButton,
   TextArea,
 } from "@/components/ui";
-import { AgentCreateProgress, type AgentCreateProgressProps } from "@/components/business/ProfileControls";
+import {
+  AgentSaveError,
+  AgentCreateProgress,
+  type AgentCreateProgressProps,
+} from "@/components/business/ProfileControls";
 import type { AgentCreationResources } from "@/models/agentCreation";
 import type { TranslateFn } from "@/models/conversations";
 import { AgentCreationResourcesPicker } from "./AgentCreationResourcesPicker";
@@ -24,6 +28,7 @@ type Props = {
   valid: boolean;
   busy: boolean;
   error?: ReactNode;
+  billingURL?: string;
   progress: AgentCreateProgressProps["progress"];
   authenticated: boolean;
   onRequireAuth: () => boolean;
@@ -40,6 +45,7 @@ export function AgentCreateWizard({
   valid,
   busy,
   error,
+  billingURL,
   progress,
   authenticated,
   onRequireAuth,
@@ -159,8 +165,10 @@ export function AgentCreateWizard({
           </div>
         </div>
         {error ? (
-          <div role="alert" className={styles.error}>
-            {error}
+          <div className={styles.error}>
+            <AgentSaveError billingURL={billingURL} t={t}>
+              {error}
+            </AgentSaveError>
           </div>
         ) : null}
         <AgentCreateProgress progress={progress} t={t} />

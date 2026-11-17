@@ -1,0 +1,219 @@
+.card {
+  display: flex;
+  width: 420px;
+  max-width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--csgclaw-ui-text);
+  font-family: var(--csgclaw-ui-font-family-text);
+  overflow-wrap: anywhere;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--csgclaw-ui-space-2);
+}
+
+.glyph {
+  --glyph-size: 18px;
+  --glyph-font-size: 8px;
+}
+
+.prompt {
+  min-width: 0;
+  padding-top: 1px;
+  color: var(--csgclaw-ui-muted);
+  font-size: var(--csgclaw-ui-text-xs-size);
+  line-height: var(--csgclaw-ui-text-xs-line-height);
+  letter-spacing: 0.01em;
+  white-space: pre-wrap;
+}
+
+.header > details.prompt {
+  margin: 0;
+  padding: 1px 0 0;
+  border: 0;
+}
+
+.header .prompt summary {
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.frames {
+  display: grid;
+  width: 100%;
+  max-width: var(--frame-width);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--csgclaw-ui-space-2);
+}
+
+.frames[data-variations] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.frame {
+  --media-frame-border-width: 1px;
+  --media-frame-radius: var(--csgclaw-ui-radius-4xl);
+  position: relative;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--media-aspect-ratio);
+  overflow: hidden;
+  padding: 0;
+  border: var(--media-frame-border-width) solid var(--csgclaw-ui-line);
+  border-radius: var(--media-frame-radius);
+  background: var(--csgclaw-ui-panel-strong);
+  font: inherit;
+}
+
+button.frame {
+  cursor: pointer;
+}
+
+.frame:focus-within {
+  outline: 2px solid var(--csgclaw-ui-primary);
+  outline-offset: 2px;
+}
+
+.frame[data-result] {
+  aspect-ratio: auto;
+  overflow: visible;
+}
+
+.result {
+  --media-result-radius: calc(
+    var(--media-frame-radius) - var(--media-frame-border-width)
+  );
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.tiles {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  gap: var(--csgclaw-ui-space-0-5);
+  padding: var(--csgclaw-ui-space-0-5);
+}
+
+.tiles > span {
+  border-radius: var(--csgclaw-ui-radius-xs);
+  background: var(--csgclaw-ui-panel-soft);
+}
+
+.card[data-state="pending"] .tiles > span {
+  animation: tile-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes tile-pulse {
+  50% {
+    opacity: 0;
+  }
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--csgclaw-ui-space-2);
+  color: var(--csgclaw-ui-muted);
+  font-size: var(--csgclaw-ui-text-xs-size);
+  line-height: var(--csgclaw-ui-text-xs-line-height);
+  letter-spacing: 0.01em;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--csgclaw-ui-muted);
+}
+
+.failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--csgclaw-ui-space-2);
+  color: var(--csgclaw-ui-danger-text);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.variation {
+  position: absolute;
+  bottom: var(--csgclaw-ui-space-2);
+  left: var(--csgclaw-ui-space-2);
+  padding: 2px 7px;
+  border: 1px solid var(--csgclaw-ui-line);
+  border-radius: var(--csgclaw-ui-radius-full);
+  background: var(--csgclaw-ui-panel);
+  color: var(--csgclaw-ui-muted);
+  font: var(--csgclaw-ui-font-weight-normal) var(--csgclaw-ui-text-xs-size) /
+    var(--csgclaw-ui-text-xs-line-height) var(--csgclaw-ui-font-mono);
+}
+
+.footer {
+  display: flex;
+  min-height: 36px;
+  flex-direction: column;
+  gap: var(--csgclaw-ui-space-2);
+  color: var(--csgclaw-ui-muted);
+  font-size: var(--csgclaw-ui-text-xs-size);
+  line-height: var(--csgclaw-ui-text-xs-line-height);
+}
+
+.statusLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--csgclaw-ui-space-2);
+}
+
+.card[data-state="failed"] .statusLine {
+  color: var(--csgclaw-ui-danger-text);
+}
+
+.percent {
+  color: var(--csgclaw-ui-muted);
+  font-family: var(--csgclaw-ui-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--csgclaw-ui-radius-xs);
+  background: var(--csgclaw-ui-panel-soft);
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--csgclaw-ui-primary);
+}
+
+.progress:not([aria-valuenow]) > span {
+  width: 30%;
+  animation: progress-slide 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes progress-slide {
+  to {
+    transform: translateX(233%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card[data-state="pending"] .tiles > span,
+  .progress:not([aria-valuenow]) > span {
+    animation: none;
+  }
+}

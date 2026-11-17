@@ -416,6 +416,19 @@ func (h *Handler) handleAgentConnectorMCP(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.registerAppPlatformTools(agentID)
+	if r.Method == http.MethodGet && h.eventStreamShutdown != nil {
+		// The MCP transport holds GET subscriptions open until the request is canceled.
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		go func() {
+			select {
+			case <-h.eventStreamShutdown:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		r = r.WithContext(ctx)
+	}
 	h.apps.Handler(agentID).ServeHTTP(w, r)
 }
 

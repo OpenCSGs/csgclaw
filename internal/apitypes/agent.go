@@ -72,6 +72,8 @@ type ProfileDetectionResult struct {
 }
 
 type Agent struct {
+	CreatedBy        string         `json:"created_by,omitempty"`
+	NamedBy          string         `json:"named_by,omitempty"`
 	ArchivedAt       *time.Time     `json:"archived_at,omitempty"`
 	ArchivedBy       string         `json:"archived_by,omitempty"`
 	ID               string         `json:"id"`

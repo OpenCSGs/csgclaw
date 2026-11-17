@@ -15,6 +15,7 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 
 	toml "github.com/pelletier/go-toml/v2"
+	"github.com/pelletier/go-toml/v2/unstable"
 )
 
 const (
@@ -57,17 +58,9 @@ var (
 	rootDottedUserInputRe     = regexp.MustCompile(`^\s*features\s*\.\s*default_mode_request_user_input\s*=`)
 	featuresTableUserInputRe  = regexp.MustCompile(`^\s*default_mode_request_user_input\s*=`)
 
-	rootDottedFeaturesMemoriesRe = regexp.MustCompile(`^\s*features\s*\.\s*memories\s*=`)
-	featuresTableMemoriesRe      = regexp.MustCompile(`^\s*memories\s*=`)
-	rootDottedMemoriesGenerateRe = regexp.MustCompile(`^\s*memories\s*\.\s*generate_memories\s*=`)
-	rootDottedMemoriesUseRe      = regexp.MustCompile(`^\s*memories\s*\.\s*use_memories\s*=`)
-	rootDottedMemoriesMinIdleRe  = regexp.MustCompile(`^\s*memories\s*\.\s*min_rollout_idle_hours\s*=`)
-	memoriesTableGenerateRe      = regexp.MustCompile(`^\s*generate_memories\s*=`)
-	memoriesTableUseRe           = regexp.MustCompile(`^\s*use_memories\s*=`)
-	memoriesTableMinIdleRe       = regexp.MustCompile(`^\s*min_rollout_idle_hours\s*=`)
-	rootDottedWindowsSandboxRe   = regexp.MustCompile(`^\s*windows\s*\.\s*sandbox\s*=`)
-	windowsTableHeaderRe         = regexp.MustCompile(`^\s*\[\s*windows\s*\]\s*(?:#.*)?$`)
-	windowsTableSandboxRe        = regexp.MustCompile(`^\s*sandbox\s*=`)
+	rootDottedWindowsSandboxRe = regexp.MustCompile(`^\s*windows\s*\.\s*sandbox\s*=`)
+	windowsTableHeaderRe       = regexp.MustCompile(`^\s*\[\s*windows\s*\]\s*(?:#.*)?$`)
+	windowsTableSandboxRe      = regexp.MustCompile(`^\s*sandbox\s*=`)
 )
 
 var executionFeatureKeys = map[string]struct{}{
@@ -252,11 +245,15 @@ func buildMemoryConfigBlock(inMemoriesTable, enabled bool) string {
 	var b strings.Builder
 	b.WriteString(csgclawMemoryConfigBeginMarker)
 	b.WriteString("\n")
+	// Keep one memory pipeline for all agents instead of Codex selecting a
+	// different default based on whether a home already contains memories.
 	if inMemoriesTable {
+		b.WriteString("version = \"v1\"\ndual_write = false\ndedicated_tools = false\n")
 		fmt.Fprintf(&b, "generate_memories = %t\n", enabled)
 		fmt.Fprintf(&b, "use_memories = %t\n", enabled)
 		fmt.Fprintf(&b, "min_rollout_idle_hours = %d\n", memoryMinRolloutIdleHours)
 	} else {
+		b.WriteString("memories.version = \"v1\"\nmemories.dual_write = false\nmemories.dedicated_tools = false\n")
 		fmt.Fprintf(&b, "memories.generate_memories = %t\n", enabled)
 		fmt.Fprintf(&b, "memories.use_memories = %t\n", enabled)
 		fmt.Fprintf(&b, "memories.min_rollout_idle_hours = %d\n", memoryMinRolloutIdleHours)
@@ -1067,49 +1064,83 @@ func stripUserInputDirectives(content string) string {
 	return strings.Join(out, "\n")
 }
 
+// Remove complete managed assignments using parsed TOML boundaries. Preserve
+// unrelated expressions verbatim and normalize managed table headers for injection.
 func stripUserMemoryDirectives(content string) string {
-	lines := strings.Split(content, "\n")
-	out := make([]string, 0, len(lines))
-	currentTable := ""
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if rootFeaturesTableHeaderRe.MatchString(line) {
-			currentTable = "[features]"
-			out = append(out, line)
-			continue
-		}
-		if rootMemoriesTableHeaderRe.MatchString(line) {
-			currentTable = "[memories]"
-			out = append(out, line)
-			continue
-		}
-		if strings.HasPrefix(trimmed, "[") {
-			currentTable = trimmed
-			out = append(out, line)
-			continue
-		}
-		switch currentTable {
-		case "":
-			if rootDottedFeaturesMemoriesRe.MatchString(trimmed) ||
-				rootDottedMemoriesGenerateRe.MatchString(trimmed) ||
-				rootDottedMemoriesUseRe.MatchString(trimmed) ||
-				rootDottedMemoriesMinIdleRe.MatchString(trimmed) {
-				continue
-			}
-		case "[features]":
-			if featuresTableMemoriesRe.MatchString(trimmed) {
-				continue
-			}
-		case "[memories]":
-			if memoriesTableGenerateRe.MatchString(trimmed) ||
-				memoriesTableUseRe.MatchString(trimmed) ||
-				memoriesTableMinIdleRe.MatchString(trimmed) {
-				continue
-			}
-		}
-		out = append(out, line)
+	var parser unstable.Parser
+	parser.KeepComments = true
+	parser.Reset([]byte(content))
+	type replacement struct {
+		start, end int
+		text       string
 	}
-	return strings.Join(out, "\n")
+	var edits []replacement
+	var table []string
+	removeStart := -1
+	for parser.NextExpression() {
+		node := parser.Expression()
+		// Each top-level expression starts on its own line. Waiting for the next
+		// expression also covers multiline strings, arrays, and inline tables.
+		offset := int(node.Raw.Offset)
+		if node.Kind == unstable.Table || node.Kind == unstable.ArrayTable || node.Kind == unstable.KeyValue {
+			key := node.Key()
+			key.Next()
+			offset = int(key.Node().Raw.Offset)
+		}
+		lineStart := strings.LastIndex(content[:offset], "\n") + 1
+		if removeStart >= 0 {
+			edits = append(edits, replacement{removeStart, lineStart, ""})
+			removeStart = -1
+		}
+		if node.Kind != unstable.Table && node.Kind != unstable.ArrayTable && node.Kind != unstable.KeyValue {
+			continue
+		}
+		var keys []string
+		var nodes []*unstable.Node
+		it := node.Key()
+		for it.Next() {
+			keys = append(keys, string(it.Node().Data))
+			nodes = append(nodes, it.Node())
+		}
+		managed := false
+		if node.Kind == unstable.Table || node.Kind == unstable.ArrayTable {
+			table = keys
+			managed = node.Kind == unstable.Table && len(keys) == 1 && (keys[0] == "memories" || keys[0] == "features")
+		} else {
+			path := append(append([]string(nil), table...), keys...)
+			if len(path) == 2 {
+				if path[0] == "features" && path[1] == "memories" {
+					managed = true
+				}
+				if path[0] == "memories" {
+					switch path[1] {
+					case "version", "dual_write", "dedicated_tools", "generate_memories", "use_memories", "min_rollout_idle_hours":
+						managed = true
+					}
+				}
+			}
+		}
+		if managed && node.Kind == unstable.KeyValue {
+			removeStart = lineStart
+		} else if managed {
+			for i, key := range nodes {
+				if string(parser.Raw(key.Raw)) != keys[i] {
+					edits = append(edits, replacement{int(key.Raw.Offset), int(key.Raw.Offset + key.Raw.Length), keys[i]})
+				}
+			}
+		}
+	}
+	if removeStart >= 0 {
+		edits = append(edits, replacement{removeStart, len(content), ""})
+	}
+	if parser.Error() != nil {
+		return content
+	}
+	for i := len(edits) - 1; i >= 0; i-- {
+		e := edits[i]
+		content = content[:e.start] + e.text + content[e.end:]
+	}
+	return content
 }
 
 func hostCodexConfigPath() (string, error) {

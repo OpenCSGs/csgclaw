@@ -79,6 +79,7 @@ type ParticipantDirectory interface {
 }
 
 type IMService interface {
+	RecordContextUsage(roomID, userID string, usage modelcap.ContextUsage) (uint64, error)
 	ResolveUserID(userID string) string
 	Room(roomID string) (im.Room, bool)
 	User(userID string) (im.User, bool)
@@ -286,6 +287,23 @@ func (r *Registry) UpdateStatus(
 		r.mu.Unlock()
 		return apitypes.ParticipantWorkUpdate{}, false, ErrRateLimited
 	}
+	var usageEpoch uint64
+	if lease.status != nil {
+		usageEpoch = lease.status.ContextUsageEpoch
+	}
+	if request.ContextUsage != nil && lease.threadRootID == "" {
+		usage := modelcap.CloneUsage(request.ContextUsage)
+		if usage.UpdatedAt == "" {
+			usage.UpdatedAt = now.Format(time.RFC3339Nano)
+		}
+		epoch, err := r.im.RecordContextUsage(lease.roomID, lease.userID, *usage)
+		if err != nil {
+			r.mu.Unlock()
+			return apitypes.ParticipantWorkUpdate{}, false, err
+		}
+		request.ContextUsage = usage
+		usageEpoch = epoch
+	}
 	lease.statusWindowCount++
 	lease.capabilities = append([]string(nil), request.Capabilities...)
 	lease.statusSequence = request.Sequence
@@ -293,11 +311,12 @@ func (r *Registry) UpdateStatus(
 		request.ContextUsage = lease.status.ContextUsage
 	}
 	lease.status = &apitypes.ParticipantWorkStatus{
-		ContextUsage: modelcap.CloneUsage(request.ContextUsage),
-		Sequence:     request.Sequence,
-		Phase:        request.Phase,
-		Stage:        request.Stage,
-		Thinking:     cloneThinking(request.Thinking),
+		ContextUsageEpoch: usageEpoch,
+		ContextUsage:      modelcap.CloneUsage(request.ContextUsage),
+		Sequence:          request.Sequence,
+		Phase:             request.Phase,
+		Stage:             request.Stage,
+		Thinking:          cloneThinking(request.Thinking),
 	}
 	lease.revision++
 	r.activeByKey[key] = lease
@@ -551,8 +570,6 @@ func (r *Registry) ActiveCount(roomID, participantID string) int {
 	return len(r.activeBySubject[strings.TrimSpace(roomID)][participantID])
 }
 
-// ActiveRooms returns current execution scope, excluding expired leases even
-// before the janitor runs. Multiple rooms are deliberately not guessed between.
 // ActiveWork returns exact, unexpired leases for task-scoped stop control.
 func (r *Registry) ActiveWork(roomID string) []apitypes.ParticipantWorkUpdate {
 	r.mu.Lock()
@@ -566,6 +583,22 @@ func (r *Registry) ActiveWork(roomID string) []apitypes.ParticipantWorkUpdate {
 	return out
 }
 
+// ActiveWorkForParticipant returns one snapshot of the participant's active turns.
+func (r *Registry) ActiveWorkForParticipant(participantID string) []apitypes.ParticipantWorkUpdate {
+	participantID = r.canonicalParticipantID(participantID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := r.now()
+	var out []apitypes.ParticipantWorkUpdate
+	for _, lease := range r.activeByKey {
+		if lease.participantID == participantID && lease.expiresAt.After(now) {
+			out = append(out, r.updateFor(lease, apitypes.ParticipantWorkStateWorking, ""))
+		}
+	}
+	return out
+}
+
+// ActiveRooms returns current execution scope, excluding expired leases.
 func (r *Registry) ActiveRooms(participantID string) []string {
 	participantID = r.canonicalParticipantID(participantID)
 	r.mu.Lock()
@@ -679,11 +712,12 @@ func (r *Registry) updateFor(lease activeLease, state, reason string) apitypes.P
 	}
 	if lease.status != nil {
 		update.Status = &apitypes.ParticipantWorkStatus{
-			ContextUsage: modelcap.CloneUsage(lease.status.ContextUsage),
-			Sequence:     lease.status.Sequence,
-			Phase:        lease.status.Phase,
-			Stage:        lease.status.Stage,
-			Thinking:     cloneThinking(lease.status.Thinking),
+			ContextUsage:      modelcap.CloneUsage(lease.status.ContextUsage),
+			ContextUsageEpoch: lease.status.ContextUsageEpoch,
+			Sequence:          lease.status.Sequence,
+			Phase:             lease.status.Phase,
+			Stage:             lease.status.Stage,
+			Thinking:          cloneThinking(lease.status.Thinking),
 		}
 	}
 	return update

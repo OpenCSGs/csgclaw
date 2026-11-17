@@ -24,6 +24,7 @@
 }
 .inner {
   width: min(880px, 100%);
+  min-width: 0;
   padding: 44px 32px 56px;
   margin: auto;
   display: flex;
@@ -35,6 +36,7 @@
   align-items: center;
   gap: 8px;
   text-align: center;
+  overflow-wrap: anywhere;
   margin-bottom: 22px;
 }
 .head h1 {
@@ -59,6 +61,8 @@
   position: relative;
 }
 .composer {
+  --composer-content-inset: 16px;
+  container: start-task-composer / inline-size;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--input-border);
@@ -97,6 +101,18 @@
   box-shadow: none;
   animation: none;
 }
+.slashPopover {
+  width: min(560px, var(--radix-popover-trigger-width), var(--radix-popover-content-available-width));
+  --slash-picker-available-width: 100%;
+}
+.mentionStatus {
+  padding: 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 12px;
+  background: var(--input-background);
+  box-shadow: var(--shadow-xs);
+  overflow-wrap: anywhere;
+}
 .mentionPopover .mentions {
   position: static;
   width: 100%;
@@ -104,17 +120,46 @@
   margin: 0;
   animation: none;
 }
+.peopleAndFiles > [role="option"] {
+  min-height: 40px;
+  padding: 6px 8px;
+}
+.peopleAndFiles > [role="option"] + [role="option"] {
+  margin-block-start: 4px;
+}
 .draft:not([hidden]) {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 6px;
   min-height: 148px;
-  padding: 16px 16px 8px;
+  padding: 16px var(--composer-content-inset) 8px;
 }
-.page .composer .input {
+.actionSuggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 0 var(--composer-content-inset) 6px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+.actionSuggestions .suggestionButton {
+  --button-shadow: none;
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: inherit;
+}
+.promptEditor {
+  position: relative;
   flex: 1;
   min-width: 120px;
+}
+.page .composer .input {
+  display: block;
+  width: 100%;
+  min-width: 0;
   min-height: 116px;
   padding: 0;
   border: 0;
@@ -126,6 +171,40 @@
   font-size: 15.5px;
   line-height: 25px;
   resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  scrollbar-gutter: stable;
+}
+.promptMirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.page .composer .promptEditor[data-highlighted] textarea {
+  position: relative;
+  color: transparent;
+  caret-color: var(--text);
+}
+.promptEditor[data-highlighted] textarea::selection {
+  color: transparent;
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+.fileMention {
+  color: var(--primary);
+}
+@media (forced-colors: active) {
+  .promptMirror {
+    display: none;
+  }
+  .page .composer .promptEditor[data-highlighted] textarea {
+    color: CanvasText;
+    caret-color: auto;
+  }
+  .promptEditor[data-highlighted] textarea::selection {
+    color: HighlightText;
+    background: Highlight;
+  }
 }
 .page .composer .input:focus {
   outline: none;
@@ -147,6 +226,85 @@
   --composer-add-icon-size: 16px;
   flex: 0 0 auto;
   align-self: center;
+}
+button.modeTrigger[data-csg-control] {
+  width: auto;
+  flex: none;
+  gap: 5px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+  font: var(--text-xs-medium);
+}
+button.modeTrigger[data-csg-control]:is(:hover, [data-state="open"]):not(:disabled) {
+  background: var(--panel-soft);
+  color: var(--text);
+}
+button.modeTrigger[data-csg-control]:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+button.modeTrigger[data-csg-control]:disabled {
+  opacity: 0.55;
+}
+.modeTrigger :global(.csg-select-value) {
+  flex: 0 1 auto;
+}
+.modeTrigger > svg {
+  width: 14px;
+  height: 14px;
+}
+.modeLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.modeLabel > svg {
+  flex: none;
+  color: var(--muted);
+}
+.modeLabel > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.modeMenu[role="listbox"] {
+  width: min(272px, calc(100vw - 24px));
+  min-width: 0;
+  border-color: color-mix(in oklab, var(--line) 80%, transparent);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.modeOption[role="option"] {
+  min-height: 48px;
+  padding: 7px 32px 7px 34px;
+}
+/* The shared Select renders its check in the first slot. */
+.modeOption > :first-child {
+  inset-inline-start: auto;
+  inset-inline-end: 9px;
+  color: var(--accent-text);
+}
+.modeOptionIcon {
+  position: absolute;
+  inset-inline-start: 9px;
+  top: 50%;
+  color: var(--muted);
+  transform: translateY(-50%);
+}
+.modeOptionTitle {
+  font: var(--text-sm-medium);
+}
+.modeOptionHint {
+  font: var(--text-xs-normal);
+}
+.modeOption[data-state="checked"] .modeOptionIcon {
+  color: var(--accent-text);
+}
+.modeOption[data-state="checked"] .modeOptionTitle {
+  font-weight: var(--font-weight-semibold);
 }
 .attachmentFeedback {
   display: flex;
@@ -208,10 +366,16 @@
 }
 .chips {
   display: flex;
+  flex: 1;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 8px;
 }
 .chip {
+  min-width: 0;
+  max-width: 100%;
+  text-align: start;
+  overflow-wrap: anywhere;
   padding: 5px 12px 5px 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -226,6 +390,7 @@
   cursor: pointer;
 }
 .chip svg {
+  flex-shrink: 0;
   color: var(--primary);
 }
 .chip:hover {
@@ -234,6 +399,7 @@
   background: var(--primary-soft);
 }
 .examplesClose {
+  flex: 0 0 24px;
   border: 0;
   background: transparent;
   color: var(--muted);

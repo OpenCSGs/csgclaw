@@ -74,6 +74,20 @@ func (r *Runtime) handleNotification(proc *process, note notification) {
 		turn.tokenUsage.ModelID = proc.profile.ModelID
 		event.Kind = contract.TurnEventActivityUpdate
 		event.Activity = &contract.ActivityUpdate{ID: params.SessionID, Kind: modelusage.Kind, Payload: turn.tokenUsage}
+	case "reasoning_delta":
+		text, _ := params.Update["text"].(string)
+		if note.Method != "csgclaw/context" || text == "" {
+			proc.mu.Unlock()
+			return
+		}
+		event.Kind = contract.TurnEventThoughtDelta
+		event.Thought = text
+	case "reasoning_commit":
+		if note.Method == "csgclaw/context" {
+			turn.recordThoughtPrefixes(params.Update)
+		}
+		proc.mu.Unlock()
+		return
 	case "agent_message_chunk", "agent_thought_chunk":
 		content, _ := params.Update["content"].(map[string]any)
 		contentType, _ := content["type"].(string)
@@ -87,6 +101,12 @@ func (r *Runtime) handleNotification(proc *process, note notification) {
 			event.Text = text
 			turn.output.WriteString(text)
 		} else {
+			messageID, _ := params.Update["messageId"].(string)
+			text = turn.trimThoughtPrefix(messageID, text)
+			if text == "" {
+				proc.mu.Unlock()
+				return
+			}
 			event.Kind = contract.TurnEventThoughtDelta
 			event.Thought = text
 		}
@@ -178,6 +198,40 @@ func (r *Runtime) handleNotification(proc *process, note notification) {
 			_ = proc.client.notify("session/cancel", map[string]any{"sessionId": params.SessionID})
 		}
 	}
+}
+
+func (turn *activeTurn) recordThoughtPrefixes(update map[string]any) {
+	id, _ := update["messageId"].(string)
+	values, _ := update["prefixBytes"].([]any)
+	if id == "" || len(values) == 0 {
+		return
+	}
+	prefixes := make([]int64, len(values))
+	for i, value := range values {
+		if size, ok := modelusage.Number(value); ok {
+			prefixes[i] = size
+		}
+	}
+	if turn.thoughtPrefixes == nil {
+		turn.thoughtPrefixes = make(map[string][]int64)
+	}
+	turn.thoughtPrefixes[id] = prefixes
+}
+
+func (turn *activeTurn) trimThoughtPrefix(messageID, text string) string {
+	prefixes := turn.thoughtPrefixes[messageID]
+	if len(prefixes) == 0 {
+		return text
+	}
+	if len(prefixes) == 1 {
+		delete(turn.thoughtPrefixes, messageID)
+	} else {
+		turn.thoughtPrefixes[messageID] = prefixes[1:]
+	}
+	if prefixes[0] <= int64(len(text)) {
+		return text[prefixes[0]:]
+	}
+	return text
 }
 
 func (turn *activeTurn) recordPresentedFiles(tool contract.ToolActivity) {

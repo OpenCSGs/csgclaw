@@ -1,0 +1,6 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="280" height="266" viewBox="0 0 280 266" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Ring">
+<path id="Background" d="M266 140C266 123.453 262.741 107.069 256.409 91.7819C250.077 76.4949 240.796 62.6047 229.095 50.9046C217.395 39.2044 203.505 29.9233 188.218 23.5912C172.931 17.2591 156.547 14 140 14C123.453 14 107.069 17.2591 91.782 23.5911C76.4949 29.9232 62.6048 39.2043 50.9046 50.9045C39.2044 62.6047 29.9233 76.4948 23.5912 91.7818C17.2591 107.069 14 123.453 14 140" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" stroke="#E9EAEB"/>
+<path id="Line" d="M14 140C14 113.391 22.4237 87.4658 38.0639 65.939C53.704 44.4122 75.7576 28.3894 101.064 20.1669C126.37 11.9444 153.63 11.9444 178.936 20.1669C204.242 28.3894 226.296 44.4123 241.936 65.9391" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" stroke="#3250BD"/>
+</g>
+</svg>

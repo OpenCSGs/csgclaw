@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/migrations/retiredclaws"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/taskconfig"
 	"encoding/json"
 	"errors"
@@ -87,7 +88,11 @@ type ThreadListOptions struct {
 }
 
 type DeliverMessageRequest struct {
-	Transient         bool                      `json:"-"`
+	Transient bool `json:"-"`
+	// RefreshCreatedAt moves a replacement message to the current point in the
+	// transcript. It is used when a transient progress message becomes the
+	// turn's final response after user interaction.
+	RefreshCreatedAt  bool                      `json:"-"`
 	RoomID            string                    `json:"room_id"`
 	SenderID          string                    `json:"sender_id,omitempty"`
 	MentionID         string                    `json:"mention_id,omitempty"`
@@ -180,19 +185,21 @@ var (
 )
 
 type Service struct {
-	agentState       func(User) string
-	diagnosticsOnce  sync.Once
-	diagnostics      *diagnostics.Store
-	mu               sync.RWMutex
-	bus              *Bus
-	statePath        string
-	currentUserID    string
-	users            map[string]User
-	byName           map[string]string
-	rooms            map[string]*Room
-	taskTitleClaims  map[string]string // Room ID to source message ID. Survives Reload.
-	sessionRooms     map[string]string
-	sessionConflicts map[string]struct{}
+	autonomousTaskThread func(roomID, sourceID string) string
+	agentState           func(User) string
+	legacyNotifier       func(User) bool
+	diagnosticsOnce      sync.Once
+	diagnostics          *diagnostics.Store
+	mu                   sync.RWMutex
+	bus                  *Bus
+	statePath            string
+	currentUserID        string
+	users                map[string]User
+	byName               map[string]string
+	rooms                map[string]*Room
+	taskTitleClaims      map[string]string // Room ID to source message ID. Survives Reload.
+	sessionRooms         map[string]string
+	sessionConflicts     map[string]struct{}
 }
 
 var mentionPattern = regexp.MustCompile(`(^|[^\pL\pM\pN._-])@([\pL\pM\pN._-]+)`)
@@ -254,9 +261,12 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	TitleSource          string                        `json:"title_source,omitempty"`
-	CloudAgent           *apitypes.CloudAgentReference `json:"cloud_agent,omitempty"`
-	CreationWorkspaceDir *string                       `json:"creation_workspace_dir,omitempty"`
+	ContextUsageEpoch    uint64                           `json:"context_usage_epoch,omitempty"`
+	ContextUsage         map[string]modelcap.ContextUsage `json:"context_usage,omitempty"`
+	TitleSource          string                           `json:"title_source,omitempty"`
+	CloudAgent           *apitypes.CloudAgentReference    `json:"cloud_agent,omitempty"`
+	AutonomousState      *apitypes.AutonomousState        `json:"autonomous_state,omitempty"`
+	CreationWorkspaceDir *string                          `json:"creation_workspace_dir,omitempty"`
 
 	SourceTeamID       string             `json:"source_team_id,omitempty"`
 	CollaborationGuide string             `json:"collaboration_guide,omitempty"`
@@ -350,11 +360,18 @@ func NewServiceFromPathWithBus(path string, bus *Bus) (*Service, error) {
 	if err := sessionAttachmentStore(path).recoverPendingBatches(); err != nil {
 		return nil, fmt.Errorf("recover session attachments: %w", err)
 	}
+	recoveredCompactions := false
 	for i := range state.Rooms {
 		interruptSavedTurnProgress(state.Rooms[i].Messages)
+		recoveredCompactions = interruptSavedCompactions(state.Rooms[i].Messages) || recoveredCompactions
 	}
 	svc := NewServiceFromBootstrapWithBus(state, bus)
 	svc.statePath = path
+	if recoveredCompactions {
+		if err := svc.saveLocked(); err != nil {
+			return nil, err
+		}
+	}
 	return svc, nil
 }
 
@@ -523,6 +540,8 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			return nil, err
 		}
 		loaded = append(loaded, Room{
+			ContextUsage:         cloneContextUsage(room.ContextUsage),
+			ContextUsageEpoch:    room.ContextUsageEpoch,
 			CreationWorkspaceDir: room.CreationWorkspaceDir,
 			TitleSource:          room.TitleSource,
 			Archived:             room.Archived,
@@ -538,6 +557,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			CreatedAt:            room.CreatedAt,
 
 			Type:            apitypes.NormalizeRoomType(room.Type),
+			AutonomousState: cloneAutonomousState(room.AutonomousState),
 			ManagerID:       room.ManagerID,
 			ID:              room.ID,
 			Title:           room.Title,
@@ -715,6 +735,8 @@ func saveRoomThreadsForState(statePath string, room Room, operations ...*diagnos
 
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
+		ContextUsage:         cloneContextUsage(room.ContextUsage),
+		ContextUsageEpoch:    room.ContextUsageEpoch,
 		CreationWorkspaceDir: room.CreationWorkspaceDir,
 		TitleSource:          room.TitleSource,
 		Archived:             room.Archived,
@@ -730,6 +752,7 @@ func persistedRoomFromRoom(room Room) persistedRoom {
 		CreatedAt:            room.CreatedAt,
 
 		Type:            apitypes.NormalizeRoomType(room.Type),
+		AutonomousState: cloneAutonomousState(room.AutonomousState),
 		ManagerID:       room.ManagerID,
 		ID:              room.ID,
 		Title:           room.Title,
@@ -1779,7 +1802,7 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 		}
 	}
 	if req.Configuration != nil {
-		if !room.IsDirect && !room.IsOnDemand() {
+		if !room.IsDirect && !room.IsOnDemand() && !room.IsAutonomous() {
 			return Room{}, fmt.Errorf("workspace configuration requires a task or collaboration room")
 		}
 		if !room.IsDirect && (req.Configuration.ModelID != "" || req.Configuration.ModelProviderID != "" || req.Configuration.ReasoningEffort != "" || req.Configuration.ExecutionMode != "") {
@@ -1838,7 +1861,10 @@ func (s *Service) ClearRoomMessages(roomID string) (Room, error) {
 		return Room{}, ErrRoomNotFound
 	}
 	room.Messages = []Message{}
+	room.AutonomousState = nil
 	room.Threads = []ThreadState{}
+	room.ContextUsage = nil
+	room.ContextUsageEpoch++
 	if err := s.saveRoomLocked(*room); err != nil {
 		s.mu.Unlock()
 		return Room{}, err
@@ -1878,6 +1904,7 @@ func (s *Service) DeleteUser(userID string) error {
 	delete(s.byName, strings.ToLower(user.Name))
 
 	for id, room := range s.rooms {
+		delete(room.ContextUsage, userID)
 		members := make([]string, 0, len(room.Members))
 		for _, memberID := range room.Members {
 			if canonicalIMUserID(memberID) != userID {
@@ -2233,6 +2260,7 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 	message := s.newMessage("", senderID, MessageKindMessage, content)
 	message.ClientMessageID = clientMessageID
 	message.MemoryUserID = req.MemoryUserID
+	message.MemoryExcluded = req.MemoryUserID == ""
 	message.Metadata = utils.CloneAnyMap(apitypes.WithResourceSelection(req.Metadata, req.ResourceSelection))
 	if !req.DiagnosticStart.IsZero() {
 		if message.Metadata == nil {
@@ -2247,6 +2275,7 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 		return Message{}, false, err
 	}
 	message.Attachments = attachments
+	assignAutonomousSequence(room, &message)
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
 		rollbackRoom()
@@ -2359,8 +2388,16 @@ func (s *Service) DeliverMessageContext(ctx context.Context, req DeliverMessageR
 	}
 	message.Attachments = attachments
 	if replaceIndex >= 0 {
-		message.CreatedAt = room.Messages[replaceIndex].CreatedAt
-		room.Messages[replaceIndex] = message
+		previous := room.Messages[replaceIndex]
+		message.RoomSequence = previous.RoomSequence
+		assignAutonomousSequence(room, &message)
+		if req.RefreshCreatedAt {
+			room.Messages = append(room.Messages[:replaceIndex], room.Messages[replaceIndex+1:]...)
+			room.Messages = append(room.Messages, message)
+		} else {
+			message.CreatedAt = previous.CreatedAt
+			room.Messages[replaceIndex] = message
+		}
 		s.rebuildThreadStatesLocked(room)
 		if err := s.saveMessageProjectionLocked(req.Transient, operation); err != nil {
 			return Message{}, err
@@ -2371,6 +2408,7 @@ func (s *Service) DeliverMessageContext(ctx context.Context, req DeliverMessageR
 		finishPublish()
 		return presented, nil
 	}
+	assignAutonomousSequence(room, &message)
 	room.Messages = append(room.Messages, message)
 	if err := s.saveMessageProjectionLocked(req.Transient, operation); err != nil {
 		return Message{}, err
@@ -2498,6 +2536,7 @@ func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
 			return presented, nil
 		}
 	}
+	assignAutonomousSequence(room, &message)
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
 		return Message{}, err
@@ -2544,7 +2583,7 @@ func publishRoomEvent(bus *Bus, eventType string, room Room) {
 func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 	req.SourceTeamID = strings.TrimSpace(req.SourceTeamID)
 	req.Type = apitypes.NormalizeRoomType(req.Type)
-	if req.Type != apitypes.RoomTypeFree && req.Type != apitypes.RoomTypeOnDemand {
+	if req.Type != apitypes.RoomTypeFree && req.Type != apitypes.RoomTypeOnDemand && req.Type != apitypes.RoomTypeAutonomous {
 		return Room{}, fmt.Errorf("unsupported room type")
 	}
 	if req.Type == apitypes.RoomTypeOnDemand {
@@ -2638,7 +2677,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		},
 	}
 
-	if room.IsOnDemand() {
+	if room.IsOnDemand() || room.IsAutonomous() {
 		requested := requestedWorkspaceDir(req.Configuration)
 		room.CreationWorkspaceDir = &requested
 	}
@@ -2713,20 +2752,27 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		if userID == "" {
 			continue
 		}
-		if _, ok := s.users[userID]; !ok {
+		user, ok := s.users[userID]
+		if !ok {
 			return Room{}, fmt.Errorf("%w: %s", ErrUserNotFound, userID)
 		}
 		if _, ok := existing[userID]; ok {
 			continue
 		}
+		if user.Role == "cloud" {
+			return Room{}, fmt.Errorf("cannot invite a cloud agent to this room")
+		}
+		if s.isLegacyNotifierLocked(user) {
+			return Room{}, fmt.Errorf("cannot invite a legacy notifier to this room")
+		}
 		existing[userID] = struct{}{}
-		room.Members = append(room.Members, userID)
 		addedIDs = append(addedIDs, userID)
 	}
 	if len(addedIDs) == 0 {
 		return Room{}, ErrNoNewUsersToInvite
 	}
 
+	room.Members = append(room.Members, addedIDs...)
 	room.Subtitle = formatRoomSubtitle(len(room.Members))
 	room.Messages = append(room.Messages, Message{
 		ID:       fmt.Sprintf("msg-%d", time.Now().UnixNano()),
@@ -2823,6 +2869,9 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	}
 
 	room.Members = remaining
+	for _, id := range removedIDs {
+		delete(room.ContextUsage, id)
+	}
 	room.Subtitle = formatRoomSubtitle(len(room.Members))
 	room.Messages = append(room.Messages, Message{
 		ID:       fmt.Sprintf("msg-%d", time.Now().UnixNano()),
@@ -3143,12 +3192,14 @@ func cloneCloudAgent(ref *apitypes.CloudAgentReference) *apitypes.CloudAgentRefe
 
 func cloneRoom(room Room) Room {
 	room.CloudAgent = cloneCloudAgent(room.CloudAgent)
+	room.AutonomousState = cloneAutonomousState(room.AutonomousState)
 	if room.CreationWorkspaceDir != nil {
 		dir := *room.CreationWorkspaceDir
 		room.CreationWorkspaceDir = &dir
 	}
 	room.Configuration = taskconfig.Clone(room.Configuration)
 	cloned := room
+	cloned.ContextUsage = cloneContextUsage(room.ContextUsage)
 	cloned.Members = append([]string(nil), room.Members...)
 	cloned.MemberNames = append([]string(nil), room.MemberNames...)
 	cloned.Messages = cloneMessages(room.Messages)
@@ -3372,6 +3423,15 @@ func (s *Service) threadSummaryLocked(room Room, rootMessageID string) (ThreadSu
 		return ThreadSummary{}, false
 	}
 	replies := s.threadRepliesLocked(room, rootMessageID)
+	if room.IsAutonomous() {
+		public := make([]Message, 0, len(replies))
+		for _, reply := range replies {
+			if publicAutonomousMessage(reply) && !IsAutonomousCoordinationNotice(reply) {
+				public = append(public, reply)
+			}
+		}
+		replies = public
+	}
 	var latest *Message
 	if len(replies) > 0 {
 		msg := cloneMessage(replies[len(replies)-1])
@@ -3620,12 +3680,13 @@ func (s *Service) newMessage(messageID, senderID, kind, content string) Message 
 		kind = MessageKindMessage
 	}
 	return Message{
-		ID:        messageID,
-		SenderID:  senderID,
-		Kind:      kind,
-		Content:   content,
-		CreatedAt: time.Now().UTC(),
-		Mentions:  s.extractMentions(content),
+		MemoryExcluded: true,
+		ID:             messageID,
+		SenderID:       senderID,
+		Kind:           kind,
+		Content:        content,
+		CreatedAt:      time.Now().UTC(),
+		Mentions:       s.extractMentions(content),
 	}
 }
 
@@ -3777,6 +3838,7 @@ func (s *Service) replaceStateLocked(state Bootstrap) {
 	}
 	for i := range rooms {
 		room := rooms[i]
+
 		s.rooms[room.ID] = &room
 	}
 	s.rebuildSessionRoomIndexLocked()

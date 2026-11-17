@@ -238,6 +238,43 @@ func (f *fakeConversationRuntime) publish(event activity.RuntimeEvent) {
 	}
 }
 
+func TestConversationCompletionPreservesNativeMessagesForReplay(t *testing.T) {
+	runtimeImpl := &fakeConversationRuntime{}
+	promptCalls := 0
+	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		promptCalls++
+		for _, event := range []activity.RuntimeEvent{
+			{Kind: activity.RuntimeEventTextDelta, MessageID: "comment", Text: "Checking.", Payload: map[string]any{"phase": "commentary"}},
+			{Kind: activity.RuntimeEventTextDelta, MessageID: "answer", Text: "Draft.", Payload: map[string]any{"phase": "unknown"}},
+			{Kind: activity.RuntimeEventTextDelta, MessageID: "answer", Text: "Answer.", Payload: map[string]any{"phase": "final_answer", "text_snapshot": true}},
+			{Kind: activity.RuntimeEventPromptCompleted},
+		} {
+			event.RuntimeID, event.SessionID = runtimeID, sessionID
+			runtimeImpl.publish(event)
+		}
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	request := TurnRequest{ID: "native-messages", ConversationKey: "conversation", Input: textInput("hello")}
+	result := engine.Conversations("agent-a").Run(t.Context(), request, nil)
+	if result.Status != TurnSucceeded || result.Output != "Answer." || len(result.RuntimeText) != 2 {
+		t.Fatalf("result=%+v", result)
+	}
+	result.RuntimeText[0].Text = "Changed by caller."
+	result.RuntimeText[1].Phase = "commentary"
+	replayed := engine.Conversations("agent-a").Run(t.Context(), request, nil)
+	want := []TurnEvent{
+		{Kind: TurnEventTextDelta, ItemID: "comment", Phase: "commentary", Text: "Checking.", TextSnapshot: true},
+		{Kind: TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: "Answer.", TextSnapshot: true},
+	}
+	if replayed.Status != TurnSucceeded || !reflect.DeepEqual(replayed.RuntimeText, want) || promptCalls != 1 {
+		t.Fatalf("replayed=%+v promptCalls=%d", replayed, promptCalls)
+	}
+}
+
 func TestConversationRunAuthorizesRuntimeOutputFile(t *testing.T) {
 	workspace := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(workspace, "reports"), 0o700); err != nil {
@@ -965,10 +1002,11 @@ func TestCodexInputPreservesOrderedTextImageAndFileBlocks(t *testing.T) {
 		t.Fatalf("clientUserMessageId = %q", runtimeImpl.turnID)
 	}
 	blocks := runtimeImpl.promptBlocks
-	if len(blocks) != 5 || blocks[0].Text == nil || blocks[0].Text.Text != "before" ||
-		blocks[1].LocalImage == nil || blocks[2].Text == nil || !strings.Contains(blocks[2].Text.Text, "notes.txt") ||
-		blocks[3].Text == nil || !strings.Contains(blocks[3].Text.Text, saved) ||
-		blocks[4].Text == nil || blocks[4].Text.Text != "after" {
+	if len(blocks) != 6 || blocks[0].Text == nil || blocks[0].Text.Text != "before" ||
+		blocks[1].Text == nil || blocks[1].Text.Text != "Attached reference image 1 (\"image.png\"):" ||
+		blocks[2].LocalImage == nil || blocks[3].Text == nil || !strings.Contains(blocks[3].Text.Text, "notes.txt") ||
+		blocks[4].Text == nil || !strings.Contains(blocks[4].Text.Text, saved) ||
+		blocks[5].Text == nil || blocks[5].Text.Text != "after" {
 		t.Fatalf("prompt blocks = %#v", blocks)
 	}
 }
@@ -1253,15 +1291,17 @@ func TestConversationResolveRestoresClaimAfterRuntimeFailure(t *testing.T) {
 	}
 }
 
-func TestAgentStopDrainsActiveEngineTurn(t *testing.T) {
+func TestAgentStopCancelsAndDrainsActiveEngineTurn(t *testing.T) {
 	runtimeImpl := &fakeConversationRuntime{}
 	started := make(chan struct{})
 	release := make(chan struct{})
-	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+	canceled := make(chan struct{})
+	runtimeImpl.prompt = func(ctx context.Context, runtimeID, sessionID, _ string) error {
 		close(started)
+		<-ctx.Done()
+		close(canceled)
 		<-release
-		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
-		return nil
+		return ctx.Err()
 	}
 	service := newTestAgentService(t, []agent.Agent{{
 		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
@@ -1287,12 +1327,17 @@ func TestAgentStopDrainsActiveEngineTurn(t *testing.T) {
 		stopDone <- err
 	}()
 	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("stop did not interrupt the active turn")
+	}
+	select {
 	case err := <-stopDone:
 		t.Fatalf("Stop returned before active Turn drained: %v", err)
-	case <-time.After(20 * time.Millisecond):
+	default:
 	}
 	close(release)
-	if result := <-runDone; result.Status != TurnSucceeded {
+	if result := <-runDone; result.Status != TurnCanceled {
 		t.Fatalf("run result = %+v", result)
 	}
 	if err := <-stopDone; err != nil {
@@ -1339,7 +1384,7 @@ func TestAgentLifecycleDrainTimeoutLeavesRuntimeUnchanged(t *testing.T) {
 		t.Fatalf("Agent changed after drain timeout: %+v, %t", selected, ok)
 	}
 	close(release)
-	if result := <-runDone; result.Status != TurnSucceeded {
+	if result := <-runDone; result.Status != TurnCanceled {
 		t.Fatalf("result = %+v", result)
 	}
 }

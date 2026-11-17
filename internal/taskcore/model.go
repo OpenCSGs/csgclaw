@@ -6,6 +6,7 @@ const (
 	AssignmentTypeRoom  = "room"
 	AssignmentTypeTeam  = "team"
 	AssignmentTypeAgent = "agent"
+	RoomModeAutonomous  = "autonomous"
 
 	StatusPending    = "pending"
 	StatusAssigned   = "assigned"
@@ -60,6 +61,8 @@ type Task struct {
 	ClaimedBy        string     `json:"claimed_by,omitempty"`
 	ExecutionChannel string     `json:"execution_channel,omitempty"`
 	RoomID           string     `json:"room_id,omitempty"`
+	RoomMode         string     `json:"room_mode,omitempty"`
+	ThreadRootID     string     `json:"thread_root_id,omitempty"`
 	DependsOn        []string   `json:"depends_on,omitempty"`
 	Priority         int        `json:"priority,omitempty"`
 	PlanSummary      string     `json:"plan_summary,omitempty"`
@@ -82,6 +85,7 @@ type TaskEvent struct {
 	AssignmentID   string    `json:"assignment_id"`
 	Channel        string    `json:"channel,omitempty"`
 	RoomID         string    `json:"room_id,omitempty"`
+	ThreadRootID   string    `json:"thread_root_id,omitempty"`
 	Type           string    `json:"type"`
 	ActorID        string    `json:"actor_id,omitempty"`
 	TaskID         string    `json:"task_id,omitempty"`

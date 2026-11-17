@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { MessageContent } from "./MessageContent";
 
 function questionMessage(status: "pending" | "answered") {
@@ -46,6 +46,30 @@ function questionMessage(status: "pending" | "answered") {
 }
 
 describe("MessageContent question transcripts", () => {
+  it("highlights both tagged and plain mentions resolved by the server", () => {
+    const content =
+      '请 @dev 检查，<at user_id="user-manager">manager</at> 验收，@unknown 保持普通文本。`@dev` [@dev](https://example.com) @"notes @dev" /@dev/file';
+    const { container } = render(
+      <MessageContent
+        content={content}
+        message={{
+          content,
+          mentions: [
+            { id: "user-manager", name: "manager" },
+            { id: "user-ljbpmz", name: "dev" },
+          ],
+        }}
+      />,
+    );
+
+    const mentions = [...container.querySelectorAll<HTMLElement>(".message-mention")];
+    expect(mentions.map((mention) => [mention.textContent, mention.dataset.userId])).toEqual([
+      ["@dev", "user-ljbpmz"],
+      ["@manager", "user-manager"],
+    ]);
+    expect(screen.getByRole("link", { name: "@dev" })).toBeVisible();
+  });
+
   it("renders backend-provided runtime error content without client-side rewriting", () => {
     const content =
       "Runtime error: unexpected status 402 Payment Required. The model service balance is insufficient. Add funds or contact an administrator.\n\n👉 [Recharge your account](https://opencsg-stg.com/settings/billing) to continue., url: http://127.0.0.1:49229/api/v1/agents/agent-manager/llm/responses, request id: secret";
@@ -103,6 +127,34 @@ describe("MessageContent question transcripts", () => {
     expect(screen.getByText("questionRequest")).toBeInTheDocument();
     expect(screen.getByText("What kind of demo?")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Questions" })).not.toBeInTheDocument();
+  });
+
+  it("opens the selected question in the composer with the original option number", () => {
+    const message = questionMessage("pending");
+    const questions = message.metadata.csgclaw.agent_activity.content.question.questions;
+    questions.push({
+      id: "scope",
+      header: "Scope",
+      question: "Which scope?",
+      options: [{ label: "Current conversation", description: "" }],
+    });
+    const onQuestionSelect = vi.fn();
+    render(
+      <MessageContent
+        content={message.content}
+        message={message}
+        onQuestionSelect={onQuestionSelect}
+        t={(key) => key}
+      />,
+    );
+
+    expect(screen.queryByText("Which scope?")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "questionNext" }));
+    expect(screen.getByText("Which scope?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Current conversation" }));
+    expect(onQuestionSelect).toHaveBeenLastCalledWith("request-1", "scope", 1);
+    fireEvent.click(screen.getByRole("button", { name: "questionAnswer" }));
+    expect(onQuestionSelect).toHaveBeenLastCalledWith("request-1", "scope", undefined);
   });
 
   it("renders the same resolved question message as ordinary Markdown", () => {

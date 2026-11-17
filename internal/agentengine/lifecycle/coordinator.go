@@ -91,6 +91,18 @@ func (c *Coordinator) Mutation(ctx context.Context, id string) (context.Context,
 
 // MutationInterrupt closes admission before interrupting active work, then drains it.
 func (c *Coordinator) MutationInterrupt(ctx context.Context, id string, interrupt func()) (context.Context, func(), error) {
+	return c.MutationPrepare(ctx, id, func(context.Context) error {
+		if interrupt != nil {
+			interrupt()
+		}
+		return nil
+	})
+}
+
+// MutationPrepare closes admission and serializes mutations before validating
+// their intent. Preparation may cancel active work after validation, but must
+// not change runtime resources until the returned execution drain completes.
+func (c *Coordinator) MutationPrepare(ctx context.Context, id string, prepare func(context.Context) error) (context.Context, func(), error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -104,6 +116,11 @@ func (c *Coordinator) MutationInterrupt(ctx context.Context, id string, interrup
 	parent, _ := ctx.Value(mutationKey{}).(*mutation)
 	for held := parent; held != nil; held = held.parent {
 		if held.owner == c && held.agentID == id {
+			if prepare != nil {
+				if err := prepare(ctx); err != nil {
+					return ctx, nil, err
+				}
+			}
 			return ctx, func() {}, nil
 		}
 	}
@@ -119,8 +136,12 @@ func (c *Coordinator) MutationInterrupt(ctx context.Context, id string, interrup
 	g.mu.Unlock()
 	var once sync.Once
 	release := func() { once.Do(func() { g.mu.Lock(); g.closed = false; g.mu.Unlock(); g.token <- struct{}{} }) }
-	if interrupt != nil {
-		interrupt()
+	mutationCtx := context.WithValue(ctx, mutationKey{}, &mutation{owner: c, agentID: id, parent: parent})
+	if prepare != nil {
+		if err := prepare(mutationCtx); err != nil {
+			release()
+			return ctx, nil, err
+		}
 	}
 	timeout := c.DrainTimeout
 	if timeout <= 0 {
@@ -134,7 +155,7 @@ func (c *Coordinator) MutationInterrupt(ctx context.Context, id string, interrup
 		return ctx, nil, fmt.Errorf("drain agent %q executions: %w", id, drainCtx.Err())
 	case <-drained:
 	}
-	return context.WithValue(ctx, mutationKey{}, &mutation{owner: c, agentID: id, parent: parent}), release, nil
+	return mutationCtx, release, nil
 }
 func (c *Coordinator) Mutate(ctx context.Context, id string, fn func(context.Context) error) error {
 	if fn == nil {

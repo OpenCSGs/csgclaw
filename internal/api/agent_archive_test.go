@@ -59,7 +59,10 @@ func TestDeletedAgentCanBeRecreatedByNameWithoutReusingHistoryHTTP(t *testing.T)
 	}
 	const createNew = `{"id":"new","type":"agent","name":"worker","avatar":"avatar/3D-5.png","agent_binding":{"mode":"create","agent":{"name":"worker","role":"worker","runtime_name":"codex"}}}`
 	request(http.MethodPost, "/api/v1/agents/agent-old/archive", "", 200)
-	request(http.MethodPost, "/api/v1/channels/csgclaw/participants", createNew, 409)
+	duplicate := request(http.MethodPost, "/api/v1/channels/csgclaw/participants", createNew, 409)
+	if !strings.Contains(duplicate.Body.String(), `"code":"agent_name_conflict"`) {
+		t.Fatalf("missing name conflict code: %s", duplicate.Body)
+	}
 	if _, err := engine.Agents().Get(context.Background(), "agent-new", agentengine.AgentGetOptions{}); err == nil {
 		t.Fatal("rejected creation left an orphan runtime")
 	}
@@ -133,7 +136,8 @@ func TestAgentArchiveRestoreAndConfirmedDeletionHTTP(t *testing.T) {
 		}
 		return rec
 	}
-	request(http.MethodDelete, "/api/v1/agents/agent-worker", `{"name":"worker"}`, 400)
+	request(http.MethodDelete, "/api/v1/agents/agent-worker", "", 400)
+	request(http.MethodDelete, "/api/v1/agents/agent-worker", `{"name":"wrong"}`, 400)
 	request(http.MethodPost, "/api/v1/agents/agent-worker/archive", "", 200)
 	request(http.MethodPost, "/api/v1/agents/agent-worker/archive", "", 200)
 	group, _ := imSvc.Room("group")
@@ -207,5 +211,55 @@ func TestAgentArchiveRestoreAndConfirmedDeletionHTTP(t *testing.T) {
 	kept, exists := teams.GetTeam(meta.ID)
 	if !exists || slices.Contains(kept.MemberAgentIDs, "agent-worker") {
 		t.Fatal("delete should retain team and remove membership")
+	}
+}
+
+func TestDirectAgentDeletionPausesTasksAndKeepsGroupHistory(t *testing.T) {
+	engine := enginetest.NewMemoryClient(agentengine.Agent{
+		ID:   "agent-worker",
+		Spec: agentengine.AgentSpec{Name: "worker", Role: agentengine.AgentRoleWorker},
+	})
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users:         []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}, {ID: "user-worker", Name: "worker", Role: "worker"}},
+		Rooms: []im.Room{
+			{ID: "direct", IsDirect: true, Members: []string{im.AdminUserID, "user-worker"}},
+			{ID: "group", Members: []string{im.AdminUserID, "user-worker"}, Messages: []im.Message{{ID: "old", SenderID: "user-worker", Content: "keep me"}}},
+		},
+	})
+	h := NewHandler(AgentServices{}, engine, imSvc, nil, nil, nil, nil)
+	store, err := scheduledtask.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	schedules, err := scheduledtask.NewService(store, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.SetScheduledTaskService(schedules)
+	_, err = schedules.Create(scheduledtask.CreateInput{
+		Title: "Schedule", AgentID: "agent-worker", Prompt: "work", Recurrence: scheduledtask.RecurrenceDaily,
+		FirstRunAt: time.Now().Add(time.Hour), Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	h.Routes().ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-worker", strings.NewReader(`{"name":"worker"}`)))
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("direct delete = %d: %s", response.Code, response.Body)
+	}
+	if _, err := engine.Agents().Get(context.Background(), "agent-worker", agentengine.AgentGetOptions{}); agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+		t.Fatalf("deleted agent lookup: %v", err)
+	}
+	if _, ok := imSvc.Room("direct"); ok {
+		t.Fatal("direct room was retained")
+	}
+	group, _ := imSvc.Room("group")
+	if len(group.Messages) != 2 || group.Messages[0].Content != "keep me" || group.Messages[1].Event.Key != im.AgentDeletedEventKey {
+		t.Fatalf("group should retain its history and show only the deletion notice: %+v", group.Messages)
+	}
+	if tasks := schedules.List(); len(tasks) != 1 || tasks[0].Enabled {
+		t.Fatalf("expected retained but disabled schedule, got %+v", tasks)
 	}
 }

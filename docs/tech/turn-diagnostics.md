@@ -167,3 +167,22 @@ No standalone application diagnostic bundle is added by this feature.
 
 Failures that reach HTTP before the native `turn/start` response are buffered briefly under the exact Agent/session/turn identity and attached when that identity binds.
 This bounded failure buffer preserves the observation timestamp, never guesses the latest Agent turn, and marks dropped evidence when capacity is exceeded.
+
+## Investigating intermittent slow turns
+
+Capture the affected turn while it is still slow, then export it again after completion or failure.
+Open Turn diagnostics from the affected reply, activity details, or the conversation log button and select the exact Agent turn.
+Keep the turn ID, application version, runtime, model, reasoning effort, approximate local time with timezone, and whether the app was foregrounded with the report.
+For a team task, collect the Manager turn and the slow Worker turns separately; a single turn does not measure the full project cycle.
+Record which interval felt slow: submitting to first visible response, gaps during execution, or the end of execution to the visible final reply.
+
+Use the duration ranking and timeline to distinguish admission/preparation, model requests, tools, and delivery/persistence.
+Inspect model first-response and request timings, native telemetry when available, tool commands and durations, and failed or long hidden events.
+Export the complete diagnostic ZIP rather than only a screenshot of the ranking, so runtime logs and the corresponding request evidence remain available.
+An unexplained Runtime gap is unmeasured time, not proof that either the model provider or CSGClaw caused the delay.
+Browser observations can be unavailable after hiding or reloading the submitting tab; include that fact rather than interpreting missing observations as zero latency.
+
+For a useful comparison, capture a normal turn using the same runtime, model, effort, approximate context size, and task type.
+Compare one Agent and several concurrent Agents to check whether waiting correlates with concurrency, without changing model and concurrency together.
+Export promptly because records and runtime log coverage are bounded; avoid clearing the conversation before collecting evidence.
+Complete bundles can contain prompts, generated content, commands, and tool output, so review their contents before sharing them.

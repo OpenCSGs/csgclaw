@@ -25,8 +25,9 @@ import { ConversationActivityPanel } from "@/components/business/ConversationAct
 import { CitationSources } from "@/components/business/MessageContent";
 import { attachmentCapability, filePreviewItem, transcriptRoomFiles } from "@/api/chatFiles";
 import { useRoomFileReader } from "./useRoomFileReader";
-import { clampChatSideWidth, type ChatSideTab } from "@/models/chatSidePanel";
+import { clampChatSideWidth, closeChatSideTab, type ChatSideTab } from "@/models/chatSidePanel";
 import { parseCitationDocument } from "@/models/citations";
+import { usesCollaborationTranscript } from "@/models/collaborationTranscript";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
@@ -34,6 +35,10 @@ import type { CitationSelection } from "@/components/business/MessageContent";
 import { CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import { FilesTab } from "./FilesTab";
 import { BrowserTab } from "./BrowserTab";
+import { AgentBrowserTab } from "@/components/business/AgentBrowserTab";
+import { closeBrowserSession } from "@/api/browser";
+import { HTMLBrowserTab } from "./HTMLBrowserTab";
+import { useRoomBrowsers } from "./useRoomBrowsers";
 import type { ChatFileScope, ReferenceFile } from "./types";
 import type { ChatSidePanelController } from "./useChatSidePanel";
 
@@ -98,7 +103,46 @@ export function ChatSidePanel({
   const [maximized, setMaximized] = useState(false);
   const [resizing, setResizing] = useState(false);
   const drag = useRef<{ pointerID: number; x: number; width: number } | null>(null);
-  const { state, patch, openTab, closeTab, replaceTab } = controller;
+  const { state: savedState, patch, openTab, closeTab, replaceTab } = controller;
+  const savedTasksTab = savedState.tabs.find((tab) => tab.kind === "tasks");
+  const state = savedTasksTab && !kinds.includes("tasks") ? closeChatSideTab(savedState, savedTasksTab.id) : savedState;
+  const [browserError, setBrowserError] = useState(false);
+  const [closingBrowser, setClosingBrowser] = useState(false);
+  const browsers = useRoomBrowsers(roomID);
+  const knownBrowsers = useRef({ roomID, ids: new Set<string>() });
+  useEffect(() => {
+    if (knownBrowsers.current.roomID !== roomID) knownBrowsers.current = { roomID, ids: new Set() };
+    if (!browsers.data) return;
+    const sessions = browsers.data;
+    const added = sessions.filter((session) => !knownBrowsers.current.ids.has(session.id));
+    sessions.forEach((session) => knownBrowsers.current.ids.add(session.id));
+    patch((current) => {
+      let next = current;
+      for (const tab of current.tabs) {
+        if (tab.kind !== "browser" || !tab.browserID) continue;
+        const session = sessions.find((session) => session.id === tab.browserID);
+        if (!session) {
+          const tabs = next.tabs.filter((item) => item.id !== tab.id);
+          next = { ...next, tabs, activeID: next.activeID === tab.id ? (tabs.at(-1)?.id ?? "") : next.activeID };
+        } else if (session.url !== tab.url) {
+          next = { ...next, tabs: next.tabs.map((item) => (item.id === tab.id ? { ...tab, url: session.url } : item)) };
+        }
+      }
+      for (const session of added) {
+        const id = `agent-browser:${session.id}`;
+        next = {
+          ...next,
+          tabs: [
+            ...next.tabs.filter((tab) => tab.id !== id),
+            { id, kind: "browser", url: session.url, browserID: session.id },
+          ],
+          activeID: id,
+          open: true,
+        };
+      }
+      return next;
+    });
+  }, [browsers.data, roomID, patch]);
   const visible = state.open && !suspended;
   const overlay = containerWidth < 680;
   useEffect(() => {
@@ -174,7 +218,18 @@ export function ChatSidePanel({
       siblings.forEach((node) => (node.inert = false));
     };
   }, [visible, maximized, overlay, onCollapse]);
-  function close(tab: ChatSideTab) {
+  async function close(tab: ChatSideTab) {
+    if (tab.kind === "browser" && tab.browserID) {
+      setClosingBrowser(true);
+      try {
+        await closeBrowserSession(roomID, tab.browserID);
+      } catch {
+        setBrowserError(true);
+        return;
+      } finally {
+        setClosingBrowser(false);
+      }
+    }
     closeTab(tab.id);
     if (tab.kind === "thread") onThreadClose?.();
     requestAnimationFrame(() =>
@@ -183,7 +238,20 @@ export function ChatSidePanel({
         ?.focus({ preventScroll: true }),
     );
   }
-  function closeAll() {
+  async function closeAll() {
+    setClosingBrowser(true);
+    try {
+      await Promise.all(
+        state.tabs
+          .filter((tab) => tab.kind === "browser" && tab.browserID)
+          .map((tab) => closeBrowserSession(roomID, (tab as Extract<ChatSideTab, { kind: "browser" }>).browserID!)),
+      );
+    } catch {
+      setBrowserError(true);
+      return;
+    } finally {
+      setClosingBrowser(false);
+    }
     const hasThread = state.tabs.some((tab) => tab.kind === "thread");
     patch({ tabs: [], activeID: "" });
     if (hasThread) onThreadClose?.();
@@ -308,7 +376,7 @@ export function ChatSidePanel({
               size="sm"
               variant="tertiaryGray"
               aria-label={t("chatSideCloseAll")}
-              disabled={!state.tabs.length}
+              disabled={!state.tabs.length || closingBrowser}
               onClick={closeAll}
             >
               <X size={17} />
@@ -374,6 +442,7 @@ export function ChatSidePanel({
                     variant="tertiaryGray"
                     className={chatSidePanelStyles["chat-side-tab-close"]}
                     aria-label={t("chatCloseTab", { name: labelFor(tab) })}
+                    disabled={closingBrowser}
                     onClick={() => close(tab)}
                   >
                     <X size={13} />
@@ -412,6 +481,21 @@ export function ChatSidePanel({
         </div>
       </header>
       <div className={chatSidePanelStyles["chat-side-content"]}>
+        {browserError ? (
+          <div role="alert" className={chatSidePanelStyles["chat-side-status"]}>
+            <span>{t("chatAgentBrowserFailed")}</span>
+            <Button
+              size="sm"
+              variant="secondaryGray"
+              onClick={() => {
+                setBrowserError(false);
+                void browsers.refetch();
+              }}
+            >
+              {t("chatBrowserRetry")}
+            </Button>
+          </div>
+        ) : null}
         {!state.tabs.length ? <WelcomeTab t={t} onSelect={newTab} kinds={kinds} /> : null}
         {state.tabs.map((tab) => (
           <TabBody key={tab.id} tab={tab} active={tab.id === state.activeID && visible}>
@@ -429,13 +513,34 @@ export function ChatSidePanel({
                 t={t}
               />
             ) : tab.kind === "browser" ? (
-              <BrowserTab
-                url={tab.url}
-                active={tab.id === state.activeID && visible}
-                onNavigate={(url) => replaceTab({ ...tab, url })}
-                onPopup={(url) => openTab({ id: createUUID(), kind: "browser", url })}
-                t={t}
-              />
+              tab.browserID ? (
+                <AgentBrowserTab
+                  roomID={roomID}
+                  session={
+                    browsers.data?.find((session) => session.id === tab.browserID) ?? {
+                      id: tab.browserID,
+                      room_id: roomID,
+                      url: tab.url,
+                      title: "",
+                      revision: 0,
+                      width: 1280,
+                      height: 800,
+                      can_go_back: false,
+                      can_go_forward: false,
+                    }
+                  }
+                  active={tab.id === state.activeID && visible}
+                  t={t}
+                />
+              ) : (
+                <BrowserTab
+                  url={tab.url}
+                  active={tab.id === state.activeID && visible}
+                  onNavigate={(url) => replaceTab({ ...tab, url })}
+                  onPopup={(url) => openTab({ id: createUUID(), kind: "browser", url })}
+                  t={t}
+                />
+              )
             ) : tab.kind === "activity" ? (
               conversation ? (
                 <ConversationActivityPanel
@@ -443,6 +548,7 @@ export function ChatSidePanel({
                   agents={agents}
                   conversation={conversation}
                   initialEntryID={tab.entryID}
+                  actorSelection={usesCollaborationTranscript(conversation) ? tab : undefined}
                   locale={locale}
                   t={t}
                   usersById={usersById}
@@ -459,6 +565,7 @@ export function ChatSidePanel({
                 t={t}
                 onClose={() => close(tab)}
                 onReference={onReference}
+                onPopup={(url) => openTab({ id: createUUID(), kind: "browser", url })}
               />
             ) : tab.kind === "thread" ? (
               (threadPanel ?? <div className={chatSidePanelStyles["chat-side-status"]}>{t("loading")}</div>)
@@ -562,6 +669,7 @@ function FileTab({
   t,
   onClose,
   onReference,
+  onPopup,
 }: {
   tab: Extract<ChatSideTab, { kind: "file" }>;
   roomID: string;
@@ -570,6 +678,7 @@ function FileTab({
   t: TranslateFn;
   onClose: () => void;
   onReference: ReferenceFile;
+  onPopup: (url: string) => void;
 }) {
   const reader = useRoomFileReader(fileScope);
   const attachmentID = tab.reference?.source === "attachment" ? tab.reference.attachment_id : "";
@@ -615,6 +724,17 @@ function FileTab({
         : candidate,
     );
   }, [candidate]);
+  if (current && documentPreviewKind(current) === "html") {
+    return (
+      <HTMLBrowserTab
+        item={current}
+        sourceKey={JSON.stringify([roomID, fileScope.workspaceDir ?? "", current.id])}
+        active={active}
+        onPopup={onPopup}
+        t={t}
+      />
+    );
+  }
   return current ? (
     <DocumentPreviewPanel
       items={[current]}

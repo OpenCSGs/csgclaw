@@ -21,6 +21,7 @@ import {
   type RemoteMCPServer,
 } from "@/models/mcp";
 import { localizeAPIError } from "@/shared/i18n";
+import { hasDifferentSkillOrigin } from "@/models/skillUpdates";
 import {
   workspaceQueryKeys,
   useWorkspaceMCPServersQuery,
@@ -41,12 +42,14 @@ export function useAgentResourcePicker({
   authenticated,
   onAdd,
   t,
+  requestSkillUpdate,
 }: {
   agentID: string;
   kind: AgentResourcePickerKind;
   authenticated: boolean;
   onAdd: (names: string[], options?: AgentSkillInstallOptions) => Promise<boolean> | boolean;
   t: TranslateFn;
+  requestSkillUpdate: (names: string[]) => Promise<boolean>;
 }) {
   const client = useQueryClient();
   const [market, setMarket] = useState(false);
@@ -198,6 +201,30 @@ export function useAgentResourcePicker({
     installSkill: async (skill: SkillSummary) => {
       const key = marketSkillKey(skill);
       const replace = skillAction(skill) === "replace";
+      if (replace && !prepared.current.has(key)) {
+        const name = marketSkillNames.current.get(key) || remoteSkillInstallName(skill);
+        if (
+          hasDifferentSkillOrigin(
+            skills.data?.find((item) => item.name === name),
+            skill,
+          )
+        ) {
+          setError(t("skillUpdatesSourceUnavailable"));
+          return false;
+        }
+        if (!(await requestSkillUpdate([name]))) return false;
+        for (const [preparedKey, preparedName] of prepared.current) {
+          if (preparedName === name) prepared.current.delete(preparedKey);
+        }
+        await Promise.all([
+          client.invalidateQueries({ queryKey: workspaceQueryKeys.skills() }),
+          client.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(agentID) }),
+          client.invalidateQueries({ queryKey: workspaceQueryKeys.skillTreeScope() }),
+          client.invalidateQueries({ queryKey: workspaceQueryKeys.skillFileScope() }),
+        ]);
+        if (installedNames.has(name)) return true;
+        return run(name, async () => [name]);
+      }
       const added = await run(
         skill.remotePath || skill.name,
         () =>

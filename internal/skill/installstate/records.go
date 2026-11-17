@@ -21,15 +21,18 @@ func IsRecordsFile(name string) bool { return name == lockFileName }
 var installRecordsMu sync.Mutex
 
 type Record struct {
-	Source      string    `json:"source,omitempty"`
-	SourceURL   string    `json:"source_url,omitempty"`
-	Registry    string    `json:"registry,omitempty"` // Older CLI records; new installs use SourceURL.
-	Ref         string    `json:"ref,omitempty"`
-	Slug        string    `json:"slug"`
-	Version     string    `json:"version"`
-	InstalledAt time.Time `json:"installed_at"`
-	UpdatedAt   time.Time `json:"updated_at,omitempty"`
-	SHA256      string    `json:"sha256,omitempty"`
+	Source         string    `json:"source,omitempty"`
+	SourceURL      string    `json:"source_url,omitempty"`
+	Registry       string    `json:"registry,omitempty"` // Older CLI records; new installs use SourceURL.
+	Ref            string    `json:"ref,omitempty"`
+	RemotePath     string    `json:"remote_path,omitempty"`
+	Commit         string    `json:"commit,omitempty"`
+	SkippedVersion string    `json:"skipped_version,omitempty"`
+	Slug           string    `json:"slug"`
+	Version        string    `json:"version"`
+	InstalledAt    time.Time `json:"installed_at"`
+	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+	SHA256         string    `json:"sha256,omitempty"`
 }
 
 const (
@@ -138,6 +141,16 @@ func Update(skillsRoot, name string, record *Record, apply func() error) error {
 // UpdateMany persists related installation records together and restores them
 // when the prepared file operation fails.
 func UpdateMany(skillsRoot string, records map[string]*Record, apply func() error) error {
+	return updateChecked(skillsRoot, records, nil, apply)
+}
+
+// UpdateChecked rejects a confirmation if either the files or their origin changed.
+// The comparison and installation share the same process and filesystem lock.
+func UpdateChecked(root, name string, record *Record, expected string, apply func() error) error {
+	return updateChecked(root, map[string]*Record{name: record}, map[string]string{name: expected}, apply)
+}
+
+func updateChecked(skillsRoot string, records map[string]*Record, expected map[string]string, apply func() error) error {
 	installRecordsMu.Lock()
 	defer installRecordsMu.Unlock()
 	lock, err := acquireRecordsLock(skillsRoot, true)
@@ -148,6 +161,15 @@ func UpdateMany(skillsRoot string, records map[string]*Record, apply func() erro
 	payload, err := readLockFile(skillsRoot)
 	if err != nil {
 		return err
+	}
+	for name, token := range expected {
+		actual, err := snapshotToken(skillsRoot, name, payload.Skills[name])
+		if err != nil {
+			return err
+		}
+		if token == "" || actual != token {
+			return ErrInstallationChanged
+		}
 	}
 	rollback, finish, err := cancelActivations(skillsRoot, records)
 	if err != nil {

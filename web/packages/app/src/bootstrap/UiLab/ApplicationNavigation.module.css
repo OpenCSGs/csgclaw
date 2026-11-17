@@ -1,0 +1,24 @@
+.item {
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  padding-block: var(--space-2);
+  border-radius: var(--radius-md);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.item[aria-current="page"] {
+  --lab-navigation-selected-background: var(--control-selected-background);
+  --lab-navigation-selected-text: var(--accent-text);
+  --button-hover-background: var(--lab-navigation-selected-background);
+  --button-hover-text: var(--lab-navigation-selected-text);
+  background: var(--lab-navigation-selected-background);
+  color: var(--lab-navigation-selected-text);
+}
+
+:global(:root[data-theme="dark"]) .item[aria-current="page"] {
+  --lab-navigation-selected-background: #22262f;
+  --lab-navigation-selected-text: #cecfd2;
+}

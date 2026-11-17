@@ -16,21 +16,27 @@ import {
   BookOpen,
   ClipboardCheck,
   FileText,
+  ListTodo,
+  MessagesSquare,
   PanelRightOpen,
   Presentation,
   Search,
+  RotateCcw,
   Square,
   Undo2,
   Users,
   X,
 } from "lucide-react";
 import {
-  TextArea,
   Button,
   DismissibleInlineError,
   PopoverAnchor,
   PopoverContent,
   PopoverRoot,
+  SelectContent,
+  SelectItem,
+  SelectRoot,
+  SelectTrigger,
   Tooltip,
 } from "@/components/ui";
 import { ChatSidePanel, useChatSidePanel } from "@/components/business/ChatSidePanel";
@@ -43,7 +49,7 @@ import { localizeAPIError } from "@/shared/i18n";
 import { normalizeAuthProviderName, providerNeedsAuth, resolveAgentChannelUserID } from "@/models/agents";
 import { modelProviderConfigUsesOpenCSG } from "@/models/modelProviders";
 import { taskConversationTitle } from "@/models/taskConversations";
-import type { IMConversation } from "@/models/conversations";
+import { RoomTypes, type IMConversation } from "@/models/conversations";
 import styles from "./StartTaskPage.module.css";
 import { TargetPicker, SOLO_TEAM_ID } from "./components/TargetPicker";
 import {
@@ -63,6 +69,7 @@ import {
 } from "@/models/attachments";
 import {
   builtinSlashCommandNames,
+  composerActionSuggestions,
   normalizeSlashShorthandForPayload,
   suggestedSlashCommandNames,
 } from "@/models/slashCommands";
@@ -74,6 +81,7 @@ import {
 import { useInfiniteAgentSkills } from "@/hooks/workspace/useInfiniteAgentSkills";
 import { useSlashSelection } from "@/hooks/workspace/useSlashSelection";
 import { useTaskPromptMentions } from "./useTaskPromptMentions";
+import { TaskPromptEditor } from "./components/TaskPromptEditor";
 import {
   ConversationResourcePicker,
   useComposerResourcePicker,
@@ -91,6 +99,15 @@ import { TaskConfigurationToolbar } from "@/components/business/TaskConfiguratio
 import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
 import { TASK_EXAMPLES_HIDDEN_STORAGE_KEY } from "@/shared/storage/keys";
 import "@/components/business/ConversationPane/ConversationPane.css";
+
+const collaborationModes = {
+  [RoomTypes.onDemand]: { title: "onDemandCollaboration", hint: "onDemandCollaborationHint", icon: ListTodo },
+  [RoomTypes.autonomous]: {
+    title: "autonomousCollaboration",
+    hint: "autonomousCollaborationHint",
+    icon: MessagesSquare,
+  },
+} as const;
 
 export function StartTaskPage() {
   const location = useLocation();
@@ -123,6 +140,9 @@ function StartTaskForm({
   const { openSettings } = useWorkspaceDialogs();
   const [configuration, setConfiguration] = useState<TaskConfiguration>(initialConfiguration || {});
   const [{ target, revision }, setTarget] = useState({ target: initialTarget, revision: 0 });
+  const [collaborationMode, setCollaborationMode] = useState<keyof typeof collaborationModes>(RoomTypes.onDemand);
+  const collaborationModeID = useId();
+  const { title: modeTitle, icon: ModeIcon } = collaborationModes[collaborationMode];
   const [resources, setResources] = useState<ResourceSnapshot[]>([]);
   const [examplesHidden, setExamplesHidden] = useState(() => {
     try {
@@ -149,6 +169,7 @@ function StartTaskForm({
   const composing = useRef(false);
   const upload = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const mentionRetryRef = useRef<HTMLButtonElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const pageRef = useRef<HTMLElement>(null);
   const panelTrigger = useRef<HTMLButtonElement>(null);
@@ -163,6 +184,7 @@ function StartTaskForm({
   const selectedCloud = cloud.agents.find((agent) => selected === `cloud:${agent.id}`);
   const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
   const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
+  const autonomous = !selectedAgent && !selectedCloud && collaborationMode === RoomTypes.autonomous;
   const cloudTarget = selected.startsWith("cloud:");
   const workspaceDir =
     !cloudTarget && (!selectedAgent || supportsTaskConfiguration(selectedAgent))
@@ -250,8 +272,18 @@ function StartTaskForm({
         )
       : { content: normalizeSlashShorthandForPayload(content), resource_refs: [] };
   }
+  const actionSuggestions = cloudTarget || resourcePicker.active ? [] : composerActionSuggestions(draft);
+  const composerHelpId = `${panelID}-composer-help`;
   const draftInput = messageInput(draft);
   const draftFileCount = promptMentions.fileReferences(draft).length;
+  const cloudOffline = Boolean(selectedCloud && selectedCloud.status !== "online");
+  const cannotSend =
+    busy ||
+    cloudOffline ||
+    resourcePicker.active ||
+    !canSendResources(draftInput.content, draftInput.resource_refs, attachments.length + draftFileCount) ||
+    Boolean(modelMissing);
+  const sendLabel = t(uploadProgress !== null ? "stopSending" : autonomous ? "send" : "taskEntryStart");
 
   function syncSlash(editor: HTMLTextAreaElement) {
     const query =
@@ -267,7 +299,9 @@ function StartTaskForm({
     const editor = editorRef.current;
     if (!editor || !name) return;
     const start = editor.value.length - editor.value.trimStart().length;
-    const end = start + (editor.value.slice(start).match(/^\S+/u)?.[0].length ?? 0);
+    const end = editor.value.trimStart().startsWith("/")
+      ? start + (editor.value.slice(start).match(/^\S+/u)?.[0].length ?? 0)
+      : editor.value.length;
     const isCommand = builtinSlashCommandNames.includes(name) || suggestedSlashCommandNames.includes(name);
     if (!isCommand && resourceAgentID) {
       setResources((current) => uniqueResources([...current, { source: "skill", id: name, name, type: "skill" }]));
@@ -280,6 +314,15 @@ function StartTaskForm({
         "end",
       );
     }
+    promptMentions.change(editor);
+    setSlashQuery(null);
+    editor.focus();
+  }
+
+  function insertSuggestedCommand(name: string) {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.setRangeText(`${slashCommandInputText(name).trimEnd()}\n`, 0, 0, "preserve");
     promptMentions.change(editor);
     setSlashQuery(null);
     editor.focus();
@@ -316,15 +359,12 @@ function StartTaskForm({
     const fileReferences = selectedCloud ? [] : promptMentions.fileReferences(prompt);
     if (
       inFlight.current ||
+      cloudOffline ||
       (!empty && !canSendResources(input.content, input.resource_refs, attachments.length + fileReferences.length))
     )
       return;
     if (!selectedCloud && !selectedAgent && !selectedTeam && selected !== "solo") {
       setError(t("taskEntryMissingTarget"));
-      return;
-    }
-    if (selectedCloud && selectedCloud.status !== "online") {
-      setError(t("cloudChatOffline"));
       return;
     }
     if (!empty && selectedCloud && !confirmed && consent.request(() => void start(false, prompt, true))) return;
@@ -367,7 +407,7 @@ function StartTaskForm({
           cloud_agent: selectedCloud
             ? { agent_id: selectedCloud.id, connection_id: selectedCloud.connectionID }
             : undefined,
-          type: selectedAgent || selectedCloud ? "free" : "on_demand",
+          type: selectedAgent || selectedCloud ? RoomTypes.free : collaborationMode,
           is_direct: Boolean(selectedAgent || selectedCloud),
           configuration: selectedCloud
             ? undefined
@@ -467,7 +507,15 @@ function StartTaskForm({
         <div className={styles.inner}>
           <header className={styles.head}>
             <h1>{t("iaStartTitle")}</h1>
-            <p>{t(selectedAgent || selectedCloud ? "iaStartSubtitleDirect" : "iaStartSubtitleRooms")}</p>
+            <p>
+              {t(
+                selectedAgent || selectedCloud
+                  ? "iaStartSubtitleDirect"
+                  : autonomous
+                    ? "autonomousCollaborationHint"
+                    : "iaStartSubtitleRooms",
+              )}
+            </p>
           </header>
           <div className={styles.pane}>
             <TargetPicker
@@ -578,15 +626,22 @@ function StartTaskForm({
                       }}
                     />
                   ))}
-                  <TextArea
+                  <TaskPromptEditor
                     ref={editorRef}
                     autoFocus
-                    className={styles.input}
-                    aria-label={t("taskEntryPrompt")}
+                    mentionRanges={promptMentions.mentionRanges}
+                    aria-label={t(autonomous ? "inputPlaceholder" : "taskEntryPrompt")}
+                    aria-describedby={composerHelpId}
                     placeholder={
                       resources.length || attachments.length || draft.length
                         ? ""
-                        : t(selectedCloud ? "cloudChatPlaceholder" : "iaStartComposerPlaceholder")
+                        : t(
+                            selectedCloud
+                              ? "cloudChatPlaceholder"
+                              : autonomous
+                                ? "inputPlaceholder"
+                                : "iaStartComposerPlaceholder",
+                          )
                     }
                     value={draft}
                     onChange={(event) => {
@@ -597,7 +652,8 @@ function StartTaskForm({
                       promptMentions.sync(event.currentTarget);
                       syncSlash(event.currentTarget);
                     }}
-                    onBlur={() => {
+                    onBlur={(event) => {
+                      if (event.relatedTarget === mentionRetryRef.current && mentionRetryRef.current) return;
                       promptMentions.dismiss();
                       setSlashQuery(null);
                     }}
@@ -613,14 +669,26 @@ function StartTaskForm({
                     }}
                     onPaste={(event) => {
                       const pasted = filesFromDataTransfer(event.clipboardData);
-                      if (!pasted.length) return;
-                      if (!event.clipboardData.getData("text/plain")) event.preventDefault();
-                      addAttachments(pasted);
+                      const text = event.clipboardData.getData("text/plain");
+                      if (pasted.length && (!cloudTarget || !text)) {
+                        event.preventDefault();
+                        addAttachments(pasted);
+                      }
+                      if (text && !cloudTarget) {
+                        event.preventDefault();
+                        promptMentions.pasteText(event.currentTarget, text);
+                        syncSlash(event.currentTarget);
+                      }
                     }}
                     disabled={busy}
                     onKeyDown={(event) => {
-                      if (composing.current || isComposerKeyboardEventComposing(event) || promptMentions.keyDown(event))
+                      if (composing.current || isComposerKeyboardEventComposing(event)) return;
+                      if (event.key === "Tab" && !event.shiftKey && mentionRetryRef.current) {
+                        event.preventDefault();
+                        mentionRetryRef.current.focus();
                         return;
+                      }
+                      if (promptMentions.keyDown(event)) return;
                       if (
                         handleSlashPickerNavigation({
                           event,
@@ -636,12 +704,12 @@ function StartTaskForm({
                         return;
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
-                        void start();
+                        if (!cannotSend) void start();
                       }
                     }}
                   />
                 </div>
-                {promptMentions.candidates.length || slashState.active ? (
+                {promptMentions.candidates.length || promptMentions.directoryStatus || slashState.active ? (
                   <PopoverRoot
                     open
                     onOpenChange={(open) => {
@@ -658,21 +726,55 @@ function StartTaskForm({
                       side="top"
                       align="start"
                       role="presentation"
-                      className={styles.mentionPopover}
+                      className={`${styles.mentionPopover} ${
+                        promptMentions.candidates.length || promptMentions.directoryStatus ? "" : styles.slashPopover
+                      }`}
                       onOpenAutoFocus={(event) => event.preventDefault()}
                       onCloseAutoFocus={(event) => event.preventDefault()}
                       onInteractOutside={(event) => {
                         if (event.target === editorRef.current) event.preventDefault();
                       }}
                     >
-                      {promptMentions.candidates.length ? (
-                        <MentionPicker
-                          className={styles.mentions}
-                          users={promptMentions.candidates}
-                          activeIndex={promptMentions.activeIndex}
-                          onSelect={promptMentions.choose}
-                          t={t}
-                        />
+                      {promptMentions.candidates.length || promptMentions.directoryStatus ? (
+                        <>
+                          {promptMentions.candidates.length ? (
+                            <MentionPicker
+                              groupPeopleAndFiles
+                              showRole={false}
+                              className={`${styles.mentions} ${styles.peopleAndFiles}`}
+                              users={promptMentions.candidates}
+                              activeIndex={promptMentions.activeIndex}
+                              onSelect={promptMentions.choose}
+                              t={t}
+                            />
+                          ) : null}
+                          {promptMentions.directoryStatus ? (
+                            <div className={styles.mentionStatus}>
+                              <div role="status">
+                                {promptMentions.directoryStatus.path ? (
+                                  <div>{promptMentions.directoryStatus.path}/</div>
+                                ) : null}
+                                {t(promptMentions.directoryStatus.message)}
+                              </div>
+                              {promptMentions.directoryStatus.retry ? (
+                                <Button
+                                  ref={mentionRetryRef}
+                                  size="sm"
+                                  variant="tertiaryGray"
+                                  onBlur={(event) => {
+                                    if (event.relatedTarget !== editorRef.current) promptMentions.dismiss();
+                                  }}
+                                  onClick={() => {
+                                    editorRef.current?.focus();
+                                    promptMentions.directoryStatus?.retry?.();
+                                  }}
+                                >
+                                  {t("retry")}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </>
                       ) : (
                         <SlashPicker
                           className={styles.mentions}
@@ -687,6 +789,27 @@ function StartTaskForm({
                     </PopoverContent>
                   </PopoverRoot>
                 ) : null}
+                {actionSuggestions.length ? (
+                  <div className={styles.actionSuggestions} role="group" aria-label={t("suggestedActions")}>
+                    <span>{t("suggestedActions")}</span>
+                    {actionSuggestions.map((suggestion) => (
+                      <Button
+                        key={suggestion.name}
+                        size="sm"
+                        variant="secondaryColor"
+                        className={styles.suggestionButton}
+                        disabled={busy}
+                        onClick={() => insertSuggestedCommand(suggestion.name)}
+                      >
+                        / {suggestion.name}
+                      </Button>
+                    ))}
+                    <span>{t("taskEntryInsertSuggestedCommand")}</span>
+                  </div>
+                ) : null}
+                <span id={composerHelpId} className="sr-only">
+                  {t("composerTip")}
+                </span>
                 <div className={selectedCloud ? `${styles.actions} ${styles.cloudActions}` : styles.actions}>
                   {!selectedCloud ? (
                     <>
@@ -728,34 +851,80 @@ function StartTaskForm({
                         showDirectory
                         disabled={busy}
                       />
+                      {!selectedAgent ? (
+                        <SelectRoot
+                          value={collaborationMode}
+                          disabled={busy || Boolean(created.current)}
+                          onValueChange={(value) => {
+                            if (inFlight.current || created.current) return;
+                            if (value !== RoomTypes.onDemand && value !== RoomTypes.autonomous) return;
+                            setCollaborationMode(value);
+                            requestID.current = createUUID();
+                          }}
+                        >
+                          <SelectTrigger
+                            size="sm"
+                            className={styles.modeTrigger}
+                            aria-label={t("collaborationMode")}
+                            aria-describedby={collaborationModeID}
+                          >
+                            <span className={styles.modeLabel}>
+                              <ModeIcon size={15} aria-hidden="true" />
+                              <span id={collaborationModeID}>{t(modeTitle)}</span>
+                            </span>
+                          </SelectTrigger>
+                          <SelectContent side="top" align="end" collisionPadding={12} className={styles.modeMenu}>
+                            {Object.entries(collaborationModes).map(([value, { title, hint, icon: Icon }]) => {
+                              const hintID = `${collaborationModeID}-${value}`;
+                              return (
+                                <SelectItem
+                                  key={value}
+                                  value={value}
+                                  className={styles.modeOption}
+                                  textValue={t(title)}
+                                  aria-describedby={hintID}
+                                  description={
+                                    <span id={hintID} className={styles.modeOptionHint}>
+                                      {t(hint)}
+                                    </span>
+                                  }
+                                >
+                                  <Icon className={styles.modeOptionIcon} size={15} aria-hidden="true" />
+                                  <span className={styles.modeOptionTitle}>{t(title)}</span>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </SelectRoot>
+                      ) : null}
                     </>
                   ) : null}
-                  <Button
-                    className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
-                    variant={uploadProgress !== null ? "danger" : "primary"}
-                    iconOnly
-                    size="sm"
-                    aria-label={t(uploadProgress !== null ? "stopSending" : "taskEntryStart")}
-                    disabled={
-                      uploadProgress === null &&
-                      (busy ||
-                        Boolean(selectedCloud && selectedCloud.status !== "online") ||
-                        resourcePicker.active ||
-                        !canSendResources(
-                          draftInput.content,
-                          draftInput.resource_refs,
-                          attachments.length + draftFileCount,
-                        ) ||
-                        Boolean(modelMissing))
-                    }
-                    onClick={() => (upload.current ? upload.current.abort() : void start())}
-                  >
-                    {uploadProgress !== null ? (
-                      <Square aria-hidden="true" size={14} fill="currentColor" />
-                    ) : (
-                      <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
-                    )}
-                  </Button>
+                  {busy ? (
+                    <span role="status" aria-live="polite">
+                      {uploadProgress === null
+                        ? t("sending")
+                        : t("sendingWithProgress", { progress: Math.round(uploadProgress) })}
+                    </span>
+                  ) : null}
+                  <Tooltip content={sendLabel}>
+                    <span>
+                      <Button
+                        className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
+                        variant={uploadProgress !== null ? "danger" : "primary"}
+                        iconOnly
+                        size="sm"
+                        aria-label={sendLabel}
+                        disabled={uploadProgress === null && cannotSend}
+                        onClick={() => (upload.current ? upload.current.abort() : void start())}
+                      >
+                        {uploadProgress !== null ? (
+                          <Square aria-hidden="true" size={14} fill="currentColor" />
+                        ) : (
+                          <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
+                        )}
+                      </Button>
+                    </span>
+                  </Tooltip>
                 </div>
               </div>
               {removedAttachments.length ? (
@@ -777,11 +946,17 @@ function StartTaskForm({
                 </DismissibleInlineError>
               ) : null}
             </div>
-            {selectedCloud && selectedCloud.status !== "online" ? <p role="status">{t("cloudChatOffline")}</p> : null}
+            {cloudOffline ? <p role="status">{t("cloudChatOffline")}</p> : null}
             {error ? (
               <p role="alert" className={styles.error}>
                 {error}
                 {created.current ? ` ${t("taskEntryRetryCreated")}` : ""}
+                {created.current && !cannotSend ? (
+                  <Button size="sm" variant="secondaryGray" onClick={() => void start()}>
+                    <RotateCcw aria-hidden="true" size={14} />
+                    {t("retrySend")}
+                  </Button>
+                ) : null}
               </p>
             ) : null}
             {!selectedAgent && !selectedCloud ? (
@@ -811,7 +986,7 @@ function StartTaskForm({
                     }}
                   >
                     <Icon size={15} />
-                    {t(`iaStartExample_${key}_title`)}
+                    <span className="min-w-0">{t(`iaStartExample_${key}_title`)}</span>
                   </button>
                 ))}
               </div>

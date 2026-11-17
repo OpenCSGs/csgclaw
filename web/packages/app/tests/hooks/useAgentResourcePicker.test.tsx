@@ -64,10 +64,14 @@ function renderPicker(
   authenticated = true,
 ) {
   const { client, wrapper } = createQueryWrapper();
-  const result = renderHook(() => useAgentResourcePicker({ agentID: "agent-1", kind, authenticated, onAdd, t }), {
-    wrapper,
-  });
-  return { ...result, onAdd, client };
+  const requestSkillUpdate = vi.fn().mockResolvedValue(true);
+  const result = renderHook(
+    () => useAgentResourcePicker({ agentID: "agent-1", kind, authenticated, onAdd, t, requestSkillUpdate }),
+    {
+      wrapper,
+    },
+  );
+  return { ...result, onAdd, client, requestSkillUpdate };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -125,16 +129,15 @@ describe("Agent resource acquisition", () => {
     "replaces the existing global %s skill before updating the worker",
     async (source) => {
       const fetch = mockAPI({ skills: [{ name: "review", source }] });
-      const { result, onAdd } = renderPicker();
+      const { result, onAdd, requestSkillUpdate } = renderPicker();
       await waitFor(() => expect(result.current.libraryLoading).toBe(false));
       expect(result.current.skillAction(remoteSkill)).toBe("replace");
       await act(async () => {
         expect(await result.current.installSkill(remoteSkill)).toBe(true);
       });
-      expect(fetch.mock.calls.find(([path]) => path === "api/v1/skills:install")?.[1]?.body).toBe(
-        JSON.stringify({ remote_path: "team/review", replace: true }),
-      );
-      expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"], { replace: true });
+      expect(requestSkillUpdate).toHaveBeenCalledExactlyOnceWith(["review"]);
+      expect(fetch.mock.calls.some(([path]) => path === "api/v1/skills:install")).toBe(false);
+      expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"]);
     },
   );
 
@@ -176,17 +179,16 @@ describe("Agent resource acquisition", () => {
     "replaces a worker skill with enabled=%s even when the global copy is absent",
     async (enabled) => {
       const fetch = mockAPI({ installedSkills: [{ name: "review", enabled }] });
-      const { result, onAdd } = renderPicker();
+      const { result, onAdd, requestSkillUpdate } = renderPicker();
       await waitFor(() => expect(result.current.libraryLoading).toBe(false));
       expect(result.current.skillAction(remoteSkill)).toBe("replace");
       expect(result.current.enabledNames.has("review")).toBe(enabled !== false);
       await act(async () => {
         expect(await result.current.installSkill(remoteSkill)).toBe(true);
       });
-      expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"], { replace: true });
-      expect(fetch.mock.calls.find(([path]) => path === "api/v1/skills:install")?.[1]?.body).toBe(
-        JSON.stringify({ remote_path: "team/review", replace: true }),
-      );
+      expect(requestSkillUpdate).toHaveBeenCalledExactlyOnceWith(["review"]);
+      expect(onAdd).not.toHaveBeenCalled();
+      expect(fetch.mock.calls.some(([path]) => path === "api/v1/skills:install")).toBe(false);
     },
   );
 
@@ -212,12 +214,7 @@ describe("Agent resource acquisition", () => {
       expect(await result.current.installSkill(skill)).toBe(true);
     });
     const installs = fetch.mock.calls.filter(([path]) => path === "api/v1/skills:install");
-    expect(installs).toHaveLength(2);
-    expect(JSON.parse(String(installs[1][1]?.body))).toEqual({
-      remote_path: "team/review",
-      ref: "main",
-      replace: true,
-    });
+    expect(installs).toHaveLength(1);
   });
 
   it.each([
@@ -237,16 +234,10 @@ describe("Agent resource acquisition", () => {
     await act(async () => {
       expect(await result.current.installSkill({ ...remoteSkill, remoteRef: "main" })).toBe(true);
     });
-    expect(onAdd.mock.calls).toEqual([
-      [["review"], { replace: true }],
-      [["review"], { replace: true }],
-      [["review"], { replace: true }],
-    ]);
+    expect(onAdd.mock.calls).toEqual([[["review"], { replace: true }], [["review"]], [["review"]]]);
     const installs = fetch.mock.calls.filter(([path]) => path === "api/v1/skills:install");
     expect(installs.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
       { remote_path: "team/review", ref: "main" },
-      { remote_path: skill.remotePath, ref: skill.remoteRef, replace: true },
-      { remote_path: "team/review", ref: "main", replace: true },
     ]);
   });
 
@@ -254,23 +245,26 @@ describe("Agent resource acquisition", () => {
     "retries a failed global installation with replace=%s before updating the worker",
     async (replace) => {
       const fetch = mockAPI({ skills: replace ? [{ name: "review" }] : [] });
-      const { result, onAdd } = renderPicker();
+      const { result, onAdd, requestSkillUpdate } = renderPicker();
       await waitFor(() => expect(result.current.libraryLoading).toBe(false));
-      fetch.mockResolvedValueOnce(
-        Response.json({ error: { code: "skill_install_failed", message: "Install failed" } }, { status: 503 }),
-      );
+      if (replace) requestSkillUpdate.mockResolvedValueOnce(false);
+      else
+        fetch.mockResolvedValueOnce(
+          Response.json({ error: { code: "skill_install_failed", message: "Install failed" } }, { status: 503 }),
+        );
       await act(async () => {
         expect(await result.current.installSkill(remoteSkill)).toBe(false);
       });
-      expect(result.current.error).toBe("Install failed");
+      expect(result.current.error).toBe(replace ? "" : "Install failed");
       expect(result.current.skillAction(remoteSkill)).toBe(replace ? "replace" : "install");
       expect(onAdd).not.toHaveBeenCalled();
       await act(async () => {
         expect(await result.current.installSkill(remoteSkill)).toBe(true);
       });
-      expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"], { replace: true });
+      if (replace) expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"]);
+      else expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"], { replace: true });
       const installs = fetch.mock.calls.filter(([path]) => path === "api/v1/skills:install");
-      expect(installs).toHaveLength(2);
+      expect(installs).toHaveLength(replace ? 0 : 2);
       for (const [, init] of installs) {
         expect(JSON.parse(String(init?.body))).toEqual({
           remote_path: "team/review",
@@ -294,8 +288,9 @@ describe("Agent resource acquisition", () => {
     await act(async () => {
       expect(await second.result.current.installSkill(remoteSkill)).toBe(true);
     });
-    expect(second.onAdd).toHaveBeenCalledExactlyOnceWith(["review"], { replace: true });
-    expect(fetch.mock.calls.filter(([path]) => path === "api/v1/skills:install")).toHaveLength(2);
+    expect(second.onAdd).toHaveBeenCalledExactlyOnceWith(["review"]);
+    expect(second.requestSkillUpdate).toHaveBeenCalledExactlyOnceWith(["review"]);
+    expect(fetch.mock.calls.filter(([path]) => path === "api/v1/skills:install")).toHaveLength(1);
   });
 
   it("enables library skills without replacing global files", async () => {

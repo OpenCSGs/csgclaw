@@ -4,21 +4,29 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
 	"csgclaw/internal/cliproxy"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 )
 
-func (s *ModelConfiguration) GenerateImage(ctx context.Context, ref *modelprovider.ImageGenerationConfig, prompt string) (modelprovider.GeneratedImage, error) {
+func (s *ModelConfiguration) GenerateImage(ctx context.Context, ref *modelprovider.ImageGenerationConfig, prompt string, options modelprovider.ImageGenerationOptions, references ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
 	empty := modelprovider.GeneratedImage{}
 	if ref == nil || ref.ProviderID == "" || ref.ModelID == "" {
 		return empty, fmt.Errorf("image_model_not_configured")
 	}
-	if !s.supportsImageModel(ref) {
+	modes := s.ImageGenerationModes(ref)
+	if modes == (modelcap.ImageGeneration{}) {
 		return empty, fmt.Errorf("image_model_unavailable")
 	}
+	edit := len(references) > 0
+	if err := modelprovider.ValidateImageGenerationMode(modes, edit); err != nil {
+		return empty, err
+	}
+	options = modelprovider.ResolveImageGenerationOptions(NormalizeModelProviderID(ref.ProviderID), ref.ModelID, edit, options)
 	profile := s.hydrateProfileFromCatalog(AgentProfile{ModelProviderID: ref.ProviderID, ModelID: ref.ModelID})
 	baseURL, key := profileBaseURL(profile), profileAPIKey(profile)
 	switch profile.Provider {
@@ -45,22 +53,25 @@ func (s *ModelConfiguration) GenerateImage(ctx context.Context, ref *modelprovid
 	if strings.TrimSpace(baseURL) == "" {
 		return empty, fmt.Errorf("image_model_unavailable")
 	}
-	return modelprovider.GenerateImage(ctx, &http.Client{Timeout: 8 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, baseURL, key, profile.Headers, ref.ModelID, prompt)
+	return modelprovider.GenerateImageWithOptions(ctx, &http.Client{Timeout: 8 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, baseURL, key, profile.Headers, ref.ModelID, prompt, options, references...)
 }
 
-func (s *ModelConfiguration) supportsImageModel(ref *modelprovider.ImageGenerationConfig) bool {
-	if ref == nil {
-		return false
-	}
-	if modelprovider.IsGPTImageModel(ref.ModelID) {
-		return true
+// ImageGenerationModes returns the operations available to the runtime.
+func (s *ModelConfiguration) ImageGenerationModes(ref *modelprovider.ImageGenerationConfig) modelcap.ImageGeneration {
+	if ref == nil || ref.ProviderID == "" || ref.ModelID == "" {
+		return modelcap.ImageGeneration{}
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, model := range s.llm.Providers[NormalizeModelProviderID(ref.ProviderID)].ImageModels {
-		if model == ref.ModelID {
-			return true
-		}
+	provider := s.llm.Providers[NormalizeModelProviderID(ref.ProviderID)]
+	if modes, ok := provider.ImageMetadata[ref.ModelID]; ok && modes != (modelcap.ImageGeneration{}) {
+		return modes
 	}
-	return false
+	if modelprovider.IsGPTImageModel(ref.ModelID) {
+		return modelcap.ImageGeneration{TextToImage: true, ImageToImage: true}
+	}
+	if slices.Contains(provider.ImageModels, ref.ModelID) {
+		return modelcap.ImageGeneration{TextToImage: true}
+	}
+	return modelcap.ImageGeneration{}
 }

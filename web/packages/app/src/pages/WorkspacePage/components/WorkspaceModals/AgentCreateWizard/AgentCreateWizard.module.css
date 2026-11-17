@@ -286,8 +286,7 @@
   flex: 1;
 }
 .error {
-  padding: 8px 24px;
-  color: var(--danger);
+  padding: 0 24px 8px;
 }
 @media (max-width: 680px) {
   .body {

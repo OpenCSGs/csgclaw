@@ -36,11 +36,11 @@ func (s *Service) MemorySourceExists(scope agentmemory.Scope, source agentmemory
 		return false
 	}
 	index := messageIndexByID(room.Messages, source.MessageID)
-	return index >= 0 && room.Messages[index].SenderID == scope.UserID
+	return index >= 0 && room.Messages[index].SenderID == scope.UserID && !room.Messages[index].MemoryExcluded
 }
 
 // MemoryHistory reads the next chronological page of persisted private user text.
-// The caller has already authorized the scope as a personal local account.
+// The caller has already authorized the scope as the current human account.
 func (s *Service) MemoryHistory(ctx context.Context, scope agentmemory.Scope, after, through time.Time, cursor agentmemory.HistoryCursor) ([]agentmemory.HistoryMessage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -54,7 +54,7 @@ func (s *Service) MemoryHistory(ctx context.Context, scope agentmemory.Scope, af
 		}
 		for i := len(room.Messages) - 1; i >= 0; i-- {
 			message := room.Messages[i]
-			if message.SenderID != scope.UserID || message.Event != nil || message.CreatedAt.After(through) || !message.CreatedAt.After(after) ||
+			if message.MemoryExcluded || message.SenderID != scope.UserID || message.Event != nil || message.CreatedAt.After(through) || !message.CreatedAt.After(after) ||
 				strings.TrimSpace(message.Content) == "" || memoryControlText(message.Content) {
 				continue
 			}

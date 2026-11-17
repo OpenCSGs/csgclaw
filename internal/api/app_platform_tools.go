@@ -12,7 +12,11 @@ import (
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/channel"
 	"csgclaw/internal/participant"
+	agentruntime "csgclaw/internal/runtime"
+	runtimedsh "csgclaw/internal/runtime/dsh"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -75,11 +79,25 @@ func platformToolFailure(err error) *mcp.CallToolResult {
 // Use the native turn's persisted conversation binding, never an Agent's latest
 // room: one Agent may coordinate several rooms concurrently.
 func (h *Handler) scopeAppPlatformRoomTool(agentID, name string, request *mcp.CallToolRequest, args map[string]any) error {
-	if name != "agent_task_create" && name != "message_send" && !strings.HasPrefix(name, "room_task") {
+	autonomousTask := strings.HasPrefix(name, "autonomous_task")
+	autonomousMessage := name == "message_send" || name == "messages_read" || name == "messages_ack"
+	if !autonomousTask && !autonomousMessage && name != "agent_task_create" && name != "messages_list" && !strings.HasPrefix(name, "room_task") && !strings.HasPrefix(name, "browser_") {
 		return nil
 	}
+	if (autonomousTask || autonomousMessage || name == "messages_list") && request.Extra != nil {
+		if token := request.Extra.Header.Get(runtimedsh.AppMCPSessionHeader); token != "" {
+			return h.scopeDSHAppPlatformRoomTool(agentID, name, token, args)
+		}
+	}
 	if request.Params.Meta["x-codex-turn-metadata"] == nil {
-		return nil // Preserve clients/runtimes without the native turn contract.
+		if autonomousTask {
+			return h.scopeUnboundAutonomous(agentID, args, true, name)
+		}
+		switch name {
+		case "message_send", "messages_read", "messages_ack":
+			return h.scopeUnboundAutonomousMessage(agentID, name, args)
+		}
+		return nil
 	}
 	thread, turn, err := appNativeTurnIDs(request)
 	if err != nil {
@@ -89,25 +107,99 @@ func (h *Handler) scopeAppPlatformRoomTool(agentID, name string, request *mcp.Ca
 	if rt == nil {
 		return fmt.Errorf("Codex runtime unavailable")
 	}
-	_, conversation, err := rt.AgentTurnContext(agentID, thread, turn)
+	turnCtx, conversation, err := rt.AgentTurnContext(agentID, thread, turn)
 	if err != nil {
 		return err
 	}
-	return h.scopeAppPlatformRoomConversation(agentID, name, conversation, args)
+	source, _ := channel.TurnContextFrom(turnCtx)
+	return h.scopeAppPlatformRoomConversation(agentID, name, conversation, source.SourceMessageID, args)
 }
 
-func (h *Handler) scopeAppPlatformRoomConversation(agentID, name, conversation string, args map[string]any) error {
+func (h *Handler) scopeDSHAppPlatformRoomTool(agentID, name, token string, args map[string]any) error {
+	owner, ok := h.svc.(interface {
+		Runtime(string) (agentruntime.Runtime, error)
+	})
+	if !ok {
+		return fmt.Errorf("DSH runtime unavailable")
+	}
+	rt, err := owner.Runtime(agent.RuntimeKindDSH)
+	if err != nil {
+		return fmt.Errorf("DSH runtime unavailable")
+	}
+	dsh, ok := rt.(*runtimedsh.Runtime)
+	if !ok {
+		return fmt.Errorf("DSH runtime unavailable")
+	}
+	ctx, conversation, active := dsh.AgentAppMCPTurnContext(agentID, token)
+	if !active {
+		return fmt.Errorf("DSH MCP session has no active turn for this Agent")
+	}
+	source, _ := channel.TurnContextFrom(ctx)
+	if !source.Autonomous && !strings.HasPrefix(name, "autonomous_task") {
+		return nil
+	}
+	return h.scopeAppPlatformRoomConversation(agentID, name, conversation, source.SourceMessageID, args)
+}
+
+func (h *Handler) scopeAppPlatformRoomConversation(agentID, name, conversation, sourceID string, args map[string]any) error {
+	autonomousTask := strings.HasPrefix(name, "autonomous_task")
 	if !strings.HasPrefix(conversation, "csgclaw-im:") {
+		if autonomousTask {
+			return fmt.Errorf("this tool requires an active autonomous room turn")
+		}
 		return nil
 	}
 	_, scope, ok := strings.Cut(conversation, ":room:")
 	if !ok {
+		if autonomousTask {
+			return fmt.Errorf("this tool requires an active autonomous room turn")
+		}
 		return nil
 	}
-	scope, _, _ = strings.Cut(scope, ":")
+	scope, tail, _ := strings.Cut(scope, ":")
 	roomID, err := url.QueryUnescape(scope)
 	if err != nil {
 		return fmt.Errorf("invalid room conversation binding")
+	}
+	if strings.HasPrefix(name, "browser_") {
+		args["room_id"] = roomID
+		if name == "browser_screenshot" {
+			args["thread_root_id"] = ""
+			if root, ok := strings.CutPrefix(tail, "thread:"); ok {
+				root, _, _ = strings.Cut(root, ":")
+				thread, err := url.QueryUnescape(root)
+				if err != nil {
+					return fmt.Errorf("invalid browser thread binding")
+				}
+				args["thread_root_id"] = thread
+			}
+		}
+		return nil
+	}
+	if h.im != nil {
+		if room, exists := h.im.Room(roomID); exists && room.IsAutonomous() {
+			boundThread := ""
+			if encoded, ok := strings.CutPrefix(tail, "thread:"); ok {
+				boundThread, err = url.QueryUnescape(encoded)
+				if err != nil {
+					return fmt.Errorf("invalid thread conversation binding")
+				}
+			}
+			if autonomousTask {
+				return bindAutonomousMessageTarget(args, roomID, boundThread)
+			}
+			switch name {
+			case "message_send", "messages_read", "messages_ack":
+				return h.bindAutonomousRoomMessage(args, name, roomID, boundThread, sourceID)
+			case "messages_list":
+				if platformText(args, "room_id") == roomID && platformText(args, "thread_root_id") == "" && boundThread != "" {
+					args["thread_root_id"] = boundThread
+				}
+			}
+		}
+	}
+	if autonomousTask {
+		return fmt.Errorf("this tool requires an active autonomous room turn")
 	}
 	roster, ok := h.roomSchedulingContext(roomID)
 	if !ok {
@@ -133,6 +225,79 @@ func (h *Handler) scopeAppPlatformRoomConversation(agentID, name, conversation s
 		return fmt.Errorf("this turn belongs to on-demand room %s; use room_task_create, room_task_plan and room_task_dispatch so work and replies stay in this room; agent_task_create delivers to a private chat", roomID)
 	}
 	return nil
+}
+
+func bindAutonomousMessageTarget(args map[string]any, roomID, threadRootID string) error {
+	if requested := platformText(args, "room_id"); requested != "" && requested != roomID {
+		return fmt.Errorf("message operation must stay in the current collaboration room")
+	}
+	if requested := platformText(args, "thread_root_id"); requested != "" && requested != threadRootID {
+		return fmt.Errorf("message operation must stay in the current conversation thread")
+	}
+	args["room_id"], args["thread_root_id"] = roomID, threadRootID
+	return nil
+}
+
+func (h *Handler) bindAutonomousRoomMessage(args map[string]any, name, roomID, threadRootID, sourceID string) error {
+	if threadRootID == "" {
+		taskThread := h.im.AutonomousTaskThread(roomID, sourceID)
+		requested := platformText(args, "thread_root_id")
+		if requested != "" && (requested == taskThread || h.im.AutonomousTaskThread(roomID, requested) == requested) {
+			// A main-chat turn can address a confirmed request's topic even
+			// when a different request led the coalesced notification.
+			threadRootID = requested
+		} else if name == "message_send" && requested == "" {
+			threadRootID = taskThread
+		}
+	}
+	return bindAutonomousMessageTarget(args, roomID, threadRootID)
+}
+
+// CLI and MCP calls without native turn metadata have an Agent identity only.
+// During autonomous work, the active conversation must be unambiguous before
+// sending a message or reserving and acknowledging its unread page.
+func (h *Handler) scopeUnboundAutonomousMessage(agentID, name string, args map[string]any) error {
+	return h.scopeUnboundAutonomous(agentID, args, false, name)
+}
+
+func (h *Handler) scopeUnboundAutonomous(agentID string, args map[string]any, requireRoom bool, name string) error {
+	reader, ok := h.participantWork.(interface {
+		ActiveWorkForParticipant(string) []apitypes.ParticipantWorkUpdate
+	})
+	if !ok || h.im == nil {
+		if requireRoom {
+			return fmt.Errorf("this tool requires an active autonomous room turn")
+		}
+		return nil
+	}
+	type scope struct{ roomID, threadRootID string }
+	scopes := make(map[scope]struct{})
+	var current scope
+	var sourceID string
+	for _, work := range reader.ActiveWorkForParticipant(h.agentPlatformParticipant(agentID)) {
+		if work.Kind != apitypes.ParticipantWorkKindAgentTurn {
+			continue
+		}
+		target := scope{work.RoomID, work.ThreadRootID}
+		scopes[target] = struct{}{}
+		if room, ok := h.im.Room(work.RoomID); ok && room.IsAutonomous() {
+			current = target
+			sourceID = work.RequestID
+		}
+	}
+	if current.roomID == "" {
+		if requireRoom {
+			return fmt.Errorf("this tool requires an active autonomous room turn")
+		}
+		return nil
+	}
+	if len(scopes) != 1 {
+		return fmt.Errorf("multiple active conversations; use a message tool bound to the current turn")
+	}
+	if !requireRoom {
+		return h.bindAutonomousRoomMessage(args, name, current.roomID, current.threadRootID, sourceID)
+	}
+	return bindAutonomousMessageTarget(args, current.roomID, current.threadRootID)
 }
 
 func platformTextFields(names ...string) map[string]any {
@@ -228,6 +393,7 @@ func (h *Handler) registerAppPlatformTools(agentID string) {
 	h.appPlatformAgents[agentID] = a.Role
 	h.registerAppIdentityTools(agentID)
 	h.registerAppRoomTools(agentID)
+	h.registerBrowserTools(agentID)
 	h.registerAppPlatformTaskTools(agentID)
 	if a.RuntimeKind == agent.RuntimeKindCodex {
 		h.registerAppFileTools(agentID)
@@ -398,14 +564,37 @@ func (h *Handler) registerAppRoomTools(agentID string) {
 		room, _ := h.im.Room(id)
 		return map[string]any{"id": room.ID, "title": room.Title, "members": room.Members, "manager_id": room.ManagerID, "is_direct": room.IsDirect}, nil
 	})
-	h.addAppPlatformTool(agentID, "messages_list", "Read messages in a room you belong to.", platformTextFields("room_id"), []string{"room_id"}, true, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
+	h.addAppPlatformTool(agentID, "messages_list", "Preview public history without consuming unread messages; use thread_root_id for a specific thread.", platformTextFields("room_id", "thread_root_id"), []string{"room_id"}, true, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
 		id := platformText(args, "room_id")
 		if err := h.requirePlatformRoom(agentID, id); err != nil {
 			return nil, err
 		}
-		return h.invokeAppPlatformHandler(ctx, agentID, http.MethodGet, nil, url.Values{"room_id": {id}}, nil, h.handleMessages)
+		return h.invokeAppPlatformHandler(ctx, agentID, http.MethodGet, nil, url.Values{"room_id": {id}, "thread_root_id": {platformText(args, "thread_root_id")}}, nil, h.handleMessages)
 	})
-	h.addAppPlatformTool(agentID, "message_send", "Send a message as yourself to a room you belong to. Mentions follow the room's routing policy. In an on-demand room, message mentions do not dispatch work; use room_task_dispatch to start a Worker and room_task_message for task-scoped communication.", platformTextFields("room_id", "content", "mention_id", "client_message_id"), []string{"room_id", "content"}, false, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
+	readFields := platformTextFields("room_id", "thread_root_id")
+	readFields["limit"] = map[string]any{"type": "integer", "minimum": 1, "maximum": 100}
+	readFields["peek"] = map[string]any{"type": "boolean"}
+	h.addAppPlatformTool(agentID, "messages_read", "Read one page of your unread public messages. Then call messages_ack with ack_token only after receiving the complete page. Repeat while has_more; peek does not consume. Main chat and threads have independent cursors.", readFields, []string{"room_id"}, true, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
+		roomID := platformText(args, "room_id")
+		if err := h.requirePlatformRoom(agentID, roomID); err != nil {
+			return nil, err
+		}
+		limit := 50
+		if n, ok := args["limit"].(float64); ok {
+			limit = int(n)
+		}
+		peek, _ := args["peek"].(bool)
+		return h.im.PrepareUnread(roomID, h.agentPlatformParticipant(agentID), platformText(args, "thread_root_id"), limit, peek)
+	})
+	h.addAppPlatformTool(agentID, "messages_ack", "Confirm successful receipt of your previously read page. Never acknowledge an unread or incomplete page; this does not mean the task is completed.", platformTextFields("room_id", "thread_root_id", "ack_token"), []string{"room_id", "ack_token"}, true, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
+		roomID := platformText(args, "room_id")
+		if err := h.requirePlatformRoom(agentID, roomID); err != nil {
+			return nil, err
+		}
+		err := h.im.AcknowledgeUnread(apitypes.UnreadAck{RoomID: roomID, ParticipantID: h.agentPlatformParticipant(agentID), ThreadRootID: platformText(args, "thread_root_id"), Token: platformText(args, "ack_token")})
+		return map[string]bool{"acknowledged": err == nil}, err
+	})
+	h.addAppPlatformTool(agentID, "message_send", "Send a message as yourself to a room you belong to. Mentions follow the room's routing policy. In an on-demand room, message mentions do not dispatch work; use room_task_dispatch to start a Worker and room_task_message for task-scoped communication.", platformTextFields("room_id", "content", "mention_id", "client_message_id", "thread_root_id"), []string{"room_id", "content"}, false, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
 		if err := h.requirePlatformRoom(agentID, platformText(args, "room_id")); err != nil {
 			return nil, err
 		}
@@ -414,6 +603,10 @@ func (h *Handler) registerAppRoomTools(agentID string) {
 			payload[key] = value
 		}
 		payload["sender_id"] = h.agentPlatformParticipant(agentID)
+		if thread := platformText(args, "thread_root_id"); thread != "" {
+			payload["relates_to"] = map[string]string{"rel_type": "m.thread", "event_id": thread}
+		}
+		delete(payload, "thread_root_id")
 		return h.invokeAppPlatformHandler(ctx, agentID, http.MethodPost, nil, nil, payload, h.handleCreateMessage)
 	})
 	if !h.agentPlatformManager(agentID) {

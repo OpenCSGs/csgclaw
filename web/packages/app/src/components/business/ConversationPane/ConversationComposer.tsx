@@ -91,6 +91,7 @@ export type ConversationComposerProps = ComposerResourceProps & {
   workingParticipants?: ConversationWorkingParticipant[];
   stoppableParticipant?: ConversationWorkingParticipant;
   toolbar?: ReactNode;
+  statusSlot?: ReactNode;
   hideWorkingContextUsage?: boolean;
 };
 
@@ -127,6 +128,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   workingParticipants = [],
   stoppableParticipant,
   toolbar,
+  statusSlot,
   hideWorkingContextUsage = false,
   onApplyMention,
   onApplySlashCandidate,
@@ -228,6 +230,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           onLogin={onProviderLogin}
         />
       ) : null}
+      {statusSlot}
       {workingParticipants.length > 0 ? (
         <ComposerWorkingIndicator
           participants={workingParticipants}

@@ -151,3 +151,38 @@ func TestSummariesPreserveMetadataWithInvalidInstallationRecords(t *testing.T) {
 		}
 	}
 }
+
+func TestSkillSummaryVersionsUseEachInstallationRecord(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"market", "local", "untracked", "builtin"} {
+		mustWriteFile(t, filepath.Join(root, name, "SKILL.md"), "---\ndescription: A skill\nmetadata:\n  version: 9.9.0\n---\n")
+	}
+	for name, record := range map[string]skillinstall.Record{
+		"market":  {Source: skillinstall.SourceMarket, Version: "v1.2.3"},
+		"local":   {Source: skillinstall.SourceLocal},
+		"builtin": {Source: skillinstall.SourceBuiltin, Version: strings.Repeat("a", 64)},
+	} {
+		if err := skillinstall.Update(root, name, &record, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func(items []SkillSummary) {
+		t.Helper()
+		for _, item := range items {
+			want := map[string]string{"market": "v1.2.3", "local": "9.9.0", "untracked": "9.9.0", "builtin": ""}[item.Name]
+			if item.Version != want {
+				t.Fatalf("%s version=%q want=%q", item.Name, item.Version, want)
+			}
+		}
+	}
+	items, err := ListSummaries(context.Background(), root)
+	if err != nil || len(items) != 4 {
+		t.Fatalf("summaries=%+v err=%v", items, err)
+	}
+	check(items)
+	paged, _, err := ListSummariesPage(context.Background(), root, resourcequery.Query{Mode: "page", Page: 1, Size: 10}, func(string) bool { return true })
+	if err != nil || len(paged) != 4 {
+		t.Fatalf("paged=%+v err=%v", paged, err)
+	}
+	check(paged)
+}

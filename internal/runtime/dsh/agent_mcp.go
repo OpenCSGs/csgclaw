@@ -2,9 +2,11 @@ package dsh
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"maps"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,6 +15,47 @@ import (
 )
 
 const agentMCPServerName = "csgclaw"
+
+// AppMCPSessionHeader carries an opaque binding issued when an ACP session
+// mounts the built-in MCP server. Agent authentication is still required.
+const AppMCPSessionHeader = "X-CSGClaw-DSH-Session-Token"
+
+func (p *process) sessionMCPServers() ([]acpMCPServer, string) {
+	for index, server := range p.mcp {
+		if server.Name != agentMCPServerName {
+			continue
+		}
+		token := rand.Text()
+		servers := slices.Clone(p.mcp)
+		servers[index].Headers = append(slices.Clone(server.Headers), acpNameValue{Name: AppMCPSessionHeader, Value: token})
+		return servers, token
+	}
+	return p.mcp, ""
+}
+
+// AgentAppMCPTurnContext resolves only the currently running turn of the
+// bound ACP session. Pending work leases never take part in this lookup.
+func (r *Runtime) AgentAppMCPTurnContext(agentID, token string) (context.Context, string, bool) {
+	if token == "" {
+		return nil, "", false
+	}
+	agentID = identity.CanonicalAgentID(agentID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, proc := range r.processes {
+		proc.mu.Lock()
+		if proc.meta.AgentID == agentID {
+			for sessionID, turn := range proc.active {
+				if proc.appMCPSessionTokens[sessionID] == token && turn.ctx.Err() == nil {
+					proc.mu.Unlock()
+					return turn.ctx, string(turn.request.ConversationKey), true
+				}
+			}
+		}
+		proc.mu.Unlock()
+	}
+	return nil, "", false
+}
 
 func (r *Runtime) SetAgentMCPRevisionSource(source func(string) uint64) {
 	r.mcpCatalogMu.Lock()

@@ -24,6 +24,8 @@ const (
 const StatusRuntimeUnavailable = "runtime_unavailable"
 
 type Agent struct {
+	CreatedBy        string                   `json:"created_by,omitempty"`
+	NamedBy          string                   `json:"named_by,omitempty"`
 	ID               string                   `json:"id"`
 	Name             string                   `json:"name"`
 	Description      string                   `json:"description,omitempty"`
@@ -126,6 +128,8 @@ type runtimeJSON struct {
 
 func (a *Agent) UnmarshalJSON(data []byte) error {
 	type agentJSON struct {
+		CreatedBy        string                   `json:"created_by,omitempty"`
+		NamedBy          string                   `json:"named_by,omitempty"`
 		ID               string                   `json:"id"`
 		Name             string                   `json:"name"`
 		Description      string                   `json:"description,omitempty"`
@@ -159,6 +163,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	out := Agent{
+		CreatedBy: decoded.CreatedBy, NamedBy: decoded.NamedBy,
 		ID:               decoded.ID,
 		Name:             decoded.Name,
 		Description:      decoded.Description,

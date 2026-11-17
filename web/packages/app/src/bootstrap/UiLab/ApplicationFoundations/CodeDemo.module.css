@@ -1,0 +1,74 @@
+.demo {
+  inline-size: min(100%, 720px);
+  min-inline-size: 0;
+}
+.snippet {
+  --snippet-surface: #fff;
+  --snippet-gutter: #fafafa;
+  --snippet-border: #e9eaeb;
+  --snippet-text: #181d27;
+  --snippet-number: #717680;
+  --snippet-comment: #079455;
+  --snippet-keyword: #dd2590;
+  --snippet-identifier: #1570ef;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--snippet-border);
+  border-radius: 12px;
+  background: var(--snippet-surface);
+  color: var(--snippet-text);
+  font:
+    400 14px/21px "Roboto Mono",
+    ui-monospace,
+    monospace;
+}
+:global(:root[data-theme="dark"]) .snippet {
+  --snippet-surface: #0c0e12;
+  --snippet-gutter: #13161b;
+  --snippet-border: #22262f;
+  --snippet-text: #f7f7f7;
+  --snippet-number: #94979c;
+  --snippet-comment: #47cd89;
+  --snippet-keyword: #f670c7;
+  --snippet-identifier: #53b1fd;
+}
+.gutter {
+  padding: 20px 16px;
+  border-inline-end: 1px solid var(--snippet-border);
+  background: var(--snippet-gutter);
+  color: var(--snippet-number);
+  font-weight: 700;
+  text-align: end;
+  user-select: none;
+}
+.code {
+  margin: 0;
+  padding: 20px;
+  overflow-x: auto;
+  font: inherit;
+  white-space: pre;
+}
+.code:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.code code {
+  font: inherit;
+}
+.comment {
+  color: var(--snippet-comment);
+}
+.keyword {
+  color: var(--snippet-keyword);
+}
+.identifier {
+  color: var(--snippet-identifier);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-start: var(--space-4);
+}

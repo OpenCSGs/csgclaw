@@ -2,7 +2,12 @@
 import styles from "./Breadcrumb.module.css";
 import homeIcon from "./assets/home-line.svg";
 import slashDivider from "./assets/slash-divider.svg";
-import { DropdownMenuContent, DropdownMenuItem, DropdownMenuRoot, DropdownMenuTrigger } from "../DropdownMenu/index.js";
+import {
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+} from "../DropdownMenu/index.js";
 import { classNames } from "../../lib/classNames.js";
 
 export type BreadcrumbItem = {
@@ -19,12 +24,31 @@ export type BreadcrumbProps = {
   items: BreadcrumbItem[];
   maxVisibleItems?: number;
   overflowLabel?: string;
+  dividerSrc?: string;
+  dividerSize?: number;
+  homeIconSrc?: string;
   wrap?: boolean;
 };
 
-function Item({ item, home = false }: { home?: boolean; item: BreadcrumbItem }) {
-  const className = classNames(styles.item, home && styles.homeItem, item.current && styles.current);
-  const content = home ? <img src={homeIcon} width="20" height="20" alt="" /> : item.label;
+function Item({
+  item,
+  home = false,
+  icon = homeIcon,
+}: {
+  home?: boolean;
+  item: BreadcrumbItem;
+  icon?: string;
+}) {
+  const className = classNames(
+    styles.item,
+    home && styles.homeItem,
+    item.current && styles.current,
+  );
+  const content = home ? (
+    <img src={icon} width="20" height="20" alt="" />
+  ) : (
+    item.label
+  );
 
   if (item.current) {
     return (
@@ -37,14 +61,26 @@ function Item({ item, home = false }: { home?: boolean; item: BreadcrumbItem }) 
 
   if (item.href) {
     return (
-      <a className={className} href={item.href} title={item.label}>
+      <a
+        className={className}
+        href={item.href}
+        aria-label={home ? item.label : undefined}
+        title={item.label}
+      >
         {content}
       </a>
     );
   }
 
   return (
-    <button className={className} type="button" onClick={item.onClick} title={item.label} disabled={!item.onClick}>
+    <button
+      className={className}
+      type="button"
+      onClick={item.onClick}
+      aria-label={home ? item.label : undefined}
+      title={item.label}
+      disabled={!item.onClick}
+    >
       {content}
     </button>
   );
@@ -56,31 +92,72 @@ export function Breadcrumb({
   home,
   items,
   maxVisibleItems = 4,
+  dividerSrc = slashDivider,
+  dividerSize = 20,
+  homeIconSrc = homeIcon,
   overflowLabel = "Show earlier path segments",
   wrap = false,
 }: BreadcrumbProps) {
   const shouldCollapse = items.length > maxVisibleItems && maxVisibleItems >= 3;
-  const edgeCount = shouldCollapse ? Math.max(1, Math.floor((maxVisibleItems - 2) / 2)) : items.length;
-  const hiddenItems = shouldCollapse ? items.slice(edgeCount, -(maxVisibleItems - edgeCount - 1)) : [];
+  const edgeCount = shouldCollapse
+    ? Math.max(1, Math.floor((maxVisibleItems - 2) / 2))
+    : items.length;
+  const hiddenItems = shouldCollapse
+    ? items.slice(edgeCount, -(maxVisibleItems - edgeCount - 1))
+    : [];
   const tailCount = maxVisibleItems - edgeCount - 1;
   const pathEntries = shouldCollapse
     ? [
-        ...items.slice(0, edgeCount).map((item, index) => ({ kind: "item" as const, item, key: `head-${index}` })),
+        ...items
+          .slice(0, edgeCount)
+          .map((item, index) => ({
+            kind: "item" as const,
+            item,
+            key: `head-${index}`,
+          })),
         { kind: "overflow" as const, key: "overflow" },
-        ...items.slice(-tailCount).map((item, index) => ({ kind: "item" as const, item, key: `tail-${index}` })),
+        ...items
+          .slice(-tailCount)
+          .map((item, index) => ({
+            kind: "item" as const,
+            item,
+            key: `tail-${index}`,
+          })),
       ]
-    : items.map((item, index) => ({ kind: "item" as const, item, key: `item-${index}` }));
-  const renderedEntries = [...(home ? [{ kind: "home" as const, item: home, key: "home" }] : []), ...pathEntries];
+    : items.map((item, index) => ({
+        kind: "item" as const,
+        item,
+        key: `item-${index}`,
+      }));
+  const renderedEntries = [
+    ...(home ? [{ kind: "home" as const, item: home, key: "home" }] : []),
+    ...pathEntries,
+  ];
 
   return (
-    <nav className={classNames(styles.breadcrumb, wrap && styles.wrap, className)} aria-label={ariaLabel}>
+    <nav
+      className={classNames(styles.breadcrumb, wrap && styles.wrap, className)}
+      aria-label={ariaLabel}
+    >
       <ol className={styles.list}>
         {renderedEntries.map((entry, index) => (
           <li className={styles.segment} key={entry.key}>
-            {index > 0 ? <img className={styles.divider} src={slashDivider} width="20" height="20" alt="" /> : null}
+            {index > 0 ? (
+              <img
+                className={styles.divider}
+                src={dividerSrc}
+                width={dividerSize}
+                height={dividerSize}
+                alt=""
+              />
+            ) : null}
             {entry.kind === "overflow" ? (
               <DropdownMenuRoot>
-                <DropdownMenuTrigger className={styles.overflowTrigger} type="button" aria-label={overflowLabel}>
+                <DropdownMenuTrigger
+                  className={styles.overflowTrigger}
+                  type="button"
+                  aria-label={overflowLabel}
+                >
                   …
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" size="sm">
@@ -96,7 +173,11 @@ export function Breadcrumb({
                 </DropdownMenuContent>
               </DropdownMenuRoot>
             ) : (
-              <Item item={entry.item} home={entry.kind === "home"} />
+              <Item
+                item={entry.item}
+                home={entry.kind === "home"}
+                icon={homeIconSrc}
+              />
             )}
           </li>
         ))}

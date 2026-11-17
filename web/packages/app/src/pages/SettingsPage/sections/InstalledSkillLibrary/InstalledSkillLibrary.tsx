@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { LoaderCircle, RefreshCw } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { CloudDownload, LoaderCircle, RefreshCw } from "lucide-react";
 import { InlineError, Button, Select } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { ResourceFeaturedIcon, SkillFeaturedIcon } from "@/components/business/HubDetailPane";
@@ -10,8 +10,10 @@ import {
   skillLibrarySources,
   skillSourceFilters,
   skillVersionLabel,
+  skillLibraryVersion,
 } from "@/models/skillLibrary";
 import type { SkillSummary } from "@/models/skillhub";
+import type { SkillUpdateInfo } from "@/models/skillUpdates";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./InstalledSkillLibrary.module.css";
 
@@ -23,6 +25,11 @@ export function InstalledSkillLibrary({
   busy = false,
   loading = false,
   t,
+  updates = [],
+  onScanRemote,
+  scanningRemote = false,
+  updateAction,
+  updateNotice,
 }: {
   skills: SkillSummary[];
   query: string;
@@ -31,6 +38,11 @@ export function InstalledSkillLibrary({
   busy?: boolean;
   loading?: boolean;
   t: TranslateFn;
+  updates?: readonly SkillUpdateInfo[];
+  onScanRemote?: () => void;
+  scanningRemote?: boolean;
+  updateAction?: ReactNode;
+  updateNotice?: ReactNode;
 }) {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [scanning, setScanning] = useState(false);
@@ -98,17 +110,33 @@ export function InstalledSkillLibrary({
             ? t("iaSkillsTotalCount", { count: skills.length })
             : t("iaSkillsVisibleCount", { count: visible.length, total: skills.length })}
         </span>
-        <Button
-          className={styles.rescan}
-          variant="secondaryGray"
-          size="sm"
-          disabled={busy || scanning}
-          onClick={() => void rescan()}
-        >
-          <RefreshCw size={14} className={busy || scanning ? "animate-spin" : undefined} aria-hidden="true" />
-          {t("iaSkillsDiscoveryRescan")}
-        </Button>
+        {updateAction}
+        <div className={styles.scanActions}>
+          {onScanRemote ? (
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              loading={scanningRemote}
+              title={t("skillUpdatesCheckHint")}
+              onClick={onScanRemote}
+            >
+              <CloudDownload size={14} aria-hidden="true" />
+              {t("skillUpdatesCheck")}
+            </Button>
+          ) : null}
+          <Button
+            variant="secondaryGray"
+            size="sm"
+            disabled={busy || scanning}
+            title={t("iaSkillsDiscoveryRescanHint")}
+            onClick={() => void rescan()}
+          >
+            <RefreshCw size={14} className={busy || scanning ? "animate-spin" : undefined} aria-hidden="true" />
+            {t("iaSkillsDiscoveryRescan")}
+          </Button>
+        </div>
       </div>
+      {updateNotice}
       {error ? (
         <InlineError as="p" role="alert">
           {t("iaSkillsDiscoveryFailed")}
@@ -128,44 +156,54 @@ export function InstalledSkillLibrary({
         <p className={styles.notice}>{t(skills.length === 0 ? "resourcesSkillsEmpty" : "iaListSearchEmpty")}</p>
       ) : (
         <ResourceList>
-          {visible.map((skill) => (
-            <ResourceListCard
-              key={skill.name}
-              title={skill.name}
-              description={skill.description}
-              icon={
-                <ResourceFeaturedIcon>
-                  <SkillFeaturedIcon />
-                </ResourceFeaturedIcon>
-              }
-              onOpen={() => void open(skill)}
-              titleBadge={
-                skill.discovery?.new ? <span className={styles.newBadge}>{t("iaSkillsUpdatedBadge")}</span> : undefined
-              }
-              actions={
-                <Button
-                  className={styles.source}
-                  variant="ghost"
-                  size="sm"
-                  aria-label={t("iaSkillsViewVersionSources", { name: skill.name })}
-                  title={
-                    skill.discovery
-                      ? t("iaSkillsActiveVersion", {
-                          version: skillVersionLabel(skill.discovery.version) || t("iaSkillsUnversioned"),
-                        }) +
-                        "\n" +
-                        skillLibrarySources(skill).join(" · ")
-                      : sourceLabel(skillLibrarySource(skill), t)
-                  }
-                  onClick={() => void open(skill)}
-                >
-                  {skillLibrarySources(skill).length > 1
-                    ? `${skillVersionLabel(skill.discovery?.version) || t("iaSkillsUnversioned")} · ${t("iaSkillsSoftwareCount", { count: skillLibrarySources(skill).length })}`
-                    : `${sourceLabel(skillLibrarySource(skill), t)}${skill.discovery?.version ? ` · ${skillVersionLabel(skill.discovery.version)}` : ""}`}
-                </Button>
-              }
-            />
-          ))}
+          {visible.map((skill) => {
+            const version = skillVersionLabel(skillLibraryVersion(skill));
+            const badge =
+              skillLibrarySources(skill).length > 1
+                ? `${version || t("iaSkillsUnversioned")} · ${t("iaSkillsSoftwareCount", { count: skillLibrarySources(skill).length })}`
+                : `${sourceLabel(skillLibrarySource(skill), t)}${version ? ` · ${version}` : ""}`;
+            return (
+              <ResourceListCard
+                key={skill.name}
+                title={skill.name}
+                description={skill.description}
+                icon={
+                  <ResourceFeaturedIcon>
+                    <SkillFeaturedIcon />
+                  </ResourceFeaturedIcon>
+                }
+                onOpen={() => void open(skill)}
+                titleBadge={
+                  <>
+                    {skill.discovery?.new ? <span className={styles.newBadge}>{t("iaSkillsUpdatedBadge")}</span> : null}
+                    {updates.some((item) => item.name === skill.name && item.available) ? (
+                      <span className={styles.newBadge}>{t("skillUpdatesAvailable")}</span>
+                    ) : null}
+                  </>
+                }
+                actions={
+                  <Button
+                    className={styles.source}
+                    variant="ghost"
+                    size="sm"
+                    aria-label={t("iaSkillsViewVersionSources", { name: skill.name })}
+                    title={
+                      skill.discovery
+                        ? t("iaSkillsActiveVersion", {
+                            version: skillVersionLabel(skill.discovery.version) || t("iaSkillsUnversioned"),
+                          }) +
+                          "\n" +
+                          skillLibrarySources(skill).join(" · ")
+                        : badge
+                    }
+                    onClick={() => void open(skill)}
+                  >
+                    <span className={styles.sourceLabel}>{badge}</span>
+                  </Button>
+                }
+              />
+            );
+          })}
         </ResourceList>
       )}
     </div>

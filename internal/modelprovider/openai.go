@@ -17,15 +17,17 @@ import (
 type openAIModelsResponse struct {
 	HasMore bool `json:"has_more"`
 	Data    []struct {
-		ID            string `json:"id"`
-		ContextWindow int64  `json:"context_window"`
-		ContextLength int64  `json:"context_length"`
-		Task          any    `json:"task"`
-		Tasks         any    `json:"tasks"`
-		Availability  *struct {
+		ID              string          `json:"id"`
+		ContextWindow   int64           `json:"context_window"`
+		ContextLength   int64           `json:"context_length"`
+		MaxOutputTokens json.RawMessage `json:"max_output_tokens"`
+		Task            any             `json:"task"`
+		Tasks           any             `json:"tasks"`
+		Availability    *struct {
 			IsAvailable *bool `json:"is_available"`
 		} `json:"availability"`
 		Metadata struct {
+			Tasks        any `json:"tasks"`
 			Capabilities struct {
 				Video modelcap.VideoGeneration `json:"video"`
 			} `json:"capabilities"`
@@ -147,15 +149,18 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 	metadata := make(map[string]modelcap.Metadata)
 	models := make([]string, 0, len(payload.Data))
 	imageModels := []string{}
+	imageMetadata := make(map[string]modelcap.ImageGeneration)
 	videoModels := []string{}
 	videoMetadata := make(map[string]modelcap.VideoGeneration)
 	visionModels := []string{}
 	seen := make(map[string]struct{}, len(payload.Data))
+	hasModelID := false
 	for _, item := range payload.Data {
 		id := strings.TrimSpace(item.ID)
 		if id == "" {
 			continue
 		}
+		hasModelID = true
 		if item.Availability != nil && item.Availability.IsAvailable != nil && !*item.Availability.IsAvailable {
 			continue
 		}
@@ -167,14 +172,27 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 		if m.ContextWindow == 0 {
 			m.ContextWindow = item.ContextLength
 		}
-		if m.Validate() == nil && m != (modelcap.Metadata{}) {
+		if m.Validate() != nil {
+			m.ContextWindow = 0
+		}
+		var outputLimit int64
+		if json.Unmarshal(item.MaxOutputTokens, &outputLimit) == nil && outputLimit > 0 {
+			m.MaxOutputTokens = outputLimit
+		}
+		if m != (modelcap.Metadata{}) {
 			metadata[id] = m
 		}
 		var declaredTasks any = item.Task
 		if includePluralTasks {
 			declaredTasks = append(taskValues(item.Task), taskValues(item.Tasks)...)
 		}
-		if taskSupportsImageGeneration(declaredTasks) || (!taskPresent(declaredTasks) && IsGPTImageModel(id)) {
+		imageTasks := append(taskValues(item.Task), taskValues(item.Tasks)...)
+		imageTasks = append(imageTasks, taskValues(item.Metadata.Tasks)...)
+		capabilities, isImage := imageGenerationCapabilities(imageTasks)
+		if capabilities != (modelcap.ImageGeneration{}) {
+			imageMetadata[id] = capabilities
+		}
+		if isImage || (!taskPresent(declaredTasks) && IsGPTImageModel(id)) {
 			imageModels = append(imageModels, id)
 		}
 		if taskSupportsVideoGeneration(declaredTasks) {
@@ -186,14 +204,18 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 		if taskSupportsVisionInput(declaredTasks) {
 			visionModels = append(visionModels, id)
 		}
-		if !taskPresent(declaredTasks) || taskSupportsTextGeneration(declaredTasks) {
+		chatTasks := declaredTasks
+		if isImage {
+			chatTasks = imageTasks
+		}
+		if !taskPresent(chatTasks) || taskSupportsTextGeneration(chatTasks) {
 			models = append(models, id)
 		}
 	}
-	if len(models) == 0 && len(imageModels) == 0 && len(videoModels) == 0 {
+	if payload.Data == nil || (len(payload.Data) > 0 && !hasModelID) {
 		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
 	}
-	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, VideoModels: videoModels, VisionModels: visionModels, ModelMetadata: metadata, VideoMetadata: videoMetadata}, nil
+	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, ImageMetadata: imageMetadata, VideoModels: videoModels, VisionModels: visionModels, ModelMetadata: metadata, VideoMetadata: videoMetadata}, nil
 }
 
 func taskPresent(task any) bool {
@@ -580,15 +602,20 @@ func scanOpenAIProbeSSE(r io.Reader, visit func(eventType, data string) (bool, e
 	return flush()
 }
 
-func taskSupportsImageGeneration(task any) bool {
-	values := taskValues(task)
-	for _, value := range values {
-		switch strings.ToLower(strings.TrimSpace(value)) {
-		case "text-to-image", "text2image", "image-generation":
-			return true
+func imageGenerationCapabilities(tasks []string) (modelcap.ImageGeneration, bool) {
+	var capabilities modelcap.ImageGeneration
+	generic := false
+	for _, value := range tasks {
+		switch strings.ToLower(value) {
+		case "text-to-image", "text2image":
+			capabilities.TextToImage = true
+		case "image-to-image", "image2image", "image-editing":
+			capabilities.ImageToImage = true
+		case "image-generation":
+			generic = true
 		}
 	}
-	return false
+	return capabilities, generic || capabilities.TextToImage || capabilities.ImageToImage
 }
 
 func taskSupportsVideoGeneration(task any) bool {

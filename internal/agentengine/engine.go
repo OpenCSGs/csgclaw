@@ -8,6 +8,8 @@ import (
 	"csgclaw/internal/agentmemory"
 	"csgclaw/internal/diagnostics"
 	agentidentity "csgclaw/internal/identity"
+	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelprovider"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -35,15 +37,16 @@ type conversationRuntimeAdapter interface {
 // identity, pending interactions, replay-safe event delivery, and terminal
 // result idempotency.
 type Engine struct {
-	lifecycle     *lifecycle.Coordinator
-	memory        atomic.Pointer[agentmemory.Store]
-	generateImage imageGenerator
-	generateVideo videoGenerator
-	agents        AgentInterface
-	runtimes      conversationRuntimeResolver
-	files         *FileStore
-	extensions    runtimeExtensionScopes
-	interactions  InteractionCoordinator
+	lifecycle            *lifecycle.Coordinator
+	memory               atomic.Pointer[agentmemory.Store]
+	generateImage        imageGenerator
+	imageGenerationModes func(*modelprovider.ImageGenerationConfig) modelcap.ImageGeneration
+	generateVideo        videoGenerator
+	agents               AgentInterface
+	runtimes             conversationRuntimeResolver
+	files                *FileStore
+	extensions           runtimeExtensionScopes
+	interactions         InteractionCoordinator
 
 	mu             sync.Mutex
 	active         map[conversationIdentity]*activeTurn
@@ -63,7 +66,8 @@ type turnIdentity struct {
 }
 
 type conversationControl struct {
-	done chan struct{}
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 type interactionState uint8
@@ -231,7 +235,23 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 				request.ImageGeneration = &task
 			}
 		}
-		err := c.generateImage(turn.ctx, turn, sink, *request.ImageGeneration)
+		task := *request.ImageGeneration
+		var references []modelprovider.ReferenceImage
+		var err error
+		if task.File == nil && len(task.AttachmentIDs) > 0 {
+			indices := make([]int, len(task.AttachmentIDs))
+			for i := range indices {
+				indices[i] = i + 1
+			}
+			var ids []string
+			references, ids, err = loadReferenceImages(turn.ctx, runtimeRequest.Input, indices, modelprovider.MaxImageEditReferences)
+			if err == nil && !slices.Equal(ids, task.AttachmentIDs) {
+				err = fmt.Errorf("original image references are unavailable")
+			}
+		}
+		if err == nil {
+			err = c.generateImage(turn.ctx, turn, sink, task, references...)
+		}
 		// Successful image-only turns must enter the replay cache so eviction
 		// releases their temporary output snapshots. Failures remain retryable.
 		result := TurnResult{Status: TurnSucceeded, Dispatched: true}
@@ -250,7 +270,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 				request.VideoGeneration = &task
 			}
 		}
-		err := c.generateVideo(turn.ctx, turn, sink, *request.VideoGeneration)
+		err := c.generateVideo(turn.ctx, turn, sink, *request.VideoGeneration, nil)
 		result := TurnResult{Status: TurnSucceeded, Dispatched: true}
 		if err != nil {
 			result = failedResult(ErrorRuntimeFailed, err.Error())
@@ -267,8 +287,15 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if c.engine.agents != nil {
 		selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
 		if err == nil {
-			turn.ctx = contract.WithImageGenerationHandler(turn.ctx, c.imageHandler(turn, sink, selected.Spec.Model.ImageGeneration))
-			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, c.videoHandler(turn, sink, selected.Spec.Model.VideoGeneration))
+			imageModel := selected.Spec.Model.ImageGeneration
+			imageHandler, imagePreflight := c.imageHandler(turn, sink, imageModel, runtimeRequest.Input)
+			turn.ctx = contract.WithImageGenerationHandler(turn.ctx, imageHandler)
+			turn.ctx = contract.WithImageGenerationPreflight(turn.ctx, imagePreflight)
+			if imageModel != nil && c.engine.imageGenerationModes != nil {
+				modes := c.engine.imageGenerationModes(imageModel)
+				runtimeRequest.ImageToolGuidance = fmt.Sprintf("Current image tool capabilities: text-to-image=%t, reference-image editing=%t. If the requested operation is unavailable, explain the limitation and ask the user to configure a compatible image model.", modes.TextToImage, modes.ImageToImage)
+			}
+			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, c.videoHandler(turn, sink, selected.Spec.Model.VideoGeneration, runtimeRequest.Input))
 		}
 	}
 	if err := c.engine.interactions.BeginTurn(c.agentID, request); err != nil {
@@ -806,6 +833,9 @@ func cloneTurnEvent(input TurnEvent) TurnEvent {
 
 func cloneTurnResult(input TurnResult) TurnResult {
 	input.Files = cloneOutputFiles(input.Files)
+	if input.RuntimeText != nil {
+		input.RuntimeText = cloneTurnEvents(input.RuntimeText)
+	}
 	if input.Interactions != nil {
 		interactions := make([]InteractionRequest, len(input.Interactions))
 		for i, item := range input.Interactions {
@@ -880,6 +910,11 @@ func (e *Engine) emitDetached(identity conversationIdentity, turn *activeTurn, s
 // interruptAgent cancels every active conversation, including image/video generation.
 func (e *Engine) interruptAgent(agentID string) {
 	e.mu.Lock()
+	for identity, control := range e.controls {
+		if agentidentity.CanonicalAgentID(identity.agentID) == agentID && control.cancel != nil {
+			control.cancel()
+		}
+	}
 	for identity, turn := range e.active {
 		if agentidentity.CanonicalAgentID(identity.agentID) == agentID {
 			turn.cancel()

@@ -11,6 +11,7 @@ it.each([
         data: [
           {
             source,
+            recommended: true,
             owned_by_current_user: source === "platform" ? true : undefined,
             type: "csgclaw",
             relay_url: "http://relay.test",
@@ -42,6 +43,7 @@ it.each([
     connectionID: "saved-connection",
     status: "offline",
     owner: "owner",
+    recommended: true,
     ownedByCurrentUser: source === "platform",
     publisher,
     type: "csgclaw",

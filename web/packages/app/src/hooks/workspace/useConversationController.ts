@@ -44,6 +44,8 @@ import {
   isThreadReply,
   isToolCallMessage,
   localIdentitiesMatch,
+  roomExternalMessageCandidates,
+  roomInviteCandidates,
   participantIDForLocalIdentity,
   removeConversationFromData,
   resolveConversationUser,
@@ -224,13 +226,6 @@ function conversationMemberParticipantIDs(conversation: IMConversation | null | 
   return new Set((conversation?.members || []).map((id) => participantIDForLocalIdentity(id)).filter(Boolean));
 }
 
-function conversationHasLocalIdentity(
-  conversation: IMConversation | null | undefined,
-  id: string | null | undefined,
-): boolean {
-  return (conversation?.members || []).some((memberID) => localIdentitiesMatch(memberID, id));
-}
-
 function conversationAgentForMember(
   memberID: string,
   agents: readonly AgentLike[],
@@ -352,6 +347,8 @@ function outgoingMessageRecipientAgents({
   if (isDirectConversation(conversation)) {
     return peers;
   }
+
+  if (conversation.type === RoomTypes.autonomous) return peers;
 
   const mentionedAgents = mentionedConversationAgents(segments, peers, agents, usersById);
   const senderAgent = conversationAgentForMember(currentUserID, agents, usersById);
@@ -767,10 +764,7 @@ export function useConversationController({
         .map((id) => resolveUserByLocalIdentity(id, usersById))
         .filter((user): user is IMUser => Boolean(user))
     : [];
-  const inviteCandidates = activeConversation
-    ? data?.users.filter((user) => !user.agent_state && !conversationHasLocalIdentity(activeConversation, user.id)) ||
-      []
-    : [];
+  const inviteCandidates = roomInviteCandidates(activeConversation, data?.users, agents);
   const inviteActionLabel = t("memberManagement");
 
   const mentionCandidates = useMemo(() => {
@@ -781,8 +775,13 @@ export function useConversationController({
     return getMentionCandidates(
       data.users.filter((user) => !user.agent_state && allowed.has(participantIDForLocalIdentity(user.id))),
       composerMentionState.query,
-    );
-  }, [data, activeConversation, composerMentionState]);
+    ).map((user) => ({
+      ...user,
+      avatar:
+        resolveUserByLocalIdentity(user.id, usersById)?.avatar ||
+        conversationAgentForMember(user.id, agents, usersById)?.avatar,
+    }));
+  }, [data, activeConversation, composerMentionState, agents, usersById]);
   const mentionableUsersByName = useMemo(() => {
     const result = new Map<string, IMUser>();
     const duplicateNames = new Set<string>();
@@ -1511,7 +1510,11 @@ export function useConversationController({
   }
 
   async function inviteUsers(): Promise<void> {
-    await addRoomMembers(inviteUserIDs, { closePanel: true });
+    const selected = new Set(inviteUserIDs);
+    await addRoomMembers(
+      inviteCandidates.filter((candidate) => selected.has(candidate.id)).map((candidate) => candidate.id),
+      { closePanel: true },
+    );
   }
 
   async function addRoomMembers(
@@ -1972,7 +1975,12 @@ export function useConversationController({
           ? {
               t,
               agents,
-              candidates: inviteCandidates,
+              candidates: [
+                ...new Set([
+                  ...inviteCandidates,
+                  ...roomExternalMessageCandidates(activeConversation, data.users, agents),
+                ]),
+              ],
               members: activeConversationMembers,
               currentUserID: data.current_user_id || "",
               inviteUserIDs,

@@ -27,6 +27,17 @@
   mask: var(--resource-tag-icon) center / contain no-repeat;
 }
 
+.resource-tag:has(> .resource-tag-brand)::before {
+  content: none;
+}
+
+.resource-tag > .resource-tag-brand {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
 .resource-tag[data-resource-type="skill"] {
   --resource-tag-icon: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M14.7%206.3a1%201%200%200%200%200%201.4l1.6%201.6a1%201%200%200%200%201.4%200l3.106-3.105c.32-.322.863-.22.983.218a6%206%200%200%201-8.259%207.057l-7.91%207.91a1%201%200%200%201-2.999-3l7.91-7.91a6%206%200%200%201%207.057-8.259c.438.12.54.662.219.984z'/%3E%3C/svg%3E");
 }

@@ -14,8 +14,10 @@ import {
   browserURL,
   clipBrowserBounds,
   parseBrowserRequest,
+  htmlPreviewPartition,
 } from "./browserPolicy";
 import { isTrustedMainFrame } from "./navigationPolicy";
+import { HTMLPreviewServer } from "./htmlPreviewServer";
 
 type Page = {
   view: WebContentsView;
@@ -28,32 +30,14 @@ type Page = {
 // have no preload, Node access, application authorization headers or desktop IPC.
 export class NativeBrowserManager {
   private readonly pages = new Map<string, Page>();
+  private readonly htmlPreviews = new HTMLPreviewServer();
   private readonly browserSession: Session;
+  private readonly previewSessions = new Map<string, Session>();
   constructor(
     private readonly window: BrowserWindow,
     private readonly appOrigin: () => string,
   ) {
-    this.browserSession = session.fromPartition("persist:csgclaw-browser");
-    this.browserSession.setPermissionRequestHandler(
-      (_contents, _permission, callback) => callback(false),
-    );
-    this.browserSession.setPermissionCheckHandler(() => false);
-    this.browserSession.setDevicePermissionHandler(() => false);
-    this.browserSession.setDisplayMediaRequestHandler((_request, callback) =>
-      callback({}),
-    );
-    this.browserSession.on("will-download", this.handleDownload);
-    this.browserSession.webRequest.onBeforeRequest((details, callback) => {
-      // Prevent remote pages from loading the authenticated application, including
-      // through redirects and subresources. No application headers are installed.
-      let cancel = false;
-      try {
-        cancel = new URL(details.url).origin === appOrigin();
-      } catch {
-        cancel = true;
-      }
-      callback({ cancel });
-    });
+    this.browserSession = this.createSession("persist:csgclaw-browser");
     ipcMain.handle(DesktopIPC.browserCommand, (event, input: unknown) => {
       if (
         event.sender !== window.webContents ||
@@ -104,7 +88,15 @@ export class NativeBrowserManager {
     item.setSaveDialogOptions({});
   };
 
-  command(request: DesktopBrowserRequest): DesktopBrowserState | null {
+  async command(request: DesktopBrowserRequest): Promise<DesktopBrowserState | null> {
+    if (request.action === "previewHTML") {
+      const url = await this.htmlPreviews.publish(request.id, request.html, request.sourceKey);
+      return { id: request.id, url, loading: false, canGoBack: false, canGoForward: false };
+    }
+    if (request.action === "releaseHTML") {
+      this.htmlPreviews.release(request.id);
+      return null;
+    }
     if (request.action === "close") {
       this.close(request.id);
       return null;
@@ -112,8 +104,12 @@ export class NativeBrowserManager {
     let page = this.pages.get(request.id);
     if (request.action === "navigate") {
       const url = browserURL(request.url, this.appOrigin());
+      if (page && page.view.webContents.session !== this.sessionForURL(url)) {
+        this.close(request.id);
+        page = undefined;
+      }
       if (!page) {
-        page = this.create(request.id);
+        page = this.create(request.id, url);
         this.pages.set(request.id, page);
       }
       page.requestedURL = url;
@@ -122,7 +118,7 @@ export class NativeBrowserManager {
     } else if (request.action === "sync") {
       const url = browserURL(request.url, this.appOrigin());
       if (!page) {
-        page = this.create(request.id);
+        page = this.create(request.id, url);
         this.pages.set(request.id, page);
         page.requestedURL = url;
         void page.view.webContents.loadURL(url).catch(() => {});
@@ -174,10 +170,43 @@ export class NativeBrowserManager {
     return page ? this.state(request.id, page) : null;
   }
 
-  private create(id: string): Page {
+  private createSession(partition: string, sourceKey?: string): Session {
+    const browserSession = session.fromPartition(partition);
+    browserSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+    browserSession.setPermissionCheckHandler(() => false);
+    browserSession.setDevicePermissionHandler(() => false);
+    browserSession.setDisplayMediaRequestHandler((_request, callback) => callback({}));
+    browserSession.on("will-download", this.handleDownload);
+    browserSession.webRequest.onBeforeRequest((details, callback) => {
+      // A preview cannot load another source file in its storage partition,
+      // including through frames, redirects, workers, or background requests.
+      let cancel = false;
+      try {
+        cancel = new URL(details.url).origin === this.appOrigin() || !this.htmlPreviews.allowsRequest(details.url, sourceKey);
+      } catch {
+        cancel = true;
+      }
+      callback({ cancel });
+    });
+    return browserSession;
+  }
+
+  private sessionForURL(url: string): Session {
+    const sourceKey = this.htmlPreviews.sourceForURL(url);
+    if (sourceKey === undefined) return this.browserSession;
+    const partition = htmlPreviewPartition(this.appOrigin(), sourceKey);
+    let browserSession = this.previewSessions.get(partition);
+    if (!browserSession) {
+      browserSession = this.createSession(partition, sourceKey);
+      this.previewSessions.set(partition, browserSession);
+    }
+    return browserSession;
+  }
+
+  private create(id: string, url: string): Page {
     const view = new WebContentsView({
       webPreferences: {
-        session: this.browserSession,
+        session: this.sessionForURL(url),
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
@@ -302,10 +331,14 @@ export class NativeBrowserManager {
   }
   private closeAll(): void {
     for (const id of this.pages.keys()) this.close(id);
+    this.htmlPreviews.clear();
   }
   dispose(): void {
     this.browserSession.removeListener("will-download", this.handleDownload);
+    this.previewSessions.forEach((browserSession) => browserSession.removeListener("will-download", this.handleDownload));
+    this.previewSessions.clear();
     ipcMain.removeHandler(DesktopIPC.browserCommand);
     this.closeAll();
+    this.htmlPreviews.dispose();
   }
 }

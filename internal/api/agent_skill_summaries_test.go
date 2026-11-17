@@ -22,6 +22,7 @@ import (
 	"csgclaw/internal/participant"
 	"csgclaw/internal/runtimecatalog"
 	skillinstall "csgclaw/internal/skill/installstate"
+	skilllocal "csgclaw/internal/skill/local"
 	webui "csgclaw/web"
 )
 
@@ -49,6 +50,31 @@ func TestSkillSummariesBrowserFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(fmt.Sprintf("---\ndescription: Batch description %03d\n---\n# Body loaded only on demand\n", i)), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, record := range map[string]skillinstall.Record{
+		"skill-000": {Source: skillinstall.SourceMarket, Version: "v1.2.3"},
+		"skill-001": {Source: skillinstall.SourceLocal, Version: "2.4.0"},
+		"skill-002": {Source: skillinstall.SourceBuiltin, Version: strings.Repeat("a", 64)},
+	} {
+		if err := skillinstall.Update(layout.SkillsRoot, name, &record, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	globalRoot, err := skilllocal.SkillsRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"skill-000", "global-only"} {
+		if err := os.MkdirAll(filepath.Join(globalRoot, name), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(globalRoot, name, "SKILL.md"), []byte("---\ndescription: Global library copy\nversion: 9.9.9\n---\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := skillinstall.Update(globalRoot, name, &skillinstall.Record{Source: skillinstall.SourceMarket, Version: "9.9.9"}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -92,7 +118,7 @@ func TestAgentSkillSummariesThroughEngineHTTP(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if err := skillinstall.Update(layout.SkillsRoot, "skill-0007", &skillinstall.Record{Source: skillinstall.SourceMarket}, nil); err != nil {
+			if err := skillinstall.Update(layout.SkillsRoot, "skill-0007", &skillinstall.Record{Source: skillinstall.SourceMarket, Version: "v1.2.3"}, nil); err != nil {
 				t.Fatal(err)
 			}
 			engine := agentengine.New(controller)
@@ -110,7 +136,7 @@ func TestAgentSkillSummariesThroughEngineHTTP(t *testing.T) {
 			if len(items) != 1000 || items[0].Name != "skill-0000" || items[999].Description != "Skill 999" {
 				t.Fatalf("unexpected summaries: count=%d", len(items))
 			}
-			if items[0].Source != skillinstall.SourceUnknown || items[7].Source != skillinstall.SourceMarket {
+			if items[0].Source != skillinstall.SourceUnknown || items[7].Source != skillinstall.SourceMarket || items[7].Version != "v1.2.3" {
 				t.Fatalf("skill origins = %+v %+v", items[0], items[7])
 			}
 			if strings.Contains(w.Body.String(), "private-body-marker") || strings.Contains(w.Body.String(), layout.SkillsRoot) {
@@ -119,7 +145,7 @@ func TestAgentSkillSummariesThroughEngineHTTP(t *testing.T) {
 			paged := httptest.NewRecorder()
 			h.Routes().ServeHTTP(paged, httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-skills/skill-summaries?pagination=page&page=2&per=7", nil))
 			var page resourcePage[agentengine.SkillSummary]
-			if err := json.Unmarshal(paged.Body.Bytes(), &page); err != nil || paged.Code != http.StatusOK || len(page.Items) != 7 || page.Total != 1000 || page.Items[0].Name != "skill-0007" || page.Items[0].Source != skillinstall.SourceMarket || paged.Header().Get("ETag") == "" {
+			if err := json.Unmarshal(paged.Body.Bytes(), &page); err != nil || paged.Code != http.StatusOK || len(page.Items) != 7 || page.Total != 1000 || page.Items[0].Name != "skill-0007" || page.Items[0].Source != skillinstall.SourceMarket || page.Items[0].Version != "v1.2.3" || paged.Header().Get("ETag") == "" {
 				t.Fatalf("unexpected paged summaries: %d %s %v", paged.Code, paged.Body, err)
 			}
 			searched := httptest.NewRecorder()

@@ -1,0 +1,4 @@
+.logo {
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}

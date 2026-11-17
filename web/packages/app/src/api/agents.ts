@@ -269,6 +269,7 @@ export type AgentSkillSummary = {
   description?: string;
   error?: string;
   source?: string;
+  version?: string;
 };
 
 export function fetchAgentSkillSummaries(agentID: string, signal?: AbortSignal): Promise<AgentSkillSummary[]> {
@@ -353,7 +354,7 @@ export async function fetchAgentProfileModels(draft: AgentProfileModelRequest): 
     if (result.status !== "connected") {
       throw new Error(result.message || "Model provider check failed");
     }
-    return { models: result.models };
+    return { models: result.models ?? [], providerStatus: result.status };
   }
   return post("api/v1/agent-profiles/models", modelPayload(draft));
 }
@@ -626,6 +627,6 @@ export function restoreAgent(id: string): Promise<AgentLike> {
 export function fetchArchivedAgents(): Promise<AgentLike[]> {
   return get("api/v1/agents?archived=true&include_participants=true");
 }
-export function deleteArchivedAgent(id: string, name: string): Promise<void> {
+export function permanentlyDeleteAgent(id: string, name: string): Promise<void> {
   return del(`api/v1/agents/${encodeURIComponent(id)}`, { json: { name } });
 }

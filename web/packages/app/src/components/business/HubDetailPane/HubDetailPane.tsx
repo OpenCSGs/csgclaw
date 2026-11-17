@@ -1,3 +1,4 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { PanelEmptyState } from "@/components/business/PanelEmptyState";
 import { EntityPane } from "@/components/business/EntityDetail";
 import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
@@ -89,6 +90,7 @@ import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 import { RemoteMCPList } from "./RemoteMCPList";
 import { TemplateVersionHistory } from "./TemplateVersionHistory";
+import { TemplatePublishProgress } from "./TemplatePublishProgress";
 import styles from "./HubDetailPane.module.css";
 import skillResourceStyles from "./SkillResource.module.css";
 import mCPResourceStyles from "./MCPResource.module.css";
@@ -872,6 +874,12 @@ export function HubDetailPane({
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
   const [publishSuccessDialogOpen, setPublishSuccessDialogOpen] = useState(false);
   const [publishedTemplateID, setPublishedTemplateID] = useState("");
+  const [publishProgressState, setPublishProgressState] = useState<"idle" | "publishing" | "complete" | "failed">(
+    "idle",
+  );
+  const publishCompletionTimerRef = useRef<number | null>(null);
+  const isTemplatePublishing =
+    publishBusy || publishProgressState === "publishing" || publishProgressState === "complete";
   const publishSuccessURL = agenticHubCreateAgentURL(agenticHubSiteURL, publishedTemplate?.id || publishedTemplateID);
   const dismissPublishSuccess = () => {
     setPublishSuccessDialogOpen(false);
@@ -893,6 +901,12 @@ export function HubDetailPane({
     setShowKnowledgeBaseAddedAlert(false);
   }, [knowledgeBaseAdded]);
   const [showMCPAddedAlert, setShowMCPAddedAlert] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (publishCompletionTimerRef.current !== null) window.clearTimeout(publishCompletionTimerRef.current);
+    };
+  }, []);
   useEffect(() => {
     if (mcpAdded) {
       setShowMCPAddedAlert(true);
@@ -1279,11 +1293,24 @@ export function HubDetailPane({
       : t("agentPublishCommunity");
 
   async function handlePublishTemplate() {
-    const result = await onPublishTemplate?.(selectedTemplate, publishTemplateIncludeMemory);
-    if (result?.status === "success") {
+    if (isTemplatePublishing) return;
+    onResetPublishError?.();
+    setPublishProgressState("publishing");
+    try {
+      const result = await onPublishTemplate?.(selectedTemplate, publishTemplateIncludeMemory);
+      if (result?.status !== "success") {
+        setPublishProgressState("failed");
+        return;
+      }
       setPublishedTemplateID(String(result.template?.id || ""));
-      setPublishChoiceDialogOpen(false);
-      setPublishSuccessDialogOpen(true);
+      setPublishProgressState("complete");
+      publishCompletionTimerRef.current = window.setTimeout(() => {
+        setPublishProgressState("idle");
+        setPublishChoiceDialogOpen(false);
+        setPublishSuccessDialogOpen(true);
+      }, 420);
+    } catch (_) {
+      setPublishProgressState("failed");
     }
   }
 
@@ -1467,7 +1494,10 @@ export function HubDetailPane({
                             <BookOpen size={16} strokeWidth={2} />
                           </ResourceFeaturedIcon>
                           <span className={skillResourceStyles["hub-skill-card-copy"]}>
-                            <span className={skillResourceStyles["hub-skill-card-title"]}>{item.name}</span>
+                            <span className={skillResourceStyles["hub-skill-card-title"]}>
+                              {item.name}
+                              {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+                            </span>
                             <span className={skillResourceStyles["hub-skill-card-description"]}>
                               {item.description || item.name}
                             </span>
@@ -1591,6 +1621,7 @@ export function HubDetailPane({
                           <span className={skillResourceStyles["hub-skill-card-copy"]}>
                             <span className={skillResourceStyles["hub-skill-card-title"]}>
                               {template.display_name?.trim() || hubTemplateFullName(template)}
+                              {template.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
                               {listPublication ? (
                                 <StatusBadge kind="tag">
                                   {listPublication.publication?.revision
@@ -3039,7 +3070,7 @@ export function HubDetailPane({
         </DialogContent>
       </DialogRoot>
       <DialogRoot
-        open={publishSuccessDialogOpen || Boolean(publishedTemplate)}
+        open={publishSuccessDialogOpen || (Boolean(publishedTemplate) && publishProgressState !== "complete")}
         onOpenChange={(open) => {
           if (!open) dismissPublishSuccess();
         }}
@@ -3075,9 +3106,11 @@ export function HubDetailPane({
       <DialogRoot
         open={publishChoiceDialogOpen}
         onOpenChange={(open) => {
+          if (!open && isTemplatePublishing) return;
           setPublishChoiceDialogOpen(open);
           if (!open) {
             setPublishTemplateIncludeMemory(false);
+            setPublishProgressState("idle");
           }
         }}
       >
@@ -3090,7 +3123,7 @@ export function HubDetailPane({
               <DialogTitle>{t("agentPublishTemplateTitle")}</DialogTitle>
               <DialogDescription>{t("templatePublishCommunitySubtitle")}</DialogDescription>
             </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" disabled={isTemplatePublishing} />
           </DialogHeader>
           <DialogBody className={templateResourceStyles["hub-template-publish-body"]}>
             <section
@@ -3131,6 +3164,7 @@ export function HubDetailPane({
                   <Checkbox
                     aria-label={t("agentPublishIncludeMemory")}
                     checked={publishTemplateIncludeMemory}
+                    disabled={isTemplatePublishing}
                     onCheckedChange={(checked) => setPublishTemplateIncludeMemory(checked === true)}
                   />
                   <span>
@@ -3147,16 +3181,27 @@ export function HubDetailPane({
               </details>
             ) : null}
           </DialogBody>
-          {publishError ? (
+          {publishError && !isTemplatePublishing ? (
             <InlineError className={templateResourceStyles["hub-template-publish-error"]} role="alert">
               <span className="whitespace-pre-wrap break-words">{publishError}</span>
             </InlineError>
           ) : null}
-          <DialogFooter>
+          <DialogFooter className={templateResourceStyles["hub-template-publish-footer"]}>
+            <TemplatePublishProgress
+              active={publishProgressState === "publishing" || publishBusy}
+              complete={publishProgressState === "complete"}
+              failed={publishProgressState === "failed"}
+              labels={{
+                preparing: t("templatePublishPreparing"),
+                uploading: t("templatePublishUploading"),
+                complete: t("templatePublishCompleted"),
+                failed: t("templatePublishFailed"),
+              }}
+            />
             <Button
               variant="secondaryGray"
               size="md"
-              disabled={publishBusy}
+              disabled={isTemplatePublishing}
               onClick={() => setPublishChoiceDialogOpen(false)}
             >
               {t("cancel")}
@@ -3164,14 +3209,14 @@ export function HubDetailPane({
             <Button
               variant="primary"
               size="md"
-              loading={publishBusy}
-              loadingLabel={t("agentPublishing")}
-              disabled={publishBusy}
+              disabled={isTemplatePublishing}
               onClick={() => void handlePublishTemplate()}
             >
-              {templateVersionLabel(selectedTemplate)
-                ? t("templatePublishVersionAction", { version: publishVersionLabel })
-                : t("agentPublishCommunityTemplateOnly")}
+              {isTemplatePublishing
+                ? t("agentPublishing")
+                : templateVersionLabel(selectedTemplate)
+                  ? t("templatePublishVersionAction", { version: publishVersionLabel })
+                  : t("agentPublishCommunityTemplateOnly")}
             </Button>
           </DialogFooter>
         </DialogContent>

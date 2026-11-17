@@ -301,4 +301,4 @@ release: build-web
 	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh windows amd64
 
 clean:
-	rm -rf $(BIN_DIR) $(DIST_DIR) $(GOCACHE)
+	rm -rf $(BIN_DIR) $(DIST_DIR) $(GOCACHE) $(addprefix $(dir $(abspath $(BIN_DIR))),codex-resources codex-path codex-package.json)

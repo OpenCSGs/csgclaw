@@ -34,7 +34,7 @@ func TestVideoDeliveryFailureReplacesDownloadingStatus(t *testing.T) {
 		}
 		return nil
 	})}
-	err := conversation.generateVideo(context.Background(), turn, sink, contract.VideoGenerationTask{ID: "video-call", Prompt: "kitten"})
+	err := conversation.generateVideo(context.Background(), turn, sink, contract.VideoGenerationTask{ID: "video-call", Prompt: "kitten"}, nil)
 	if err == nil || completedAttempts != 3 {
 		t.Fatalf("error/attempts = %v/%d", err, completedAttempts)
 	}
@@ -106,5 +106,55 @@ func TestVideoTimingPreservesStartOnRecoveryAndEndsOnFailure(t *testing.T) {
 	end, err := time.Parse(time.RFC3339Nano, tasks[1].EndedAt)
 	if err != nil || time.Since(end) > time.Second {
 		t.Fatalf("missing terminal timestamp: %+v", tasks[1])
+	}
+}
+
+func TestVideoHandlerKeepsReferenceAfterTurnInputCleanup(t *testing.T) {
+	ctx := context.Background()
+	data := []byte("\x89PNG\r\n\x1a\nfixture")
+	file, err := contract.NewOutputFile(ctx, contract.OutputFileMetadata{
+		Name: "first-frame.png", MediaType: "image/png", SizeBytes: int64(len(data)),
+	}, bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Cleanup()
+
+	inputReleased := make(chan struct{})
+	completed := make(chan contract.VideoGenerationTask, 1)
+	engine := &Engine{files: NewFileStore(), generateVideo: func(_ context.Context, _ *modelprovider.VideoGenerationConfig, _ string, options modelprovider.VideoGenerationOptions) (modelprovider.GeneratedVideo, error) {
+		<-inputReleased
+		if options.Reference == nil || options.Reference.Name != "first-frame.png" || !bytes.Equal(options.Reference.Data, data) {
+			return modelprovider.GeneratedVideo{}, errors.New("first frame was lost after input cleanup")
+		}
+		return modelprovider.GeneratedVideo{Content: io.NopCloser(bytes.NewReader([]byte("video"))), SizeBytes: 5, MediaType: "video/mp4"}, nil
+	}}
+	conversation := &conversations{engine: engine, agentID: "agent-video"}
+	turn := &activeTurn{agentID: "agent-video", request: TurnRequest{ID: "turn-video", ConversationKey: "room-video"}}
+	defer engine.files.DeleteTurn("agent-video", "room-video", "turn-video")
+	sink := contract.MediaGenerationSink{EventSink: EventSinkFunc(func(_ context.Context, event TurnEvent) error {
+		task := event.Output.Payload.(contract.VideoGenerationTask)
+		if task.State == "completed" || task.State == "failed" {
+			completed <- task
+		}
+		return nil
+	})}
+	handler := conversation.videoHandler(turn, sink, nil, []InputPart{{Kind: InputPartFile, File: &InputFile{ID: file.ID, Resolved: file}}})
+	if err := handler(ctx, "call-video", "animate", modelprovider.VideoGenerationOptions{}, 2); err == nil {
+		t.Fatal("accepted an out-of-range reference")
+	}
+	if err := handler(ctx, "call-video", "animate", modelprovider.VideoGenerationOptions{}, 1); err != nil {
+		t.Fatal(err)
+	}
+	file.Cleanup()
+	close(inputReleased)
+
+	select {
+	case task := <-completed:
+		if task.State != "completed" || task.File == nil {
+			t.Fatalf("video task = %+v", task)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("video task did not finish")
 	}
 }

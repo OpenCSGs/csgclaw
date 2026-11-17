@@ -1,0 +1,1 @@
+export { FooterFoundations } from "./FooterFoundations";

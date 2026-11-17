@@ -16,13 +16,14 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/modelcap"
 	agentruntime "csgclaw/internal/runtime"
 )
 
 // Exercises the bundled process, real Responses transport and event subscription.
 func TestContextUsageBundledCodexE2E(t *testing.T) {
-	for _, mode := range []string{"diagnostics", "usage", "auto_compact", "overflow", "cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure"} {
+	for _, mode := range []string{"diagnostics", "usage", "manual_compact", "auto_compact", "overflow", "cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure"} {
 		t.Run(mode, func(t *testing.T) { testContextBundledCodex(t, mode) })
 	}
 }
@@ -66,6 +67,15 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
+		}
+		if mode == "diagnostics" {
+			items, _ := body["input"].([]any)
+			for _, item := range items {
+				m, _ := item.(map[string]any)
+				if m["type"] == "function_call_output" {
+					t.Logf("native tool result: %v", m["output"])
+				}
+			}
 		}
 		input, _ := json.Marshal(body["input"])
 		if strings.Count(string(input), "CSG_CONTEXT_SENTINEL") > 1 {
@@ -125,7 +135,11 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	thread, err := rt.EnsureEngineSession(ctx, h.RuntimeID, "room:test")
+	conversationBinding := "room:test"
+	if mode == "manual_compact" {
+		conversationBinding = "csgclaw-memory:managed-v2-fixture:room:test"
+	}
+	thread, err := rt.EnsureEngineSession(ctx, h.RuntimeID, conversationBinding)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,6 +280,9 @@ func testContextBundledCodex(t *testing.T, mode string) {
 			if !ok {
 				t.Fatal("event stream closed")
 			}
+			if mode == "diagnostics" && e.Kind == SessionEventToolCallUpdate && e.ToolKind == "exec_command" {
+				t.Logf("native shell status=%s output=%s", e.ToolStatus, e.ToolOutputSummary)
+			}
 			if e.Kind == SessionEventToolCallUpdate && e.ToolKind == "exec_command" && e.ToolStatus == "completed" {
 				successfulCommand = true
 			}
@@ -307,6 +324,27 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	}
 	if mode == "sol61_history" && (sawCompaction || requests.Load() != 2) {
 		t.Fatalf("premature GPT-6.1 Sol compaction at 383k usage: %+v, calls=%d", latest, requests.Load())
+	}
+
+	if mode == "manual_compact" {
+		calls := requests.Load()
+		result, err := rt.Conversation(h.RuntimeID).(contract.ConversationCompactor).Compact(ctx, contract.CompactRequest{ConversationKey: "room:test", Usage: latest})
+		if err != nil || result.Status != "completed" {
+			t.Fatalf("manual compaction: %+v %v", result, err)
+		}
+		if result.Usage == nil || result.Usage.UsedTokens == nil || !result.Usage.Estimated || result.Usage.Compacting {
+			t.Fatalf("manual compaction lost native occupancy: %+v", result.Usage)
+		}
+		if requests.Load() != calls+1 {
+			t.Fatalf("manual compaction accidentally started a normal turn: %d -> %d", calls, requests.Load())
+		}
+		if err := rt.Prompt(ctx, h.RuntimeID, thread, "Continue after manual compaction."); err != nil {
+			t.Fatal(err)
+		}
+		saved, ok, err := rt.ExistingEngineSession(ctx, h.RuntimeID, conversationBinding)
+		if err != nil || !ok || saved != thread {
+			t.Fatalf("manual compaction changed session: %s %v", saved, err)
+		}
 	}
 	t.Logf("requests=%d compaction=%v used=%d capacity=%d", requests.Load(), sawCompaction, *latest.UsedTokens, latest.ContextWindow)
 }

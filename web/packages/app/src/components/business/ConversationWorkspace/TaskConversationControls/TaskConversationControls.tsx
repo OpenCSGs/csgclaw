@@ -1,3 +1,4 @@
+import { conversationCompacting } from "@/models/contextCompaction";
 import { useNavigate } from "react-router-dom";
 import { pathForNewCloudTask } from "@/models/routing";
 import { hasPendingCloudTask } from "@/models/cloudTasks";
@@ -5,10 +6,11 @@ import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui";
-import { ContextUsageRing, type ConversationWorkingParticipant } from "@/components/business/ConversationPane";
+import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import { resolveAgentChannelUserID, type AgentLike } from "@/models/agents";
 import { isEventMessage, isToolCallMessage, type IMConversation, type TranslateFn } from "@/models/conversations";
 import styles from "./TaskConversationControls.module.css";
+import { ConversationContextUsage } from "./ConversationContextUsage";
 import { TaskConfigurationToolbar } from "@/components/business/TaskConfigurationToolbar";
 
 export function TaskConversationControls({
@@ -18,6 +20,8 @@ export function TaskConversationControls({
   t,
   onNewTask,
   cloudSendDisabled = false,
+  onCompactingChange,
+  onCompactionAccepted,
 }: {
   conversation: IMConversation;
   participants: ConversationWorkingParticipant[];
@@ -25,6 +29,8 @@ export function TaskConversationControls({
   t: TranslateFn;
   onNewTask?: (agentID?: string, configuration?: TaskConfiguration) => void;
   cloudSendDisabled?: boolean;
+  onCompactingChange?: (busy: boolean) => void;
+  onCompactionAccepted?: () => void;
 }) {
   const controller = useOptionalWorkspaceControllerContext();
   const entry = controller?.taskEntry;
@@ -42,11 +48,17 @@ export function TaskConversationControls({
           agent={agent}
           showModel={Boolean(agent && conversation.is_direct)}
           showDirectory={Boolean(
-            conversation.is_direct || (conversation.type === "on_demand" && conversation.configuration?.workspace_dir),
+            conversation.is_direct ||
+            (["on_demand", "autonomous"].includes(conversation.type || "") &&
+              conversation.configuration?.workspace_dir),
           )}
           configuration={conversation.configuration}
           directoryLocked
-          disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}
+          disabled={
+            conversationCompacting(conversation) ||
+            entry?.isWorking(conversation.id) ||
+            entry?.busyID === conversation.id
+          }
           onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
         />
       ) : null}
@@ -57,7 +69,12 @@ export function TaskConversationControls({
           t={t}
         />
       ) : null}
-      {onNewTask && !conversation.cloud_agent && hasChatMessages ? (
+      {conversation.type === "autonomous" && conversation.autonomous_state?.paused ? (
+        <span role="status" className="text-sm text-[var(--muted)]">
+          {t("autonomousPaused")}
+        </span>
+      ) : null}
+      {onNewTask && !conversation.cloud_agent && conversation.type !== "autonomous" && hasChatMessages ? (
         <Button
           variant="tertiaryGray"
           size="sm"
@@ -70,19 +87,15 @@ export function TaskConversationControls({
           {t("taskEntryNew")}
         </Button>
       ) : null}
-      {!conversation.cloud_agent &&
-        participants
-          .filter((participant) => participant.showContextUsage || participant.contextUsage)
-          .map((participant) => (
-            <span
-              key={participant.leaseID || participant.id || participant.name}
-              className={styles.usage}
-              title={participant.name}
-            >
-              <small>{conversation.is_direct ? "" : participant.name}</small>
-              <ContextUsageRing usage={participant.contextUsage} t={t} />
-            </span>
-          ))}
+      <ConversationContextUsage
+        key={`usage:${conversation.id}`}
+        onCompactingChange={onCompactingChange}
+        onCompactionAccepted={onCompactionAccepted}
+        conversation={conversation}
+        participants={participants}
+        agents={agents}
+        t={t}
+      />
     </div>
   );
 }

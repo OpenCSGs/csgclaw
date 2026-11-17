@@ -27,6 +27,24 @@ describe("RemoteMCPList", () => {
     expect(screen.getByRole("button", { name: "resourcesMCPRemoteServersRefresh" })).toBeDisabled();
   });
 
+  it("labels recommended MCP servers without changing their order", () => {
+    render(
+      <RemoteMCPList
+        {...baseProps}
+        error=""
+        items={[
+          { id: "z", name: "Zulu", description: "First server", url: "", recommended: false },
+          { id: "a", name: "Alpha", description: "Second server", url: "", recommended: true },
+        ]}
+      />,
+    );
+    const first = screen.getByText("Zulu");
+    const second = screen.getByText("Alpha");
+    const badge = screen.getByText("resourceRecommended");
+    expect(first.compareDocumentPosition(second)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(second.parentElement).toContainElement(badge);
+  });
+
   it("renders errors with alert semantics and danger styling", () => {
     render(<RemoteMCPList {...baseProps} />);
 

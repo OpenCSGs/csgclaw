@@ -195,15 +195,16 @@ describe("agent overview team navigation", () => {
     );
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "全部 3" }));
-    const selected = screen.getByRole("button", { name: /回归团队 1/ });
+    const list = within(document.getElementById("agent-overview-list")!);
+    const selected = list.getByRole("button", { name: /回归团队 1/ });
     expect(selected).toHaveAttribute("aria-current", "true");
-    const agent = () => screen.getByRole("button", { name: /测试智能体/ });
+    const agent = () => list.getByRole("button", { name: /测试智能体/ });
     await user.click(within(agent().parentElement!).getByRole("button", { name: "置顶" }));
 
-    const heading = screen.getByRole("button", { name: "置顶", expanded: true });
+    const heading = list.getByRole("button", { name: "置顶", expanded: true });
     await user.click(heading);
     expect(heading).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("button", { name: /测试智能体/ })).not.toBeInTheDocument();
+    expect(list.queryByRole("button", { name: /测试智能体/ })).not.toBeInTheDocument();
     expect(selected).toBeVisible();
 
     await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "测试");
@@ -222,14 +223,24 @@ describe("agent overview team navigation", () => {
       </MemoryRouter>,
     );
     const user = userEvent.setup();
-    for (const name of [/测试智能体/, /回归团队 1/, /回归团队 2/, /测试智能体/, /^Back$/, /^Forward$/]) {
-      await user.click(screen.getByRole("button", { name }));
-      expect(screen.getByRole("button", { name: "全部 3" })).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: /测试智能体/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /回归团队 1/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /回归团队 2/ })).toBeVisible();
+    for (const [name, path] of [
+      [/测试智能体/, "/agents/agent-worker"],
+      [/回归团队 1/, "/teams/team-1"],
+      [/回归团队 2/, "/teams/team-2"],
+      [/测试智能体/, "/agents/agent-worker"],
+      [/^Back$/, "/teams/team-2"],
+      [/^Forward$/, "/agents/agent-worker"],
+    ] as const) {
+      const list = within(document.getElementById("agent-overview-list")!);
+      const controls = name.source === "^Back$" || name.source === "^Forward$" ? screen : list;
+      await user.click(controls.getByRole("button", { name }));
+      await waitFor(() => expect(screen.getByLabelText("Current URL")).toHaveTextContent(path));
+      expect(list.getByRole("button", { name: "全部 3" })).toHaveAttribute("aria-pressed", "true");
+      expect(list.getByRole("button", { name: /测试智能体/ })).toBeVisible();
+      expect(list.getByRole("button", { name: /回归团队 1/ })).toBeVisible();
+      expect(list.getByRole("button", { name: /回归团队 2/ })).toBeVisible();
     }
-    expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents/agent-worker");
+    await waitFor(() => expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents/agent-worker"));
   });
 
   it("keeps the team filter and search when selecting another result", async () => {
@@ -518,6 +529,28 @@ describe("agent overview guidance and template loading", () => {
   });
 });
 
+it("keeps local templates first and remote templates in catalog order after pinning", async () => {
+  vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(
+    queryState({
+      data: [
+        { id: "alice/z", name: "Zulu", namespace: "alice", source: { kind: "remote" } },
+        { id: "alice/a", name: "Alpha", namespace: "alice", source: { kind: "remote" } },
+        { id: "local.worker", name: "Local worker", role: "worker", source: { kind: "local" } },
+      ],
+    }),
+  );
+  const user = userEvent.setup();
+  render(<Page username="alice" />);
+  await user.click(screen.getByRole("button", { name: "我的 3" }));
+  const local = screen.getByRole("button", { name: "Local worker" });
+  const zulu = screen.getByRole("button", { name: /Zulu 云端/ });
+  const alpha = screen.getByRole("button", { name: /Alpha 云端/ });
+  await user.click(within(alpha.parentElement!).getByRole("button", { name: "置顶" }));
+  expect(within(alpha.parentElement!).getByRole("button", { name: "取消置顶" })).toBeVisible();
+  expect(local.compareDocumentPosition(zulu)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(zulu.compareDocumentPosition(alpha)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+});
+
 it("moves the signed-in user's community templates to My templates with a cloud tag", async () => {
   const remote = (namespace: string): HubTemplate => ({
     id: `${namespace}/worker`,
@@ -795,6 +828,45 @@ describe("cloud agent plaza", () => {
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState());
   });
   afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
+
+  it("refreshes the displayed agent's availability while the plaza stays open", async () => {
+    vi.useFakeTimers();
+    const agent = cloudAgentFixture[0];
+    let status: "online" | "offline" = "online";
+    vi.mocked(fetchRelayCatalog).mockImplementation(async (_signal, _target, ids) =>
+      ids?.length ? [{ ...agent, status }] : [{ ...agent, status: "offline" }],
+    );
+    const view = render(<Page route="/agents?tab=plaza" username="alice" />);
+    try {
+      await act(() => vi.advanceTimersByTimeAsync(100));
+      await act(() => vi.advanceTimersByTimeAsync(100));
+      expect(screen.getByText("在线")).toBeVisible();
+
+      status = "offline";
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(screen.getByText("离线")).toBeVisible();
+
+      status = "online";
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(screen.getByText("在线")).toBeVisible();
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the community order and labels only recommended agents", async () => {
+    const base = cloudAgentFixture[0];
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([
+      { ...base, id: "z-first", name: "Zulu", recommended: false },
+      { ...base, id: "a-second", name: "Alpha", recommended: true },
+    ]);
+    render(<Page route="/agents?tab=plaza" username="alice" />);
+    const first = await screen.findByRole("heading", { name: "Zulu" });
+    const second = screen.getByRole("heading", { name: /Alpha.*推荐/ });
+    expect(first.compareDocumentPosition(second)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getAllByText("推荐")).toHaveLength(1);
+  });
 
   it("includes the complete cloud description in the profile body", async () => {
     const description = "第一段：" + "完整的云端智能体说明。".repeat(15) + "\n第二段：保留换行和结尾。";

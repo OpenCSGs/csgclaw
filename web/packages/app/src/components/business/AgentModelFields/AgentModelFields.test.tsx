@@ -36,6 +36,26 @@ test("provider changes choose its first model and OpenCSG authentication can blo
   expect(onPatch).toHaveBeenCalledWith({ provider: "api", model_provider_id: "custom", model_id: "first" });
 });
 
+test("waits for discovery when switching providers in an agent profile", async () => {
+  const user = userEvent.setup();
+  const onPatch = vi.fn();
+  render(
+    <AgentModelFields
+      providerOptions={providers}
+      providerID="custom"
+      modelID="first"
+      models={["first", "second"]}
+      deferModelSelection
+      onPatch={onPatch}
+      onRequireOpenCSGAuth={() => true}
+      t={t}
+    />,
+  );
+  await user.click(screen.getByRole("combobox", { name: t("profileModelProvider") }));
+  await user.click(screen.getByRole("option", { name: /OpenCSG/ }));
+  expect(onPatch).toHaveBeenCalledWith({ provider: "csghub", model_provider_id: "opencsg", model_id: "" });
+});
+
 test("model choices follow the selected provider when switching in both directions", async () => {
   const user = userEvent.setup();
   const onPatch = vi.fn();
@@ -80,7 +100,7 @@ test("model choices follow the selected provider when switching in both directio
   expect(screen.queryByRole("option", { name: /cloud-model/ })).not.toBeInTheDocument();
 });
 
-test("目录以外的模板模型保持显示并允许用户选择其他模型", async () => {
+test("保留目录以外的模板模型值，只提供目录中的模型选项", async () => {
   const user = userEvent.setup();
   const onPatch = vi.fn();
   render(
@@ -97,7 +117,7 @@ test("目录以外的模板模型保持显示并允许用户选择其他模型",
   const model = screen.getByRole("combobox", { name: t("profileModel") });
   expect(model).toHaveTextContent("template-model");
   await user.click(model);
-  expect(screen.getByRole("option", { name: /template-model/ })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByRole("option", { name: /template-model/ })).not.toBeInTheDocument();
   await user.click(screen.getByRole("option", { name: /second/ }));
   expect(onPatch).toHaveBeenLastCalledWith({ provider: "api", model_provider_id: "custom", model_id: "second" });
 });

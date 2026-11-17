@@ -32,14 +32,21 @@ type Worker struct {
 	cancel  context.CancelFunc
 	done    chan struct{}
 
-	mu         sync.Mutex
-	stopped    bool
-	queued     map[string]struct{}
-	latest     map[string]string
-	seen       *state.SeenWindow
-	processing map[string]struct{}
-	active     map[agentengine.ConversationKey]map[string]context.CancelFunc
-	generation map[agentengine.ConversationKey]uint64
+	mu            sync.Mutex
+	stopped       bool
+	queued        map[string]struct{}
+	notifications map[agentengine.ConversationKey]string
+	latest        map[string]string
+	seen          *state.SeenWindow
+	processing    map[string]struct{}
+	active        map[agentengine.ConversationKey]map[string]activeEvent
+	generation    map[agentengine.ConversationKey]uint64
+}
+
+type activeEvent struct {
+	cancel context.CancelFunc
+	unread chan struct{}
+	event  channel.Event
 }
 
 type queuedEvent struct {
@@ -59,17 +66,18 @@ func NewWorker(adapter *execution.Adapter, binding channel.Binding) (*Worker, er
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	w := &Worker{
-		adapter:    adapter,
-		binding:    binding,
-		queue:      make(chan queuedEvent, defaultQueueSize),
-		queued:     make(map[string]struct{}),
-		latest:     make(map[string]string),
-		seen:       state.NewSeenWindow(defaultSeenWindow),
-		processing: make(map[string]struct{}),
-		active:     make(map[agentengine.ConversationKey]map[string]context.CancelFunc),
-		generation: make(map[agentengine.ConversationKey]uint64),
-		cancel:     cancel,
-		done:       make(chan struct{}),
+		adapter:       adapter,
+		binding:       binding,
+		queue:         make(chan queuedEvent, defaultQueueSize),
+		queued:        make(map[string]struct{}),
+		notifications: make(map[agentengine.ConversationKey]string),
+		latest:        make(map[string]string),
+		seen:          state.NewSeenWindow(defaultSeenWindow),
+		processing:    make(map[string]struct{}),
+		active:        make(map[agentengine.ConversationKey]map[string]activeEvent),
+		generation:    make(map[agentengine.ConversationKey]uint64),
+		cancel:        cancel,
+		done:          make(chan struct{}),
 	}
 	go w.run(ctx)
 	return w, nil
@@ -115,13 +123,11 @@ func (w *Worker) Close(ctx context.Context) error {
 		w.stopped = true
 		w.cancel()
 		for _, turns := range w.active {
-			for _, cancel := range turns {
-				if cancel != nil {
-					cancel()
-				}
+			for _, turn := range turns {
+				turn.cancel()
 			}
 		}
-		w.active = make(map[agentengine.ConversationKey]map[string]context.CancelFunc)
+		w.active = make(map[agentengine.ConversationKey]map[string]activeEvent)
 	}
 	w.mu.Unlock()
 	select {
@@ -152,7 +158,7 @@ func (w *Worker) IsCurrent(key agentengine.ConversationKey, sourceMessageID stri
 func (w *Worker) run(ctx context.Context) {
 	defer close(w.done)
 	pending := make([]queuedEvent, 0, defaultQueueSize)
-	activeScopes := make(map[agentengine.ConversationKey]struct{})
+	activeScopes := make(map[agentengine.ConversationKey]queuedEvent)
 	completed := make(chan agentengine.ConversationKey, defaultConcurrentScopes)
 	var handlers sync.WaitGroup
 	defer handlers.Wait()
@@ -175,7 +181,7 @@ func (w *Worker) run(ctx context.Context) {
 			}
 			item := pending[index]
 			pending = append(pending[:index], pending[index+1:]...)
-			activeScopes[item.conversationKey] = struct{}{}
+			activeScopes[item.conversationKey] = item
 			w.beginProcessing(item.dedupeKey)
 			handlers.Add(1)
 			go func() {
@@ -217,7 +223,11 @@ func (w *Worker) handle(ctx context.Context, item queuedEvent) {
 		return
 	}
 	turnCtx, cancel := context.WithCancel(diagnostics.WithRecord(ctx, item.diagnostic))
-	if !w.setActive(item, cancel) {
+	turn := activeEvent{cancel: cancel}
+	if item.event.NotificationOnly {
+		turn.unread = make(chan struct{}, 1)
+	}
+	if !w.setActive(item, turn) {
 		item.diagnostic.Finish("canceled")
 		cancel()
 		return
@@ -236,6 +246,7 @@ func (w *Worker) handle(ctx context.Context, item queuedEvent) {
 	if item.event.TaskID != "" {
 		slog.InfoContext(turnCtx, "room task Agent turn starting", attrs...)
 	}
+	turnCtx = w.adapter.WithUnreadSignal(turnCtx, w.binding, item.event, turn.unread)
 	outcome, err := w.adapter.Handle(turnCtx, w.binding, item.event)
 	attrs = append(attrs, "turn_id", outcome.Turn.TurnID, "duration", time.Since(start), "turn_status", outcome.Result.Status)
 	if item.event.TaskID != "" {
@@ -282,6 +293,13 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 	if _, ok := w.processing[key]; ok {
 		return queuedEvent{}, false, nil
 	}
+	if event.NotificationOnly && w.notifications[conversationKey] != "" {
+		w.seen.Add(key)
+		w.latest[string(conversationKey)] = w.notifications[conversationKey]
+		w.signalUnreadLocked(conversationKey)
+		w.signalRelatedUnreadLocked(event)
+		return queuedEvent{}, false, nil
+	}
 	if len(w.queued) >= defaultQueueSize {
 		return queuedEvent{}, false, fmt.Errorf("binding worker queue is full")
 	}
@@ -299,7 +317,15 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 	select {
 	case w.queue <- item:
 		w.generation[conversationKey] = generation
+		if execution.Classify(event) == "reset" {
+			delete(w.notifications, conversationKey)
+		}
 		w.queued[key] = struct{}{}
+		if event.NotificationOnly {
+			w.notifications[conversationKey] = key
+			w.signalUnreadLocked(conversationKey)
+			w.signalRelatedUnreadLocked(event)
+		}
 		w.latest[string(conversationKey)] = key
 		return item, true, nil
 	default:
@@ -318,6 +344,11 @@ func (w *Worker) isCurrentGeneration(item queuedEvent) bool {
 func (w *Worker) discardQueued(key string) {
 	w.mu.Lock()
 	delete(w.queued, key)
+	for scope, source := range w.notifications {
+		if source == key {
+			delete(w.notifications, scope)
+		}
+	}
 	w.seen.Add(key)
 	w.mu.Unlock()
 }
@@ -325,6 +356,11 @@ func (w *Worker) discardQueued(key string) {
 func (w *Worker) beginProcessing(key string) {
 	w.mu.Lock()
 	delete(w.queued, key)
+	for scope, source := range w.notifications {
+		if source == key {
+			delete(w.notifications, scope)
+		}
+	}
 	w.processing[key] = struct{}{}
 	w.mu.Unlock()
 }
@@ -336,17 +372,58 @@ func (w *Worker) finishProcessing(key string) {
 	w.mu.Unlock()
 }
 
-func (w *Worker) setActive(item queuedEvent, cancel context.CancelFunc) bool {
+func (w *Worker) setActive(item queuedEvent, turn activeEvent) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.generation[item.conversationKey] != item.generation {
 		return false
 	}
 	if w.active[item.conversationKey] == nil {
-		w.active[item.conversationKey] = make(map[string]context.CancelFunc)
+		w.active[item.conversationKey] = make(map[string]activeEvent)
 	}
-	w.active[item.conversationKey][item.dedupeKey] = cancel
+	turn.event = item.event
+	w.active[item.conversationKey][item.dedupeKey] = turn
+	if w.notifications[item.conversationKey] != "" {
+		w.signalUnreadLocked(item.conversationKey)
+	}
+	if item.event.NotificationOnly && item.event.ThreadRootID == "" {
+		topic := item.event
+		topic.ThreadRootID = item.event.MessageID
+		if key, err := conv.ConversationKey(w.binding, topic); err == nil && w.notifications[key] != "" {
+			signalUnread(turn)
+		}
+	}
 	return true
+}
+
+func (w *Worker) signalUnreadLocked(key agentengine.ConversationKey) {
+	for _, turn := range w.active[key] {
+		signalUnread(turn)
+	}
+}
+
+func (w *Worker) signalRelatedUnreadLocked(topic channel.Event) {
+	if topic.ThreadRootID == "" {
+		return
+	}
+	main := topic
+	main.ThreadRootID = ""
+	key, err := conv.ConversationKey(w.binding, main)
+	if err != nil {
+		return
+	}
+	for _, turn := range w.active[key] {
+		if relatedUnreadTopic(turn.event, topic) {
+			signalUnread(turn)
+		}
+	}
+}
+
+func signalUnread(turn activeEvent) {
+	select {
+	case turn.unread <- struct{}{}:
+	default:
+	}
 }
 
 func (w *Worker) clearActive(key agentengine.ConversationKey, sourceMessageID string) {
@@ -368,20 +445,30 @@ func (w *Worker) cancelConversation(key agentengine.ConversationKey) {
 	turns := w.active[key]
 	delete(w.active, key)
 	w.mu.Unlock()
-	for _, cancel := range turns {
-		if cancel != nil {
-			cancel()
-		}
+	for _, turn := range turns {
+		turn.cancel()
 	}
 }
 
-func nextDispatchable(pending []queuedEvent, active map[agentengine.ConversationKey]struct{}) int {
+func nextDispatchable(pending []queuedEvent, active map[agentengine.ConversationKey]queuedEvent) int {
+next:
 	for index, item := range pending {
-		if _, busy := active[item.conversationKey]; !busy {
-			return index
+		if _, busy := active[item.conversationKey]; busy {
+			continue
 		}
+		for _, running := range active {
+			if relatedUnreadTopic(running.event, item.event) || relatedUnreadTopic(item.event, running.event) {
+				continue next
+			}
+		}
+		return index
 	}
 	return -1
+}
+
+func relatedUnreadTopic(main, topic channel.Event) bool {
+	return main.NotificationOnly && topic.NotificationOnly && main.RoomID == topic.RoomID &&
+		main.ThreadRootID == "" && topic.ThreadRootID != "" && topic.ThreadRootID == main.MessageID
 }
 
 func eventDedupKey(event channel.Event) string {

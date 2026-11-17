@@ -67,6 +67,50 @@ func chatIdentityRequest(t *testing.T, h *Handler, method, path, body string, wa
 	return rec
 }
 
+func TestLegacyNotifierChatIdentity(t *testing.T) {
+	engine := enginetest.NewMemoryClient(agentengine.Agent{
+		ID: "agent-alerts",
+		Spec: agentengine.AgentSpec{
+			Name: "Alerts", Role: agentengine.AgentRoleWorker,
+			Runtime: agentengine.RuntimeSpec{Adapter: "notifier"},
+		},
+	})
+	chat := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{
+		{ID: "user-alerts", Name: "Alerts", Role: "worker"},
+		{ID: "user-bound", Name: "Bound Alerts", Role: "worker"},
+	}})
+	h := NewHandler(AgentServices{}, engine, chat, nil, nil, nil, nil)
+	for _, tc := range []struct {
+		id   string
+		want bool
+	}{
+		{id: "user-alerts", want: true},
+		{id: "user-bound"},
+	} {
+		user, _ := chat.User(tc.id)
+		if user.LegacyNotifier != tc.want {
+			t.Fatalf("User(%q).LegacyNotifier = %v, want %v", tc.id, user.LegacyNotifier, tc.want)
+		}
+	}
+
+	store, err := participant.NewStore(filepath.Join(t.TempDir(), "participants.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(participant.Participant{
+		ID: "pt-bound", Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent,
+		AgentID: "agent-alerts", ChannelUserRef: "user-bound", ChannelUserKind: participant.ChannelUserKindLocalUserID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.participant = participant.NewService(store)
+	bound, _ := chat.User("user-bound")
+	unrelated, _ := chat.User("user-alerts")
+	if !bound.LegacyNotifier || unrelated.LegacyNotifier {
+		t.Fatalf("legacy notifier flags after binding: bound=%v same-suffix=%v", bound.LegacyNotifier, unrelated.LegacyNotifier)
+	}
+}
+
 func TestIndependentChatIdentityLifecycleHTTP(t *testing.T) {
 	h, imPath, participantPath := independentChatIdentityHandler(t)
 	var impact agentArchiveImpact

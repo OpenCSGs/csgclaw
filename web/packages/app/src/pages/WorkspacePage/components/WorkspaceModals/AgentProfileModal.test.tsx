@@ -149,7 +149,7 @@ describe("AgentProfileModal", () => {
     await user.click(screen.getByRole("button", { name: "Create from template" }));
     await user.click(screen.getByRole("button", { name: "editAvatar" }));
     const avatar = screen.getByRole("dialog", { name: "editAvatar" });
-    await user.click(within(avatar).getByRole("button", { name: "confirm" }));
+    await user.click(within(avatar).getByRole("button", { name: "avatarApply" }));
     expect(screen.queryByRole("dialog", { name: "editAvatar" })).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "createAgentTitle" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /editAvatar/ }));

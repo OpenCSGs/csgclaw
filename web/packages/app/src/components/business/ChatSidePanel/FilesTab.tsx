@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, RefreshCw } from "lucide-react";
 import { attachmentCapability, fetchWorkspaceDirectory, filePreviewItem } from "@/api/chatFiles";
-import { errorMessage } from "@/api/client";
+import { apiErrorCode } from "@/api/client";
 import { Breadcrumb, Button, Select, TextInput, Tooltip } from "@/components/ui";
 import { FileTypeIcon } from "@/components/business/FileTypeIcon";
 import { formatAttachmentSize, type AttachmentPreviewItem } from "@/models/attachments";
@@ -91,6 +91,11 @@ export function FilesTab({
   const files = attachments.data?.pages.flatMap((page) => page.items) ?? [];
   const loading = isWorkspace ? workspace.isLoading : attachments.isLoading;
   const error = isWorkspace ? workspace.error : attachments.error;
+  const errorLabel = isWorkspace
+    ? apiErrorCode(error) === "unauthorized"
+      ? "chatWorkspaceFilesAuthenticationRequired"
+      : "chatWorkspaceFilesLoadFailed"
+    : "chatConversationFilesLoadFailed";
   function changeDirectory(path: string) {
     controller.patch({ directory: path });
     setQuery("");
@@ -273,9 +278,9 @@ export function FilesTab({
           </div>
         ) : error ? (
           <div className={chatSidePanelStyles["chat-side-status"]} role="alert">
-            {errorMessage(error, t("attachmentPreviewFailed"))}
+            {t(errorLabel)}
             <Button onClick={refresh} size="sm" variant="secondaryGray">
-              {t("retrySend")}
+              {t("retry")}
             </Button>
           </div>
         ) : null}

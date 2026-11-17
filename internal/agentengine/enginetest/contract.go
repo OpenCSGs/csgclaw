@@ -658,7 +658,11 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 				case <-time.After(20 * time.Millisecond):
 				}
 				close(release)
-				if result := <-runDone; result.Status != agentengine.TurnSucceeded {
+				wantStatus := agentengine.TurnSucceeded
+				if name == "stop" {
+					wantStatus = agentengine.TurnCanceled
+				}
+				if result := <-runDone; result.Status != wantStatus {
 					t.Fatalf("Run() = %+v", result)
 				}
 				if err := <-operationDone; err != nil {
@@ -694,7 +698,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 			t.Fatalf("Agent changed after timeout: %+v, %v", got, err)
 		}
 		close(release)
-		if result := <-runDone; result.Status != agentengine.TurnSucceeded {
+		if result := <-runDone; result.Status != agentengine.TurnCanceled {
 			t.Fatalf("Run() = %+v", result)
 		}
 	})

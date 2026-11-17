@@ -128,11 +128,29 @@
   font-size: 11px;
 }
 .description {
-  min-height: 46px;
   margin: 14px 0;
   font-size: 13px;
   line-height: 1.7;
   color: var(--muted);
+}
+.descriptionPreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.descriptionTitle,
+.fullDescription {
+  overflow-wrap: anywhere;
+}
+.fullDescription {
+  white-space: pre-wrap;
+  margin: 0;
+}
+.card > .metadata {
+  margin-top: auto;
 }
 .metadata {
   border-top: 1px dashed var(--line);
@@ -159,7 +177,6 @@
   display: flex;
   justify-content: flex-end;
   padding-top: 14px;
-  margin-top: auto;
 }
 @media (hover: hover) and (pointer: fine) {
   .card footer {

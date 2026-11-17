@@ -2,6 +2,7 @@ package localstore
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,42 @@ func TestCreateSiblingBackupExcludesRuntimeLock(t *testing.T) {
 		t.Fatalf("backup missing config.toml: %v", err)
 	}
 	assertMissing(t, filepath.Join(backupPath, runtimeLockFileName))
+}
+
+func TestSiblingBackupExcludesDSHSharedModuleFallback(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".csgclaw")
+	generated := filepath.Join("agents", "agent-bdcpxh", ".dsh", "home", "profiles", "node_modules")
+	writeFile(t, filepath.Join(root, generated, "@agentclientprotocol", "sdk", "package.json"), "generated dependency")
+	retained := []string{
+		"config.toml",
+		"state.json",
+		"agents/agent-bdcpxh/.dsh/home/profiles/acp/package.json",
+		"agents/agent-bdcpxh/.dsh/home/profiles/acp/cordis.patch.yml",
+		"agents/agent-bdcpxh/.dsh/home/profiles/acp/node_modules/custom-plugin/package.json",
+		"agents/agent-bdcpxh/.dsh/home/profiles/node_modules-custom/notes.txt",
+		"agents/agent-bdcpxh/.dsh/home/memories/memory_summary.md",
+		"agents/agent-bdcpxh/.dsh/workspace/node_modules/custom-plugin/package.json",
+		"agents/agent-bdcpxh/.codex/home/profiles/node_modules/notes.txt",
+		"agents/agent-bdcpxh/workspace/.dsh/home/profiles/node_modules/notes.txt",
+		"workspace/agents/agent-bdcpxh/.dsh/home/profiles/node_modules/notes.txt",
+	}
+	for _, rel := range retained {
+		writeFile(t, filepath.Join(root, filepath.FromSlash(rel)), "preserve "+rel)
+	}
+	backup, err := CreateSiblingBackup(root, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMissing(t, filepath.Join(backup, generated))
+	for _, rel := range retained {
+		data, err := os.ReadFile(filepath.Join(backup, filepath.FromSlash(rel)))
+		if err != nil || string(data) != "preserve "+rel {
+			t.Fatalf("backup lost %s: %q, %v", rel, data, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, generated, "@agentclientprotocol", "sdk", "package.json")); err != nil {
+		t.Fatalf("live dependency mirror changed: %v", err)
+	}
 }
 
 func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
@@ -350,6 +387,42 @@ func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 	readJSON(t, filepath.Join(root, "teams", "team-room-ops", "approvals.json"), &approvals)
 	if approvals[0]["id"] != "approval-1" || approvals[0]["task_id"] != "task-1" || approvals[0]["approver_id"] != "pt-admin" {
 		t.Fatalf("approval not migrated: %#v", approvals[0])
+	}
+}
+
+func TestMigrateTypedIDsSkipsDSHSharedDependencies(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".csgclaw")
+	legacyAgent := filepath.Join("agents", "worker")
+	migratedAgent := filepath.Join("agents", "agent-worker")
+	profiles := filepath.Join(".dsh", "home", "profiles")
+	dependency := filepath.Join(profiles, "node_modules", "@agentclientprotocol", "sdk", "package.json")
+	profile := filepath.Join(profiles, "profile.json")
+	workspaceDependency := filepath.Join("workspace", "node_modules", "package.json")
+	writeJSON(t, filepath.Join(root, "agents", "state.json"), map[string]any{
+		"agents": []map[string]any{{
+			"id": "worker", "name": "Worker",
+		}},
+	})
+	for _, rel := range []string{dependency, profile, workspaceDependency} {
+		writeJSON(t, filepath.Join(root, legacyAgent, rel), map[string]any{"agent_id": "worker"})
+	}
+
+	result, err := MigrateTypedIDs(MigrateOptions{Root: root})
+	if err != nil {
+		t.Fatalf("MigrateTypedIDs() error = %v", err)
+	}
+	assertMissing(t, filepath.Join(result.BackupPath, legacyAgent, profiles, "node_modules"))
+	for _, check := range []struct{ path, wantID string }{
+		{filepath.Join(root, migratedAgent, dependency), "worker"},
+		{filepath.Join(root, migratedAgent, profile), "agent-worker"},
+		{filepath.Join(result.BackupPath, legacyAgent, profile), "worker"},
+		{filepath.Join(result.BackupPath, legacyAgent, workspaceDependency), "worker"},
+	} {
+		var data map[string]any
+		readJSON(t, check.path, &data)
+		if got := data["agent_id"]; got != check.wantID {
+			t.Errorf("%s: agent_id = %v, want %q", check.path, got, check.wantID)
+		}
 	}
 }
 
@@ -1092,6 +1165,23 @@ func TestFailedSiblingBackupDoesNotLeavePartialDirectory(t *testing.T) {
 		if len(backups) != 0 {
 			t.Fatalf("partial backups retained: %v", backups)
 		}
+	}
+}
+
+func TestCopyDirPropagatesDestinationErrorForGeneratedEntry(t *testing.T) {
+	parent := t.TempDir()
+	src, dst := filepath.Join(parent, "source"), filepath.Join(parent, "backup")
+	rel := filepath.Join("agents", "agent-worker", ".openclaw", "plugin-skills", "plugin.json")
+	writeFile(t, filepath.Join(src, rel), "source dependency")
+	writeFile(t, filepath.Join(dst, rel), "existing backup entry")
+
+	err := copyDir(src, dst, func(path string) bool { return path == rel })
+	if !errors.Is(err, os.ErrExist) {
+		t.Fatalf("copyDir() error = %v, want destination collision", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dst, rel))
+	if err != nil || string(data) != "existing backup entry" {
+		t.Fatalf("existing backup entry = %q, error = %v", data, err)
 	}
 }
 

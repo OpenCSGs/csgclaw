@@ -7,7 +7,9 @@ import (
 	"csgclaw/internal/modelusage"
 	agentruntime "csgclaw/internal/runtime"
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -17,9 +19,18 @@ func TestContextBridgeIncludesCompactionUsage(t *testing.T) {
 	if err != nil {
 		t.Skip("node required for the managed bridge test")
 	}
+	root := t.TempDir()
+	if err := writeStandingInstructions(root, "agent-dev", "Developer", "/runtime/csgclaw-cli"); err != nil {
+		t.Fatal(err)
+	}
 	script := contextBridgeModule + `
 const handlers = new Map();
-apply({on: (name, handler) => handlers.set(name, handler)});
+let standing;
+apply({effect: () => {}, systemPrompt: {section: (section) => { standing = section; }}, on: (name, handler) => handlers.set(name, handler)});
+const policy = standing.text();
+for (const rule of ['Developer', 'room_type="autonomous"', 'end this turn immediately with exactly <csgclaw-silent/>', 'on-demand-worker/v1', "'/runtime/csgclaw-cli' team task claim"]) {
+  if (!policy.includes(rule)) throw new Error('missing standing rule: ' + rule);
+}
 const session = {header: {id: 's'}};
 const emit = (type, seq, usage) => handlers.get('session/event')(session, {type, seq, data: {usage}});
 emit('assistant/message', 1, {inputTokens:100, outputTokens:20, totalTokens:120});
@@ -27,7 +38,11 @@ emit('compaction/summary', 2, {inputTokens:200, outputTokens:30, totalTokens:230
 emit('compaction/summary', 2, {inputTokens:200, outputTokens:30, totalTokens:230});
 emit('compaction/summary', 3, undefined);
 `
-	output, err := exec.Command(node, "--input-type=module", "-e", script).CombinedOutput()
+	module := filepath.Join(root, "context-bridge.mjs")
+	if err := os.WriteFile(module, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(node, module).CombinedOutput()
 	if err != nil {
 		t.Fatalf("bridge: %v %s", err, output)
 	}

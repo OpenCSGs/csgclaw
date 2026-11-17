@@ -29,6 +29,7 @@ type ListResult struct {
 }
 
 type KnowledgeBase struct {
+	Recommended bool     `json:"recommended"`
 	ID          int64    `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`

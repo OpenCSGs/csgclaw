@@ -1,6 +1,7 @@
 package im
 
 import (
+	"csgclaw/internal/modelcap"
 	"testing"
 	"time"
 )
@@ -441,5 +442,22 @@ func TestParticipantBridgeMessageDeliveryState(t *testing.T) {
 	}
 	if got := bridge.MessageDeliveryState("other", "different", agents); got != "no_execution" {
 		t.Fatalf("cross-room state=%s", got)
+	}
+}
+
+func TestCompactionSystemCardsNeverDispatchAgentWork(t *testing.T) {
+	for _, room := range []Room{{ID: "direct", IsDirect: true, Members: []string{"user-admin", "user-bot"}}, {ID: "fanout", NotifyAllAgents: true, Members: []string{"user-admin", "user-bot"}}, {ID: "mentioned", Members: []string{"user-admin", "user-bot"}}} {
+		t.Run(room.ID, func(t *testing.T) {
+			bridge := NewParticipantBridge("")
+			events, cancel := bridge.Subscribe("user-bot")
+			defer cancel()
+			message := Message{ID: "compact", Kind: MessageKindEvent, SenderID: "user-admin", Content: "Context compaction", Mentions: []Mention{{ID: "user-bot"}}, Metadata: compactionMetadata(modelcap.CompactionOperation{ID: "control", Running: true})}
+			bridge.PublishMessageEvent(room, User{ID: "user-admin", Role: "admin"}, message)
+			select {
+			case event := <-events:
+				t.Fatalf("system card dispatched work: %s", event.MessageID)
+			default:
+			}
+		})
 	}
 }

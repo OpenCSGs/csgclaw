@@ -2,7 +2,6 @@ import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.m
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import conversationSendButtonStyles from "./ConversationSendButton.module.css";
 import conversationThreadsStyles from "./ConversationThreads.module.css";
-import conversationPaneStyles from "./ConversationPane.module.css";
 import "@/components/business/ResourceTag";
 import { messageResources, resourceMessageText } from "@/models/conversationResources";
 import {
@@ -16,6 +15,9 @@ import type { ChatFileScope } from "@/components/business/ChatSidePanel/types";
 import { useFileMentions } from "./FileMentionPicker";
 import type { SkillContinuation } from "@/models/slashCommands";
 import { emptyCompletedProgress } from "@/models/turnProgress";
+import { collaborationTranscript } from "@/models/collaborationTranscript";
+import { CollaborationStatus } from "./CollaborationStatus";
+import type { ConversationWorkingParticipant } from "./types";
 import { messageListScrollKey, useMessageListAutoScroll } from "@/hooks/workspace/useMessageListAutoScroll";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
@@ -90,10 +92,15 @@ type ThreadMentionState = {
 };
 
 export type ConversationThreadPanelProps = ComposerResourceProps & {
+  collaboration?: boolean;
+  workingParticipants?: ConversationWorkingParticipant[];
+  onOpenCollaborationActivity?: (senderID?: string, turnID?: string, requestID?: string) => void;
+  onStopWorkingTurn?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
   currentUserID?: string;
   memoryAgentID?: string;
   fileScope?: ChatFileScope;
   renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
+  renderMessageFooter?: (message: IMMessage) => React.ReactNode;
   agents?: AgentLike[];
   disabled: boolean;
   draftSegments: ComposerSegment[];
@@ -130,11 +137,16 @@ export type ConversationThreadPanelProps = ComposerResourceProps & {
 };
 
 export function ConversationThreadPanel({
+  collaboration = false,
+  workingParticipants,
+  onOpenCollaborationActivity,
+  onStopWorkingTurn,
   resourceAgentID,
   memoryAgentID = "",
   onPickResources,
   fileScope,
   renderTurnControls,
+  renderMessageFooter,
   thread,
   currentUserID,
   agents = [],
@@ -185,16 +197,24 @@ export function ConversationThreadPanel({
   const root = thread?.root ?? null;
   const memory = useConversationMemory(memoryAgentID, thread?.room_id || "");
   const replies = useMemo(() => thread?.replies ?? [], [thread?.replies]);
-  const videoGroups = useMemo(() => groupVideoGenerationMessages(root ? [root, ...replies] : replies), [root, replies]);
-  const visibleRoot =
-    !emptyCompletedProgress(root) &&
-    (showToolCalls || !isToolCallMessage(root)) &&
-    (!root?.id || !videoGroups.childMessageIDs.has(root.id))
-      ? root
-      : null;
-  const visibleReplies = replies.filter(
-    (message) => !emptyCompletedProgress(message) && (showToolCalls || !isToolCallMessage(message)),
+  const transcript = useMemo(
+    () => (collaboration ? collaborationTranscript(root ? [root, ...replies] : replies) : null),
+    [collaboration, root, replies],
   );
+  const publicRoot = transcript ? (transcript.messages.find((message) => message.id === root?.id) ?? null) : root;
+  const videoGroups = useMemo(
+    () => groupVideoGenerationMessages(transcript?.messages ?? (root ? [root, ...replies] : replies)),
+    [transcript, root, replies],
+  );
+  const visibleRoot =
+    !emptyCompletedProgress(publicRoot) &&
+    (showToolCalls || !isToolCallMessage(publicRoot)) &&
+    (!publicRoot?.id || !videoGroups.childMessageIDs.has(publicRoot.id))
+      ? publicRoot
+      : null;
+  const visibleReplies = (
+    transcript ? transcript.messages.filter((message) => message.id !== root?.id) : replies
+  ).filter((message) => !emptyCompletedProgress(message) && (showToolCalls || !isToolCallMessage(message)));
   const displayReplies = visibleReplies.filter(
     (message) => !message.id || !videoGroups.childMessageIDs.has(message.id),
   );
@@ -340,6 +360,19 @@ export function ConversationThreadPanel({
     onAddAttachments(files);
   }
 
+  const status = collaboration ? (
+    <CollaborationStatus
+      roomID={thread?.room_id || ""}
+      messages={root ? [root, ...replies] : replies}
+      participants={workingParticipants}
+      agents={agents}
+      usersById={usersById}
+      t={t}
+      onOpenActivity={onOpenCollaborationActivity}
+      onStop={onStopWorkingTurn}
+    />
+  ) : undefined;
+
   return (
     <aside className="thread-panel" aria-label={t("threadPanelTitle")}>
       <div className={conversationThreadsStyles["thread-panel-header"]}>
@@ -378,11 +411,13 @@ export function ConversationThreadPanel({
           <div className={conversationThreadsStyles["thread-root"]}>
             <ThreadMessage
               message={visibleRoot}
+              showTurnProgress={!collaboration}
               onForgetMemory={
                 memory.sourceFor(visibleRoot) ? () => memory.forget(memory.sourceFor(visibleRoot)) : undefined
               }
               currentUserID={currentUserID}
               progressControls={renderTurnControls?.(visibleRoot)}
+              footer={renderMessageFooter?.(visibleRoot)}
               agents={agents}
               usersById={usersById}
               locale={locale}
@@ -403,9 +438,11 @@ export function ConversationThreadPanel({
               <ThreadMessage
                 key={message.id}
                 message={message}
+                showTurnProgress={!collaboration}
                 onForgetMemory={memory.sourceFor(message) ? () => memory.forget(memory.sourceFor(message)) : undefined}
                 currentUserID={currentUserID}
                 progressControls={renderTurnControls?.(message)}
+                footer={renderMessageFooter?.(message)}
                 agents={agents}
                 usersById={usersById}
                 locale={locale}
@@ -419,13 +456,13 @@ export function ConversationThreadPanel({
                 embeddedVideos={message.id ? videoGroups.childrenByParentID.get(message.id) : undefined}
               />
             ))
-          ) : (
+          ) : !transcript?.activities.length ? (
             <div className={conversationThreadsStyles["thread-empty"]}>{t("threadNoReplies")}</div>
-          )}
+          ) : null}
         </div>
       </div>
       {questionMode?.pending.length ? (
-        <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} />
+        <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} statusSlot={status} />
       ) : (
         <div
           className={conversationThreadsStyles["thread-composer"]}
@@ -468,6 +505,7 @@ export function ConversationThreadPanel({
               onSelect={insertThreadMention}
             />
           ) : null}
+          {status}
           <div className={conversationThreadsStyles["thread-composer-box"]}>
             <AttachmentDraftStrip
               drafts={attachmentDrafts}
@@ -640,6 +678,8 @@ export function ConversationThreadPanel({
 }
 
 type ThreadMessageProps = {
+  footer?: React.ReactNode;
+  showTurnProgress?: boolean;
   currentUserID?: string;
   progressControls?: ProgressControlSlots | null;
   onForgetMemory?: () => Promise<void>;
@@ -659,6 +699,8 @@ type ThreadMessageProps = {
 };
 
 function ThreadMessage({
+  footer,
+  showTurnProgress = true,
   currentUserID,
   progressControls,
   onForgetMemory,
@@ -691,7 +733,7 @@ function ThreadMessage({
 
   return (
     <div
-      className={`thread-message ${own ? "own" : ""} ${compact ? "compact" : ""} ${message.metadata?.image_generation || isVideoGeneration ? conversationPaneStyles["image-generation-message"] : ""}`.trim()}
+      className={`thread-message ${own ? "own" : ""} ${compact ? "compact" : ""}`.trim()}
       data-message-id={message.id || undefined}
     >
       {user ? (
@@ -726,6 +768,8 @@ function ThreadMessage({
               content={message.content}
               message={message}
               allowLegacyToolFormat={Boolean(messageAgent)}
+              showTurnProgress={showTurnProgress}
+              enableLongMessageCollapse={!showTurnProgress}
               progressControls={progressControls}
               videoMessages={embeddedVideos}
               onQuestionSelect={onQuestionSelect}
@@ -735,11 +779,26 @@ function ThreadMessage({
           </div>
         ) : null}
         <DiagnosticMessageAction metadata={message.metadata} t={t} />
-        <ImageGenerationStatus message={message} t={t} />
+        {isVideoGeneration && message.metadata?.image_generation ? (
+          <ImageGenerationStatus message={message} t={t} />
+        ) : null}
         {isVideoGeneration ? (
           <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
         ) : (
-          <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
+          <ImageGenerationStatus
+            message={message}
+            t={t}
+            result={
+              message.attachments?.length ? (
+                <MessageAttachments
+                  generation={Boolean(message.metadata?.image_generation)}
+                  attachments={message.attachments}
+                  t={t}
+                  onPreviewAttachment={onPreviewAttachment}
+                />
+              ) : null
+            }
+          />
         )}
         {embeddedVideos.map((video) => (
           <VideoGenerationCard
@@ -750,6 +809,8 @@ function ThreadMessage({
           />
         ))}
         <ConversationMessageActions
+          leading={footer}
+          showTokenUsage={showTurnProgress}
           metadata={message.metadata}
           className={conversationThreadsStyles["thread-message-actions"]}
           onForgetMemory={onForgetMemory}

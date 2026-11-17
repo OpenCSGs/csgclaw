@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 )
 
 func TestImageDeliveryRetryDoesNotGenerateAgain(t *testing.T) {
 	calls := 0
-	engine := &Engine{files: NewFileStore(), generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string) (modelprovider.GeneratedImage, error) {
+	engine := &Engine{files: NewFileStore(), generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
 		calls++
 		return modelprovider.GeneratedImage{Data: []byte("generated image"), MediaType: "image/png"}, nil
 	}}
@@ -47,7 +48,7 @@ func TestImageDeliveryRetryDoesNotGenerateAgain(t *testing.T) {
 
 func TestImageGenerationRequiresChannelDeliverySupport(t *testing.T) {
 	calls := 0
-	engine := &Engine{generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string) (modelprovider.GeneratedImage, error) {
+	engine := &Engine{generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
 		calls++
 		return modelprovider.GeneratedImage{}, nil
 	}}
@@ -62,7 +63,7 @@ func TestSuccessfulImageRetryParticipatesInCompletedTurnEviction(t *testing.T) {
 	ctx := context.Background()
 	fail := true
 	calls := 0
-	engine := &Engine{files: NewFileStore(), runtimes: directConversationResolver{}, generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string) (modelprovider.GeneratedImage, error) {
+	engine := &Engine{files: NewFileStore(), runtimes: directConversationResolver{}, generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
 		calls++
 		if fail {
 			return modelprovider.GeneratedImage{}, errors.New("provider unavailable")
@@ -106,5 +107,63 @@ func TestSuccessfulImageRetryParticipatesInCompletedTurnEviction(t *testing.T) {
 	if reader, err := snapshot.Open(ctx); err == nil {
 		reader.Close()
 		t.Fatal("evicted image snapshot remains readable on disk")
+	}
+}
+
+func TestImageHandlerStopsAfterBadRequestForTurn(t *testing.T) {
+	calls := 0
+	engine := &Engine{generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
+		calls++
+		return modelprovider.GeneratedImage{}, &modelprovider.ImageGenerationError{
+			HTTPStatus: 400, Code: "invalid_request_error", Message: "resolution is required",
+		}
+	}}
+	conversation := &conversations{engine: engine, agentID: "agent-1"}
+	turn := &activeTurn{request: TurnRequest{ID: "turn-1", ConversationKey: "room-1"}}
+	sink := contract.ImageGenerationSink{EventSink: EventSinkFunc(func(context.Context, TurnEvent) error { return nil })}
+	handle, preflight := conversation.imageHandler(turn, sink, nil, nil)
+	first := handle(context.Background(), "call-1", "blue sky", nil, modelprovider.ImageGenerationOptions{})
+	second := handle(context.Background(), "call-2", "blue sky", nil, modelprovider.ImageGenerationOptions{Size: "1024x1024"})
+	var providerErr *modelprovider.ImageGenerationError
+	if !errors.As(first, &providerErr) || second != first || preflight(false) != first || calls != 1 {
+		t.Fatalf("expected the original error and one provider call, got %v, %v, calls=%d", first, second, calls)
+	}
+}
+
+func TestImageHandlerDoesNotGenerateReplacementAfterEditFails(t *testing.T) {
+	calls := 0
+	engine := &Engine{generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
+		calls++
+		return modelprovider.GeneratedImage{}, errors.New("unexpected provider call")
+	}}
+	conversation := &conversations{engine: engine, agentID: "agent-1"}
+	handle, preflight := conversation.imageHandler(&activeTurn{}, nil, nil, nil)
+	if err := handle(context.Background(), "edit", "add a sheep", []int{1}, modelprovider.ImageGenerationOptions{}); err == nil {
+		t.Fatal("expected the missing reference to fail")
+	}
+	if err := preflight(false); err == nil {
+		t.Fatal("expected replacement to be blocked before confirmation")
+	}
+	if err := handle(context.Background(), "generate", "draw a sheep", nil, modelprovider.ImageGenerationOptions{}); err == nil || calls != 0 {
+		t.Fatalf("expected replacement to be blocked, got %v, calls=%d", err, calls)
+	}
+}
+
+func TestImageHandlerPreflightRejectsEditWithTextOnlyModel(t *testing.T) {
+	engine := &Engine{imageGenerationModes: func(*modelprovider.ImageGenerationConfig) modelcap.ImageGeneration {
+		return modelcap.ImageGeneration{TextToImage: true}
+	}}
+	conversation := &conversations{engine: engine}
+	_, preflight := conversation.imageHandler(&activeTurn{}, nil, nil, nil)
+	if err := preflight(false); err != nil {
+		t.Fatalf("text-to-image should be allowed: %v", err)
+	}
+	err := preflight(true)
+	var modeErr *modelprovider.ImageGenerationError
+	if !errors.As(err, &modeErr) || modeErr.Code != "image_edit_unsupported" {
+		t.Fatalf("expected the mode mismatch before confirmation, got %v", err)
+	}
+	if preflight(false) != err {
+		t.Fatal("text-to-image must not replace the rejected edit in the same turn")
 	}
 }

@@ -691,14 +691,18 @@ func (s *Store) prune() {
 	}
 }
 
-var credential = regexp.MustCompile(`(?i)(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)(["']?\s*[:=]\s*["']?)([^\s,"';&}]+)`)
+// Keep the original quoting when a diagnostic embeds a credential in JSON or logfmt.
+var credential = regexp.MustCompile(`(?i)(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)(["']?\s*[:=]\s*)(?:(")(?:\\.|[^"\\])*"?|(')(?:\\.|[^'\\])*'?|[^\s,"';&}]+)`)
+
+const maskedCredential = "${1}${2}${3}${4}[redacted]${3}${4}"
+
 var bearer = regexp.MustCompile(`(?i)bearer\s+[a-z0-9._~+/=-]+`)
 var keyToken = regexp.MustCompile(`\b(?:sk-|ghp_|github_pat_)[a-zA-Z0-9_-]+`)
 var urlCredentials = regexp.MustCompile(`(https?://)[^/\s@]+@`)
 
 func Redact(value string) string {
 	value = bearer.ReplaceAllString(value, "Bearer [redacted]")
-	value = credential.ReplaceAllString(value, "$1$2[redacted]")
+	value = credential.ReplaceAllString(value, maskedCredential)
 	value = keyToken.ReplaceAllString(value, "[redacted]")
 	value = urlCredentials.ReplaceAllString(value, "${1}[redacted]@")
 	if len(value) > 4096 {

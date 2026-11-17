@@ -1,3 +1,4 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
@@ -202,6 +203,7 @@ function KnowledgeBaseCard({
   return (
     <ResourceListCard
       title={item.name || item.id}
+      titleBadge={item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
       description={[
         item.description || item.name || item.id,
         mcpName ? `${t("resourcesKnowledgeBaseMCPNameLabel")}${mcpName}` : "",
@@ -269,61 +271,63 @@ function MarketPane({
     );
   }
 
-  if (items.length === 0) {
+  if (items.length === 0 && !knowledgeBases?.discoveryHasMore) {
     return <KnowledgeEmptyState t={t} />;
   }
 
   return (
     <>
-      <ResourceList>
-        {items.map((item) => {
-          const connecting = connectingID === item.id;
-          const connected = Boolean(String(item.configuredMCPName || "").trim());
-          return (
-            <KnowledgeBaseCard
-              key={item.id}
-              item={item}
-              t={t}
-              onOpen={() => onOpenItem(item)}
-              actions={
-                connected ? (
-                  <Tooltip content={t("iaKnowledgeUpdate")}>
-                    <span>
-                      <Button
-                        iconOnly
-                        size="sm"
-                        variant="secondaryGray"
-                        loading={connecting}
-                        aria-label={t("iaKnowledgeUpdate")}
-                        disabled={Boolean(connectingID)}
-                        onClick={() => onConnect(item)}
-                      >
-                        <RefreshCw size={15} strokeWidth={2} aria-hidden="true" />
-                      </Button>
-                    </span>
-                  </Tooltip>
-                ) : (
-                  <Tooltip content={t("iaKnowledgeConnect")}>
-                    <span>
-                      <Button
-                        iconOnly
-                        size="sm"
-                        variant="secondaryGray"
-                        loading={connecting}
-                        aria-label={t("iaKnowledgeConnect")}
-                        disabled={Boolean(connectingID)}
-                        onClick={() => onConnect(item)}
-                      >
-                        <Plus size={16} strokeWidth={2} aria-hidden="true" />
-                      </Button>
-                    </span>
-                  </Tooltip>
-                )
-              }
-            />
-          );
-        })}
-      </ResourceList>
+      {items.length > 0 ? (
+        <ResourceList>
+          {items.map((item) => {
+            const connecting = connectingID === item.id;
+            const connected = Boolean(String(item.configuredMCPName || "").trim());
+            return (
+              <KnowledgeBaseCard
+                key={item.id}
+                item={item}
+                t={t}
+                onOpen={() => onOpenItem(item)}
+                actions={
+                  connected ? (
+                    <Tooltip content={t("iaKnowledgeUpdate")}>
+                      <span>
+                        <Button
+                          iconOnly
+                          size="sm"
+                          variant="secondaryGray"
+                          loading={connecting}
+                          aria-label={t("iaKnowledgeUpdate")}
+                          disabled={Boolean(connectingID)}
+                          onClick={() => onConnect(item)}
+                        >
+                          <RefreshCw size={15} strokeWidth={2} aria-hidden="true" />
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip content={t("iaKnowledgeConnect")}>
+                      <span>
+                        <Button
+                          iconOnly
+                          size="sm"
+                          variant="secondaryGray"
+                          loading={connecting}
+                          aria-label={t("iaKnowledgeConnect")}
+                          disabled={Boolean(connectingID)}
+                          onClick={() => onConnect(item)}
+                        >
+                          <Plus size={16} strokeWidth={2} aria-hidden="true" />
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  )
+                }
+              />
+            );
+          })}
+        </ResourceList>
+      ) : null}
 
       {knowledgeBases?.discoveryHasMore ? (
         <div className={resourceSettingsStyles.listMore}>

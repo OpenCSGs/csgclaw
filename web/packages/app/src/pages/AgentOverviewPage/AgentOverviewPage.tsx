@@ -1,3 +1,4 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { resolveTeamAvatarMembers, teamMemberIDs, teamStatusLabel } from "@/models/tasks";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -111,7 +112,7 @@ export function AgentOverviewPage() {
   const plazaTab = requestedTab === "plaza";
   const cloudID = searchParams.get("cloud") || "";
   const pins = usePinnedEntities(controller.sidebarProps?.currentUserID ?? "");
-  const plaza = useCloudAgents(controller.sidebarProps?.authStatus);
+  const plaza = useCloudAgents(controller.sidebarProps?.authStatus, true, undefined, plazaTab);
   const selectedCloudAgent = plaza.agents.find((agent) => agent.id === cloudID);
   const templatesTab = requestedTab === "templates" || requestedTab === "market";
   const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";
@@ -181,10 +182,7 @@ export function AgentOverviewPage() {
       templateInGroup(item, templateFilter === "official" ? "official" : "mine", templateUsername),
   );
   const cloudTemplates = shownTemplates.filter((item) => item.source?.kind === "remote");
-  const orderedTemplates =
-    templateFilter === "personal"
-      ? [...shownTemplates.filter((item) => item.source?.kind !== "remote"), ...cloudTemplates]
-      : shownTemplates;
+  const orderedTemplates = [...shownTemplates.filter((item) => item.source?.kind !== "remote"), ...cloudTemplates];
   const templatesLoading = templatesQuery.isLoading && !templates.length;
   const templatesFailed = templatesQuery.isError && !templates.length;
   const templateEmptyTitle = query.trim()
@@ -220,7 +218,7 @@ export function AgentOverviewPage() {
           kind: "template",
           id: item.id || "",
           name: item.display_name?.trim() || item.name || item.id || "",
-          cloudTemplate: templateFilter === "personal" && item.source?.kind === "remote",
+          cloudTemplate: item.source?.kind === "remote",
           content: (
             <button
               type="button"
@@ -239,6 +237,7 @@ export function AgentOverviewPage() {
               <span className={styles.identity}>
                 <span className={styles.templateName}>
                   <strong>{item.display_name?.trim() || item.name || item.id}</strong>{" "}
+                  {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
                   {templateFilter === "personal" && item.source?.kind === "remote" ? (
                     <span className={styles.cloudTag}>{t("iaTemplateCloudTag")}</span>
                   ) : null}
@@ -369,8 +368,12 @@ export function AgentOverviewPage() {
       : [];
 
   function renderPinned(rows: Row[], showCloudHeading = false) {
-    const { pinned, rest } = partitionPinned(rows, pins.order);
-    const firstCloudTemplate = showCloudHeading ? rest.find((item) => item.cloudTemplate) : undefined;
+    const remoteRows = rows.filter((row) => row.cloudTemplate);
+    const { pinned, rest } = partitionPinned(
+      rows.filter((row) => !row.cloudTemplate),
+      pins.order,
+    );
+    const pinnedKeys = new Set(pins.order);
     const renderRow = (row: Row, isPinned: boolean) => (
       <EntityPinRow
         key={entityPinKey(row)}
@@ -397,16 +400,15 @@ export function AgentOverviewPage() {
           ]
         : []),
       ...(pinnedExpanded ? pinned.map((row) => renderRow(row, true)) : []),
-      ...rest.flatMap((row) => [
-        ...(row === firstCloudTemplate
-          ? [
-              <h3 className={styles.cloudTemplatesHeading} key="cloud-heading">
-                {t("iaTemplatesCloudOnly", { count: rest.filter((item) => item.cloudTemplate).length })}
-              </h3>,
-            ]
-          : []),
-        renderRow(row, false),
-      ]),
+      ...rest.map((row) => renderRow(row, false)),
+      ...(showCloudHeading && remoteRows.length
+        ? [
+            <h3 className={styles.cloudTemplatesHeading} key="cloud-heading">
+              {t("iaTemplatesCloudOnly", { count: remoteRows.length })}
+            </h3>,
+          ]
+        : []),
+      ...remoteRows.map((row) => renderRow(row, pinnedKeys.has(entityPinKey(row)))),
     ];
   }
 
@@ -480,6 +482,8 @@ export function AgentOverviewPage() {
       ) : plazaTab ? (
         <AgentPlaza
           agents={plaza.catalog}
+          probeAvailability
+          loginKey={controller.sidebarProps?.authStatus?.logged_in_at || ""}
           addedIDs={plaza.addedIDs}
           t={t}
           onAdd={(id) => {
@@ -566,7 +570,7 @@ export function AgentOverviewPage() {
                       </Button>
                     </div>
                   ) : null}
-                  {renderPinned(templateRows, true)}
+                  {renderPinned(templateRows, templateFilter === "personal")}
                   {templateFilter === "personal" && authed && !cloudTemplates.length ? (
                     <>
                       <h3 className={styles.cloudTemplatesHeading}>{t("iaTemplatesCloudOnly", { count: 0 })}</h3>

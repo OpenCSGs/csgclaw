@@ -1586,22 +1586,26 @@ describe("useConversationController", () => {
     const conversation = { ...directConversation, is_direct: false, members: ["u-admin", "u-dev"] };
     const request = deferred<IMConversation>();
     apiMocks.inviteRoomUsersRequest.mockReturnValue(request.promise);
-    const { result } = renderConversationController({ data: groupConversationData(conversation) });
+    const { result } = renderConversationController({
+      data: groupConversationData(conversation),
+      agents: [{ id: "agent-qa" }],
+    });
     act(() => result.current.conversationViewProps.onInviteAction());
-    act(() => result.current.conversationViewProps.memberPanelProps?.onInviteUserIDsChange(["u-qa"]));
+    act(() => result.current.conversationViewProps.memberPanelProps?.onInviteUserIDsChange(["u-qa", "u-orphan"]));
     let pending: Promise<void> | undefined;
     act(() => {
       pending = result.current.conversationViewProps.memberPanelProps?.onInvite();
       void result.current.conversationViewProps.memberPanelProps?.onInvite();
     });
     expect(apiMocks.inviteRoomUsersRequest).toHaveBeenCalledOnce();
+    expect(apiMocks.inviteRoomUsersRequest).toHaveBeenCalledWith(expect.objectContaining({ user_ids: ["u-qa"] }));
     expect(result.current.conversationViewProps.memberPanelProps?.inviteBusy).toBe(true);
     await act(async () => {
       request.reject(new Error("Invitation failed"));
       await pending;
     });
     expect(result.current.conversationViewProps.memberPanelProps).toMatchObject({
-      inviteUserIDs: ["u-qa"],
+      inviteUserIDs: ["u-qa", "u-orphan"],
       inviteBusy: false,
       submitError: "Invitation failed",
     });
@@ -1635,7 +1639,7 @@ describe("useConversationController", () => {
     const nextConversation = { ...conversation, id: "room-next" };
     const data = { ...groupConversationData(conversation), rooms: [conversation, nextConversation] };
     apiMocks.inviteRoomUsersRequest.mockRejectedValue(new Error("Invitation failed"));
-    const { result, rerender } = renderConversationController({ data });
+    const { result, rerender } = renderConversationController({ data, agents: [{ id: "agent-qa" }] });
     act(() => result.current.conversationViewProps.onInviteAction());
     act(() => result.current.conversationViewProps.memberPanelProps?.onInviteUserIDsChange(["u-qa"]));
     await act(async () => result.current.conversationViewProps.memberPanelProps?.onInvite());
@@ -1663,7 +1667,7 @@ describe("useConversationController", () => {
     const data = { ...groupConversationData(conversation), rooms: [conversation, nextConversation] };
     const request = deferred<IMConversation>();
     apiMocks.inviteRoomUsersRequest.mockReturnValue(request.promise);
-    const { result, rerender, unmount } = renderConversationController({ data });
+    const { result, rerender, unmount } = renderConversationController({ data, agents: [{ id: "agent-qa" }] });
     act(() => result.current.conversationViewProps.onInviteAction());
     act(() => result.current.conversationViewProps.memberPanelProps?.onInviteUserIDsChange(["u-qa"]));
     let pending: Promise<void> | undefined;

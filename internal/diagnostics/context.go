@@ -231,16 +231,16 @@ func protectValue(value any, key string) any {
 }
 
 var privateKeyBlock = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
-var cookieHeader = regexp.MustCompile(`(?im)((?:set-cookie|cookie)\s*[:=]\s*)[^\r\n]+`)
+var sensitiveHeader = regexp.MustCompile(`(?im)((?:set-cookie|cookie|authorization)\s*[:=]\s*)[^\r\n]+`)
 
 var privateMemoryContext = regexp.MustCompile(`(?s)<extra_context type="agent_memory" trust="untrusted">.*?</extra_context>`)
 
 func ProtectText(value string) string {
 	value = privateMemoryContext.ReplaceAllString(value, "[redacted agent memory]")
 	value = privateKeyBlock.ReplaceAllString(value, "[redacted private key]")
-	value = cookieHeader.ReplaceAllString(value, "${1}[redacted]")
+	value = sensitiveHeader.ReplaceAllString(value, "${1}[redacted]")
 	value = bearer.ReplaceAllString(value, "Bearer [redacted]")
-	value = credential.ReplaceAllString(value, "$1$2[redacted]")
+	value = credential.ReplaceAllString(value, maskedCredential)
 	value = keyToken.ReplaceAllString(value, "[redacted]")
 	value = urlCredentials.ReplaceAllString(value, "${1}[redacted]@")
 	return strings.ToValidUTF8(value, "�")

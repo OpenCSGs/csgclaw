@@ -6517,8 +6517,8 @@ func TestCreateWorkerFromBuiltinDSHTemplateOverlaysDefaultWorkspace(t *testing.T
 			t.Fatalf("template overlay %s error = %v", name, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(overlayTarget, "skills", "agent-teams", "SKILL.md")); err != nil {
-		t.Fatalf("template overlay agent-teams skill error = %v", err)
+	if _, err := os.Stat(filepath.Join(overlayTarget, "skills", "agent-teams")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retired Team skill should be absent from the template overlay: %v", err)
 	}
 }
 
@@ -7096,12 +7096,12 @@ func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("agentWorkspaceRoot() error = %v", err)
 	}
-	builtInSkillPath := filepath.Join(workspaceRoot, "skills", "agent-teams", "SKILL.md")
+	builtInSkillPath := filepath.Join(workspaceRoot, "skills", "agent-creator", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(builtInSkillPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(agent-teams) error = %v", err)
+		t.Fatalf("MkdirAll(agent-creator) error = %v", err)
 	}
-	if err := os.WriteFile(builtInSkillPath, []byte("# Locally Edited Agent Teams\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(agent-teams) error = %v", err)
+	if err := os.WriteFile(builtInSkillPath, []byte("# Locally Edited Agent Creator\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(agent-creator) error = %v", err)
 	}
 	userSkillPath := filepath.Join(workspaceRoot, "skills", "impeccable", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(userSkillPath), 0o755); err != nil {
@@ -7119,23 +7119,23 @@ func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
 		t.Fatal("Recreate().AgentProfile.EnvRestartRequired = true, want false")
 	}
 
-	wantBuiltIn, err := templateembed.FS().Open(templateembed.CodexManagerRoot + "/skills/agent-teams/SKILL.md")
+	wantBuiltIn, err := templateembed.FS().Open(templateembed.CodexManagerRoot + "/skills/agent-creator/SKILL.md")
 	if err != nil {
-		t.Fatalf("open embedded agent-teams skill: %v", err)
+		t.Fatalf("open embedded agent-creator skill: %v", err)
 	}
 	defer func() {
 		_ = wantBuiltIn.Close()
 	}()
 	wantBuiltInData, err := io.ReadAll(wantBuiltIn)
 	if err != nil {
-		t.Fatalf("read embedded agent-teams skill: %v", err)
+		t.Fatalf("read embedded agent-creator skill: %v", err)
 	}
 	gotBuiltInData, err := os.ReadFile(builtInSkillPath)
 	if err != nil {
-		t.Fatalf("ReadFile(agent-teams) error = %v", err)
+		t.Fatalf("ReadFile(agent-creator) error = %v", err)
 	}
 	if string(gotBuiltInData) != string(wantBuiltInData) {
-		t.Fatalf("agent-teams after recreate = %q, want embedded template content", string(gotBuiltInData))
+		t.Fatalf("agent-creator after recreate = %q, want embedded template content", string(gotBuiltInData))
 	}
 	userData, err := os.ReadFile(userSkillPath)
 	if err != nil || string(userData) != "# Impeccable\n" {

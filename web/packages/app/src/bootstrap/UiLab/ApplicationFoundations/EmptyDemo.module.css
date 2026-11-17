@@ -1,0 +1,244 @@
+.variant {
+  margin-block-end: var(--space-4);
+  color: var(--muted);
+  font: var(--text-sm-normal);
+}
+.preview {
+  --empty-title: #181d27;
+  --empty-copy: #535862;
+  --empty-grid: #e9eaeb;
+  --empty-tile: #f0f1f3;
+  --empty-featured-surface: #fff;
+  --empty-featured-border: #d5d7da;
+  --empty-featured-glyph: #414651;
+  --empty-featured-shadow:
+    0 1px 2px rgb(10 13 18 / 5%), inset 0 -2px 0 rgb(10 13 18 / 5%), inset 0 0 0 1px rgb(10 13 18 / 18%);
+  --empty-badge: rgb(0 0 0 / 20%);
+  --empty-title-font: var(--text-md-medium);
+  --empty-copy-font: var(--text-sm-normal);
+  --empty-icon-gap: 16px;
+  --empty-text-gap: 4px;
+  --empty-action-gap: 24px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  justify-self: center;
+  inline-size: min(100%, 512px);
+  padding: 24px 12px;
+}
+.preview[data-size="md"],
+.preview[data-size="lg"] {
+  --empty-title-font: var(--text-lg-medium);
+  --empty-icon-gap: 20px;
+  --empty-text-gap: 8px;
+  --empty-action-gap: 32px;
+}
+.preview[data-size="lg"] {
+  --empty-title-font: var(--text-xl-medium);
+  --empty-copy-font: var(--text-md-normal);
+}
+:global(:root[data-theme="dark"]) .preview {
+  --empty-title: #f7f7f7;
+  --empty-copy: #94979c;
+  --empty-grid: #22262f;
+  --empty-tile: #13161b;
+  --empty-featured-surface: #0c0e12;
+  --empty-featured-border: #373a41;
+  --empty-featured-glyph: #cecfd2;
+  --empty-featured-shadow: inset 0 -2px 0 rgb(12 14 18 / 5%), inset 0 0 0 1px rgb(12 14 18 / 18%);
+  --empty-badge: rgb(255 255 255 / 20%);
+}
+.pattern {
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -252px;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  inline-size: 640px;
+  block-size: 640px;
+  display: grid;
+  grid-template: repeat(15, 1fr) / repeat(15, 1fr);
+  background-image:
+    linear-gradient(to right, var(--empty-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--empty-grid) 1px, transparent 1px);
+  background-size: calc(640px / 15) calc(640px / 15);
+  mask: url("./assets/empty-states-imgContent.svg") center / 640px 640px no-repeat;
+  pointer-events: none;
+}
+.pattern span {
+  margin: 1px 0 0 1px;
+  background: var(--empty-tile);
+}
+.preview .empty {
+  gap: 0;
+  padding: 0;
+}
+.preview .empty h2 {
+  margin-block-start: var(--empty-icon-gap);
+  color: var(--empty-title);
+  font: var(--empty-title-font);
+}
+.preview .empty p {
+  max-inline-size: 352px;
+  margin-block-start: var(--empty-text-gap);
+  color: var(--empty-copy);
+  font: var(--empty-copy-font);
+  overflow-wrap: anywhere;
+}
+.preview .empty > div {
+  margin-block-start: var(--empty-action-gap);
+}
+.folder {
+  position: relative;
+  display: block;
+  inline-size: 54px;
+  block-size: 48px;
+}
+.back,
+.paper,
+.blur,
+.front,
+.noise {
+  position: absolute;
+}
+.back {
+  inset: 3px 6px 3px 0;
+}
+.paper {
+  inset: 10px 9px 6px 3px;
+  border-radius: 4px;
+  background: white;
+}
+.front,
+.blur {
+  inset: 13px auto auto 0.1745px;
+  inline-size: 53.651px;
+  block-size: 32px;
+}
+.blur {
+  /* Figma's exported SVG embeds this effect in a foreignObject. The
+     image cannot blur the paper and folder layers behind it on the page. */
+  backdrop-filter: blur(4px);
+  mask: url("./assets/empty-states-imgFrontNoise.png") center / 100% 100% no-repeat;
+}
+.noise {
+  inset: 13px auto auto 0;
+  inline-size: 54px;
+  block-size: 32px;
+  /* The SVG includes the layer opacity. Blend with the cover on the page. */
+  mix-blend-mode: overlay;
+}
+:global(:root[data-theme="dark"]) .back {
+  content: url("./assets/dark-empty-states-imgBackMain.svg");
+}
+:global(:root[data-theme="dark"]) .front {
+  content: url("./assets/dark-empty-states-imgFrontMain.svg");
+}
+.actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.fileHalo,
+.featured,
+.illustrationBadge {
+  display: grid;
+  place-items: center;
+}
+.fileHalo {
+  inline-size: 104px;
+  block-size: 104px;
+  border-radius: 50%;
+  background: linear-gradient(#fafafa, #e9eaeb);
+}
+.fileIcon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: 40px;
+  block-size: 40px;
+}
+:global(:root[data-theme="light"]) .fileIcon {
+  filter: drop-shadow(0 1px 1.5px rgb(10 13 18 / 10%)) drop-shadow(0 1px 1px rgb(10 13 18 / 10%));
+}
+.fileMark {
+  position: absolute;
+  inset: 16px auto auto 12px;
+}
+.featured {
+  inline-size: 48px;
+  block-size: 48px;
+  border: 1px solid var(--empty-featured-border);
+  border-radius: 10px;
+  background: var(--empty-featured-surface);
+  box-shadow: var(--empty-featured-shadow);
+}
+.featuredGlyph {
+  --lab-glyph-color: var(--empty-featured-glyph);
+  background-color: var(--empty-featured-glyph);
+  mask: var(--lab-glyph-mask) center no-repeat;
+}
+.featuredGlyph img {
+  visibility: hidden;
+}
+.preview[data-size="lg"] .featured {
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: 12px;
+}
+.illustration {
+  position: relative;
+  display: block;
+  z-index: 0;
+}
+.illustration > img,
+.illustrationBadge {
+  position: absolute;
+}
+.illustration > img {
+  max-inline-size: none;
+}
+:global(:root[data-theme="light"]) .illustrationCircle {
+  filter: brightness(0) invert(96.0784%);
+}
+:global(:root[data-theme="light"]) .illustrationCloud {
+  content: var(--empty-light-cloud);
+  filter: drop-shadow(0 3px 1.5px rgb(10 13 18 / 4%)) drop-shadow(0 8px 4px rgb(10 13 18 / 3%))
+    drop-shadow(0 20px 12px rgb(10 13 18 / 8%));
+}
+.illustrationBadge {
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: var(--empty-badge);
+  backdrop-filter: blur(4px);
+}
+.preview[data-icon="illustration"] .empty > span {
+  margin-block-end: 12px;
+}
+.preview[data-icon="featured"]::before,
+.preview[data-icon="illustration"]::before {
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -160px;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  inline-size: 480px;
+  block-size: 480px;
+  mask-image: radial-gradient(closest-side, black, transparent);
+  pointer-events: none;
+  content: "";
+}
+.preview[data-icon="featured"]::before {
+  inset-block-start: -192px;
+  background: repeating-radial-gradient(circle, transparent 0 31px, var(--empty-grid) 31px 32px);
+}
+.preview[data-icon="illustration"]::before {
+  inset-block-start: -104px;
+  background-image:
+    linear-gradient(to right, var(--empty-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--empty-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}

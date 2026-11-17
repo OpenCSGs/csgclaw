@@ -11,10 +11,39 @@ import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { cloudAgentCatalogKey } from "@/hooks/workspace/useCloudAgentCatalog";
 import type { CloudAgent } from "@/models/cloudAgents";
+import { createTranslator } from "@/shared/i18n";
 
 vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
 vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
 const room = { id: "r1", title: "Review", members: ["user-admin", "manager"], is_direct: true, messages: [] };
+
+it("distinguishes the two collaboration modes in the compact task list", async () => {
+  vi.mocked(fetchTaskConversations).mockResolvedValue({
+    rooms: [
+      room,
+      { ...room, id: "r2", title: "Research", is_direct: false, type: "autonomous" },
+      { ...room, id: "r3", title: "Review brief", is_direct: false, type: "on_demand" },
+      { ...room, id: "r4", title: "Discussion", is_direct: false },
+    ],
+    total: 4,
+    has_more: false,
+  });
+  render(
+    <TaskConversationList
+      compact
+      entry={{ isWorking: () => false, busyID: "" } as unknown as TaskEntryController}
+      currentUserID="user-admin"
+      usersById={new Map()}
+      t={createTranslator("en")}
+      onSelect={vi.fn()}
+    />,
+    { wrapper: createQueryWrapper().wrapper },
+  );
+  expect((await screen.findByText("Autonomous")).closest("button")).toHaveTextContent("Research");
+  expect(screen.getByText("On demand").closest("button")).toHaveTextContent("Review brief");
+  expect(screen.getByRole("button", { name: "Review" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Discussion" })).toBeVisible();
+});
 
 describe("TaskConversationList cloud avatars", () => {
   beforeEach(() => {

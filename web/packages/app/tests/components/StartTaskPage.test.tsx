@@ -207,6 +207,25 @@ describe("task presets", () => {
 
 describe("StartTaskPage task preparation", () => {
   beforeEach(() => vi.mocked(sendMessageRequest).mockReset());
+  it("adds a suggested command before the original draft and waits for explicit send", async () => {
+    vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
+    const { create } = setup();
+    const user = userEvent.setup();
+    const prompt = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    const draft = "我想创建智能体。\n它需要监控 Token 用量。";
+    const content = `/创建智能体\n${draft}`;
+    fireEvent.change(prompt, { target: { value: draft } });
+
+    await user.click(screen.getByRole("button", { name: "/ 创建智能体" }));
+    expect(prompt).toHaveValue(content);
+    expect(prompt).toHaveFocus();
+    expect(create).not.toHaveBeenCalled();
+    expect(sendMessageRequest).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() => expect(sendMessageRequest).toHaveBeenCalledWith(expect.objectContaining({ content })));
+  });
+
   it("renders and sends the first task on HTTP without crypto.randomUUID", async () => {
     const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
     vi.stubGlobal("crypto", { getRandomValues });
@@ -292,7 +311,7 @@ describe("StartTaskPage task preparation", () => {
     );
     expect(open).not.toHaveBeenCalled();
     expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("  检查代码  ");
-    fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    fireEvent.click(screen.getByRole("button", { name: "retrySend" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(room));
     expect(create).toHaveBeenCalledTimes(1);
     const sends = vi.mocked(sendMessageRequest).mock.calls;
@@ -311,6 +330,7 @@ describe("StartTaskPage task preparation", () => {
   it("creates and opens a task for the selected worker instead of Manager", async () => {
     vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
     const { create, open } = setup("/new?agent=u-worker");
+    expect(screen.queryByRole("combobox", { name: "collaborationMode" })).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), { target: { value: "hi" } });
     fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(room));
@@ -319,19 +339,32 @@ describe("StartTaskPage task preparation", () => {
     );
     expect(sendMessageRequest).toHaveBeenCalledWith(expect.objectContaining({ room_id: room.id, content: "hi" }));
   });
-  it("creates collaboration using a team member snapshot and on-demand delivery", async () => {
+  it.each(["on_demand", "autonomous"])("creates %s collaboration using a team member snapshot", async (mode) => {
     vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
     const { create, open } = setup("/new?team=team-1");
     expect(screen.getByLabelText("iaWorkdirTitle")).toBeInTheDocument();
     expect(screen.queryByLabelText("iaModelTitle")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("iaReasoningTitle")).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    const selector = screen.getByRole("combobox", { name: "collaborationMode" });
+    expect(selector).toHaveAccessibleDescription("onDemandCollaboration");
+    if (mode === "autonomous") {
+      await user.click(selector);
+      const onDemand = screen.getByRole("option", { name: "onDemandCollaboration" });
+      const autonomous = screen.getByRole("option", { name: "autonomousCollaboration" });
+      expect(onDemand).toHaveAccessibleDescription("onDemandCollaborationHint");
+      expect(autonomous).toHaveAccessibleDescription("autonomousCollaborationHint");
+      await user.click(autonomous);
+      expect(selector).toHaveAccessibleDescription("autonomousCollaboration");
+      expect(selector).toHaveAttribute("aria-expanded", "false");
+    }
     fireEvent.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
     await waitFor(() => expect(open).toHaveBeenCalled());
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         auto_title: false,
         is_direct: false,
-        type: "on_demand",
+        type: mode,
         manager_id: "manager",
         member_ids: ["manager", "worker"],
         source_team_id: "team-1",
@@ -374,6 +407,117 @@ describe("new task member mentions", () => {
       .mockReset()
       .mockResolvedValue({} as never),
   );
+
+  it("preserves a pasted participant mention as a structured reference", async () => {
+    setup("/new?agent=u-worker");
+    const user = userEvent.setup();
+    const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    await user.click(editor);
+    await user.paste("Review\r\n@Worker please");
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() =>
+      expect(sendMessageRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ content: 'Review\n<at user_id="worker">Worker</at> please' }),
+      ),
+    );
+  });
+
+  it("browses a workspace directory with Tab and references a child file", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, path) => ({
+      entries:
+        path === "docs"
+          ? [{ name: "guide.md", path: "docs/guide.md", type: "file" }]
+          : [{ name: "docs", path: "docs", type: "dir" }],
+    }));
+    try {
+      const user = userEvent.setup();
+      setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "Review @docs");
+      await screen.findByRole("option", { name: /docs/ });
+      await user.keyboard("{Tab}");
+      expect(editor).toHaveValue("Review @");
+      await screen.findByRole("option", { name: /guide.md/ });
+      await user.keyboard("{Enter}");
+      await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+      await waitFor(() =>
+        expect(sendMessageRequest).toHaveBeenCalledWith(
+          expect.objectContaining({
+            file_references: [expect.objectContaining({ path: "docs/guide.md" })],
+          }),
+        ),
+      );
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
+  it("shows an empty directory and allows keyboard navigation back", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, path) => ({
+      entries: path ? [] : [{ name: "docs", path: "docs", type: "dir" }],
+    }));
+    try {
+      const user = userEvent.setup();
+      const { create } = setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "Review @docs");
+      await screen.findByRole("option", { name: /docs/ });
+      await user.keyboard("{Tab}");
+      expect(await screen.findByText("agentWorkspaceEmpty")).toBeVisible();
+      expect(screen.getByText("docs/")).toBeVisible();
+      await user.keyboard("{Enter}");
+      expect(create).not.toHaveBeenCalled();
+      await user.keyboard("{ArrowLeft}");
+      expect(await screen.findByRole("option", { name: /docs/ })).toBeVisible();
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
+  it.each(["click", "keyboard"])("retries a failed shared directory request via %s", async (activation) => {
+    vi.mocked(fetchWorkspaceDirectory).mockRejectedValue(new Error("unreadable"));
+    try {
+      setup("/new?team=team-1", "test-model", { configuration: { workspace_dir: "/shared-project" } });
+      const user = userEvent.setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "@");
+      expect(await screen.findByText("chatWorkspaceFilesLoadFailed")).toBeVisible();
+      expect(screen.getByRole("option", { name: /Manager/ })).toBeVisible();
+      const retry = screen.getByRole("button", { name: "retry" });
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+        entries: [{ name: "guide.md", path: "guide.md", type: "file" }],
+      });
+      if (activation === "keyboard") {
+        await user.tab();
+        expect(retry).toHaveFocus();
+        await user.keyboard("{Enter}");
+      } else {
+        await user.click(retry);
+      }
+      expect(await screen.findByRole("option", { name: /guide.md/ })).toBeVisible();
+      expect(editor).toHaveFocus();
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
+  it("groups team members and files from the selected shared workspace", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+      entries: [{ name: "guide.md", path: "guide.md", type: "file" }],
+    });
+    try {
+      setup("/new?team=team-1", "test-model", { configuration: { workspace_dir: "/shared-project" } });
+      const user = userEvent.setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "@");
+      expect(screen.getByText("chatMentionPeople")).toBeVisible();
+      expect(await screen.findByText("chatMentionFiles")).toBeVisible();
+      expect(screen.getByRole("option", { name: /guide.md/ })).toBeVisible();
+      expect(fetchWorkspaceDirectory).toHaveBeenCalledWith("u-manager", "", expect.anything(), "", "/shared-project");
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
 
   it("selects a team member without submitting and sends a structured participant reference", async () => {
     const user = userEvent.setup();
@@ -538,11 +682,10 @@ describe("collaboration directory selection", () => {
         managerDirectory: "/manager-private",
         configuration: { workspace_dir },
       });
-      expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute(
-        "title",
-        workspace_dir || "collaborationWorkdirAutomaticHint",
-      );
-      expect(screen.queryByTitle("/manager-private")).not.toBeInTheDocument();
+      fireEvent.focus(screen.getByLabelText("iaWorkdirTitle"));
+      const tooltip = await screen.findByRole("tooltip");
+      expect(tooltip).toHaveTextContent(workspace_dir || "collaborationWorkdirAutomaticHint");
+      expect(tooltip).not.toHaveTextContent("/manager-private");
       fireEvent.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
       await waitFor(() => expect(open).toHaveBeenCalled());
       expect(create).toHaveBeenCalledWith(expect.objectContaining({ configuration: { workspace_dir } }));
@@ -587,6 +730,7 @@ describe("cloud task targets", () => {
         await user.click(await screen.findByRole("button", { name: /合同条款审阅/ }));
       }
       expect(await screen.findByRole("button", { name: /iaTargetLabel.*合同条款审阅/ })).toBeVisible();
+      expect(screen.queryByRole("group", { name: "collaborationMode" })).not.toBeInTheDocument();
       expect(screen.queryByText("taskEntryModelMissing")).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "composerAddContent" })).not.toBeInTheDocument();
       fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), {
@@ -621,6 +765,22 @@ describe("cloud task targets", () => {
     setup();
     await userEvent.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
     expect(await screen.findByRole("button", { name: /合同条款审阅/ })).toBeDisabled();
+  });
+
+  it("keeps one offline notice and preserves the draft when Enter is pressed", async () => {
+    const offline = { ...cloudAgentFixture[0], status: "offline" as const };
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([offline]));
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([offline]);
+    const { create } = setup(`/new?cloud=${offline.id}`);
+    const user = userEvent.setup();
+    expect(await screen.findByText("cloudChatOffline")).toHaveAttribute("role", "status");
+    const prompt = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    await user.type(prompt, "Hello{Enter}");
+    expect(prompt).toHaveValue("Hello");
+    expect(screen.getByRole("button", { name: "taskEntryStart" })).toBeDisabled();
+    expect(screen.getAllByText("cloudChatOffline")).toHaveLength(1);
+    expect(screen.queryByRole("dialog", { name: "cloudPrivacyTitle" })).not.toBeInTheDocument();
+    expect(create).not.toHaveBeenCalled();
   });
 });
 
@@ -717,7 +877,8 @@ it("selects a slash skill from the shared picker and shows the connector logo", 
   const { create } = setup();
   const user = userEvent.setup();
   const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
-  await user.type(editor, "/fei");
+  await user.click(editor);
+  await user.paste("/fei");
   const option = await screen.findByRole("option", { name: /feishu-docs/ });
   expect(option.querySelector("img")).toHaveAttribute("src", "icons/feishu.png");
   await user.keyboard("{Enter}");

@@ -1,4 +1,4 @@
-import { newerProgressMessage } from "@/models/turnProgress";
+import { newerConversationMessage } from "@/models/conversations";
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchAgents, fetchManagerProfile } from "@/api/agents";
@@ -119,7 +119,7 @@ export function useWorkspaceData() {
               ...room,
               messages: room.messages.map((message) => {
                 const old = prior?.messages.find((item) => item.id === message.id);
-                return old ? newerProgressMessage(old, message) : message;
+                return old ? newerConversationMessage(old, message) : message;
               }),
             };
           }),

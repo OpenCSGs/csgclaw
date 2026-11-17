@@ -8,7 +8,19 @@ This frontend design implements [requirement 3957](https://git-devops.opencsg.co
 
 Creation actions open `/new`. `StartTaskPage` and `TargetPicker` handle the agent or team choice, the Manager-only team, the initial message, and empty-room creation. The picker also exposes the Manager-assisted agent and team creation actions. The conversation directory filter continues to use existing workspace-directory metadata.
 
+Team creation offers **On demand** (the default) and **Autonomous collaboration**. Autonomous members receive unread notifications, actively read public messages, and explicitly send useful contributions. Final answers appear as messages in the current conversation or thread. An identical answer already sent there during the same turn is deduplicated. A turn can finish silently when there is no message to send. Existing free rooms keep their mention-driven delivery. There is no fixed turn limit. The toolbar displays a pause when the user stops collaboration; a new human message resumes admission. Each member keeps its own model and permissions; a new autonomous room shares the same room-owned working directory as on-demand collaboration.
+
 Selecting a destination at viewport widths of 720px or less collapses the navigation so the destination is visible. Desktop navigation remains expanded when selecting a destination. Active conversations and navigation items expose `aria-current` and visible keyboard focus.
+
+## Conversation and member activity
+
+Collaboration spaces keep public conversation separate from execution records. A compact status dock above the composer shows each active member, current action and a short activity summary. Reading an unread notification is labeled “Checking new messages”, rather than implying the member has claimed the task. Selecting a member opens the exact active turn in the activity inspector when its identity is available, falling back to a member filter; raw tools stay there. Stop controls belong to the matching live lease, and failures remain visible until that member starts again. Single-agent and cloud conversation layouts retain their existing behavior.
+
+The main conversation and each thread have their own public transcript and composer status. Autonomous private output and tool progress do not increase thread reply counts. Public questions and approvals remain accessible. When the thread panel is suspended, its active work remains reachable from the main status dock.
+
+The collaboration inspector defaults to a list of executions. Each row shows the member, trigger, status, start time, duration and tool count. Member/status filters and search narrow the turn list. Opening a turn always shows its entire available execution in order, including tool inputs/outputs and the final answer, even when only one item matched the search. Expand and collapse actions apply to the selected turn, and truncated stored output is explicitly labeled. New collaboration records preserve the runtime's redacted structured tool arguments and results up to the existing 64 KiB per-field bound; historical records that may only contain summaries are labeled, and missing history is not reconstructed. Back retains the filters. Grouping uses actor, message-thread scope and turn ID; legacy request IDs are used only when unambiguous, never timestamp proximity. All events remains available for unlinked historical records. Single-agent activity retains its existing view.
+
+The transcript also shows completed replies from older records that stored the answer in `final_text`. Historical recovery affects display only.
 
 ## Room tools
 

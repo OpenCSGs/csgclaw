@@ -9,15 +9,36 @@ import (
 	"csgclaw/internal/im"
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 func (s *IMTranscriptStore) DeliverTurnProgress(ctx context.Context, turn channel.TurnContext, progress activity.TurnProgress, answer string, persist bool, files []agentengine.OutputFile) error {
 	if err := contextError(ctx); err != nil {
 		return err
 	}
+	uploads, rejected := s.outputFileSources(ctx, turn.AgentID, files)
+	defer CloseOutputFileSources(uploads)
+	answer = outputFileDeliveryText(answer, rejected, turn.Locale)
 	kind := "activity"
-	if progress.Status == "succeeded" && (strings.TrimSpace(answer) != "" || len(files) > 0) {
+	publicFinal := progress.Status == "succeeded" && (strings.TrimSpace(answer) != "" || len(files) > 0)
+	thread := turn.ThreadRootID
+	replyThread := thread
+	if turn.Autonomous && publicFinal && thread == "" {
+		replyThread = s.im.AutonomousTaskThread(turn.RoomID, turn.SourceMessageID)
+	}
+	if turn.Autonomous && publicFinal && len(files) == 0 {
+		startedAt, _ := time.Parse(time.RFC3339Nano, progress.StartedAt)
+		sender := s.senderID(turn.ParticipantID)
+		publicFinal = !s.im.HasAutonomousReply(turn.RoomID, sender, replyThread, finalMessageID(turn), answer, startedAt) &&
+			(replyThread == thread || !s.im.HasAutonomousReply(turn.RoomID, sender, thread, finalMessageID(turn), answer, startedAt))
+	}
+	if turn.Autonomous && !publicFinal {
+		progress.PrivateOutput = true
+		answer = ""
+	} else if publicFinal {
+		progress.PrivateOutput = false
 		kind = "final"
+		thread = replyThread
 	}
 	internalError := strings.TrimSpace(progress.Error)
 	var publicError channelrender.PublicPromptError
@@ -41,12 +62,21 @@ func (s *IMTranscriptStore) DeliverTurnProgress(ctx context.Context, turn channe
 	if internalError != "" {
 		metadata = mergeCSGClawMetadata(metadata, map[string]any{channelrender.RuntimeErrorMetaKey: true, channelrender.RuntimeErrorDetailKey: internalError, "error_code": publicError.Code, "presentation_version": 2})
 	}
-	uploads, rejected := s.outputFileSources(ctx, turn.AgentID, files)
-	defer CloseOutputFileSources(uploads)
-	answer = outputFileDeliveryText(answer, rejected, turn.Locale)
 	if strings.TrimSpace(answer) == "" {
 		answer = "\u200b"
 	}
-	_, err = s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{RoomID: turn.RoomID, SenderID: s.senderID(turn.ParticipantID), MessageID: finalMessageID(turn), ThreadRootID: turn.ThreadRootID, Content: answer, Metadata: metadata, AttachmentSources: uploads, Transient: !persist})
+	_, err = s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{
+		RoomID:            turn.RoomID,
+		SenderID:          s.senderID(turn.ParticipantID),
+		MessageID:         finalMessageID(turn),
+		ThreadRootID:      thread,
+		Content:           answer,
+		Metadata:          metadata,
+		AttachmentSources: uploads,
+		Transient:         !persist,
+		// The final response may follow user interactions (for example, a media
+		// generation confirmation). Move the replacement after those messages.
+		RefreshCreatedAt: persist && kind == "final",
+	})
 	return err
 }

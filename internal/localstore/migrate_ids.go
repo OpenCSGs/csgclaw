@@ -1542,6 +1542,16 @@ func (m *typedIDMigrator) migrateAgentDirs() error {
 		}
 	}
 	return filepath.WalkDir(agentsRoot, func(path string, d fs.DirEntry, err error) error {
+		rel, relErr := filepath.Rel(m.root, path)
+		if relErr != nil {
+			return relErr
+		}
+		if isDSHProfileDependencies(rel) {
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if err != nil || d == nil || d.IsDir() || filepath.Ext(path) != ".json" {
 			return err
 		}
@@ -2321,8 +2331,8 @@ func CreateSiblingBackup(root string, now time.Time, ignoreErrors ...func(string
 	} else {
 		// A linked config must be a snapshot of its contents, not another
 		// symlink that changes alongside the live configuration.
-		if err := copyFile(root, backupPath, info.Mode().Perm()); err != nil {
-			return "", err
+		if readErr, writeErr := copyFile(root, backupPath, info.Mode().Perm()); readErr != nil || writeErr != nil {
+			return "", errors.Join(readErr, writeErr)
 		}
 	}
 	if err != nil {
@@ -2335,63 +2345,48 @@ func CreateSiblingBackup(root string, now time.Time, ignoreErrors ...func(string
 
 func copyDir(src, dst string, ignoreErrors ...func(string) bool) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if rel, relErr := filepath.Rel(src, path); relErr == nil && ignoreBackupError(rel, ignoreErrors) {
-				if d != nil && d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			return err
+		rel, relErr := filepath.Rel(src, path)
+		if relErr != nil {
+			return relErr
 		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		if isExcludedBackupEntry(rel) {
-			if d.IsDir() {
+		if strings.EqualFold(rel, runtimeLockFileName) || isDSHProfileDependencies(rel) {
+			if d != nil && d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
+		if err != nil {
+			return handleBackupEntryError(rel, d, err, ignoreErrors)
+		}
 		target := filepath.Join(dst, rel)
+		info, err := d.Info()
+		if err != nil {
+			return handleBackupEntryError(rel, d, err, ignoreErrors)
+		}
 		if d.IsDir() {
-			info, err := d.Info()
-			if err != nil {
-				if ignoreBackupError(rel, ignoreErrors) {
-					return filepath.SkipDir
-				}
-				return err
-			}
 			// Populate and clean up copies even when source directories are
 			// read-only; source access checks still apply while reading them.
 			return os.MkdirAll(target, info.Mode().Perm()|0o700)
 		}
-		info, err := d.Info()
-		if err != nil {
-			if ignoreBackupError(rel, ignoreErrors) {
-				return nil
-			}
-			return err
-		}
 		if info.Mode()&fs.ModeSymlink != 0 {
 			linkTarget, err := os.Readlink(path)
 			if err != nil {
-				if ignoreBackupError(rel, ignoreErrors) {
-					return nil
-				}
-				return err
+				return handleBackupEntryError(rel, d, err, ignoreErrors)
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			return os.Symlink(linkTarget, target)
-		}
-		if err := copyFile(path, target, info.Mode().Perm()); err != nil {
-			if ignoreBackupError(rel, ignoreErrors) {
-				return nil
+			if err := createBackupSymlink(info, linkTarget, target); err != nil {
+				return err
 			}
-			return err
+			return nil
+		}
+		readErr, writeErr := copyFile(path, target, info.Mode().Perm())
+		if writeErr != nil {
+			return errors.Join(readErr, writeErr)
+		}
+		if readErr != nil {
+			return handleBackupEntryError(rel, d, readErr, ignoreErrors)
 		}
 		return nil
 	})
@@ -2406,29 +2401,60 @@ func ignoreBackupError(rel string, predicates []func(string) bool) bool {
 	return false
 }
 
-func isExcludedBackupEntry(rel string) bool {
-	return strings.EqualFold(filepath.Clean(rel), runtimeLockFileName)
+func handleBackupEntryError(rel string, d fs.DirEntry, err error, ignoreErrors []func(string) bool) error {
+	if !ignoreBackupError(rel, ignoreErrors) {
+		return err
+	}
+	if d != nil && d.IsDir() {
+		return filepath.SkipDir
+	}
+	return nil
 }
 
-func copyFile(src, dst string, mode fs.FileMode) error {
+// DSH regenerates this shared dependency mirror on launch. Exclude it from
+// backups and ID rewrites while preserving profile-local packages and settings.
+func isDSHProfileDependencies(rel string) bool {
+	parts := strings.SplitN(filepath.ToSlash(rel), "/", 7)
+	return len(parts) >= 6 && parts[0] == "agents" && parts[2] == ".dsh" &&
+		parts[3] == "home" && parts[4] == "profiles" && parts[5] == "node_modules"
+}
+
+// Keep read errors identifiable when io.Copy reports a failure.
+type backupReadError struct{ error }
+
+type backupReader struct{ io.Reader }
+
+func (r backupReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err != nil && err != io.EOF {
+		return n, backupReadError{err}
+	}
+	return n, err
+}
+
+func copyFile(src, dst string, mode fs.FileMode) (readErr, writeErr error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
+		return nil, err
 	}
 	in, err := os.Open(src)
 	if err != nil {
-		return err
+		return err, nil
 	}
 	defer in.Close()
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, copyErr := io.Copy(out, in)
-	closeErr := out.Close()
-	if err := errors.Join(copyErr, closeErr); err != nil {
-		return errors.Join(err, os.Remove(dst))
+	_, copyErr := io.Copy(out, backupReader{in})
+	if sourceErr, ok := copyErr.(backupReadError); ok {
+		readErr = sourceErr.error
+		copyErr = nil
 	}
-	return nil
+	writeErr = errors.Join(copyErr, out.Close())
+	if readErr != nil || writeErr != nil {
+		writeErr = errors.Join(writeErr, os.Remove(dst))
+	}
+	return readErr, writeErr
 }
 
 func readJSONMapIfExists(path string) (map[string]any, error) {

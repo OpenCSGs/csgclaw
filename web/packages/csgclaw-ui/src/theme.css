@@ -39,10 +39,14 @@
     --csgclaw-ui-space-1: 4px;
     --csgclaw-ui-space-2: 8px;
     --csgclaw-ui-space-3: 12px;
+    --csgclaw-ui-space-4: 16px;
     --csgclaw-ui-space-6: 24px;
     --csgclaw-ui-radius-xs: 2px;
+    --csgclaw-ui-radius-sm: 4px;
     --csgclaw-ui-radius-base: 6px;
     --csgclaw-ui-radius-md: 8px;
+    --csgclaw-ui-radius-xl: 12px;
+    --csgclaw-ui-radius-4xl: 24px;
     --csgclaw-ui-radius-full: 9999px;
     --csgclaw-ui-shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
     --csgclaw-ui-shadow-sm:
@@ -250,10 +254,14 @@
     --csgclaw-ui-space-1: 4px;
     --csgclaw-ui-space-2: 8px;
     --csgclaw-ui-space-3: 12px;
+    --csgclaw-ui-space-4: 16px;
     --csgclaw-ui-space-6: 24px;
     --csgclaw-ui-radius-xs: 2px;
+    --csgclaw-ui-radius-sm: 4px;
     --csgclaw-ui-radius-base: 6px;
     --csgclaw-ui-radius-md: 8px;
+    --csgclaw-ui-radius-xl: 12px;
+    --csgclaw-ui-radius-4xl: 24px;
     --csgclaw-ui-radius-full: 9999px;
     --csgclaw-ui-shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
     --csgclaw-ui-shadow-sm:

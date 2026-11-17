@@ -111,6 +111,9 @@ type InputPart struct {
 type InputFile struct {
 	ID string `json:"id"`
 
+	// AttachmentID identifies the durable chat attachment behind a staged file.
+	AttachmentID string `json:"-"`
+
 	// Resolved is available only to the selected Runtime Adapter, never JSON clients.
 	Resolved *OutputFile `json:"-"`
 }
@@ -130,13 +133,16 @@ type TurnModel struct {
 
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
-	Model         *TurnModel     `json:"-"`
-	MemorySource  *MemorySource  `json:"-"`
-	RuntimeMemory *RuntimeMemory `json:"-"`
+	ImageToolGuidance string         `json:"-"`
+	Model             *TurnModel     `json:"-"`
+	MemorySource      *MemorySource  `json:"-"`
+	RuntimeMemory     *RuntimeMemory `json:"-"`
+	Locale            string         `json:"-"`
 	// RespondingTo identifies the detached answer reserved for this turn.
 	RespondingTo string `json:"-"`
 	// PreservePendingInteractions prevents this turn from superseding a pending form.
 	PreservePendingInteractions bool `json:"-"`
+	StreamReasoningSummary      bool `json:"-"`
 
 	RoomConfiguration *RoomConfiguration   `json:"-"`
 	ImageGeneration   *ImageGenerationTask `json:"image_generation,omitempty"`
@@ -183,6 +189,9 @@ type TurnEvent struct {
 	Activity     *ActivityUpdate     `json:"activity,omitempty"`
 	Interaction  *InteractionRequest `json:"interaction,omitempty"`
 	Output       *OutputItem         `json:"output,omitempty"`
+
+	// Recovered identifies events reconstructed from Runtime history.
+	Recovered bool `json:"-"`
 
 	// A terminal history update may reconcile text still buffered by an in-process consumer.
 	RecoveredText []RecoveredTextPart `json:"-"`
@@ -341,4 +350,9 @@ type TurnResult struct {
 
 	// RuntimeFiles transfers immutable snapshots from the Adapter to Engine.
 	RuntimeFiles []*OutputFile `json:"-"`
+
+	// RuntimeText preserves authoritative native message identities for
+	// in-process delivery, including text recovered from native history.
+	// Recovered tool boundaries retain the original commentary positions.
+	RuntimeText []TurnEvent `json:"-"`
 }

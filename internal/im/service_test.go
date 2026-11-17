@@ -964,6 +964,36 @@ func TestDeliverMessageReplacesExistingMessageWithSameIDAndSender(t *testing.T) 
 	}
 }
 
+func TestDeliverMessageRefreshCreatedAtMovesReplacementToLatestPosition(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{
+		CurrentUserID: "u-admin",
+		Users:         []User{{ID: "manager", Name: "manager"}},
+		Rooms:         []Room{{ID: "room-1", Title: "Ops", Type: apitypes.RoomTypeAutonomous, Members: []string{"manager"}}},
+	})
+	first, err := svc.DeliverMessage(DeliverMessageRequest{
+		RoomID: "room-1", SenderID: "manager", MessageID: "act-1", Content: "pending", Transient: true,
+		Metadata: map[string]any{"csgclaw": map[string]any{"delivery_kind": "activity"}},
+	})
+	if err != nil || first.RoomSequence != 0 {
+		t.Fatalf("transient delivery sequence = %d, error = %v", first.RoomSequence, err)
+	}
+	intervening, err := svc.DeliverMessage(DeliverMessageRequest{RoomID: "room-1", SenderID: "manager", MessageID: "intervening", Content: "confirmed"})
+	if err != nil || intervening.RoomSequence == 0 {
+		t.Fatalf("intervening delivery sequence = %d, error = %v", intervening.RoomSequence, err)
+	}
+	final, err := svc.DeliverMessage(DeliverMessageRequest{RoomID: "room-1", SenderID: "manager", MessageID: "act-1", Content: "complete", RefreshCreatedAt: true})
+	if err != nil {
+		t.Fatalf("DeliverMessage(final) error = %v", err)
+	}
+	if final.CreatedAt.Before(intervening.CreatedAt) || final.RoomSequence <= intervening.RoomSequence {
+		t.Fatalf("final delivery time %s and sequence %d must follow %s and %d", final.CreatedAt, final.RoomSequence, intervening.CreatedAt, intervening.RoomSequence)
+	}
+	messages, err := svc.ListMessages("room-1")
+	if err != nil || len(messages) != 2 || messages[0].ID != intervening.ID || messages[1].ID != final.ID {
+		t.Fatalf("unexpected transcript order: %+v, error = %v", messages, err)
+	}
+}
+
 func TestListRoomsUsersAndMessages(t *testing.T) {
 	earlier := time.Date(2026, 4, 1, 9, 0, 0, 0, time.UTC)
 	later := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
@@ -1293,6 +1323,62 @@ func TestPresentDirectRoomKeepsTitleWhenCurrentUserIsNotMember(t *testing.T) {
 	}
 	if strings.Join(room.MemberNames, ",") != "admin,ux" {
 		t.Fatalf("Room(room-1).MemberNames = %#v, want admin,ux", room.MemberNames)
+	}
+}
+
+func TestAddRoomMembersRejectsCloudIdentity(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{
+		CurrentUserID: AdminUserID,
+		Users: []User{
+			{ID: AdminUserID, Name: "admin"},
+			{ID: "user-worker", Name: "Worker", Role: "worker"},
+			{ID: "user-relay-history", Name: "Cloud History", Role: "cloud"},
+		},
+		Rooms: []Room{{ID: "room-1", Members: []string{AdminUserID}}},
+	})
+
+	_, err := svc.AddRoomMembers(AddRoomMembersRequest{
+		RoomID:    "room-1",
+		InviterID: AdminUserID,
+		UserIDs:   []string{"user-worker", "relay-history"},
+	})
+	if err == nil || err.Error() != "cannot invite a cloud agent to this room" {
+		t.Fatalf("AddRoomMembers() error = %v, want cloud identity rejection", err)
+	}
+	room, _ := svc.Room("room-1")
+	if !slices.Equal(room.Members, []string{AdminUserID}) {
+		t.Fatalf("room members = %v after rejected invitation", room.Members)
+	}
+}
+
+func TestAddRoomMembersRejectsLegacyNotifier(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{
+		CurrentUserID: AdminUserID,
+		Users: []User{
+			{ID: AdminUserID, Name: "admin"},
+			{ID: "user-worker", Name: "Worker", Role: "worker"},
+			{ID: "user-old", Name: "Legacy notifier", Role: "worker"},
+			{ID: "user-old-role", Name: "Legacy notifier role", Role: "notifier"},
+		},
+		Rooms: []Room{{ID: "room-1", Members: []string{AdminUserID}}},
+	})
+	svc.SetLegacyNotifierLookup(func(user User) bool { return user.ID == "user-old" })
+
+	for _, id := range []string{"user-old", "user-old-role"} {
+		user, ok := svc.User(id)
+		if !ok || !user.LegacyNotifier {
+			t.Fatalf("User(%q) was not marked as a legacy notifier", id)
+		}
+		_, err := svc.AddRoomMembers(AddRoomMembersRequest{
+			RoomID: "room-1", InviterID: AdminUserID, UserIDs: []string{"user-worker", id},
+		})
+		if err == nil || err.Error() != "cannot invite a legacy notifier to this room" {
+			t.Fatalf("AddRoomMembers(%q) error = %v, want legacy notifier rejection", id, err)
+		}
+	}
+	room, _ := svc.Room("room-1")
+	if !slices.Equal(room.Members, []string{AdminUserID}) {
+		t.Fatalf("room members = %v after rejected invitations", room.Members)
 	}
 }
 

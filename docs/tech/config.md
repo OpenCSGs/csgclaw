@@ -68,9 +68,12 @@ When it is set, the Web UI login flow also uses it as the trusted public base fo
 
 `no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
 
-`local_single_user = true` declares a standalone Web server bound only to loopback as a personal instance.
-Agent memory is then on by default in private chats and can be disabled from the Agent’s memory page.
-The default is `false`, which shared unauthenticated deployments use.
+Agent memory is enabled by default in local Web, desktop, remote, and cloud deployments, without any additional configuration or provisioning metadata.
+Memory uses the same instance authentication as chat and maps human requests to the default user ID, `user-admin`.
+Proxy forwarding, the listen address, and the sandbox creation service do not determine whether memory is available.
+Users can disable memory per Agent, and that choice survives restarts.
+Only eligible private conversations are learned; group chats and Agent-identity requests remain excluded.
+There is currently no separate public-Agent deployment flag; shared deployments also default to memory enabled.
 
 Memory is stored in `~/.csgclaw/agents/<agent-id>/memory/<user-id>/`, containing `state.json` and the plain Markdown document `MEMORY.md`.
 Instance-level memory state is stored in the `agent_memory` section of `~/.csgclaw/state.json` and is only updated on initialization or a deployment mode change.
@@ -167,14 +170,17 @@ default_worker_template = "builtin.codex-worker"
 
 An Agent can select an optional image generation provider and model separately from its chat model in Profile.
 The current integration uses the Codex Runtime's image tool in CSGClaw web conversations and reuses the selected provider's credentials.
-Provider-declared `text-to-image` models are cached separately in `image_models`; known GPT Image models are recognized when task metadata is unavailable.
+Provider-declared `text-to-image` and `image-to-image` models are cached separately in `image_models`; known GPT Image models are recognized when task metadata is unavailable.
+The model picker shows the provider-declared input modes cached in `image_metadata`. Refresh the provider connection to populate the labels for an existing catalog.
 This cache is refreshed by connection checks and does not mean the current account or upstream adapter has passed a real generation request.
-The image adapter uses the OpenAI Images API and requests base64 output; providers exposing only a native, different request schema require a compatible gateway adapter.
+In a web conversation, attach one or more images and ask the Agent to edit them or use them as references. The configured model must support OpenAI-compatible multipart `POST /v1/images/edits` and return `b64_json` or a downloadable image URL in `data[0].url`. Text-only requests use `POST /v1/images/generations`. CSGClaw checks the provider catalog’s text-to-image and image-to-image capabilities before sending each request. An unclassified model in the image catalog is eligible for text-to-image. Reference editing requires a declared capability or a built-in GPT Image capability. After an HTTP 400 the Agent reports the error and ends the image request for that turn. To generate a new image after an unsuccessful reference edit, start a new turn and explicitly request a redraw.
 
 ### Video generation models
 
 An Agent can select a video generation provider and model separately from its chat model. Provider-declared `text-to-video` and `image-to-video` models are cached in `video_models`.
-The video adapter uses AIGateway's OpenAI-compatible asynchronous API: `POST /v1/videos` creates a task, `GET /v1/videos/{id}` reads its status, and `GET /v1/videos/{id}/content` downloads the result. The Codex Runtime exposes this through `csgclaw_generate_video`; completed videos are stored and delivered as conversation attachments.
+The video adapter uses AIGateway's OpenAI-compatible asynchronous API: `POST /v1/videos` creates a task, `GET /v1/videos/{id}` reads its status, and `GET /v1/videos/{id}/content` downloads the result. For image-to-video, attach one image and ask the Agent to use it as the first frame. The adapter sends the reference image as multipart `input_reference` and falls back to JSON `input_reference.image_url` when the gateway explicitly rejects multipart references. The Codex Runtime exposes this through `csgclaw_generate_video`; completed videos are stored and delivered as conversation attachments.
+
+Reference uploads support PNG, JPEG, and WebP, with a combined limit of 32 MiB per request. Image edits accept up to 16 images.
 
 ### Dynamic Codex or Claude Code profiles
 

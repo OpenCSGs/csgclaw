@@ -1,3 +1,4 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, UIEvent } from "react";
 import { AlertCircle, CloudDownload, FileCode2, RefreshCw, UploadCloud } from "lucide-react";
@@ -313,7 +314,10 @@ export function SkillUploadDialog({
                               <FileCode2 size={16} strokeWidth={2} />
                             </span>
                             <span className={styles.remoteMain}>
-                              <span className={classNames(styles.remoteTitle, "truncate")}>{item.name}</span>
+                              <span className={classNames(styles.remoteTitle, "truncate")}>
+                                {item.name}
+                                {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+                              </span>
                               <span className={classNames(styles.remoteMeta, "truncate")}>{description}</span>
                             </span>
                           </>

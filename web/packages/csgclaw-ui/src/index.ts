@@ -17,3 +17,5 @@ export * from "./components/Switch/index.js";
 export * from "./components/Tooltip/index.js";
 export * from "./components/InlineError/index.js";
 export * from "./components/StatusBadge/index.js";
+export * from "./components/MediaGeneration/index.js";
+export * from "./components/QuestionCard/index.js";

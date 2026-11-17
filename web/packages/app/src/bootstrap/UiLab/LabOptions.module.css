@@ -1,0 +1,26 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+  margin-block: var(--space-3);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  flex: 0 1 180px;
+  min-width: min(100%, 140px);
+  color: var(--muted);
+  font: var(--text-sm-normal);
+}
+
+.trigger {
+  width: 100%;
+}
+
+.resetRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: var(--space-3);
+}

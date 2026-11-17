@@ -60,6 +60,7 @@ type remoteKnowledgeBasesListResponse struct {
 }
 
 type remoteKnowledgeBaseSummary struct {
+	Recommended       bool                       `json:"recommended"`
 	Availability      knowledgebase.Availability `json:"availability"`
 	CSGHubResponse    json.RawMessage            `json:"csghub_response"`
 	ConfiguredMCP     string                     `json:"configured_mcp_name,omitempty"`
@@ -120,6 +121,7 @@ func (h *Handler) handleRemoteKnowledgeBases(w http.ResponseWriter, r *http.Requ
 			ConfiguredMCP:     knowledgebase.FindConfiguredServer(servers, item.ContentID),
 			ContentID:         item.ContentID,
 			Description:       item.Description,
+			Recommended:       item.Recommended,
 			ID:                item.ID,
 			Name:              item.Name,
 			UnavailableReason: reason,

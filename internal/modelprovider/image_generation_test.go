@@ -148,3 +148,84 @@ func TestImageGatewayMislabelledCompressionAndHTTP200Error(t *testing.T) {
 		t.Fatalf("lost gateway error: %v", err)
 	}
 }
+
+func TestGenerateImageDownloadsURLResults(t *testing.T) {
+	var pngData bytes.Buffer
+	if err := png.Encode(&pngData, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, asset string
+		wantStatus  int
+	}{
+		{name: "generation", asset: "/image"},
+		{name: "edit", asset: "/image"},
+		{name: "download rejected", asset: "/forbidden", wantStatus: http.StatusForbidden},
+		{name: "non-image content", asset: "/invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/images/generations", "/images/edits":
+					if r.Header.Get("Authorization") != "Bearer secret" {
+						t.Error("missing generation credentials")
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"url": "http://" + r.Host + tc.asset}}})
+				default:
+					if r.Method != http.MethodGet || r.Header.Get("Authorization") != "" || r.Header.Get("X-Provider-Key") != "" {
+						t.Error("download used generation credentials or method")
+					}
+					switch r.URL.Path {
+					case "/image":
+						_, _ = w.Write(pngData.Bytes())
+					case "/forbidden":
+						w.WriteHeader(http.StatusForbidden)
+					case "/invalid":
+						_, _ = w.Write([]byte("not an image"))
+					}
+				}
+			}))
+			defer server.Close()
+			var references []ReferenceImage
+			if tc.name == "edit" {
+				references = []ReferenceImage{{Name: "source.png", Data: pngData.Bytes()}}
+			}
+			result, err := GenerateImage(context.Background(), server.Client(), server.URL, "secret", map[string]string{"X-Provider-Key": "private"}, "mock_image_generations", "snow", references...)
+			switch {
+			case tc.wantStatus != 0:
+				var details *ImageGenerationError
+				if !errors.As(err, &details) || details.Code != "image_download_failed" || details.HTTPStatus != tc.wantStatus {
+					t.Fatalf("unexpected download error: %v", err)
+				}
+			case tc.asset == "/invalid":
+				if err == nil {
+					t.Fatal("accepted non-image content")
+				}
+			default:
+				if err != nil || result.MediaType != "image/png" || !bytes.Equal(result.Data, pngData.Bytes()) {
+					t.Fatalf("unexpected downloaded result: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveImageGenerationOptionsDefaultsOnlyVerifiedTextRoutes(t *testing.T) {
+	for _, tc := range []struct {
+		provider string
+		model    string
+		edit     bool
+		options  ImageGenerationOptions
+		want     ImageGenerationOptions
+	}{
+		{provider: "opencsg", model: "Qwen/Qwen-Image-2512-test", want: ImageGenerationOptions{Size: "1024x1024"}},
+		{provider: "opencsg", model: "Qwen-Image-2512", want: ImageGenerationOptions{Size: "1536x1024"}},
+		{provider: "opencsg", model: "Qwen-Image-2512", edit: true},
+		{provider: "custom", model: "Qwen-Image-2512"},
+		{provider: "opencsg", model: "Qwen-Image-2512", options: ImageGenerationOptions{Size: "1024x1024"}, want: ImageGenerationOptions{Size: "1024x1024"}},
+	} {
+		if got := ResolveImageGenerationOptions(tc.provider, tc.model, tc.edit, tc.options); got != tc.want {
+			t.Errorf("%+v: got %+v", tc, got)
+		}
+	}
+}

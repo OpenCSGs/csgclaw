@@ -64,8 +64,6 @@ type Options struct {
 	AppsStatePath      string
 	AccessToken        string
 	NoAuth             bool
-	LocalSingleUser    bool
-	MemoryCloud        bool
 	AdvertiseBaseURL   string
 	InternalBaseURL    string
 	Desktop            *DesktopOptions
@@ -149,7 +147,7 @@ func Run(opts Options) error {
 		}()
 	}
 	handler := newHandler(opts)
-	closeMemory := startAgentMemory(runCtx, opts, listener, handler)
+	closeMemory := startAgentMemory(runCtx, opts, handler)
 	defer closeMemory()
 	if err := handler.MigrateSessionWorkspaces(); err != nil {
 		_ = listener.Close()
@@ -160,6 +158,7 @@ func Run(opts Options) error {
 		return fmt.Errorf("initialize relay: %w", err)
 	}
 	defer handler.CloseRelay()
+	defer handler.CloseBrowser()
 	if opts.AppsStatePath != "" {
 		if err := handler.EnableConnectors(opts.AppsStatePath); err != nil {
 			_ = listener.Close()

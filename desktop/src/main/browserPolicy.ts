@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   BrowserBounds,
   DesktopBrowserRequest,
@@ -23,7 +24,10 @@ export function parseBrowserRequest(value: unknown): DesktopBrowserRequest {
   const request = value as DesktopBrowserRequest;
   if (typeof request.id !== "string" || !request.id || request.id.length > 256)
     throw new Error("Browser identity is invalid.");
-  if (request.action === "navigate") {
+  if (request.action === "previewHTML") {
+    if (typeof request.html !== "string" || typeof request.sourceKey !== "string" || !request.sourceKey || request.sourceKey.length > 16384)
+      throw new Error("HTML preview content is invalid.");
+  } else if (request.action === "navigate") {
     if (typeof request.url !== "string")
       throw new Error("Browser navigation is invalid.");
   } else if (request.action === "sync") {
@@ -41,7 +45,7 @@ export function parseBrowserRequest(value: unknown): DesktopBrowserRequest {
       request.bounds.height < 0
     )
       throw new Error("Browser layout is invalid.");
-  } else if (!["reload", "back", "forward", "close"].includes(request.action))
+  } else if (!["reload", "back", "forward", "close", "releaseHTML"].includes(request.action))
     throw new Error("Browser action is invalid.");
   return request;
 }
@@ -65,4 +69,10 @@ export function clipBrowserBounds(
       Math.min(height - y, Math.round(bounds.y + bounds.height) - y),
     ),
   };
+}
+
+// In-memory partitions retain a file's storage across refreshes and reopened
+// views without exposing it to other files or the ordinary browser session.
+export function htmlPreviewPartition(appOrigin: string, sourceKey: string): string {
+  return `csgclaw-html-preview:${createHash("sha256").update(JSON.stringify([appOrigin, sourceKey])).digest("hex")}`;
 }

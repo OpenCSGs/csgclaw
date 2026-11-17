@@ -6,7 +6,9 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/conversationresource"
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/modelcap"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -49,6 +51,8 @@ type Adapter struct {
 	newTurnID     idGenerator
 	work          workOptions
 	roomContext   roomtask.TurnContextProvider
+	unreadUpdates unreadUpdateReader
+	taskThread    func(roomID, sourceID string) string
 	projector     *roomtask.ContextProjector
 }
 
@@ -141,6 +145,9 @@ func Classify(event channel.Event) string {
 }
 
 func classifyInbound(event channel.Event) inboundKind {
+	if event.NotificationOnly {
+		return inboundRun
+	}
 	text := strings.TrimSpace(event.Text)
 	if cmd, ok, err := slashcommand.Parse(text); err == nil && ok && slashcommand.IsNewConversationCommand(cmd) && event.ResourceSelection == nil {
 		return inboundReset
@@ -266,7 +273,26 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	var current roomtask.PrivateTurnContext
+	if a.roomContext != nil {
+		current, err = a.roomContext(roomtask.TurnContextRequest{ConversationID: string(turn.ConversationKey), RoomID: event.RoomID, ParticipantID: binding.ParticipantID, SourceID: event.MessageID, TaskID: event.TaskID})
+		if err != nil {
+			if a.room != nil {
+				if room, ok := a.room(turn.RoomID); ok && room.IsAutonomous() {
+					return channel.Outcome{Turn: turn, Result: failed(agentengine.ErrorInvalidRequest, "resolve room context: "+err.Error())}, err
+				}
+			}
+			return a.complete(ctx, turn, failed(agentengine.ErrorInvalidRequest, "resolve room context: "+err.Error()))
+		}
+		if current.Skip {
+			return channel.Outcome{Turn: turn, Result: agentengine.TurnResult{Status: agentengine.TurnSucceeded}}, nil
+		}
+		turn.Autonomous = current.Role == roomtask.TurnRoleAutonomous
+	}
 	turn.AgentTurn = true
+	if turn.Autonomous {
+		ctx = channel.WithTurnContext(ctx, turn)
+	}
 	record.Capture("channel.turn", turn)
 	ctx, finishWork, observeWork := a.startWork(ctx, turn)
 	defer func() { finishWork(outcome.Result) }()
@@ -279,7 +305,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	}
 
 	finishInput := diagnostics.Measure(ctx, "input.prepare", "csgclaw")
-	input, release, inputErr := a.input(ctx, binding, event, turn)
+	input, release, inputErr := a.input(ctx, binding, event, turn, current)
 	finishInput()
 	if release != nil {
 		defer release()
@@ -318,13 +344,14 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	result := conversation.Run(ctx, agentengine.TurnRequest{
 		MemorySource:      memorySource,
 		RoomConfiguration: session,
+		Locale:            turn.Locale,
 		ID:                turn.TurnID,
 		ConversationKey:   turn.ConversationKey,
 		Input:             input,
 		Admission:         builtInIMAdmissionPolicy,
 		Continuation:      agentengine.ContinuationCreateOrResume,
 		Interaction:       agentengine.InteractionResolve,
-	}, contract.MediaGenerationSink{EventSink: rendererSink{renderer: a.renderer, turn: turn, observeWork: observeWork}})
+	}, contract.MediaGenerationSink{EventSink: rendererSink{renderer: a.renderer, turn: turn, observeWork: observeWork, projector: a.projector}})
 	if result.Status != agentengine.TurnSucceeded && a.projector != nil {
 		// A failed/canceled Runtime call may not have retained its input. Prefer
 		// one safe full fact refresh on retry.
@@ -373,7 +400,14 @@ func (a *Adapter) turnContext(binding channel.Binding, event channel.Event) (cha
 	}, nil
 }
 
-func (a *Adapter) input(ctx context.Context, binding channel.Binding, event channel.Event, turn channel.TurnContext) ([]agentengine.InputPart, func(), error) {
+func (a *Adapter) input(ctx context.Context, binding channel.Binding, event channel.Event, turn channel.TurnContext, current roomtask.PrivateTurnContext) ([]agentengine.InputPart, func(), error) {
+	if current.Notification != nil {
+		event.NotificationOnly = true
+		event.Text = ""
+		event.Attachments = nil
+		event.ResourceSelection = nil
+		event.ThreadContext = nil
+	}
 	attachments := files.EventAttachments(event)
 	if a.attachments == nil && len(attachments) > 0 {
 		return nil, nil, fmt.Errorf("attachment resolver is not configured")
@@ -414,15 +448,6 @@ func (a *Adapter) input(ctx context.Context, binding channel.Binding, event chan
 		input = append(input, agentengine.InputPart{Kind: agentengine.InputPartFile, File: &file})
 	}
 	if a.roomContext != nil {
-		current, err := a.roomContext(roomtask.TurnContextRequest{
-			ConversationID: string(turn.ConversationKey),
-			RoomID:         event.RoomID, ParticipantID: binding.ParticipantID,
-			SourceID: event.MessageID, TaskID: event.TaskID,
-		})
-		if err != nil {
-			releaseAll()
-			return nil, nil, fmt.Errorf("resolve room context: %w", err)
-		}
 		hidden, err := a.projector.Project(string(turn.ConversationKey), current)
 		if err != nil {
 			releaseAll()
@@ -469,12 +494,22 @@ func SourceTurnID(binding channel.Binding, event channel.Event) agentengine.Turn
 }
 
 type rendererSink struct {
+	projector   *roomtask.ContextProjector
 	renderer    delivery.Renderer
 	turn        channel.TurnContext
 	observeWork func(context.Context, agentengine.TurnEvent)
 }
 
 func (s rendererSink) Emit(ctx context.Context, event agentengine.TurnEvent) error {
+	if s.projector != nil && event.Kind == agentengine.TurnEventActivityUpdate && event.Activity != nil && event.Activity.Kind == modelcap.ContextUsageKind {
+		var usage modelcap.ContextUsage
+		data, err := json.Marshal(event.Activity.Payload)
+		if err == nil && json.Unmarshal(data, &usage) == nil && usage.Compacting {
+			// The guide is room data, not native standing policy. Refresh it on
+			// the next turn after compaction, without waiting for the periodic fallback.
+			s.projector.Reset(string(s.turn.ConversationKey))
+		}
+	}
 	record := diagnostics.From(ctx)
 	if event.Text != "" {
 		record.FirstOutput()

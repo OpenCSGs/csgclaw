@@ -39,16 +39,35 @@ func (m *appServerManager) publishContextUsage(runtimeID string, live *liveSessi
 	usage.CompactThreshold = metadata.CompactThreshold()
 	switch method {
 	case "item/started":
+		if !usage.Compacting {
+			if live.compactionUsageReady == nil {
+				live.compactionUsageReady = make(map[string]bool)
+			}
+			live.compactionUsageReady[threadID] = false
+		}
 		usage.Compacting = true
 	case "item/completed":
+		// Codex recomputes occupancy before completing the compaction item. Do
+		// not erase that newer report with a lifecycle-only notification.
+		if !live.compactionUsageReady[threadID] {
+			usage.UsedTokens = nil
+		}
 		usage.Compacting = false
-		usage.UsedTokens = nil
 	default:
 		if raw, ok := params["tokenUsage"].(map[string]any); ok {
 			if last, ok := raw["last"].(map[string]any); ok {
 				if value, valid := contextTokenNumber(last["totalTokens"]); valid {
 					usage.UsedTokens = &value
 					usage.Estimated = false
+					input, inputOK := contextTokenNumber(last["inputTokens"])
+					output, outputOK := contextTokenNumber(last["outputTokens"])
+					if usage.Compacting && inputOK && outputOK && input == 0 && output == 0 {
+						usage.Estimated = true
+						if live.compactionUsageReady == nil {
+							live.compactionUsageReady = make(map[string]bool)
+						}
+						live.compactionUsageReady[threadID] = true
+					}
 				}
 			}
 		}

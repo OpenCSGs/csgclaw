@@ -198,11 +198,10 @@ func noAuthDetectFromContext(ctx context.Context) bool {
 func defaultConfig() config.Config {
 	return config.Config{
 		Server: config.ServerConfig{
-			ListenAddr:      config.DefaultListenAddr(),
-			AccessToken:     config.DefaultAccessToken,
-			NoAuth:          false,
-			LocalSingleUser: false,
-			ShowUpgrade:     true,
+			ListenAddr:  config.DefaultListenAddr(),
+			AccessToken: config.DefaultAccessToken,
+			NoAuth:      false,
+			ShowUpgrade: true,
 		},
 		Bootstrap: config.BootstrapConfig{},
 		Sandbox:   config.SandboxConfig{},

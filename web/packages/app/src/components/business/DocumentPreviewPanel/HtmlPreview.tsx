@@ -1,8 +1,10 @@
 import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import { useMemo, useState } from "react";
 import DOMPurify from "dompurify";
-import { SegmentedControl } from "@/components/ui";
-import { SyntaxHighlightedText } from "./SyntaxHighlightedText";
+import { Check, Copy, WrapText } from "lucide-react";
+import { Button, SegmentedControl, Tooltip } from "@/components/ui";
+import { writeTextToClipboard } from "@/shared/lib/clipboard";
+import { HtmlSourceView } from "./HtmlSourceView";
 
 const htmlPreviewCSP = [
   "default-src 'none'",
@@ -110,17 +112,59 @@ function htmlPreviewDocument(source: string, scale: number): string {
 
 export default function HtmlPreview({ scale, text, t }: { scale: number; text: string; t: (key: string) => string }) {
   const [mode, setMode] = useState<"preview" | "source">("preview");
+  const [wrap, setWrap] = useState(true);
+  const [copyResult, setCopyResult] = useState<{ text: string; ok: boolean }>();
   const srcDoc = useMemo(() => htmlPreviewDocument(text, scale), [scale, text]);
+  const copied = copyResult?.text === text ? copyResult.ok : undefined;
+  const copyStatus = copied === undefined ? "" : t(copied ? "copiedToClipboard" : "copyTextFailed");
 
   return (
     <div className={documentPreviewPanelStyles["document-preview-html-shell"]}>
       <div className={documentPreviewPanelStyles["document-preview-mode-switch"]}>
+        {mode === "source" ? (
+          <div className={documentPreviewPanelStyles["document-preview-source-actions"]}>
+            <Tooltip content={t("attachmentPreviewWrapSource")}>
+              <Button
+                active={wrap}
+                aria-label={t("attachmentPreviewWrapSource")}
+                aria-pressed={wrap}
+                iconOnly
+                onClick={() => setWrap(!wrap)}
+                size="sm"
+                variant="tertiaryGray"
+              >
+                <WrapText size={16} />
+              </Button>
+            </Tooltip>
+            <Tooltip content={copyStatus || t("attachmentPreviewCopySource")}>
+              <Button
+                aria-label={t("attachmentPreviewCopySource")}
+                disabled={!text}
+                iconOnly
+                onClick={() => {
+                  setCopyResult(undefined);
+                  void writeTextToClipboard(text).then((ok) => setCopyResult({ text, ok }));
+                }}
+                size="sm"
+                variant="tertiaryGray"
+              >
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+              </Button>
+            </Tooltip>
+            <span role="status" className={copied === false ? undefined : "sr-only"}>
+              {copyStatus}
+            </span>
+          </div>
+        ) : null}
         <SegmentedControl
           label={t("attachmentPreviewViewMode")}
           size="sm"
           variant="text"
           value={mode}
-          onChange={setMode}
+          onChange={(next) => {
+            setMode(next);
+            setCopyResult(undefined);
+          }}
           options={[
             { value: "preview", label: t("workspacePreviewPreviewTab") },
             { value: "source", label: t("workspacePreviewCodeTab") },
@@ -138,7 +182,7 @@ export default function HtmlPreview({ scale, text, t }: { scale: number; text: s
           />
         </div>
       ) : (
-        <SyntaxHighlightedText language="html" scale={scale} text={text} t={t} />
+        <HtmlSourceView label={t("workspacePreviewCodeTab")} scale={scale} text={text} wrap={wrap} />
       )}
     </div>
   );

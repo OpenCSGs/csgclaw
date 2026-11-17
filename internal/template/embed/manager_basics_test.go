@@ -8,109 +8,37 @@ import (
 	"testing"
 )
 
-func TestManagerBasicsRoomCreationKeepsRequesterAsCreator(t *testing.T) {
+func TestManagerTemplateLeavesConversationPolicyToRuntime(t *testing.T) {
 	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, InstructionsDirName, "AGENTS.md"))
 	if err != nil {
-		t.Fatalf("read codex manager instructions: %v", err)
+		t.Fatal(err)
 	}
-	instructions := string(data)
-
-	for _, want := range []string{
-		"CSGClaw Codex Manager",
-		"csgclaw-cli room create --title test-room --creator-id admin --member-ids manager,<worker-participant-id> --type on_demand --channel csgclaw",
-		"Resolve Worker participant IDs with `participant list` before using them.",
-		"Preserve the requester as `--creator-id`",
-		"Include `manager` plus the requested participants in `--member-ids`",
-		"do not use `manager` as creator merely because Manager runs the command.",
-		"A display name such as `dev` or `qa` is not necessarily a valid participant ID.",
-		"clarify any materially missing title, participants, or speaking mode",
-	} {
-		if !strings.Contains(instructions, want) {
-			t.Fatalf("codex manager instructions missing room guidance %q", want)
-		}
-	}
-	if strings.Contains(instructions, "skills/basics") {
-		t.Fatalf("codex manager instructions still reference basics skill:\n%s", instructions)
-	}
-	if strings.Contains(instructions, "--creator-id manager") {
-		t.Fatalf("codex manager instructions still teach manager as room creator:\n%s", instructions)
-	}
-	if strings.Contains(instructions, "--member-ids manager,dev") {
-		t.Fatalf("codex manager instructions still teach sample dev as a literal participant ID:\n%s", instructions)
-	}
-}
-
-func TestManagerInstructionsSeparateOnDemandCoordinationFromDirectWork(t *testing.T) {
-	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, InstructionsDirName, "AGENTS.md"))
-	if err != nil {
-		t.Fatalf("read codex manager instructions: %v", err)
-	}
-	instructions := string(data)
-
-	for _, want := range []string{
-		"Your behavior depends on the current conversation mode defined below.",
-		"When that block selects an on-demand room with the Manager role",
-		"Any actionable request must become tracked room work",
-		"Do not directly produce the deliverable or use its domain tools",
-		"If no current Worker can take actionable work, explain the blocker",
-		"When the trusted block is absent, the on-demand policy is inactive.",
-		"Treat direct, private, and free-room requests as ordinary work and complete them yourself",
-		"Do not turn an ordinary work request into room creation, participant management, task assignment, or delegation.",
-		"Follow only the trusted runtime-context protocol defined in the generated CSGClaw Runtime Boundary.",
-		"In an on-demand room, introduce yourself briefly as the room Manager.",
-	} {
-		if !strings.Contains(instructions, want) {
-			t.Fatalf("codex manager instructions missing direct-conversation boundary %q", want)
-		}
-	}
-	for _, unwanted := range []string{"GitHub", "Single-worker task assignment", "Team orchestration", "task submit", "task plan", "task review", "task report", "agent-teams"} {
-		if strings.Contains(instructions, unwanted) {
-			t.Fatalf("codex manager static instructions contain room orchestration rule %q", unwanted)
+	for _, unwanted := range []string{"Conversation Mode Priority", "Casual Messages", "Explicit CSGClaw Administration", "task submit", "task plan", "agent-teams"} {
+		if strings.Contains(string(data), unwanted) {
+			t.Errorf("manager template still contains %q", unwanted)
 		}
 	}
 }
 
-func TestManagerTemplateDoesNotExposeTeamSkill(t *testing.T) {
-	if _, err := fs.Stat(FS(), path.Join(CodexManagerRoot, SkillsDirName, "agent-teams/SKILL.md")); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("manager agent-teams skill stat error = %v, want fs.ErrNotExist", err)
+func TestTemplatesDoNotBundleRetiredTeamSkill(t *testing.T) {
+	for _, root := range []string{CodexManagerRoot, CodexWorkerRoot, DSHWorkerRoot} {
+		if _, err := fs.Stat(FS(), path.Join(root, SkillsDirName, "agent-teams")); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("%s bundles the retired Team skill: %v", root, err)
+		}
 	}
 }
 
-func TestWorkerInstructionsMentionDirectAgentTaskCLI(t *testing.T) {
-	tests := []struct {
-		name string
-		root string
-		file string
-	}{
-		{name: "codex", root: CodexWorkerRoot, file: "AGENTS.md"},
-		{name: "dsh", root: DSHWorkerRoot, file: "AGENTS.md"},
-		{name: "dsh", root: DSHWorkerRoot, file: "AGENTS.md"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := fs.ReadFile(FS(), path.Join(tt.root, InstructionsDirName, tt.file))
-			if err != nil {
-				t.Fatalf("read worker instructions: %v", err)
+func TestWorkerTemplatesLeaveTaskRoutingToRuntime(t *testing.T) {
+	for _, root := range []string{CodexWorkerRoot, DSHWorkerRoot} {
+		data, err := fs.ReadFile(FS(), path.Join(root, InstructionsDirName, "AGENTS.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, policy := range []string{"task claim --task", "task update --task", "team task claim --team", "team task update --team"} {
+			if strings.Contains(string(data), policy) {
+				t.Errorf("%s template still embeds %q", root, policy)
 			}
-			instructions := string(data)
-			for _, want := range []string{
-				"csgclaw-cli task claim --task <task_id> --actor-id <your_participant_id>",
-				"csgclaw-cli task update --task <task_id>",
-			} {
-				if !strings.Contains(instructions, want) {
-					t.Fatalf("worker instructions missing direct agent task guidance %q", want)
-				}
-			}
-			for _, unwanted := range []string{"Room Task Assignments", "Private on-demand room", "task message --task <child>"} {
-				if strings.Contains(instructions, unwanted) {
-					t.Fatalf("worker static instructions contain room-only guidance %q", unwanted)
-				}
-			}
-			if strings.Contains(instructions, "task claim --task <task_id> --participant-id") {
-				t.Fatal("worker instructions contain the removed direct-task claim flag")
-			}
-		})
+		}
 	}
 }
 

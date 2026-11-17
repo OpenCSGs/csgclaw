@@ -351,6 +351,56 @@ describe("AgentDetailPane metadata editing", () => {
 });
 
 describe("AgentDetailPane model loading error", () => {
+  it("distinguishes an unknown model directory from a confirmed missing model", () => {
+    const { rerender } = render(<Harness modelDirectory={null} />);
+    const model = screen.getByRole("combobox", { name: "profileModel" });
+    expect(model).toHaveTextContent("gpt-4.1-mini");
+    expect(model).toHaveAccessibleDescription("profileModelAvailabilityUnknown");
+    expect(model).toBeDisabled();
+
+    rerender(<Harness modelDirectory={[]} />);
+    expect(model).toHaveTextContent("gpt-4.1-mini");
+    expect(model).toHaveAccessibleDescription("profileModelOutsideDirectory");
+
+    rerender(<Harness modelDirectory={["gpt-4.1-mini"]} modelSaveError="Model no longer routable" />);
+    expect(model).toHaveAccessibleDescription("Model no longer routable");
+    expect(model).toHaveAttribute("aria-invalid", "true");
+
+    rerender(<Harness modelDirectory={[]} modelSaveError="Model no longer routable" />);
+    expect(model).toHaveAccessibleDescription("profileModelOutsideDirectory");
+    expect(screen.queryByText("Model no longer routable")).not.toBeInTheDocument();
+  });
+
+  it("disables saving and explains how to recover when the current model blocks saving", () => {
+    render(<Harness hasUnsavedChanges modelDirectory={[]} modelSaveBlocked />);
+    expect(screen.getByRole("button", { name: "agentSaveChanges" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "profileModel" })).toHaveAccessibleDescription(
+      "profileModelOutsideDirectory profileModelSelectAvailableToSave",
+    );
+  });
+
+  it("offers a path back to model configuration when saving is blocked on another tab", async () => {
+    const user = userEvent.setup();
+    render(<Harness hasUnsavedChanges modelDirectory={[]} modelSaveBlocked workspaceSupported />);
+    await user.click(screen.getByRole("button", { name: /agentProfileSkillsTab/ }));
+    expect(screen.getByRole("button", { name: "agentSaveChanges" })).toBeDisabled();
+    expect(screen.getByText("profileModelOutsideDirectory profileModelSelectAvailableToSave")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "profileModelOpenConfiguration" }));
+    expect(screen.getByRole("combobox", { name: "profileModel" })).toHaveAccessibleDescription(
+      "profileModelOutsideDirectory profileModelSelectAvailableToSave",
+    );
+  });
+
+  it("allows refreshing a successfully loaded empty model directory", async () => {
+    const user = userEvent.setup();
+    const onRetryModels = vi.fn();
+    render(<Harness modelDirectory={[]} onRetryModels={onRetryModels} />);
+    expect(screen.getByText("modelProviderNoModels")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "profileModelRefreshDirectory" }));
+    expect(onRetryModels).toHaveBeenCalledOnce();
+  });
+
   it("keeps the model controls aligned and exposes retryable technical details", async () => {
     const user = userEvent.setup();
     const onRetryModels = vi.fn();
@@ -528,7 +578,7 @@ describe("AgentDetailPane memory", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
       await user.click(within(dialog).getByRole("button", { name: "agentMemoryClear" }));
       if (failure) {
-        expect(await within(dialog).findByText("clear request failed")).toBeVisible();
+        expect(await within(dialog).findByText("agentMemoryErrorUnknown")).toBeVisible();
         expect(dialog).toBeInTheDocument();
       } else {
         await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -781,7 +831,11 @@ describe("AgentDetailPane memory", () => {
     );
     render(<Harness item={{ ...agent, memory_supported: true }} />);
     await user.click(screen.getByRole("button", { name: "agentMemoryTab" }));
-    expect(await screen.findByText("HTTP 429: rate limit exceeded")).toBeVisible();
+    expect(await screen.findByText("errors.rate_limit_exceeded")).toBeVisible();
+    expect(screen.getByText("agentMemoryHistoryError")).toBeVisible();
+    expect(screen.getByText("HTTP 429: rate limit exceeded")).not.toBeVisible();
+    await user.click(screen.getByText("agentMemoryErrorDetails"));
+    expect(screen.getByText("HTTP 429: rate limit exceeded")).toBeVisible();
     expect(screen.queryByRole("button", { name: "agentMemoryEditEntries" })).not.toBeInTheDocument();
     const description = screen.getByText("agentMemoryDocumentDescription");
     await user.click(screen.getByRole("button", { name: "agentMemoryEdit" }));

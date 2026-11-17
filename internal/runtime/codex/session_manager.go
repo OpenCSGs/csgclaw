@@ -22,6 +22,7 @@ type liveSession struct {
 	stopErr               error
 	telemetry             *nativeTelemetry
 	compactingThreads     map[string]bool
+	compactionUsageReady  map[string]bool
 	contextUsage          map[string]modelcap.ContextUsage
 	threadModels          map[string]contract.TurnModel
 	mu                    sync.Mutex
@@ -35,7 +36,7 @@ type liveSession struct {
 	appClient             *appServerClient
 	cmd                   *exec.Cmd
 	stdin                 io.Closer
-	stderr                *os.File
+	stderr                *diagnostics.StderrLog
 	done                  chan struct{}
 	spec                  SessionSpec
 	conversationSessions  map[string]string

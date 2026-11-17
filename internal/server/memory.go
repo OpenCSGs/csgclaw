@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"log/slog"
-	"net"
 	"path/filepath"
 
 	"csgclaw/internal/agentengine"
@@ -14,23 +13,13 @@ import (
 	"csgclaw/internal/localstore"
 )
 
-func startAgentMemory(ctx context.Context, opts Options, listener net.Listener, handler *api.Handler) func() {
+func startAgentMemory(ctx context.Context, opts Options, handler *api.Handler) func() {
 	engine, ok := opts.AgentEngine.(*agentengine.Engine)
 	controller, ownsAgents := opts.AgentServices.Records.(*agent.Controller)
 	if !ok || !ownsAgents || opts.IM == nil {
 		return func() {}
 	}
-	mode := "disabled"
-	if !opts.MemoryCloud {
-		switch {
-		case opts.Desktop != nil:
-			mode = "desktop"
-		case opts.LocalSingleUser:
-			if addr, ok := listener.Addr().(*net.TCPAddr); ok && addr.IP.IsLoopback() {
-				mode = "local"
-			}
-		}
-	}
+	mode := agentMemoryMode(opts)
 
 	managerHome, err := controller.RuntimeHost().AgentHome(identity.ManagerAgentID)
 	root := filepath.Dir(managerHome)
@@ -60,7 +49,7 @@ func startAgentMemory(ctx context.Context, opts Options, listener net.Listener, 
 		return func() {}
 	}
 	engine.SetMemory(store)
-	if mode == "disabled" || opts.LLM == nil {
+	if opts.LLM == nil {
 		return func() {}
 	}
 	worker := agentmemory.Worker{
@@ -80,4 +69,12 @@ func startAgentMemory(ctx context.Context, opts Options, listener net.Listener, 
 		worker.Run(workerCtx)
 	}()
 	return func() { cancel(); <-done }
+}
+
+// Memory defaults on in every deployment and does not depend on provisioning metadata.
+func agentMemoryMode(opts Options) string {
+	if opts.Desktop != nil {
+		return "desktop"
+	}
+	return "local"
 }

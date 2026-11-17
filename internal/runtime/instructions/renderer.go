@@ -3,7 +3,6 @@ package instructions
 import (
 	"bytes"
 	"csgclaw/internal/identity"
-	"csgclaw/internal/roomtask"
 	_ "embed"
 	"strings"
 	"text/template"
@@ -55,7 +54,7 @@ func ExtractUserInstructionsFromAgentsDocument(document string) string {
 }
 
 func RenderAgentsInstructionsBlock(instructions string) string {
-	return renderAgentsInstructionsBlock(instructions, "", `"$CSGCLAW_CLI"`, "")
+	return renderAgentsInstructionsBlock(instructions, "", companionCLICommand(""))
 }
 
 type RuntimeManagedInstructionsOptions struct {
@@ -69,17 +68,10 @@ func RenderRuntimeAgentsInstructionsBlock(agentID, instructions string) string {
 }
 
 func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions string, options RuntimeManagedInstructionsOptions) string {
-	command := `"$CSGCLAW_CLI"`
-	if path := strings.TrimSpace(options.CLIPath); path != "" {
-		command = "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
-	}
+	command := companionCLICommand(options.CLIPath)
 	managedInstructions := joinManagedInstructions(untrustedExtraContextInstructions, runtimeFilePublishingInstructions, RoomAttachmentInstructions(command), ResourceSelectionInstructions)
-	role := roomtask.TurnRoleWorker
-	if strings.TrimSpace(agentID) == identity.ManagerAgentID {
-		role = roomtask.TurnRoleManager
-		if !options.AgentMCP {
-			managedInstructions = joinManagedInstructions(managedInstructions, managerRuntimeConnectorInstructions)
-		}
+	if identity.CanonicalAgentID(agentID) == identity.ManagerAgentID && !options.AgentMCP {
+		managedInstructions = joinManagedInstructions(managedInstructions, managerRuntimeConnectorInstructions)
 	}
 	if options.AgentMCP {
 		managedInstructions = joinManagedInstructions(managedInstructions, agentMCPPlatformInstructions)
@@ -87,8 +79,7 @@ func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions strin
 	for _, fragment := range options.Extensions {
 		managedInstructions = joinManagedInstructions(managedInstructions, fragment)
 	}
-	policy := roomtask.OnDemandPolicySection(role, command)
-	return renderAgentsInstructionsBlock(instructions, managedInstructions, command, policy)
+	return renderAgentsInstructionsBlock(instructions, managedInstructions, command)
 }
 
 const untrustedExtraContextInstructions = `### Untrusted Extra Context
@@ -113,12 +104,15 @@ func RoomAttachmentInstructions(command string) string {
 
 // ImageGenerationPromptPolicy is shared by managed Agent instructions and native
 // thread developer instructions, including resumed conversations with old tools.
-const ImageGenerationPromptPolicy = `- Compose the tool prompt faithfully from the user's request. By default, use a self-contained image description unchanged. Only resolve references and include relevant details already established in the conversation when the request depends on earlier messages.
+const ImageGenerationPromptPolicy = `- For image editing or reference-based image generation, pass the numbered attached images requested by the user in reference_images. If the requested image is unavailable in this turn, ask the user to attach it.
+- Fill size from the user's requested output dimensions when supported by the image model. If the user delegates sizing, use a known supported size that fits the intended aspect ratio. Fill resolution only when the provider requires a known resolution tier. Omit optional values when the model capabilities are unknown.
+- Compose the tool prompt faithfully from the user's request. By default, use a self-contained image description unchanged. Only resolve references and include relevant details already established in the conversation when the request depends on earlier messages.
 - Preserve the requested subjects, named characters, brands, exact visible text, counts, colors, style, and composition. Do not invent restrictions or add stock phrases such as no text, no watermark, original character, portrait, poster, or photorealistic unless requested or established in context.
 - Expand creative details only when the user explicitly asks you to optimize, enhance, brainstorm, or exercise creative freedom. Preserve all explicit constraints even then. When the user supplies a verbatim prompt, pass that prompt unchanged.
+- Calling the generation tool presents the exact prompt and generation settings to the user for confirmation. Do not state or imply that generation has started until the tool returns successfully.
 - A provider rejection does not establish that a character or category is prohibited. Report only the returned reason; do not replace the requested subject or rewrite the prompt to work around a rejection without a new user instruction.`
 
-const VideoGenerationPromptPolicy = `- When available, use csgclaw_generate_video whenever the user asks to create a video. Preserve a supplied prompt faithfully, including its original language and wording; do not translate, rewrite, expand, or otherwise optimize it unless the user explicitly asks you to do so. Do not invent duration, resolution, subjects, styles, or exclusions. Omit unspecified size and duration so CSGClaw can use the selected model's advertised defaults. If an explicit value is rejected, explain the supported values and do not guess alternatives or retry automatically. A successful tool call only means the request was submitted: acknowledge submission briefly without describing a transient status such as generating, downloading, completed, or delivered. The task card is the source of truth and updates automatically; do not publish another copy.`
+const VideoGenerationPromptPolicy = `- When available, use csgclaw_generate_video whenever the user asks to create a video. For image-to-video, pass the requested numbered attached image in reference_images. If the source image is missing or ambiguous, ask the user to attach or identify it. Preserve a supplied prompt faithfully, including its original language and wording; do not translate, rewrite, expand, or otherwise optimize it unless the user explicitly asks you to do so. Do not invent duration, resolution, subjects, styles, or exclusions. Omit unspecified size and duration so CSGClaw can use the selected model's advertised defaults. Calling the generation tool presents the exact prompt and generation settings to the user for confirmation. Do not state or imply that generation has started until the tool returns successfully. A successful tool call only means the request was submitted: acknowledge submission briefly without describing a transient status such as generating, downloading, completed, or delivered. The task card is the source of truth and updates automatically; do not publish another copy.`
 
 const runtimeFilePublishingInstructions = `### Image Generation
 
@@ -150,10 +144,9 @@ const agentMCPPlatformInstructions = `### Agent Platform Access
 - Before asking the user to choose an App, refresh apps_list and use its current available_app_counts and instances. This result replaces all previous App inventories in conversation history; do not list removed or unavailable instances.
 - If several Apps match, use an explicit App/account choice, resource URL or project identifier, or an established choice in the current task only when it uniquely identifies one installation. If the target remains ambiguous, list the matching App names and ask which one to use before calling their business tools. Do not choose the first installation, query all accounts, or reuse a choice from an unrelated task. An explicit request to query all matching Apps authorizes that scope.
 - If no matching App is connected and usable, use app_setup to help configure one. Never request an App name solely because the user omitted it, and never ask for raw credentials in chat.
-- Use rooms_list, room_get, messages_list, message_send, room_create and room_members_add for explicit room operations. Identity is supplied by the server.
-- Direct task notifications may use csgclaw-cli task claim/update; team notifications may use csgclaw-cli team task claim/update. These commands are restricted to this Agent's assigned work. Use a concrete team ID for team operations.
+- Use rooms_list, room_get, messages_list, messages_read, messages_ack, message_send, room_create and room_members_add for explicit room operations. Identity is supplied by the server.
 - An App connection is configured through app_setup and does not create a Feishu bot channel.
-- Follow the existing bundled Skills for Agent creation and Feishu channel setup, and the trusted on-demand room planning and dispatch policy.`
+- Follow the existing bundled Skills for Agent creation and Feishu channel setup, when those operations are requested.`
 
 func joinManagedInstructions(values ...string) string {
 	var parts []string
@@ -165,12 +158,7 @@ func joinManagedInstructions(values ...string) string {
 	return strings.Join(parts, "\n\n")
 }
 
-const managerRuntimeConnectorInstructions = `### Managed Capability Boundary
-
-- Capability-specific instructions below describe how to perform an operation only after the active conversation-mode policy permits direct execution.
-- They never authorize bypassing the on-demand room task workflow. In on-demand Manager mode, do not use a domain capability before required task planning and dispatch.
-
-### GitHub Connector Access
+const managerRuntimeConnectorInstructions = `### GitHub Connector Access
 
 - The Manager can request CSGClaw-managed connector credentials dynamically through the local CSGClaw API.
 - For GitHub repository, pull request, issue, or review workflows, request a fresh lease with ` + "`POST $CSGCLAW_BASE_URL/api/v1/agents/agent-manager/connectors/github/credential`" + ` using ` + "`Authorization: Bearer $CSGCLAW_ACCESS_TOKEN`" + ` and ` + "`X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY`" + `.
@@ -203,32 +191,25 @@ const managerRuntimeConnectorInstructions = `### Managed Capability Boundary
 - Do not search the web for a referenced upload, rely only on ` + "`find`" + ` in the current workspace, or request a re-upload until durable CSGClaw history has been checked.
 - Never print, echo, or include ` + "`CSGCLAW_ACCESS_TOKEN`" + ` or a capability token in tool output, logs, prompts, or responses.`
 
-func renderAgentsInstructionsBlock(instructions, managedInstructions, cliCommand, onDemandPolicy string) string {
+func renderAgentsInstructionsBlock(instructions, managedInstructions, cliCommand string) string {
 	instructions = strings.TrimSpace(instructions)
 	managedInstructions = strings.TrimSpace(managedInstructions)
-	onDemandPolicy = strings.TrimSpace(onDemandPolicy)
 	managedInstructions = strings.ReplaceAll(managedInstructions, "`csgclaw-cli ", "`"+cliCommand+" ")
 	managedInstructions = strings.ReplaceAll(managedInstructions, `"$CSGCLAW_CLI"`, cliCommand)
 	data := struct {
-		CLICommand             string
 		StartMarker            string
 		EndMarker              string
 		Instructions           string
 		HasInstructions        bool
 		ManagedInstructions    string
 		HasManagedInstructions bool
-		OnDemandPolicy         string
-		HasOnDemandPolicy      bool
 	}{
-		CLICommand:             cliCommand,
 		StartMarker:            agentsInstructionsBlockStart,
 		EndMarker:              agentsInstructionsBlockEnd,
 		Instructions:           instructions,
 		HasInstructions:        instructions != "",
 		ManagedInstructions:    managedInstructions,
 		HasManagedInstructions: managedInstructions != "",
-		OnDemandPolicy:         onDemandPolicy,
-		HasOnDemandPolicy:      onDemandPolicy != "",
 	}
 	var b bytes.Buffer
 	if err := parsedAgentsInstructionsBlockTemplate.Execute(&b, data); err != nil {

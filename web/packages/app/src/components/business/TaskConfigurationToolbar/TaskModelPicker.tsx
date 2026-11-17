@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Settings2 } from "lucide-react";
+import { Cpu, Settings2 } from "lucide-react";
 import { Button, Combobox } from "@/components/ui";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
@@ -35,6 +35,7 @@ export function TaskModelPicker({
   const [error, setError] = useState("");
   const current = providers.find((provider) => provider.id === providerID);
   const label = (id: string, model: string) => (isOpenCSGAutoModel(id, model) ? t("modelProviderAutoName") : model);
+  const selectedModelLabel = label(providerID, modelID) || t("iaModelUnset");
   const encode = (id: string, model: string) => JSON.stringify([id, model]);
   return (
     <Combobox
@@ -45,12 +46,18 @@ export function TaskModelPicker({
       }}
       value={followDefault ? "" : encode(providerID, modelID)}
       selectedLabel={
-        <ModelOptionLabel avatar={current?.avatar} model={label(providerID, modelID) || t("iaModelUnset")} />
+        <ModelOptionLabel
+          avatar={current?.avatar}
+          icon={current?.avatar ? undefined : <Cpu size={16} />}
+          model={selectedModelLabel}
+          title=""
+        />
       }
       disabled={disabled}
       size="sm"
       triggerClassName={styles.modelTrigger}
       triggerProps={{ "aria-label": t("iaModelTitle") }}
+      triggerTooltip={selectedModelLabel}
       contentClassName={styles.modelMenu}
       contentProps={{ side: "top", align: "end" }}
       searchPlaceholder={t("iaModelSearch")}
