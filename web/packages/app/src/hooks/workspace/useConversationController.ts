@@ -102,6 +102,7 @@ import {
 import {
   builtinSlashCommandNames,
   suggestedSlashCommandNames,
+  slashCommandLabel,
   parseSlashCommand,
   type SlashSkillOption,
 } from "@/models/slashCommands";
@@ -841,8 +842,9 @@ export function useConversationController({
         enabled: slashPickerEnabled,
         query: composerSlashQuery,
         skillOptions,
+        t,
       }),
-    [composerSlashQuery, draftText, slashPickerEnabled, skillOptions],
+    [composerSlashQuery, draftText, slashPickerEnabled, skillOptions, t],
   );
   const slashPickerQuery = slashPickerState.query;
   const slashPickerActive = slashPickerState.active;
@@ -883,8 +885,9 @@ export function useConversationController({
         query: threadSlashQuery,
         skillOptions: threadSkills.items,
         disabled: threadSlashPickerDismissed,
+        t,
       }),
-    [activeThreadDraft, threadSlashPickerEnabled, threadSlashPickerDismissed, threadSlashQuery, threadSkills.items],
+    [activeThreadDraft, threadSlashPickerEnabled, threadSlashPickerDismissed, threadSlashQuery, threadSkills.items, t],
   );
   const threadSlashPickerQuery = threadSlashPickerState.query;
   const threadSlashPickerActive = threadSlashPickerState.active;
@@ -1663,7 +1666,7 @@ export function useConversationController({
             resourceSegment({ source: "skill", id: skillName, name: skillName, type: "skill" }, resourceAgentID),
             { type: "text", text: " " },
           ]
-        : slashCommandInputSegments(skillName);
+        : slashCommandInputSegments(slashCommandLabel(skillName, t));
     applySlashSuggestionToComposer(editor ?? editorRef.current, nextSegments, (committedSegments) =>
       setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, committedSegments)),
     );
@@ -1682,7 +1685,7 @@ export function useConversationController({
             resourceSegment({ source: "skill", id: skillName, name: skillName, type: "skill" }, resourceAgentID),
             { type: "text", text: " " },
           ]
-        : slashCommandInputSegments(skillName);
+        : slashCommandInputSegments(slashCommandLabel(skillName, t));
     applySlashSuggestionToComposer(editor, nextSegments, (committedSegments) => {
       setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, committedSegments));
     });
@@ -2138,6 +2141,7 @@ type SlashPickerStateInput = {
   enabled: boolean;
   query?: string | null;
   skillOptions: SlashSkillOption[];
+  t?: (key: string) => string;
 };
 
 type SlashPickerState = {
@@ -2165,6 +2169,13 @@ export function buildSlashPickerState(input: SlashPickerStateInput): SlashPicker
         // Keep /new parsing and execution available without suggesting the legacy entry point.
         .filter((name) => name !== "new" && fuzzySkillMatch(name, query ?? ""))
         .map((name) => ({ description: slashCommandDescription(name), name, type: "command" as const })),
+      ...suggestedSlashCommandNames
+        .filter(
+          (name) =>
+            fuzzySkillMatch(name, query ?? "") ||
+            (input.t && fuzzySkillMatch(slashCommandLabel(name, input.t), query ?? "")),
+        )
+        .map((name) => ({ description: slashCommandDescription(name), name, type: "command" as const })),
       ...input.skillOptions
         .filter(
           (skill) =>
@@ -2173,9 +2184,6 @@ export function buildSlashPickerState(input: SlashPickerStateInput): SlashPicker
             fuzzySkillMatch(skill.name, query ?? ""),
         )
         .map((skill) => ({ description: skill.description, name: skill.name, type: "skill" as const })),
-      ...suggestedSlashCommandNames
-        .filter((name) => fuzzySkillMatch(name, query ?? ""))
-        .map((name) => ({ description: slashCommandDescription(name), name, type: "command" as const })),
     ],
   };
 }

@@ -105,6 +105,9 @@
   width: min(560px, var(--radix-popover-trigger-width), var(--radix-popover-content-available-width));
   --slash-picker-available-width: 100%;
 }
+.slashPopover .mentions {
+  height: min(240px, var(--radix-popover-content-available-height));
+}
 .mentionStatus {
   padding: 12px;
   border: 1px solid var(--input-border);
@@ -152,6 +155,7 @@
   font-size: inherit;
 }
 .promptEditor {
+  --command-inline-padding: 4px;
   position: relative;
   flex: 1;
   min-width: 120px;
@@ -175,9 +179,13 @@
   overflow-wrap: break-word;
   scrollbar-gutter: stable;
 }
-.promptMirror {
+.page .composer .promptMirror {
+  box-sizing: border-box;
   position: absolute;
   inset: 0;
+  inset-inline-start: calc(-1 * var(--command-inline-padding));
+  width: calc(100% + var(--command-inline-padding));
+  padding-inline-start: var(--command-inline-padding);
   overflow: hidden;
   pointer-events: none;
 }
@@ -195,11 +203,13 @@
 }
 .slashCommand {
   color: var(--mention);
+  padding-inline: var(--command-inline-padding);
+  margin-inline: calc(-1 * var(--command-inline-padding));
   background: var(--primary-soft);
   border-radius: var(--radius-sm);
 }
 @media (forced-colors: active) {
-  .promptMirror {
+  .page .composer .promptMirror {
     display: none;
   }
   .page .composer .promptEditor[data-highlighted] textarea {

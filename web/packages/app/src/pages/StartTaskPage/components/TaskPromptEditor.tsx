@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useRef, type ComponentProps, type RefObject } from "react";
 import { TextArea } from "@/components/ui";
-import { builtinSlashCommandNames, suggestedSlashCommandNames } from "@/models/slashCommands";
+import { matchComposerCommand } from "@/models/slashCommands";
 import styles from "../StartTaskPage.module.css";
 
 type TaskPromptEditorProps = Omit<ComponentProps<typeof TextArea>, "ref" | "value" | "onScroll"> & {
@@ -11,12 +11,10 @@ type TaskPromptEditorProps = Omit<ComponentProps<typeof TextArea>, "ref" | "valu
 
 export function TaskPromptEditor({ ref, value, mentionRanges, ...props }: TaskPromptEditorProps) {
   const mirror = useRef<HTMLDivElement>(null);
-  const command = /^\s*\/([^\s/]+)(?=\s|$)/u.exec(value);
-  const commandName = command?.[1];
-  const commandRanges =
-    command && commandName && [...builtinSlashCommandNames, ...suggestedSlashCommandNames].includes(commandName)
-      ? [{ start: command[0].length - commandName.length - 1, end: command[0].length, className: styles.slashCommand }]
-      : [];
+  const command = matchComposerCommand(value);
+  const commandRanges = command
+    ? [{ start: command[1].length, end: command[0].length, className: styles.slashCommand }]
+    : [];
   const ranges = [...commandRanges, ...mentionRanges.map((range) => ({ ...range, className: styles.fileMention }))];
   const highlighted = ranges.length > 0;
 

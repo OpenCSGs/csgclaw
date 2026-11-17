@@ -169,9 +169,9 @@ describe("useConversationController slash skill helpers", () => {
         skillOptions: [{ name: "skill-creator", description: "Create useful skills" }, { name: "new" }],
       }).candidates,
     ).toEqual([
-      { description: "Create useful skills", name: "skill-creator", type: "skill" },
       { description: "建议创建智能体，不会自动执行", name: "创建智能体", type: "command" },
       { description: "建议创建房间，不会自动执行", name: "创建房间", type: "command" },
+      { description: "Create useful skills", name: "skill-creator", type: "skill" },
     ]);
     expect(
       buildSlashPickerState({
@@ -188,9 +188,9 @@ describe("useConversationController slash skill helpers", () => {
         skillOptions: [{ name: "skill-creator" }],
       }).candidates,
     ).toEqual([
-      { description: undefined, name: "skill-creator", type: "skill" },
       { description: "建议创建智能体，不会自动执行", name: "创建智能体", type: "command" },
       { description: "建议创建房间，不会自动执行", name: "创建房间", type: "command" },
+      { description: undefined, name: "skill-creator", type: "skill" },
     ]);
   });
 

@@ -1,7 +1,7 @@
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import slashPickerStyles from "./SlashPicker.module.css";
 import mentionPickerStyles from "./MentionPicker.module.css";
-import type { SkillContinuation } from "@/models/slashCommands";
+import { slashCommandLabel, slashCommandDisplayDescription, type SkillContinuation } from "@/models/slashCommands";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BoxIcon, TerminalIcon } from "lucide-react";
 import { ConnectorLogo } from "../ConnectorLogo/ConnectorLogo";
@@ -82,49 +82,55 @@ export function SlashPicker({
       className={`mention-picker ${mentionPickerStyles["mention-picker"]} ${slashPickerStyles["slash-picker"]} ${className}`.trim()}
       role="listbox"
     >
-      {loading ? <div className={slashPickerStyles["slash-picker-empty"]}>{t("slashPickerLoading")}</div> : null}
       {!loading && !continuation?.failed && candidates.length === 0 ? (
         <div className={slashPickerStyles["slash-picker-empty"]}>{t("slashPickerEmpty")}</div>
       ) : null}
       <div aria-hidden="true" style={{ height: start * rowStride, flexShrink: 0 }} />
-      {candidates.slice(start, end).map((candidate, visibleIndex) => (
-        <button
-          key={`${candidate.type}:${candidate.name}`}
-          style={{
-            height: rowHeight,
-            minHeight: rowHeight,
-            flexShrink: 0,
-            marginBlockEnd: visibleIndex + start < candidates.length - 1 ? rowGap : 0,
-          }}
-          aria-posinset={visibleIndex + start + 1}
-          aria-setsize={continuation?.hasMore ? -1 : candidates.length}
-          title={[candidate.name, candidate.description].filter(Boolean).join(" · ")}
-          role="option"
-          aria-selected={visibleIndex + start === activeIndex}
-          className={`${mentionPickerStyles["mention-option"]} ${slashPickerStyles["slash-option"]} ${candidate.type === "command" ? "command-option" : "skill-slash-option"} ${visibleIndex + start === activeIndex ? "active" : ""}`}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            onSelect(candidate.name);
-          }}
-        >
-          <span className={slashPickerStyles["slash-option-mark"]} aria-hidden="true">
-            {candidate.type === "command" ? (
-              <TerminalIcon size={18} strokeWidth={1.8} />
-            ) : (
-              <ConnectorLogo name={candidate.name} fallback={<BoxIcon size={18} strokeWidth={1.8} />} />
-            )}
-          </span>
-          <div className={slashPickerStyles["slash-option-copy"]}>
-            <span className={`message-author ${messageLayoutStyles["message-author"]}`}>{candidate.name}</span>
-            {candidate.description ? (
-              <span className={slashPickerStyles["slash-option-description"]}>{candidate.description}</span>
-            ) : null}
-          </div>
-          <span className={slashPickerStyles["slash-option-kind"]}>
-            {candidate.type === "command" ? t("slashPickerCommandKind") : t("slashPickerSkillKind")}
-          </span>
-        </button>
-      ))}
+      {candidates.slice(start, end).map((candidate, visibleIndex) => {
+        const name = candidate.type === "command" ? slashCommandLabel(candidate.name, t) : candidate.name;
+        const description =
+          candidate.type === "command"
+            ? slashCommandDisplayDescription(candidate.name, candidate.description, t)
+            : candidate.description;
+        return (
+          <button
+            key={`${candidate.type}:${candidate.name}`}
+            style={{
+              height: rowHeight,
+              minHeight: rowHeight,
+              flexShrink: 0,
+              marginBlockEnd: visibleIndex + start < candidates.length - 1 ? rowGap : 0,
+            }}
+            aria-posinset={visibleIndex + start + 1}
+            aria-setsize={continuation?.hasMore ? -1 : candidates.length}
+            title={[name, description].filter(Boolean).join(" · ")}
+            role="option"
+            aria-selected={visibleIndex + start === activeIndex}
+            className={`${mentionPickerStyles["mention-option"]} ${slashPickerStyles["slash-option"]} ${candidate.type === "command" ? "command-option" : "skill-slash-option"} ${visibleIndex + start === activeIndex ? "active" : ""}`}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              onSelect(candidate.name);
+            }}
+          >
+            <span className={slashPickerStyles["slash-option-mark"]} aria-hidden="true">
+              {candidate.type === "command" ? (
+                <TerminalIcon size={18} strokeWidth={1.8} />
+              ) : (
+                <ConnectorLogo name={candidate.name} fallback={<BoxIcon size={18} strokeWidth={1.8} />} />
+              )}
+            </span>
+            <div className={slashPickerStyles["slash-option-copy"]}>
+              <span className={`message-author ${messageLayoutStyles["message-author"]}`}>{name}</span>
+              {description ? (
+                <span className={slashPickerStyles["slash-option-description"]}>{description}</span>
+              ) : null}
+            </div>
+            <span className={slashPickerStyles["slash-option-kind"]}>
+              {candidate.type === "command" ? t("slashPickerCommandKind") : t("slashPickerSkillKind")}
+            </span>
+          </button>
+        );
+      })}
       <div
         aria-hidden="true"
         style={{ height: Math.max(0, (candidates.length - end) * rowStride - rowGap), flexShrink: 0 }}
@@ -138,7 +144,11 @@ export function SlashPicker({
             </Button>
           </div>
         ) : null}
-        {continuation?.loading && !loading ? <div role="status">{t("slashPickerLoading")}</div> : null}
+        {loading || continuation?.loading ? (
+          <div className={slashPickerStyles["slash-picker-empty"]} role="status">
+            {t("slashPickerLoading")}
+          </div>
+        ) : null}
         {continuation?.hasMore && !continuation.failed ? (
           <Button
             variant="tertiaryGray"
