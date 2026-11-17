@@ -132,6 +132,12 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	output := turn.output.String()
 	presentedFiles := append([]presentedFile(nil), turn.presentedFiles...)
 	proc.mu.Unlock()
+	var contextErr *contract.TurnError
+	if compactionFailed {
+		contextErr = &contract.TurnError{Code: contract.ErrorCode("context_compaction_failed"), Message: "Conversation compaction failed. Your history is preserved. Retry or choose a model with a larger context window."}
+	} else if contextExceeded {
+		contextErr = &contract.TurnError{Code: contract.ErrorCode("context_length_exceeded"), Message: "The input exceeds the model context window. Split the input or check the model capacity."}
+	}
 	if interactionErr != nil {
 		return contract.TurnResult{Status: contract.TurnFailed, Output: output, Dispatched: dispatched, Error: interactionErr}
 	}
@@ -144,22 +150,34 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 			return contract.TurnResult{Status: contract.TurnCanceled, Output: output, Dispatched: dispatched, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: message}}
 		}
 		result := failed(err)
-		if compactionFailed {
-			result.Error = &contract.TurnError{Code: contract.ErrorCode("context_compaction_failed"), Message: "Conversation compaction failed. Your history is preserved. Retry or choose a model with a larger context window."}
-		} else if contextExceeded {
-			result.Error = &contract.TurnError{Code: contract.ErrorCode("context_length_exceeded"), Message: "The input exceeds the model context window. Split the input or check the model capacity."}
+		if contextErr != nil {
+			result.Error = contextErr
 		}
 		result.Output = output
 		result.Dispatched = dispatched
 		return result
 	}
-	switch strings.ToLower(strings.TrimSpace(response.StopReason)) {
+	stopReason := strings.ToLower(strings.TrimSpace(response.StopReason))
+	switch stopReason {
 	case "end_turn", "max_tokens":
 		files, fileErr := authorizePresentedFiles(ctx, c.runtimeID, proc.workspace, presentedFiles)
 		if fileErr != nil {
 			return contract.TurnResult{Status: contract.TurnFailed, Output: output, Dispatched: dispatched, Error: fileErr}
 		}
-		return contract.TurnResult{Status: contract.TurnSucceeded, Output: output, Dispatched: dispatched, RuntimeFiles: files}
+		// ACP can report end_turn even when DSH failed to produce a reply.
+		// Thoughts and tool activity alone are not a deliverable.
+		if strings.TrimSpace(output) != "" || len(files) > 0 {
+			return contract.TurnResult{Status: contract.TurnSucceeded, Output: output, Dispatched: dispatched, RuntimeFiles: files}
+		}
+		turnErr := contextErr
+		if turnErr == nil {
+			if stopReason == "max_tokens" {
+				turnErr = &contract.TurnError{Code: "output_token_limit", Message: "DSH reached the output token limit before returning an answer."}
+			} else {
+				turnErr = &contract.TurnError{Code: "empty_agent_response", Message: "DSH ended the turn without returning an answer."}
+			}
+		}
+		return contract.TurnResult{Status: contract.TurnFailed, Output: output, Dispatched: dispatched, Error: turnErr}
 	case "cancelled":
 		return contract.TurnResult{Status: contract.TurnCanceled, Output: output, Dispatched: dispatched, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: "DSH turn was canceled"}}
 	default:
