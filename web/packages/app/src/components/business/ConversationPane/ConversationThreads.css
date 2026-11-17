@@ -394,6 +394,15 @@ button.thread-message-avatar:focus-visible {
   font-size: 16px;
 }
 
+.thread-message .thread-message-bubble:has(> [data-question-card]),
+:root[data-theme="dark"] .thread-message .thread-message-bubble:has(> [data-question-card]) {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  word-break: normal;
+}
+
 .thread-message-bubble .message-content .message-mention,
 .thread-message-bubble .message-content .message-slash-token {
   color: var(--mention);

@@ -2,7 +2,6 @@ import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.m
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import conversationSendButtonStyles from "./ConversationSendButton.module.css";
 import conversationThreadsStyles from "./ConversationThreads.module.css";
-import conversationPaneStyles from "./ConversationPane.module.css";
 import "@/components/business/ResourceTag";
 import { messageResources, resourceMessageText } from "@/models/conversationResources";
 import {
@@ -734,7 +733,7 @@ function ThreadMessage({
 
   return (
     <div
-      className={`thread-message ${own ? "own" : ""} ${compact ? "compact" : ""} ${message.metadata?.image_generation || isVideoGeneration ? conversationPaneStyles["image-generation-message"] : ""}`.trim()}
+      className={`thread-message ${own ? "own" : ""} ${compact ? "compact" : ""}`.trim()}
       data-message-id={message.id || undefined}
     >
       {user ? (
@@ -779,11 +778,26 @@ function ThreadMessage({
           </div>
         ) : null}
         <DiagnosticMessageAction metadata={message.metadata} t={t} />
-        <ImageGenerationStatus message={message} t={t} />
+        {isVideoGeneration && message.metadata?.image_generation ? (
+          <ImageGenerationStatus message={message} t={t} />
+        ) : null}
         {isVideoGeneration ? (
           <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
         ) : (
-          <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
+          <ImageGenerationStatus
+            message={message}
+            t={t}
+            result={
+              message.attachments?.length ? (
+                <MessageAttachments
+                  generation={Boolean(message.metadata?.image_generation)}
+                  attachments={message.attachments}
+                  t={t}
+                  onPreviewAttachment={onPreviewAttachment}
+                />
+              ) : null
+            }
+          />
         )}
         {embeddedVideos.map((video) => (
           <VideoGenerationCard

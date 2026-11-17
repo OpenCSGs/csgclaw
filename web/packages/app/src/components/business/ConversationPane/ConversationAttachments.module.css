@@ -261,3 +261,14 @@ button.message-file-attachment {
   font: inherit;
   text-align: left;
 }
+
+[data-generation] > .message-video-attachment {
+  width: 100%;
+  margin-top: 0;
+}
+
+[data-single-media] > .message-video-attachment {
+  aspect-ratio: var(--media-aspect-ratio);
+  border-radius: var(--media-result-radius, var(--radius-md));
+  object-fit: contain;
+}

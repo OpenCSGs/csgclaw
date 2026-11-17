@@ -4,3 +4,7 @@ Includes frontend components and theme tokens from OpenCSGs/csgclaw.
 Source commit: c005cf1b4c54741573321699227730c14e68dee0.
 The components and styles were adapted for standalone distribution.
 See LICENSE for the original terms and conditions.
+
+Question Card and Media Generation presentation adapted from Halaska Studio UI.
+Source commit: 797f5426ef5b3a2fc6149141f15fb83a7f657b80.
+See src/assets/Halaska-MIT.txt for the license.

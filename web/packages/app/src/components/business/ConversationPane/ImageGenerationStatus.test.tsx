@@ -18,7 +18,33 @@ describe("Image generation status", () => {
       />,
     );
     expect(screen.getByRole("status").textContent).toContain("正在生成图片");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("keeps a delivered attachment and the prompt available when delivery reports a failure", async () => {
+    const onPreview = vi.fn();
+    render(
+      <ImageGenerationStatus
+        t={t}
+        message={{ id: "image-1", content: "blue sky", metadata: { image_generation: { state: "delivery_failed" } } }}
+        result={
+          <button type="button" onClick={onPreview}>
+            Preview attachment
+          </button>
+        }
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Preview attachment" }));
+    expect(onPreview).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "重新发送图片" })).toBeEnabled();
+
+    const disclosure = screen.getByText(t("imageViewPrompt"));
+    expect(disclosure.closest("details")).not.toHaveAttribute("open");
+    await user.click(disclosure);
+    expect(disclosure.closest("details")).toHaveAttribute("open");
+    expect(screen.getByText("blue sky")).toBeVisible();
   });
 
   it("retries only the failed image task and blocks repeated clicks", async () => {

@@ -1,0 +1,15 @@
+.glyph {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--glyph-size);
+  height: var(--glyph-size);
+  border-radius: 50%;
+  background: linear-gradient(
+    135deg,
+    var(--csgclaw-ui-primary),
+    var(--csgclaw-ui-primary-strong)
+  );
+  color: var(--csgclaw-ui-on-primary);
+  font-size: var(--glyph-font-size);
+}

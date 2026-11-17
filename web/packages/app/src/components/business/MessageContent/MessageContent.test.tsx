@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { MessageContent } from "./MessageContent";
 
 function questionMessage(status: "pending" | "answered") {
@@ -127,6 +127,34 @@ describe("MessageContent question transcripts", () => {
     expect(screen.getByText("questionRequest")).toBeInTheDocument();
     expect(screen.getByText("What kind of demo?")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Questions" })).not.toBeInTheDocument();
+  });
+
+  it("opens the selected question in the composer with the original option number", () => {
+    const message = questionMessage("pending");
+    const questions = message.metadata.csgclaw.agent_activity.content.question.questions;
+    questions.push({
+      id: "scope",
+      header: "Scope",
+      question: "Which scope?",
+      options: [{ label: "Current conversation", description: "" }],
+    });
+    const onQuestionSelect = vi.fn();
+    render(
+      <MessageContent
+        content={message.content}
+        message={message}
+        onQuestionSelect={onQuestionSelect}
+        t={(key) => key}
+      />,
+    );
+
+    expect(screen.queryByText("Which scope?")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "questionNext" }));
+    expect(screen.getByText("Which scope?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Current conversation" }));
+    expect(onQuestionSelect).toHaveBeenLastCalledWith("request-1", "scope", 1);
+    fireEvent.click(screen.getByRole("button", { name: "questionAnswer" }));
+    expect(onQuestionSelect).toHaveBeenLastCalledWith("request-1", "scope", undefined);
   });
 
   it("renders the same resolved question message as ordinary Markdown", () => {

@@ -145,3 +145,7 @@ Checkbox composes Radix checkbox semantics. Optional `indicator` supplies decora
 ## Tooltip
 
 Tooltip composes the shared Root/Trigger/Content wrappers and portals by default. `TooltipArrow` exposes the Radix positioning-aware arrow, including `asChild` for decorative original design assets. Keep collision detection enabled; arrow artwork must follow Content `data-side` when placement flips. Content retains the tooltip layer token and pointer-transparent behavior. The additive arrow export does not change existing product tooltip styles.
+
+## Question Card
+
+Use `QuestionCard` for interactive questions embedded in a conversation. Pass localized labels and question data as props. The card displays one question at a time and emits its ID with an optional zero-based option index. The caller owns answering, submission, deadlines, and redaction of private answers.

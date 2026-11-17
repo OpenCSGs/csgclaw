@@ -32,9 +32,11 @@ export type QuestionAnswerMode = {
 
 export function useQuestionAnswerMode({
   messages,
+  respond = respondToUserInput,
   t,
 }: {
   messages: readonly IMMessage[];
+  respond?: typeof respondToUserInput;
   responderID: string;
   roomID: string;
   t: TranslateFn;
@@ -88,7 +90,7 @@ export function useQuestionAnswerMode({
       setBusy(true);
       setError("");
       try {
-        const result = await respondToUserInput(activity.channel || snapshot.channel || "csgclaw", snapshot.id, {
+        const result = await respond(activity.channel || snapshot.channel || "csgclaw", snapshot.id, {
           answers: responseAnswers,
         });
         if (result.status !== "pending") {
@@ -104,7 +106,7 @@ export function useQuestionAnswerMode({
         setBusy(false);
       }
     },
-    [busy, t],
+    [busy, respond, t],
   );
 
   const previousQuestion = useCallback(() => {
