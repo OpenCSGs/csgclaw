@@ -9,12 +9,14 @@ const ContextUsageKind = "context_usage"
 
 // Metadata describes a model or an explicit override. Zero values mean automatic.
 type Metadata struct {
-	ContextWindow int64 `json:"context_window,omitempty"`
+	ContextWindow   int64 `json:"context_window,omitempty"`
+	MaxOutputTokens int64 `json:"max_output_tokens,omitempty"`
 }
 
 type Resolved struct {
-	ContextWindow int64  `json:"context_window"`
-	ContextSource string `json:"context_source"`
+	ContextWindow   int64  `json:"context_window"`
+	ContextSource   string `json:"context_source"`
+	MaxOutputTokens int64  `json:"max_output_tokens,omitempty"`
 }
 
 // ContextUsage is a snapshot, never a sum of request usage across a session.
@@ -51,6 +53,9 @@ func Clone(values map[string]Metadata) map[string]Metadata {
 
 func Resolve(provider, endpoint, model string, discovered, override Metadata) Resolved {
 	out := Resolved{ContextWindow: DefaultContextWindow, ContextSource: "default"}
+	if discovered.MaxOutputTokens > 0 {
+		out.MaxOutputTokens = discovered.MaxOutputTokens
+	}
 	known := catalog(provider, endpoint, model)
 	for _, entry := range []struct {
 		value  Metadata

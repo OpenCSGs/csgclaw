@@ -14,8 +14,8 @@ func TestMetadataResolution(t *testing.T) {
 		{"Sol 6.1 API", "api", "https://api.openai.com/v1", "gpt-6.1-sol", Metadata{}, Metadata{}, 1050000, "catalog"},
 		{"Sol 6.1 Codex capacity", "codex", "http://localhost/v1", "gpt-6.1-sol", Metadata{}, Metadata{}, 1050000, "catalog"},
 		{"private deployment", "custom", "http://local/v1", "gpt-4o", Metadata{}, Metadata{}, 128000, "catalog"},
-		{"provider wins", "api", "https://api.openai.com/v1", "gpt-4o", Metadata{64000}, Metadata{}, 64000, "provider"},
-		{"override wins", "api", "https://api.openai.com/v1", "gpt-4o", Metadata{64000}, Metadata{8192}, 8192, "user"},
+		{"provider wins", "api", "https://api.openai.com/v1", "gpt-4o", Metadata{ContextWindow: 64000}, Metadata{}, 64000, "provider"},
+		{"override wins", "api", "https://api.openai.com/v1", "gpt-4o", Metadata{ContextWindow: 64000}, Metadata{ContextWindow: 8192}, 8192, "user"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -26,6 +26,15 @@ func TestMetadataResolution(t *testing.T) {
 		})
 	}
 }
+
+func TestOutputLimitResolutionPreservesProviderLimitWithContextOverride(t *testing.T) {
+	discovered := Metadata{ContextWindow: 1_048_576, MaxOutputTokens: 4096}
+	got := Resolve("custom", "https://provider.example/v1", "deepseek-flash", discovered, Metadata{ContextWindow: 65_536})
+	if got.ContextWindow != 65_536 || got.ContextSource != "user" || got.MaxOutputTokens != 4096 {
+		t.Fatalf("unexpected resolved metadata: %+v", got)
+	}
+}
+
 func TestMetadataValidation(t *testing.T) {
 	for _, m := range []Metadata{{ContextWindow: -1}, {ContextWindow: 1000000001}} {
 		if m.Validate() == nil {

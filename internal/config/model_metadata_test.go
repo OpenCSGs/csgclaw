@@ -10,7 +10,15 @@ func TestModelMetadataRoundTripAndClone(t *testing.T) {
 	for _, name := range []string{"models.json", StateFileName} {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), name)
-			cfg := LLMConfig{Providers: map[string]ProviderConfig{"custom": {BaseURL: "http://local/v1", APIKey: "fixture", Models: []string{"m"}, ModelMetadata: map[string]modelcap.Metadata{"m": {ContextWindow: 64000}}, ModelOverrides: map[string]modelcap.Metadata{"m": {ContextWindow: 16000}}, ImageMetadata: map[string]modelcap.ImageGeneration{"edit": {ImageToImage: true}}, VideoMetadata: map[string]modelcap.VideoGeneration{"video": {Sizes: []string{"768P"}, Seconds: []int{6}}}}}}
+			cfg := LLMConfig{Providers: map[string]ProviderConfig{"custom": {
+				BaseURL:        "http://local/v1",
+				APIKey:         "fixture",
+				Models:         []string{"m"},
+				ModelMetadata:  map[string]modelcap.Metadata{"m": {ContextWindow: 64000, MaxOutputTokens: 2048}},
+				ModelOverrides: map[string]modelcap.Metadata{"m": {ContextWindow: 16000}},
+				ImageMetadata:  map[string]modelcap.ImageGeneration{"edit": {ImageToImage: true}},
+				VideoMetadata:  map[string]modelcap.VideoGeneration{"video": {Sizes: []string{"768P"}, Seconds: []int{6}}},
+			}}}
 			if err := SaveModels(path, cfg); err != nil {
 				t.Fatal(err)
 			}
@@ -18,7 +26,7 @@ func TestModelMetadataRoundTripAndClone(t *testing.T) {
 			if err != nil || !ok {
 				t.Fatalf("load %v %v", ok, err)
 			}
-			if got.Providers["custom"].ModelOverrides["m"].ContextWindow != 16000 || got.Providers["custom"].ModelMetadata["m"].ContextWindow != 64000 {
+			if got.Providers["custom"].ModelOverrides["m"].ContextWindow != 16000 || got.Providers["custom"].ModelMetadata["m"] != cfg.Providers["custom"].ModelMetadata["m"] {
 				t.Fatalf("lost metadata: %+v", got.Providers["custom"])
 			}
 			if !got.Providers["custom"].ImageMetadata["edit"].ImageToImage {

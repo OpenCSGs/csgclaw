@@ -22,6 +22,7 @@ import (
 	"csgclaw/internal/agentengine/interactionstate"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/dshcli"
+	"csgclaw/internal/modelcap"
 	agentruntime "csgclaw/internal/runtime"
 	larkextension "csgclaw/internal/runtimeextension/larkcli"
 )
@@ -167,6 +168,36 @@ func TestReconcileConfigUsesResolvedExecutionProfile(t *testing.T) {
 	}
 	if got := settings["llm-deepseek"].Models[0].ID; got != profile.ModelID {
 		t.Fatalf("settings model = %q, want %q", got, profile.ModelID)
+	}
+}
+
+func TestDSHProviderSettingsOutputBudget(t *testing.T) {
+	for _, tc := range []struct {
+		modelID       string
+		contextWindow int64
+		outputLimit   int64
+		want          int64
+	}{
+		{modelID: "deepseek-flash", contextWindow: 1_048_576, want: 8192},
+		{modelID: "deepseek-v4.1-flash", contextWindow: 1_000_000, want: 8192},
+		{modelID: "custom-model", contextWindow: 1_000_000, want: 8192},
+		{modelID: "custom-model", contextWindow: 16_384, want: 4096},
+		{modelID: "deepseek-flash", contextWindow: 1_048_576, outputLimit: 393_216, want: 65_536},
+		{modelID: "deepseek-v4.1-flash", contextWindow: 1_000_000, outputLimit: 4096, want: 4096},
+		{modelID: "custom-model", contextWindow: 1_000_000, outputLimit: 32_768, want: 32_768},
+		{modelID: "custom-model", contextWindow: 1_000_000, outputLimit: 96_000, want: 65_536},
+		{modelID: "custom-model", contextWindow: 16_384, outputLimit: 8192, want: 4096},
+	} {
+		t.Run(fmt.Sprintf("%s/%d/%d", tc.modelID, tc.contextWindow, tc.outputLimit), func(t *testing.T) {
+			settings := dshProviderSettings(agentruntime.Profile{
+				ModelID:       tc.modelID,
+				ModelMetadata: modelcap.Resolved{ContextWindow: tc.contextWindow, MaxOutputTokens: tc.outputLimit},
+			})
+			got := settings["models"].([]map[string]any)[0]["maxTokens"]
+			if got != tc.want {
+				t.Fatalf("maxTokens = %v, want %d", got, tc.want)
+			}
+		})
 	}
 }
 
