@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Combobox } from "csgclaw-ui";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
 import type { TranslateFn } from "@/models/conversations";
@@ -7,7 +8,7 @@ export type ModelPickerProps = {
   value: string;
   providerID?: string;
   models: readonly string[];
-  modelBadges?: (model: string) => readonly string[];
+  renderOptionLabel?: (model: string) => ReactNode;
   disabled?: boolean;
   required?: boolean;
   placeholder: string;
@@ -21,7 +22,7 @@ export function ModelPicker({
   value,
   providerID = "",
   models,
-  modelBadges,
+  renderOptionLabel,
   disabled,
   required,
   placeholder,
@@ -34,7 +35,7 @@ export function ModelPicker({
   const modelLabel = (model: string, showBadge = true) => (
     <ModelOptionLabel
       model={isAuto(model) ? t("modelProviderAutoName") : model}
-      badges={showBadge ? (isAuto(model) ? [t("modelProviderAutoBadge")] : modelBadges?.(model)) : undefined}
+      badge={showBadge && isAuto(model) ? t("modelProviderAutoBadge") : undefined}
       title={isAuto(model) ? t("modelProviderAutoRouteHint") : undefined}
       showAvatar={false}
     />
@@ -55,7 +56,7 @@ export function ModelPicker({
       options={[
         ...uniqueModels.map((model) => ({
           value: model,
-          label: modelLabel(model),
+          label: renderOptionLabel?.(model) ?? modelLabel(model),
           textValue: modelSearchText(model),
           description: isAuto(model) ? t("modelProviderAutoDescription") : undefined,
           separatorAfter: isAuto(model),

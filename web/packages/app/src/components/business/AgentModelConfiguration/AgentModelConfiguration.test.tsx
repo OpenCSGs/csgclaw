@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { TooltipProvider } from "@/components/ui";
 import { agentToDraft } from "@/models/agents";
 import { createTranslator } from "@/shared/i18n";
 import { AgentModelConfiguration } from "./AgentModelConfiguration";
@@ -35,6 +36,7 @@ test("conversation settings are grouped separately and media changes only patch 
       onRequireOpenCSGAuth={() => true}
       t={t}
     />,
+    { wrapper: TooltipProvider },
   );
   const conversation = within(screen.getByRole("group", { name: t("profileConversationModelGroup") }));
   expect(conversation.getByRole("combobox", { name: t("profileReasoningEffort") })).toBeInTheDocument();
@@ -43,11 +45,13 @@ test("conversation settings are grouped separately and media changes only patch 
   const image = within(screen.getByRole("group", { name: t("profileImageModelGroup") }));
   expect(image.queryByRole("checkbox")).not.toBeInTheDocument();
   await user.click(image.getByRole("combobox", { name: t("profileImageModel") }));
-  expect(
-    screen.getByRole("option", {
-      name: `image ${t("profileImageCapabilityText")} ${t("profileImageCapabilityReference")}`,
-    }),
-  ).toBeInTheDocument();
+  const imageOption = screen.getByRole("option", {
+    name: `image ${t("profileImageCapabilityText")} ${t("profileImageCapabilityReference")}`,
+  });
+  await user.hover(within(imageOption).getByText(t("profileImageCapabilityTextShort")));
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(t("profileImageCapabilityText"));
+  await user.unhover(within(imageOption).getByText(t("profileImageCapabilityTextShort")));
+  expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   expect(
     screen.getByRole("option", { name: `image-unknown ${t("profileImageCapabilityUnknown")}` }),
   ).toBeInTheDocument();

@@ -11,6 +11,64 @@
   color: var(--muted);
   font-size: 12px;
 }
+.imageModelOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.imageModelOption > :global(.model-option-label) {
+  flex: 1 1 auto;
+  width: auto;
+}
+.capabilityBadges {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--csgclaw-ui-space-1);
+  max-width: 78%;
+}
+.capabilityBadges:empty {
+  display: none;
+}
+.capabilityBadge {
+  --capability-badge-border: #e9eaeb;
+  --capability-badge-text: #414651;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--csgclaw-ui-space-1);
+  padding: 2px 6px;
+  border: 1px solid var(--capability-badge-border);
+  border-radius: var(--csgclaw-ui-radius-base);
+  background: transparent;
+  color: var(--capability-badge-text);
+  font-family: var(--csgclaw-ui-font-family-text);
+  font-size: var(--csgclaw-ui-text-xs-size);
+  font-weight: 400;
+  line-height: var(--csgclaw-ui-text-xs-line-height);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.capabilityIcon {
+  display: grid;
+  flex: 0 0 12px;
+  block-size: 12px;
+  place-items: center;
+}
+.capabilityIcon img {
+  display: block;
+  max-width: none;
+}
+:global([data-theme="dark"]) .capabilityBadge {
+  --capability-badge-border: #373a41;
+  --capability-badge-text: #cecfd2;
+}
+:global([data-theme="dark"]) .capabilityIcon img {
+  filter: brightness(0) invert(0.81);
+}
 @container (max-width: 460px) {
   .group {
     grid-template-columns: minmax(0, 1fr);
