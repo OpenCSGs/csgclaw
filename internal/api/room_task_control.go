@@ -3,10 +3,13 @@ package api
 import (
 	"context"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/roomtask"
 	"csgclaw/internal/taskcore"
 	"csgclaw/internal/worklease"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -19,7 +22,13 @@ func (h *Handler) RecoverRoomTasks() error {
 	if h.roomTaskSvc == nil {
 		return nil
 	}
-	return h.roomTaskSvc.Recover()
+	err := h.roomTaskSvc.Recover()
+	var pending *roomtask.DeliveryError
+	if errors.As(err, &pending) {
+		slog.Warn("room task recovery notification pending", "error", err)
+		return nil
+	}
+	return err
 }
 func (h *Handler) handleRoomTaskEvents(w http.ResponseWriter, r *http.Request) {
 	if h.autonomousRoomTaskRead(w, r, true) {

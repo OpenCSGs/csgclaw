@@ -171,6 +171,9 @@
   width: 22px;
   height: 22px;
 }
+.compact .titleLine {
+  justify-content: space-between;
+}
 .compact .text small {
   display: none;
 }

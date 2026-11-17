@@ -295,6 +295,10 @@ button.modeTrigger[data-csg-control]:disabled {
   transform: translateY(-50%);
 }
 .modeOptionTitle {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   font: var(--text-sm-medium);
 }
 .modeOptionHint {

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"csgclaw/internal/agentengine"
@@ -51,6 +52,7 @@ type Adapter struct {
 	newTurnID     idGenerator
 	work          workOptions
 	roomContext   roomtask.TurnContextProvider
+	workerTurnEnd func(roomtask.WorkerTurnEnd) error
 	unreadUpdates unreadUpdateReader
 	taskThread    func(roomID, sourceID string) string
 	projector     *roomtask.ContextProjector
@@ -88,6 +90,10 @@ func (a *Adapter) BeginDiagnostics(binding channel.Binding, event channel.Event)
 // ingress queue admits this room's next turn. It never creates an IM message.
 func WithRoomContextProvider(provider roomtask.TurnContextProvider) Option {
 	return func(adapter *Adapter) { adapter.roomContext = provider }
+}
+
+func WithWorkerTurnEndHandler(handler func(roomtask.WorkerTurnEnd) error) Option {
+	return func(adapter *Adapter) { adapter.workerTurnEnd = handler }
 }
 
 func WithAttachmentResolver(resolver files.Resolver) Option {
@@ -295,7 +301,12 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	}
 	record.Capture("channel.turn", turn)
 	ctx, finishWork, observeWork := a.startWork(ctx, turn)
-	defer func() { finishWork(outcome.Result) }()
+	defer func() {
+		stopped := finishWork(outcome.Result)
+		if current.Role == roomtask.TurnRoleWorker && turn.TaskID != "" && turn.TaskAttempt > 0 {
+			a.reportWorkerTurnEnd(turn, outcome.Result, stopped)
+		}
+	}()
 	if starter, ok := a.renderer.(interface {
 		Start(context.Context, channel.TurnContext) error
 	}); ok {
@@ -358,6 +369,31 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		a.projector.Reset(string(turn.ConversationKey))
 	}
 	return a.complete(ctx, turn, result)
+}
+
+func (a *Adapter) reportWorkerTurnEnd(turn channel.TurnContext, result agentengine.TurnResult, stopped bool) {
+	if a.workerTurnEnd == nil || (!stopped && result.Status != agentengine.TurnFailed) {
+		return
+	}
+	end := roomtask.WorkerTurnEnd{
+		RoomID: turn.RoomID, TaskID: turn.TaskID, ParticipantID: turn.ParticipantID,
+		Attempt: turn.TaskAttempt, Stopped: stopped,
+	}
+	if !stopped {
+		end.Failure = "Worker execution failed before reporting a result"
+		if result.Error != nil {
+			if detail := strings.TrimSpace(diagnostics.Redact(result.Error.Message)); detail != "" {
+				end.Failure = detail
+			}
+			if result.Error.Code != "" {
+				end.Failure = string(result.Error.Code) + ": " + end.Failure
+			}
+		}
+	}
+	if err := a.workerTurnEnd(end); err != nil {
+		slog.Warn("record room worker turn outcome", "room_id", turn.RoomID, "task_id", turn.TaskID,
+			"attempt", turn.TaskAttempt, "error", diagnostics.Redact(err.Error()))
+	}
 }
 
 func (a *Adapter) turnContext(binding channel.Binding, event channel.Event) (channel.TurnContext, error) {

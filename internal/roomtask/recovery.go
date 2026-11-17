@@ -24,7 +24,7 @@ func (s *Service) releaseCapacity() error {
 			continue
 		}
 		occupied, found := byID[t.WaitingOnTaskID]
-		if found && (running(occupied) || occupied.RecoveryRequired) {
+		if found && occupied.AssignedTo == t.AssignedTo && reservesWorker(occupied, t.RoomID) {
 			continue
 		}
 		r, err := s.members(t.RoomID)
@@ -36,7 +36,7 @@ func (s *Service) releaseCapacity() error {
 			if c == nil || Terminal(a.Root.Status) || a.Root.Status == taskcore.StatusStopping {
 				return nil
 			}
-			c.Status, c.WaitingOnTaskID, c.Error = taskcore.StatusPending, "", ""
+			c.Status, c.WaitingOnTaskID, c.Error, c.UpdatedAt = taskcore.StatusPending, "", "", time.Now().UTC()
 			feedback(a, r, c, c.ID+": worker capacity released; inspect current dependencies and explicitly dispatch if still appropriate")
 			rooms[t.RoomID] = true
 			return nil
@@ -86,8 +86,25 @@ func (s *Service) RequestStop(room, id string) error {
 // Recover is called once when the host opens its persisted task store. It never
 // replays an uncertain execution. Manager verification is required before retry.
 func (s *Service) Recover() error {
+	rooms, err := s.markInterrupted()
+	if err != nil {
+		return err
+	}
+	if err := s.releaseCapacity(); err != nil {
+		return err
+	}
+	for room := range rooms {
+		if err := s.RetryDelivery(room); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) markInterrupted() (map[string]bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	rooms := map[string]bool{}
 	for _, root := range s.List("") {
 		if root.ParentID != "" || Terminal(root.Status) {
 			continue
@@ -99,19 +116,24 @@ func (s *Service) Recover() error {
 		if err := s.core.Mutate(root.ID, func(a *taskcore.Snapshot, _ func() (string, error)) error {
 			for i := range a.Children {
 				c := &a.Children[i]
+				if c.RecoveryRequired {
+					rooms[root.RoomID] = true
+				}
 				if !running(*c) {
 					continue
 				}
 				c.Status, c.RecoveryRequired = taskcore.StatusBlocked, true
 				c.Error = "service restarted; verify the previous execution and saved artifacts before resuming"
+				c.UpdatedAt = time.Now().UTC()
 				feedback(a, r, c, c.ID+": "+c.Error)
+				rooms[root.RoomID] = true
 			}
 			return nil
 		}); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return rooms, nil
 }
 
 func (s *Service) ResolveRecovery(room, id string, attempt int, assessment string) error {

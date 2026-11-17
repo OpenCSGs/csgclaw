@@ -19,6 +19,7 @@ import (
 func (h *Handler) SetRoomTaskCore(core *taskcore.Service) {
 	if h.participantBridge != nil {
 		h.participantBridge.SetRoomContextProvider(h.roomExecutionContext)
+		h.participantBridge.SetWorkerTurnEndHandler(h.endRoomWorkerTurn)
 	}
 	if core == nil {
 		if h.im != nil {
@@ -33,6 +34,17 @@ func (h *Handler) SetRoomTaskCore(core *taskcore.Service) {
 	if h.im != nil {
 		h.im.SetAutonomousTaskThreadResolver(core.AutonomousTaskThread)
 	}
+}
+
+func (h *Handler) endRoomWorkerTurn(end roomtask.WorkerTurnEnd) error {
+	if h.roomTaskSvc == nil {
+		return nil
+	}
+	actor := h.participantBridgeTargetForRoomMember(end.ParticipantID).bridgeID
+	if end.Stopped {
+		return h.roomTaskSvc.WorkerStopped(end.RoomID, end.TaskID, actor, end.Attempt)
+	}
+	return h.roomTaskSvc.WorkerFailed(end.RoomID, end.TaskID, actor, end.Attempt, end.Failure)
 }
 
 func (h *Handler) deliverRoomTaskProjection(p roomtask.Projection) error {

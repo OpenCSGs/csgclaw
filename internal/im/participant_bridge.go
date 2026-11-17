@@ -16,6 +16,7 @@ type ParticipantBridge struct {
 	resourceInput func(context.Context, string, string, *apitypes.ResourceSelection) (string, string, error)
 	mu            sync.Mutex
 	roomContext   roomtask.TurnContextProvider
+	workerTurnEnd func(roomtask.WorkerTurnEnd) error
 	subscribers   map[string]map[chan ParticipantEvent]struct{}
 	pending       map[string][]ParticipantEvent
 	inflight      map[string]map[string]ParticipantEvent
@@ -38,6 +39,22 @@ func (b *ParticipantBridge) RoomContext(request roomtask.TurnContextRequest) (ro
 		return roomtask.PrivateTurnContext{}, nil
 	}
 	return provider(request)
+}
+
+func (b *ParticipantBridge) SetWorkerTurnEndHandler(handler func(roomtask.WorkerTurnEnd) error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.workerTurnEnd = handler
+}
+
+func (b *ParticipantBridge) EndWorkerTurn(end roomtask.WorkerTurnEnd) error {
+	b.mu.Lock()
+	handler := b.workerTurnEnd
+	b.mu.Unlock()
+	if handler == nil {
+		return nil
+	}
+	return handler(end)
 }
 
 const maxPendingParticipantEventsPerParticipant = 64

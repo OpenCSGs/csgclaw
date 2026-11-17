@@ -32,6 +32,13 @@ type Projection struct {
 	ID, RoomID, TaskID, SenderID, TargetID, Kind, Title, Content string
 	Attempt                                                      int
 }
+type WorkerTurnEnd struct {
+	RoomID, TaskID, ParticipantID string
+	Attempt                       int
+	Stopped                       bool
+	Failure                       string
+}
+
 type Service struct {
 	mu           sync.Mutex
 	core         *taskcore.Service
@@ -205,7 +212,7 @@ func (s *Service) changeState(room, id string, fn func(Roster, []taskcore.Task, 
 		}
 	}
 	if err == nil {
-		tasks := s.List("")
+		tasks := s.List(room)
 		err = s.core.Mutate(id, func(a *taskcore.Snapshot, allocate func() (string, error)) error {
 			return fn(roster, tasks, a, allocate)
 		})
@@ -216,7 +223,7 @@ func (s *Service) changeState(room, id string, fn func(Roster, []taskcore.Task, 
 
 // BeginRoomDeletion prevents new room-task mutations while the caller removes
 // the room. A room with unfinished work must be stopped and reported first so
-// no persisted execution can become an orphan or retain global worker capacity.
+// no persisted execution can become an orphan.
 func (s *Service) BeginRoomDeletion(room string) (func(), error) {
 	room = strings.TrimSpace(room)
 	if room == "" {
@@ -342,6 +349,10 @@ func running(t taskcore.Task) bool {
 	return t.Status == taskcore.StatusInProgress || t.Status == taskcore.StatusAssigned && t.DispatchedAt != nil
 }
 
+func reservesWorker(t taskcore.Task, roomID string) bool {
+	return t.RoomID == roomID && (running(t) || t.RecoveryRequired)
+}
+
 // Dispatch is a Manager decision. A dependency becoming ready never calls it.
 func (s *Service) Dispatch(room, id, assignee string) error {
 	return s.change(room, id, func(r Roster, tasks []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
@@ -374,7 +385,7 @@ func (s *Service) Dispatch(room, id, assignee string) error {
 			return fmt.Errorf("waiting for predecessor acceptance by the manager")
 		}
 		for _, other := range tasks {
-			if other.ID != id && other.AssignedTo == assignee && (running(other) || other.RecoveryRequired) {
+			if other.ID != id && other.AssignedTo == assignee && reservesWorker(other, room) {
 				t.AssignedTo, t.Status = assignee, taskcore.StatusBlocked
 				t.WaitingOnTaskID = other.ID
 				t.Error = "worker is busy on task " + other.ID + "; waiting for capacity"
@@ -611,20 +622,28 @@ func memberRemovalBlocks(status string) bool {
 	}
 }
 func (s *Service) WorkerStopped(room, id, actor string, attempt int) error {
+	return s.workerTurnEnded(room, id, actor, attempt, taskcore.StatusCancelled, "stopped by user")
+}
+
+func (s *Service) WorkerFailed(room, id, actor string, attempt int, reason string) error {
+	return s.workerTurnEnded(room, id, actor, attempt, taskcore.StatusFailed, reason)
+}
+
+func (s *Service) workerTurnEnded(room, id, actor string, attempt int, status, reason string) error {
 	if id == "" {
 		return nil
 	}
 	return s.change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
 		t := child(a, id)
 		if t == nil || t.AssignedTo != actor || t.Attempt != attempt || attempt < 1 {
-			return fmt.Errorf("stale stop confirmation")
+			return fmt.Errorf("stale worker turn outcome")
 		}
 		if !running(*t) {
 			return nil
 		}
-		t.Status, t.Error = taskcore.StatusCancelled, "stopped by user"
-		appendEvent(a, taskcore.EventTaskCancelled, t, actor, t.Error)
-		feedback(a, r, t, t.ID+": stopped; inspect preserved results and decide whether to continue or report the parent")
+		t.Status, t.Error, t.UpdatedAt = status, reason, time.Now().UTC()
+		appendEvent(a, "task."+status, t, actor, reason)
+		feedback(a, r, t, fmt.Sprintf("%s: %s. %s", id, status, reason))
 		return nil
 	})
 }

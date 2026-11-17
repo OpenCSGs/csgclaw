@@ -37,6 +37,7 @@ import {
   SelectItem,
   SelectRoot,
   SelectTrigger,
+  StatusBadge,
   Tooltip,
 } from "@/components/ui";
 import { ChatSidePanel, useChatSidePanel } from "@/components/business/ChatSidePanel";
@@ -142,7 +143,7 @@ function StartTaskForm({
   const [{ target, revision }, setTarget] = useState({ target: initialTarget, revision: 0 });
   const [collaborationMode, setCollaborationMode] = useState<keyof typeof collaborationModes>(RoomTypes.onDemand);
   const collaborationModeID = useId();
-  const { title: modeTitle, icon: ModeIcon } = collaborationModes[collaborationMode];
+  const { title: modeTitle, hint: modeHint, icon: ModeIcon } = collaborationModes[collaborationMode];
   const [resources, setResources] = useState<ResourceSnapshot[]>([]);
   const [examplesHidden, setExamplesHidden] = useState(() => {
     try {
@@ -507,15 +508,7 @@ function StartTaskForm({
         <div className={styles.inner}>
           <header className={styles.head}>
             <h1>{t("iaStartTitle")}</h1>
-            <p>
-              {t(
-                selectedAgent || selectedCloud
-                  ? "iaStartSubtitleDirect"
-                  : autonomous
-                    ? "autonomousCollaborationHint"
-                    : "iaStartSubtitleRooms",
-              )}
-            </p>
+            <p>{t(selectedAgent || selectedCloud ? "iaStartSubtitleDirect" : modeHint)}</p>
           </header>
           <div className={styles.pane}>
             <TargetPicker
@@ -890,7 +883,15 @@ function StartTaskForm({
                                   }
                                 >
                                   <Icon className={styles.modeOptionIcon} size={15} aria-hidden="true" />
-                                  <span className={styles.modeOptionTitle}>{t(title)}</span>
+                                  <span className={styles.modeOptionTitle}>
+                                    {t(title)}
+                                    {value === RoomTypes.autonomous ? (
+                                      <>
+                                        {" "}
+                                        <StatusBadge kind="compact">{t("collaborationExperimental")}</StatusBadge>
+                                      </>
+                                    ) : null}
+                                  </span>
                                 </SelectItem>
                               );
                             })}

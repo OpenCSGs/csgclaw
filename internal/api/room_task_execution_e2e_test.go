@@ -23,6 +23,7 @@ import (
 	"csgclaw/internal/participant"
 	"csgclaw/internal/roomtask"
 	"csgclaw/internal/taskcore"
+	"csgclaw/internal/worklease"
 )
 
 // Real HTTP, task persistence, participant routing, Source, Binding, Engine and
@@ -39,8 +40,16 @@ func (r *roomTaskExecutionRuntime) Run(ctx context.Context, request agentengine.
 }
 
 func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
-	for _, failOldProjection := range []bool{false, true} {
-		t.Run(fmt.Sprintf("projection_failure=%t", failOldProjection), func(t *testing.T) {
+	for _, tc := range []struct {
+		name                                           string
+		failOldProjection, failWorkerStart, stopWorker bool
+	}{
+		{name: "worker submits"},
+		{name: "claim with projection unavailable", failOldProjection: true},
+		{name: "runtime fails before claim", failWorkerStart: true},
+		{name: "user stops one worker", stopWorker: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			rt := &roomTaskExecutionRuntime{uiFixtureRuntime: uiFixtureRuntime{fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex}}}
 			profile := agent.AgentProfile{Provider: agent.ProviderAPI, ModelID: "fixture-model", ProfileComplete: true}
 			controller := mustNewSeededServiceWithOptions(t, []agent.Agent{
@@ -49,8 +58,8 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 			}, agent.WithRuntime(rt))
 			engine := agentengine.New(controller)
 			participants := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{
-				{ID: agent.ManagerParticipantID, Channel: "csgclaw", Type: participant.TypeAgent, Name: "manager", AgentID: agent.ManagerUserID, ChannelUserRef: im.ManagerUserID, ChannelUserKind: participant.ChannelUserKindLocalUserID, Mentionable: true},
-				{ID: "pt-dev", Channel: "csgclaw", Type: participant.TypeAgent, Name: "dev", AgentID: "agent-dev", ChannelUserRef: "user-dev", ChannelUserKind: participant.ChannelUserKindLocalUserID, Mentionable: true},
+				{ID: agent.ManagerParticipantID, Channel: "csgclaw", Type: participant.TypeAgent, Name: "manager", AgentID: agent.ManagerUserID, ChannelUserRef: im.ManagerUserID, ChannelUserKind: participant.ChannelUserKindLocalUserID, Mentionable: true, LifecycleStatus: participant.LifecycleStatusActive},
+				{ID: "pt-dev", Channel: "csgclaw", Type: participant.TypeAgent, Name: "dev", AgentID: "agent-dev", ChannelUserRef: "user-dev", ChannelUserKind: participant.ChannelUserKindLocalUserID, Mentionable: true, LifecycleStatus: participant.LifecycleStatusActive},
 			}), participant.WithAgentEngine(engine))
 			bus := im.NewBus()
 			messages, err := im.NewServiceFromPathWithBus(filepath.Join(t.TempDir(), "im.json"), bus)
@@ -74,6 +83,9 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 			bridge := im.NewParticipantBridge("")
 			h := NewHandlerWithAuth(AgentServices{Records: controller, Workspace: controller.Workspace(), Models: controller.Models(), Runtime: controller}, engine, messages, bus, bridge, nil, nil, "room-e2e-token", true)
 			h.SetParticipantService(participants)
+			workBus := worklease.NewBus()
+			leases := worklease.NewRegistry(participants, messages, workBus, worklease.WithTurnControlDispatcher(worklease.NewTurnControlDispatcher(nil)))
+			h.SetParticipantWorkService(leases, workBus)
 			taskStore, err := taskcore.NewStore(filepath.Join(t.TempDir(), "tasks"))
 			if err != nil {
 				t.Fatal(err)
@@ -94,10 +106,25 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 			workerClient := apiclient.New(server.URL, "room-e2e-token", client).WithCallerAgentID("pt-dev")
 			started, release := make(chan struct{}, 1), make(chan struct{})
 			finished := make(chan error, 2)
+			managerNotified := make(chan struct{}, 1)
+			const workerFailure = "fixture model quota exhausted"
+			reportedError := workerFailure
+			if tc.stopWorker {
+				reportedError = "stopped by user"
+			}
 			var runs atomic.Int32
 			rt.run = func(ctx context.Context, request agentengine.TurnRequest) agentengine.TurnResult {
 				_, taskID, isWorker := strings.Cut(string(request.ConversationKey), ":task:")
 				if !isWorker {
+					for _, input := range request.Input {
+						if strings.Contains(input.Text, reportedError) {
+							select {
+							case managerNotified <- struct{}{}:
+							default:
+							}
+							break
+						}
+					}
 					return agentengine.TurnResult{Status: agentengine.TurnSucceeded}
 				}
 				runs.Add(1)
@@ -110,9 +137,13 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 				case <-ctx.Done():
 					return agentengine.TurnResult{Status: agentengine.TurnCanceled}
 				}
+				if tc.failWorkerStart {
+					finished <- nil
+					return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: workerFailure}}
+				}
 				task, err := workerClient.GetRoomTask(ctx, room.ID, taskID)
 				if err == nil {
-					failProjection.Store(failOldProjection)
+					failProjection.Store(tc.failOldProjection)
 					var claimed apitypes.RoomTask
 					claimed, err = workerClient.ClaimRoomTask(ctx, room.ID, taskID, task.Attempt)
 					failProjection.Store(false)
@@ -133,7 +164,9 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			adapter, err := execution.New(engine, delivery.NewTranscriptRenderer(transcripts), execution.WithRoomContextProvider(bridge.RoomContext), execution.WithDiagnostics(messages.Diagnostics()))
+			adapter, err := execution.New(engine, delivery.NewTranscriptRenderer(transcripts), execution.WithRoomContextProvider(bridge.RoomContext),
+				execution.WithWorkerTurnEndHandler(bridge.EndWorkerTurn), execution.WithDiagnostics(messages.Diagnostics()),
+				execution.WithParticipantWorkReporter(leases), execution.WithTurnControllerRegistrar(leases))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -202,6 +235,39 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 				}
 			}
 		drained:
+			if tc.stopWorker {
+				stoppedWorker := false
+				for _, work := range leases.ActiveWork(room.ID) {
+					if work.TaskID != child.ID || work.ParticipantID != "pt-dev" {
+						continue
+					}
+					stopped := performParticipantWorkRequest(t, h, http.MethodPost, "/api/v1/channels/csgclaw/participants/pt-dev/work:stop", map[string]any{
+						"room_id": room.ID, "lease_id": work.LeaseID, "request_id": work.RequestID,
+					})
+					if stopped.Code != http.StatusAccepted {
+						t.Fatalf("stop Worker: %d %s", stopped.Code, stopped.Body.String())
+					}
+					stoppedWorker = true
+					break
+				}
+				if !stoppedWorker {
+					t.Fatal("Worker did not register an active lease")
+				}
+				select {
+				case <-managerNotified:
+				case <-time.After(5 * time.Second):
+					t.Fatal("Manager did not receive the stop as task feedback")
+				}
+				task, err := managerClient.GetRoomTask(context.Background(), room.ID, child.ID)
+				if err != nil || task.Status != taskcore.StatusCancelled || task.Attempt != 1 {
+					t.Fatalf("Worker's stopped attempt was not recorded: %+v %v", task, err)
+				}
+				goal, err := managerClient.GetRoomTask(context.Background(), room.ID, parent.ID)
+				if err != nil || goal.Status != taskcore.StatusInProgress || runs.Load() != 1 {
+					t.Fatalf("stopping one worker either halted the plan or replayed the attempt: %+v %v", goal, err)
+				}
+				return
+			}
 			close(release)
 			select {
 			case err := <-finished:
@@ -210,6 +276,18 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 				}
 			case <-time.After(5 * time.Second):
 				t.Fatal("Worker claim/submit did not finish")
+			}
+			if tc.failWorkerStart {
+				select {
+				case <-managerNotified:
+				case <-time.After(5 * time.Second):
+					t.Fatal("Manager did not receive runtime failure feedback")
+				}
+				task, err := managerClient.GetRoomTask(context.Background(), room.ID, child.ID)
+				if err != nil || task.Status != taskcore.StatusFailed || task.Attempt != 1 || !strings.Contains(task.Error, workerFailure) {
+					t.Fatalf("worker remained busy after runtime failure: %+v %v", task, err)
+				}
+				return
 			}
 			deadline := time.Now().Add(5 * time.Second)
 			for {
