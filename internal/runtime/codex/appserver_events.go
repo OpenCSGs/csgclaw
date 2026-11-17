@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"maps"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -514,6 +512,8 @@ type appServerReasoningSummary struct {
 	source    string
 	parts     map[int]*strings.Builder
 	completed bool
+	lastPart  int
+	hasOutput bool
 }
 
 func (m *appServerManager) handleReasoningDelta(runtimeID string, live *liveSession, threadID, turnID, method string, params map[string]any) {
@@ -536,8 +536,8 @@ func (m *appServerManager) handleReasoningDelta(runtimeID string, live *liveSess
 	}
 	waiter := live.appServerTurnWaiter(threadID)
 	if active, summary := waiter.reasoningStream(turnID); active && summary {
-		if waiter.recordReasoningSummaryDelta(itemID, method, index, text) {
-			m.publishReasoningSummary(runtimeID, threadID, turnID, itemID, text)
+		if delta := waiter.recordReasoningSummaryDelta(itemID, method, index, text); delta != "" {
+			m.publishReasoningSummary(runtimeID, threadID, turnID, itemID, delta)
 		}
 	}
 }
@@ -554,12 +554,12 @@ func (w *appServerTurnWaiter) reasoningSummary(itemID string) *appServerReasonin
 	return summary
 }
 
-func (w *appServerTurnWaiter) recordReasoningSummaryDelta(itemID, source string, index int, text string) bool {
+func (w *appServerTurnWaiter) recordReasoningSummaryDelta(itemID, source string, index int, text string) string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	summary := w.reasoningSummary(itemID)
 	if summary.completed || (summary.source != "" && summary.source != source) {
-		return false
+		return ""
 	}
 	// A provider can report both reasoning text and a summary for one item.
 	// Keep the first delta source so the append-only stream displays it once.
@@ -570,9 +570,18 @@ func (w *appServerTurnWaiter) recordReasoningSummaryDelta(itemID, source string,
 		summary.parts[index] = part
 	}
 	part.WriteString(text)
-	// Later parts wait for the snapshot so missing earlier text can still
-	// be inserted in order in the append-only Session stream.
-	return index == 0
+	return summary.formatDelta(index, text)
+}
+
+func (s *appServerReasoningSummary) formatDelta(index int, text string) string {
+	if text == "" {
+		return ""
+	}
+	if s.hasOutput && s.lastPart != index {
+		text = "\n\n" + text
+	}
+	s.lastPart, s.hasOutput = index, true
+	return text
 }
 
 func (w *appServerTurnWaiter) completeReasoningSummary(itemID string, snapshot, content []any) (string, bool) {
@@ -609,26 +618,17 @@ func (w *appServerTurnWaiter) completeReasoningSummary(itemID string, snapshot, 
 		}
 	}
 
-	streamed := parts[0]
-	for index, value := range snapshot {
-		if text, ok := value.(string); ok && text != "" {
-			parts[index] = text
-		}
-	}
 	var tail strings.Builder
-	if suffix, matches := strings.CutPrefix(parts[0], streamed); matches {
-		tail.WriteString(suffix)
-	}
-	hasText := streamed != "" || tail.Len() > 0
-	for _, index := range slices.Sorted(maps.Keys(parts)) {
-		if index == 0 || parts[index] == "" {
+	// Every observed delta has already been sent in arrival order. Only append
+	// snapshot suffixes that extend the text observed for their own part.
+	for index, value := range snapshot {
+		text, ok := value.(string)
+		if !ok {
 			continue
 		}
-		if hasText {
-			tail.WriteString("\n\n")
+		if suffix, matches := strings.CutPrefix(text, parts[index]); matches {
+			tail.WriteString(summary.formatDelta(index, suffix))
 		}
-		tail.WriteString(parts[index])
-		hasText = true
 	}
 	return tail.String(), true
 }
