@@ -133,7 +133,7 @@ export function slashCommandDisplayDescription(
 }
 
 export function matchComposerCommand(text: string) {
-  return /^([ \t]*)(\/(?:创建智能体|创建房间|Create Agent|Create Room|new))(?=\s|$)/u.exec(text);
+  return /^(\s*)(\/(?:创建智能体|创建房间|Create Agent|Create Room|new))(?=\s|$)/u.exec(text);
 }
 
 export function canonicalizeComposerCommand(text: string): string {
