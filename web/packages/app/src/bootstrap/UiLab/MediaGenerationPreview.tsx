@@ -1,9 +1,5 @@
 import { useState } from "react";
 import { Button, MediaGeneration } from "@/components/ui";
-import { MessageAttachments } from "@/components/business/ConversationPane/ConversationAttachments";
-import { ImageGenerationStatus } from "@/components/business/ConversationPane/ImageGenerationStatus";
-import { DocumentPreviewPanel, type DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
-import { generatedImageExample } from "./generatedImageExample";
 import { createTranslator } from "@/shared/i18n";
 import { InteractiveExample } from "./ApplicationFoundations/InteractiveExample";
 import { useLabTranslation } from "./LabLocale";
@@ -29,39 +25,16 @@ export function MediaGenerationPreview() {
 
 function MediaGenerationDemo() {
   const [retried, setRetried] = useState(false);
-  const [preview, setPreview] = useState<DocumentPreviewRequest>();
-  const [createdAt] = useState(() => new Date().toISOString());
   const [variation, setVariation] = useState<number>();
   const { locale } = useLabTranslation();
   const t = createTranslator(locale);
   const zh = locale === "zh";
-  const generatedImage = generatedImageExample(zh, createdAt);
   const prompt = zh
     ? "状态页主图：黎明时分安静的控制室，光线柔和，无人。"
     : "Hero image for the Northwind status page: a calm control room at dawn, soft light, no people.";
 
   return (
     <div className="grid gap-6">
-      <ImageGenerationStatus
-        message={generatedImage}
-        t={t}
-        result={
-          <MessageAttachments
-            generation
-            attachments={generatedImage.attachments}
-            t={t}
-            onPreviewAttachment={setPreview}
-          />
-        }
-      />
-      {preview ? (
-        <DocumentPreviewPanel
-          {...preview}
-          t={t}
-          onClose={() => setPreview(undefined)}
-          onIndexChange={(index) => setPreview((current) => current && { ...current, index })}
-        />
-      ) : null}
       <MediaGeneration kind="video" state="queued" label={t("videoQueued")} prompt={prompt} />
       <MediaGeneration
         kind="image"
