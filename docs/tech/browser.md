@@ -17,10 +17,12 @@ The currently inspected `sandbox-runtime` server image at `50a0d2a` does not ins
 Update that image before enabling browser tasks in cloud deployments, and verify the actual deployed image and server restart path.
 Browser state is ephemeral, so replacing a persisted CSGClaw bundle does not migrate browser profiles.
 
-Only public HTTP(S) destinations are allowed by default.
+Public HTTP(S) destinations and loopback addresses are allowed by default in both the web and desktop versions.
+Local sites such as `http://localhost:3000`, `http://127.0.0.1:3000` and `http://[::1]:3000` work without environment configuration.
+Loopback refers to the machine or container running the CSGClaw backend, which may differ from the computer displaying the Web UI.
 A server-owned forward proxy validates DNS results for every connection and dials the checked IP directly, covering redirects and subresources too.
-Loopback, private, link-local and other non-public addresses are denied.
-For local pages, intranet applications or private test sites, the deployment administrator must set `CSGCLAW_BROWSER_ALLOW_PRIVATE_NETWORK=true` before starting the server.
+Non-loopback private, link-local and other non-public addresses are denied.
+For non-loopback intranet applications or private test sites, the deployment administrator must set `CSGCLAW_BROWSER_ALLOW_PRIVATE_NETWORK=true` before starting the server.
 This is a service-wide authorization and cannot be enabled through Agent tool arguments.
 
 ## Using the browser
