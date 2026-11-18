@@ -8,7 +8,7 @@ This frontend design implements [requirement 3957](https://git-devops.opencsg.co
 
 Creation actions open `/new`. `StartTaskPage` and `TargetPicker` handle the agent or team choice, the Manager-only team, the initial message, and empty-room creation. The picker also exposes the Manager-assisted agent and team creation actions. The conversation directory filter continues to use existing workspace-directory metadata.
 
-Team creation offers **On demand** (the default) and **Autonomous collaboration**. Autonomous members receive unread notifications, actively read public messages, and explicitly send useful contributions. Final answers appear as messages in the current conversation or thread. An identical answer already sent there during the same turn is deduplicated. A turn can finish silently when there is no message to send. Existing free rooms keep their mention-driven delivery. There is no fixed turn limit. The toolbar displays a pause when the user stops collaboration; a new human message resumes admission. Each member keeps its own model and permissions; a new autonomous room shares the same room-owned working directory as on-demand collaboration.
+Team creation offers **Moderated mode** (the default, `on_demand`) and **Roundtable mode** (experimental, `autonomous`). Autonomous members receive unread notifications, actively read public messages, and explicitly send useful contributions. Final answers appear as messages in the current conversation or thread. An identical answer already sent there during the same turn is deduplicated. A turn can finish silently when there is no message to send. Existing free rooms keep their mention-driven delivery. There is no fixed turn limit. The toolbar displays a pause when the user stops collaboration; a new human message resumes admission. Each member keeps its own model and permissions; a new roundtable room shares a room-owned working directory, as in moderated mode. [Collaboration workflow and session concurrency](../room-first-collaboration.zh.md)
 
 Selecting a destination at viewport widths of 720px or less collapses the navigation so the destination is visible. Desktop navigation remains expanded when selecting a destination. Active conversations and navigation items expose `aria-current` and visible keyboard focus.
 
@@ -24,7 +24,7 @@ The transcript also shows completed replies from older records that stored the a
 
 ## Room tools
 
-The on-demand collaboration room header presents these actions in order:
+The moderated room header presents these actions in order:
 
 1. Member management.
 2. Room tasks.

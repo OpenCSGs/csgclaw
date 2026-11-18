@@ -1,4 +1,5 @@
 import { ListTodo, MessagesSquare } from "lucide-react";
+import { StatusBadge } from "@/components/ui";
 import {
   RoomTypes,
   isDirectConversation,
@@ -38,6 +39,12 @@ export function CollaborationModeBadge({
     <span className={styles.badge} data-mode={type} data-compact={compact || undefined} title={t(label)}>
       {!compact ? <Icon size={12} aria-hidden="true" /> : null}
       <span>{t(compact ? shortLabel : label)}</span>
+      {!compact && type === RoomTypes.autonomous ? (
+        <>
+          {" "}
+          <StatusBadge kind="compact">{t("collaborationExperimental")}</StatusBadge>
+        </>
+      ) : null}
     </span>
   );
 }

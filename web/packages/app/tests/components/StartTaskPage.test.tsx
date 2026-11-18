@@ -381,7 +381,7 @@ describe("StartTaskPage task preparation", () => {
     if (mode === "autonomous") {
       await user.click(selector);
       const onDemand = screen.getByRole("option", { name: "onDemandCollaboration" });
-      const autonomous = screen.getByRole("option", { name: "autonomousCollaboration" });
+      const autonomous = screen.getByRole("option", { name: "autonomousCollaboration collaborationExperimental" });
       expect(onDemand).toHaveAccessibleDescription("onDemandCollaborationHint");
       expect(autonomous).toHaveAccessibleDescription("autonomousCollaborationHint");
       await user.click(autonomous);

@@ -39,8 +39,8 @@ it("distinguishes the two collaboration modes in the compact task list", async (
     />,
     { wrapper: createQueryWrapper().wrapper },
   );
-  expect((await screen.findByText("Autonomous")).closest("button")).toHaveTextContent("Research");
-  expect(screen.getByText("On demand").closest("button")).toHaveTextContent("Review brief");
+  expect((await screen.findByText("Roundtable")).closest("button")).toHaveTextContent("Research");
+  expect(screen.getByText("Moderated").closest("button")).toHaveTextContent("Review brief");
   expect(screen.getByRole("button", { name: "Review" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Discussion" })).toBeVisible();
 });

@@ -239,7 +239,7 @@ func TestRootSubmissionConcurrentAndPersistent(t *testing.T) {
 		t.Fatal("lost dedupe on reload", err)
 	}
 	if _, err := reloaded.Create("room-a", "other-source", "manager", "Other", ""); err != nil {
-		t.Fatal("manager could not create queued parent", err)
+		t.Fatal("manager could not create independent parent", err)
 	}
 	if len(reloaded.List("room-a")) != 2 {
 		t.Fatal("second parent missing")
@@ -431,52 +431,51 @@ func TestCorrectionsAndReassignmentRejectOldAttempts(t *testing.T) {
 	}
 }
 
-func TestParentsQueueAndIndependentWorkersRunConcurrently(t *testing.T) {
+func TestIndependentParentsStartAndFinishWhileEarlierParentRuns(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	a := rootTask(t, s)
-	b, err := s.Create("room-a", "manager-goal", "manager", "Next", "")
-	if err != nil {
+	first := rootTask(t, s)
+	if err := s.Plan("room-a", first.ID, "", standardPlan(), true); err != nil {
 		t.Fatal(err)
 	}
-	plan := standardPlan()
-	plan[1].DependsOnRefs = nil
-	if err := s.Plan("room-a", a.ID, "", plan, true); err != nil {
+	active := childFor(t, s, "dev")
+	if err := s.Dispatch("room-a", active.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Plan("room-a", b.ID, "", plan, true); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Start("room-a", b.ID); err == nil {
-		t.Fatal("second parent ran early")
-	}
-	tasks := s.List("room-a")
-	for _, c := range tasks {
-		if c.ParentID == a.ID {
+	mustUpdate(t, s, active.ID, "dev", taskcore.StatusInProgress, "", "")
+	for _, start := range []string{"auto", "explicit"} {
+		next, err := s.Create("room-a", start, "manager", "Independent goal", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Plan("room-a", next.ID, "", []PlanItem{{IDRef: "doc", Title: "Document", AssignedTo: "dev"}}, start == "auto"); err != nil {
+			t.Fatal(err)
+		}
+		if start == "explicit" {
+			if err := s.Start("room-a", next.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if task, _ := s.Get("room-a", next.ID); task.Status != taskcore.StatusInProgress {
+			t.Fatalf("%s: later parent did not start: %+v", start, task)
+		}
+		for _, c := range s.List("room-a") {
+			if c.ParentID != next.ID {
+				continue
+			}
 			if err := s.Dispatch("room-a", c.ID, ""); err != nil {
 				t.Fatal(err)
 			}
-			mustUpdate(t, s, c.ID, c.AssignedTo, taskcore.StatusInProgress, "", "")
-		}
-	}
-	for _, c := range tasks {
-		if c.ParentID == a.ID {
-			mustUpdate(t, s, c.ID, c.AssignedTo, taskcore.StatusCompleted, "delivered", "")
+			mustUpdate(t, s, c.ID, "dev", taskcore.StatusInProgress, "", "")
+			mustUpdate(t, s, c.ID, "dev", taskcore.StatusCompleted, "guide", "")
 			if err := s.Review("room-a", c.ID, 1, true, "accepted"); err != nil {
 				t.Fatal(err)
 			}
 		}
-	}
-	if _, err := s.Report("room-a", a.ID, "succeeded", "all done"); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Start("room-a", b.ID); err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range tasks {
-		if c.ParentID == b.ID {
-			if err := s.Dispatch("room-a", c.ID, ""); err != nil {
-				t.Fatal(err)
-			}
+		if _, err := s.Report("room-a", next.ID, "succeeded", "done"); err != nil {
+			t.Fatal(err)
 		}
+	}
+	if got, _ := s.Get("room-a", active.ID); got.Status != taskcore.StatusInProgress || got.Attempt != 1 {
+		t.Fatalf("finishing another parent disturbed the first task: %+v", got)
 	}
 }

@@ -430,8 +430,10 @@ describe("ConversationPane", () => {
     expect(container.querySelector(".chat-header")).toHaveTextContent(label);
     expect(container.querySelector(".composer")).not.toHaveTextContent(label);
     if (conversationType === "autonomous") {
+      expect(container.querySelector(".chat-header")).toHaveTextContent("collaborationExperimental");
       expect(screen.queryByRole("button", { name: "roomTasksOpen" })).not.toBeInTheDocument();
     } else {
+      expect(container.querySelector(".chat-header")).not.toHaveTextContent("collaborationExperimental");
       expect(screen.getByRole("button", { name: "roomTasksOpen" })).toBeVisible();
     }
   });

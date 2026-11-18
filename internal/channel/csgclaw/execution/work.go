@@ -60,11 +60,11 @@ type activeWorkTurn struct {
 
 func (a *Adapter) startWork(ctx context.Context, turn channel.TurnContext) (
 	context.Context,
-	func(agentengine.TurnResult),
+	func(agentengine.TurnResult) bool,
 	func(context.Context, agentengine.TurnEvent),
 ) {
 	if a == nil || a.work.reporter == nil {
-		return ctx, func(agentengine.TurnResult) {}, nil
+		return ctx, func(agentengine.TurnResult) bool { return false }, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -138,7 +138,8 @@ func (a *Adapter) startWork(ctx context.Context, turn channel.TurnContext) (
 	}
 
 	var once sync.Once
-	return turnCtx, func(result agentengine.TurnResult) {
+	var stopped bool
+	return turnCtx, func(result agentengine.TurnResult) bool {
 		once.Do(func() {
 			stopping := active.finish()
 			unregister()
@@ -148,7 +149,8 @@ func (a *Adapter) startWork(ctx context.Context, turn channel.TurnContext) (
 
 			outcome := apitypes.ParticipantWorkOutcomeReleased
 			if stopping {
-				if result.Status == agentengine.TurnCanceled {
+				stopped = result.Status == agentengine.TurnCanceled
+				if stopped {
 					outcome = apitypes.ParticipantWorkOutcomeStopped
 				} else {
 					outcome = apitypes.ParticipantWorkOutcomeStopTimedOut
@@ -166,6 +168,7 @@ func (a *Adapter) startWork(ctx context.Context, turn channel.TurnContext) (
 				logWorkFailure("finish", lease, err)
 			}
 		})
+		return stopped
 	}, active.observeEvent
 }
 

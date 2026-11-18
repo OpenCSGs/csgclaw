@@ -24,6 +24,11 @@ func TestOnDemandPolicyInstructionsAreRoleSpecific(t *testing.T) {
 			t.Fatalf("manager guide handling missing %q", want)
 		}
 	}
+	for _, want := range []string{"Independent goals in the same room may start immediately", "same Worker can execute independent children concurrently in separate task sessions", "adjust the existing plan in this turn", "room_task_dispatch with assigned_to", "If the user stopped the parent"} {
+		if !strings.Contains(manager, want) {
+			t.Fatalf("manager replanning instructions missing %q", want)
+		}
+	}
 
 	for _, want := range []string{`room_type="on_demand", role="worker", and policy_id="on-demand-worker/v1"`, "task claim --task", "task update --task", "task message --task", "pending Manager review", "independent review required by the guide is separate Worker work", "csgclaw-cli"} {
 		if !strings.Contains(worker, want) {
