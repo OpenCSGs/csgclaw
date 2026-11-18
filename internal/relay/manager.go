@@ -14,12 +14,14 @@ import (
 	"time"
 
 	"csgclaw/internal/apiclient"
+	"csgclaw/internal/knowledgebase"
 	"github.com/google/uuid"
 )
 
 // Manager owns the server's published agents. Credentials stay on the server.
 // The private manifest stores desired publications; executor files store results.
 type Manager struct {
+	cloudConnection      func(context.Context) (knowledgebase.Connection, error)
 	identityMu           sync.Mutex
 	boundSite, boundUser string
 	opMu                 sync.Mutex

@@ -9,12 +9,14 @@ import (
 	"net/url"
 	"slices"
 	"time"
+
+	"csgclaw/internal/apitypes"
 )
 
 var ErrChatReference = errors.New("published agent or relay connection is no longer available")
 var ErrInvalidChatResponse = errors.New("invalid relay chat response")
 
-var ErrExecutorFilesUnsupported = errors.New("upgrade the publishing CSGClaw and Relay to support attachments")
+var ErrExecutorFilesUnsupported = errors.New("update the cloud agent to support attachments")
 
 func (m *Manager) CheckAttachmentSupport(ctx context.Context, id, connectionID string) error {
 	client, err := m.invocationClient(ctx, id, connectionID)
@@ -107,6 +109,10 @@ func (m *Manager) lockInvocation(ctx context.Context) error {
 	}
 }
 func (m *Manager) Chat(ctx context.Context, id, connectionID, key string, input string, previous string, attachments ...File) (Response, error) {
+	return m.ChatWithResources(ctx, id, connectionID, key, input, previous, nil, attachments...)
+}
+
+func (m *Manager) ChatWithResources(ctx context.Context, id, connectionID, key, input, previous string, refs []apitypes.ResourceReference, attachments ...File) (Response, error) {
 	c, err := m.invocationClient(ctx, id, connectionID)
 	if err != nil {
 		return Response{}, err
@@ -126,7 +132,7 @@ func (m *Manager) Chat(ctx context.Context, id, connectionID, key string, input 
 	if err != nil {
 		return Response{}, err
 	}
-	result, err := c.Call(ctx, key, CallRequest{Model: id, Input: raw, PreviousResponseID: previous})
+	result, err := c.Call(ctx, key, CallRequest{Model: id, Input: raw, PreviousResponseID: previous, ResourceRefs: refs})
 	if err == nil && result.Model != id {
 		// A successful submission can still be confirmed using its response ID.
 		return Response{}, responseBodyUnavailable(result.ID)

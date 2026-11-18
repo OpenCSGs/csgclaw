@@ -1,3 +1,4 @@
+import { parseCloudResourceScope } from "@/models/cloudResourceScope";
 import { get } from "@/api/client";
 import type { AgentSkillSummary } from "@/api/agents";
 import type { JSONRecord } from "@/models/agents";
@@ -44,6 +45,11 @@ function batchPath(agentID: string, resource: string, cursor: string, request: R
   if (request.search) params.set("search", request.search);
   if (request.enabled !== undefined) params.set("enabled", String(request.enabled));
   for (const name of request.exclude ?? []) params.append("exclude", name);
+  const cloud = parseCloudResourceScope(agentID);
+  if (cloud && resource === "resources") {
+    params.set("connection_id", cloud.connectionID);
+    return `api/v1/relay/agents/${encodeURIComponent(cloud.agentID)}/resources?${params}`;
+  }
   return `api/v1/agents/${encodeURIComponent(agentID)}/${resource}?${params}`;
 }
 

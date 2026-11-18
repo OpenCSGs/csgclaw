@@ -1,3 +1,4 @@
+import { parseCloudResourceScope } from "@/models/cloudResourceScope";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BookOpen, Boxes, Wrench } from "lucide-react";
 import { Button, LinkButton, TextInput } from "@/components/ui";
@@ -177,7 +178,7 @@ export function ConversationResourcePicker({
               </button>
             );
           })}
-          {resource.loading ? <p role="status">{t("loading")}</p> : null}
+          {resource.loading ? <p role="status">{t("resourceLoading")}</p> : null}
           {!resource.loading && !resource.continuation.failed && !resource.items.length ? (
             <p>{t(query ? "composerResourceSearchEmpty" : "composerResourceEmpty", { kind: label })}</p>
           ) : null}
@@ -204,16 +205,18 @@ export function ConversationResourcePicker({
             {t(resource.continuation.loading ? "resourceLoading" : "taskEntryLoadMore")}
           </Button>
         ) : null}
-        <footer className={styles.footer}>
-          <LinkButton
-            variant="linkColor"
-            size="sm"
-            href={`#${pathForAgentResources(agentID, resourceType)}`}
-            onClick={() => onClose(false)}
-          >
-            {manageLabel}
-          </LinkButton>
-        </footer>
+        {!parseCloudResourceScope(agentID) ? (
+          <footer className={styles.footer}>
+            <LinkButton
+              variant="linkColor"
+              size="sm"
+              href={`#${pathForAgentResources(agentID, resourceType)}`}
+              onClick={() => onClose(false)}
+            >
+              {manageLabel}
+            </LinkButton>
+          </footer>
+        ) : null}
       </section>
       <TextInput
         autoFocus

@@ -14,11 +14,14 @@ import (
 	"strings"
 
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/csgclaw/delivery"
 	"csgclaw/internal/im"
 )
 
 type agentSessionInput struct {
+	resourceRefs                []apitypes.ResourceReference
+	resourcePrompt              string
 	model                       string
 	reasoningEffort             string
 	reasoningSummary            bool

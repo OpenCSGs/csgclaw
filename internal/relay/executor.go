@@ -243,7 +243,7 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 		}
 		e.mu.Lock()
 		defer e.mu.Unlock()
-		return Frame{Type: typ, Capabilities: []string{CapabilityInputFiles}, ProtocolVersion: 1, InstanceID: instance, Ready: ready && e.fatal == nil, Busy: e.activeID != ""}
+		return Frame{Type: typ, Capabilities: []string{CapabilityInputFiles, CapabilityResourceRefs}, ProtocolVersion: 1, InstanceID: instance, Ready: ready && e.fatal == nil, Busy: e.activeID != ""}
 	}
 	if err := send(status("hello")); err != nil {
 		return err
@@ -400,7 +400,7 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 		return fmt.Errorf("invalid relay request identity or deadline")
 	}
 	input, err := InputText(frame.Input)
-	if err != nil && len(frame.InputFiles) == 0 {
+	if err != nil && len(frame.InputFiles) == 0 && len(frame.ResourceRefs) == 0 {
 		return fmt.Errorf("invalid relay request input")
 	}
 	// Relay response IDs can repeat after the idempotency record expires.
@@ -408,6 +408,9 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 	identity, _ := json.Marshal([]string{frame.SessionID, frame.PreviousResponseID, frame.Deadline.UTC().Format(time.RFC3339Nano), input})
 	if len(frame.InputFiles) > 0 {
 		identity, _ = json.Marshal([]any{json.RawMessage(identity), frame.InputFiles})
+	}
+	if len(frame.ResourceRefs) > 0 {
+		identity, _ = json.Marshal([]any{json.RawMessage(identity), frame.ResourceRefs})
 	}
 	fingerprint := fmt.Sprintf("%x", sha256.Sum256(identity))
 	record := executionRecord{InstanceID: e.instance, InvocationFingerprint: fingerprint}

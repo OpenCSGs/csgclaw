@@ -1069,3 +1069,60 @@ func TestCloudAttachmentReplayAfterRestartUsesSavedFileReferences(t *testing.T) 
 		t.Fatalf("saved attachment replay = %+v, %v, submissions=%d", result, err, submissions.Load())
 	}
 }
+
+func TestCloudTaskResourceSelectionSurvivesSubmissionRetry(t *testing.T) {
+	var submits atomic.Int32
+	var key string
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	manager, connection := newCloudTaskTestRelay(t, ctx, "agt_resources", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/v1/responses" {
+			t.Errorf("resource task bypassed Relay response endpoint: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(404)
+			return
+		}
+		var body relay.CallRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if len(body.ResourceRefs) != 1 || body.ResourceRefs[0].ID != "review" || body.PreviousResponseID != "resp_parent" {
+			t.Errorf("resource selection or parent lost: %+v", body)
+		}
+		if submits.Add(1) == 1 {
+			key = r.Header.Get("Idempotency-Key")
+			w.WriteHeader(503)
+			return
+		}
+		if key == "" || r.Header.Get("Idempotency-Key") != key {
+			t.Error("resource retry changed idempotency key")
+		}
+		_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_done", Model: "agt_resources", Status: "completed"})
+	})
+	svc := im.NewService()
+	room, err := svc.CreateRoom(im.CreateRoomRequest{Title: "Resources", CreatorID: im.AdminUserID, Type: apitypes.RoomTypeFree})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection := &apitypes.ResourceSelection{Version: 1, AgentID: "agt_resources", Refs: []apitypes.ResourceSnapshot{{ResourceReference: apitypes.ResourceReference{Source: "skill", ID: "review"}, Type: "skill", Name: "Review"}}}
+	message, err := svc.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: im.AdminUserID, ResourceSelection: selection, Metadata: map[string]any{cloudTaskUnsubmittedKey: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	room.CloudAgent = &apitypes.CloudAgentReference{AgentID: "agt_resources", ConnectionID: connection}
+	h := &Handler{im: svc, relayManager: manager}
+	response, err := h.awaitCloudTask(ctx, room, message, "resp_parent")
+	if err != nil || response.Status != "completed" || submits.Load() != 2 {
+		t.Fatalf("resource retry failed: %+v %v", response, err)
+	}
+	saved, _ := svc.Room(room.ID)
+	for _, persisted := range saved.Messages {
+		if persisted.ID != message.ID {
+			continue
+		}
+		if got := apitypes.ResourceSelectionFromMetadata(persisted.Metadata); got == nil || len(got.Refs) != 1 || got.Refs[0].ID != "review" {
+			t.Fatalf("checkpoint lost resource selection: %+v", got)
+		}
+		return
+	}
+	t.Fatal("resource message missing after checkpoint")
+}

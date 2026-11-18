@@ -45,7 +45,7 @@ func (e *LocalExecutor) Execute(ctx context.Context, frame Frame) Frame {
 		return result
 	}
 	text, err := InputText(frame.Input)
-	if err != nil && len(frame.InputFiles) == 0 {
+	if err != nil && len(frame.InputFiles) == 0 && len(frame.ResourceRefs) == 0 {
 		result.Error = &ProtocolError{Code: "invalid_request", Message: err.Error()}
 		return result
 	}
@@ -56,6 +56,9 @@ func (e *LocalExecutor) Execute(ctx context.Context, frame Frame) Frame {
 	base := "/api/v1/agents/" + url.PathEscape(e.AgentID) + "/sessions/" + session
 	path := base + "/responses"
 	payload := map[string]any{"input": text, "stream": false}
+	if len(frame.ResourceRefs) > 0 {
+		payload["resource_refs"] = frame.ResourceRefs
+	}
 	if len(frame.InputFiles) > 0 {
 		ids, err := e.prepareInputs(ctx, frame, base)
 		if err != nil {

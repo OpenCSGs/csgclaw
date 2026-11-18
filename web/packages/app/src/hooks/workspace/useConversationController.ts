@@ -1,3 +1,4 @@
+import { cloudResourceScope } from "@/models/cloudResourceScope";
 import { useCloudSendConsent } from "./useCloudSendConsent";
 import { withCloudAgentAvatars } from "@/models/cloudAgents";
 import { useConversationMessageSync } from "./useConversationMessageSync";
@@ -820,10 +821,21 @@ export function useConversationController({
   );
   const composerSendState = composerSendStatesByConversationId[activeConversationId] ?? idleComposerSendState;
   const removedAttachment = removedAttachmentsByConversationId[activeConversationId];
+  const cloudResourceAgent =
+    cloudTask &&
+    cloudCatalog?.find(
+      (agent) =>
+        agent.id === cloudTask.agent_id &&
+        agent.connectionID === cloudTask.connection_id &&
+        agent.publisher.toLowerCase() === "agentichub" &&
+        ["csgclaw", "csgclaw-workspace"].includes(agent.type ?? ""),
+    );
   const resourceAgentID =
-    !cloudTask && isDirectConversation(activeConversation) && ["codex", "dsh"].includes(agentRuntimeKind(logAgent))
-      ? activeConversationAgentId
-      : "";
+    cloudTask && cloudResourceAgent
+      ? cloudResourceScope(cloudTask.agent_id, cloudTask.connection_id)
+      : !cloudTask && isDirectConversation(activeConversation) && ["codex", "dsh"].includes(agentRuntimeKind(logAgent))
+        ? activeConversationAgentId
+        : "";
   const slashPickerEnabled = Boolean(
     !cloudTask && (hasActiveConversationAgent || logAgent?.id) && !slashPickerDismissed,
   );
@@ -1163,7 +1175,7 @@ export function useConversationController({
     if (!data?.current_user_id || !activeConversation || !canSendComposer(draftSegments, attachmentDrafts.length)) {
       return;
     }
-    if (!cloudTask && !resourcesMatchAgent(draftSegments, resourceAgentID)) {
+    if (!resourcesMatchAgent(draftSegments, resourceAgentID)) {
       setComposerError(t("resourceAgentChanged"));
       return;
     }
@@ -1184,13 +1196,14 @@ export function useConversationController({
     const senderID = data.current_user_id;
     const attachments = attachmentDrafts.map((draft) => draft.file);
     const serializedDraft = serializeComposerSegments(draftSegments);
-    const { content, resource_refs } = cloudTask
-      ? { content: draftText.trim(), resource_refs: [] }
-      : resourceAgentID || draftSegments.some((segment) => segment.type === "resource")
-        ? resourceMessageInput(draftSegments, serializedDraft)
-        : { content: normalizeSlashShorthandForPayload(serializedDraft), resource_refs: [] };
+    const { content, resource_refs } =
+      cloudTask && !draftSegments.some((segment) => segment.type === "resource")
+        ? { content: draftText.trim(), resource_refs: [] }
+        : resourceAgentID || draftSegments.some((segment) => segment.type === "resource")
+          ? resourceMessageInput(draftSegments, serializedDraft)
+          : { content: normalizeSlashShorthandForPayload(serializedDraft), resource_refs: [] };
     if (cloudTask) {
-      if (!content && !attachments.length) return;
+      if (!content && !attachments.length && !canSendResources(content, resource_refs, attachments.length)) return;
       if (!confirmed && cloudConsent.request(() => void sendMessage(true), attachments.length > 0)) return;
     }
     const fileReferences = cloudTask ? [] : composerFileReferences(draftSegments);
@@ -1388,9 +1401,11 @@ export function useConversationController({
     if (code.startsWith("resource_") || code === "invalid_resource_reference") {
       void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(resourceAgentID) });
       void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(resourceAgentID) });
-      return localizeAPIError(error, t, errorMessage(error, t("sendFailed")));
     }
-    return errorMessage(error, t("sendFailed"));
+    if (cloudTask && (code === "cloud_resources_unavailable" || code === "resource_service_unavailable")) {
+      return t("cloudResourceSendFailed");
+    }
+    return localizeAPIError(error, t, errorMessage(error, t("sendFailed")));
   }
 
   async function sendThreadReply(): Promise<void> {

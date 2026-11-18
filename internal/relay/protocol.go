@@ -15,6 +15,7 @@ import (
 const Subprotocol = "csgrelay.v1"
 
 const CapabilityInputFiles = "input_files"
+const CapabilityResourceRefs = "resource_refs"
 
 type Agent struct {
 	Capabilities  []string   `json:"capabilities,omitempty"`
@@ -54,10 +55,11 @@ type AgentList struct {
 }
 
 type CallRequest struct {
-	Model              string          `json:"model"`
-	Input              json.RawMessage `json:"input"`
-	Stream             bool            `json:"stream,omitempty"`
-	PreviousResponseID string          `json:"previous_response_id,omitempty"`
+	ResourceRefs       []apitypes.ResourceReference `json:"resource_refs,omitempty"`
+	Model              string                       `json:"model"`
+	Input              json.RawMessage              `json:"input"`
+	Stream             bool                         `json:"stream,omitempty"`
+	PreviousResponseID string                       `json:"previous_response_id,omitempty"`
 }
 
 type ProtocolError struct {
@@ -109,11 +111,12 @@ func (r Response) Text() string {
 }
 
 type Frame struct {
-	Capabilities            []string `json:"capabilities,omitempty"`
-	InputFiles              []File   `json:"input_files,omitempty"`
-	Files                   []File   `json:"files,omitempty"`
-	ExecutionTimeoutSeconds float64  `json:"execution_timeout_seconds,omitempty"`
-	TransferTimeoutSeconds  float64  `json:"transfer_timeout_seconds,omitempty"`
+	ResourceRefs            []apitypes.ResourceReference `json:"resource_refs,omitempty"`
+	Capabilities            []string                     `json:"capabilities,omitempty"`
+	InputFiles              []File                       `json:"input_files,omitempty"`
+	Files                   []File                       `json:"files,omitempty"`
+	ExecutionTimeoutSeconds float64                      `json:"execution_timeout_seconds,omitempty"`
+	TransferTimeoutSeconds  float64                      `json:"transfer_timeout_seconds,omitempty"`
 	fileClient              *Client
 	fileScope               fileScope
 	start                   func() (context.Context, context.CancelFunc)

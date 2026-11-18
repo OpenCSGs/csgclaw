@@ -1,3 +1,4 @@
+import { createTranslator } from "@/shared/i18n";
 import { CLOUD_SEND_CONSENT_STORAGE_KEY } from "@/shared/storage/keys";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
@@ -458,6 +459,80 @@ describe("useConversationController", () => {
     apiMocks.inviteRoomUsersRequest.mockReset();
     apiMocks.removeRoomUserRequest.mockReset();
     apiMocks.sendMessageRequest.mockReset();
+  });
+
+  it("sends selected cloud resources through the persisted message API", async () => {
+    const cloud = { ...cloudAgentFixture[0], type: "csgclaw" };
+    const conversation = {
+      ...directConversation,
+      cloud_agent: { agent_id: cloud.id, connection_id: cloud.connectionID, user_id: "u-demo" },
+    };
+    const { result } = renderConversationController({
+      data: { ...dataWithMessages([]), rooms: [conversation] },
+      cloudCatalog: [cloud],
+      addedCloudAgentIDs: [cloud.id],
+    });
+    const resource = { source: "skill" as const, id: "review", type: "skill" as const, name: "Review" };
+    act(() => result.current.conversationViewProps.onPickResources([resource]));
+    expect(result.current.conversationViewProps.resourceAgentID).toMatch(/^cloud-resource:/);
+    apiMocks.sendMessageRequest.mockResolvedValue(successfulMessage(""));
+    await act(async () => result.current.conversationViewProps.onSendMessage());
+    await act(async () => result.current.conversationViewProps.cloudSendConfirmation!.onConfirm(true));
+    expect(apiMocks.sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        room_id: conversation.id,
+        content: "",
+        resource_refs: [{ source: "skill", id: "review" }],
+      }),
+      expect.anything(),
+    );
+    expect(result.current.conversationViewProps.draftSegments).toEqual([]);
+  });
+
+  it.each([
+    ["executor_resources_unsupported", "errors.executor_resources_unsupported"],
+    ["cloud_resources_unavailable", "cloudResourceSendFailed"],
+    ["resource_service_unavailable", "cloudResourceSendFailed"],
+    ["cloud_endpoint_unavailable", "errors.cloud_endpoint_unavailable"],
+    ["cloud_resource_access_denied", "errors.cloud_resource_access_denied"],
+  ])("localizes cloud resource send errors for %s and preserves the selected skill", async (code, copyKey) => {
+    for (const locale of ["zh", "en"] as const) {
+      const t = createTranslator(locale);
+      const cloud = { ...cloudAgentFixture[0], type: "csgclaw" };
+      const conversation = {
+        ...directConversation,
+        cloud_agent: { agent_id: cloud.id, connection_id: cloud.connectionID, user_id: "u-demo" },
+      };
+      const view = renderConversationController({
+        data: { ...dataWithMessages([]), rooms: [conversation] },
+        cloudCatalog: [cloud],
+        addedCloudAgentIDs: [cloud.id],
+        locale,
+        t,
+      });
+      act(() =>
+        view.result.current.conversationViewProps.onPickResources([
+          { source: "skill", id: "review", type: "skill", name: "Review" },
+        ]),
+      );
+      apiMocks.sendMessageRequest.mockRejectedValue({
+        code,
+        status: 409,
+        message: "Cloud agent resources could not be read",
+      });
+      await act(async () => view.result.current.conversationViewProps.onSendMessage());
+      if (view.result.current.conversationViewProps.cloudSendConfirmation) {
+        await act(async () => view.result.current.conversationViewProps.cloudSendConfirmation!.onConfirm(true));
+      }
+      expect(view.result.current.conversationViewProps.sendError).toBe(t(copyKey));
+      expect(view.result.current.conversationViewProps.sendError).not.toContain(
+        "Cloud agent resources could not be read",
+      );
+      expect(view.result.current.conversationViewProps.draftSegments).toEqual([
+        expect.objectContaining({ type: "resource", resource: expect.objectContaining({ id: "review" }) }),
+      ]);
+      view.unmount();
+    }
   });
 
   it.each(["composer", "thread"])("%s 保留失败选择，重试复用请求身份，成功后清空资源", async (scope) => {

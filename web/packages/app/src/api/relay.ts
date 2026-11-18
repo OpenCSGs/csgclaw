@@ -104,3 +104,17 @@ export function fetchCloudAgentResponse(agent: CloudAgent, id: string): Promise<
     `api/v1/relay/agents/${encodeURIComponent(agent.id)}/responses/${encodeURIComponent(id)}?${new URLSearchParams({ connection_id: agent.connectionID })}`,
   );
 }
+
+export type CloudProfile = {
+  provider?: string;
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  runtime: string;
+  model: string;
+};
+export function fetchCloudProfile(agent: Pick<CloudAgent, "id" | "connectionID">, signal?: AbortSignal) {
+  const query = new URLSearchParams({ connection_id: agent.connectionID });
+  return get<CloudProfile>(`api/v1/relay/agents/${encodeURIComponent(agent.id)}/profile?${query}`, { signal });
+}

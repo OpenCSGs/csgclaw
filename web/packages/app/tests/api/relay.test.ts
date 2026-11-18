@@ -51,3 +51,28 @@ it.each([
   });
   expect(agent).not.toHaveProperty("token");
 });
+
+it("routes cloud resource reads through the local read-only proxy", async () => {
+  const { cloudResourceScope } = await import("@/models/cloudResourceScope");
+  const { fetchConversationResourceBatch } = await import("@/api/agentResources");
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total: 0, list_revision: "revision", has_more: false }), {
+        status: 200,
+      }),
+    );
+  vi.stubGlobal("fetch", fetcher);
+  await fetchConversationResourceBatch(
+    cloudResourceScope("agt_remote", "account-reference"),
+    "knowledge_base",
+    "cursor",
+    { search: "station" },
+  );
+  const requested = new URL(fetcher.mock.calls[0][0], "https://local.test/");
+  expect(requested.pathname).toBe("/api/v1/relay/agents/agt_remote/resources");
+  expect(requested.searchParams.get("connection_id")).toBe("account-reference");
+  expect(requested.searchParams.get("type")).toBe("knowledge_base");
+  expect(requested.searchParams.get("cursor")).toBe("cursor");
+  expect(requested.searchParams.get("search")).toBe("station");
+});

@@ -1982,6 +1982,10 @@ export const messages = {
     agentSkillsEmptyHint: "可从全局 Skills 中添加当前智能体需要使用的技能。",
     agentProfileSectionNavLabel: "配置档页面分区",
     agentProfileTab: "档案",
+    cloudProfileReadonly: "云端智能体档案为只读，内容来自当前运行实例。",
+    cloudResourceSendFailed: "未能确认所选云端资源，这条消息尚未发送。请稍后重试，或移除资源后发送普通消息。",
+    cloudRuntimeSectionDescription: "查看云端智能体的运行环境。",
+    cloudModelSectionDescription: "查看云端智能体使用的模型配置。",
     agentMemoryTab: "记忆",
     agentActivityTab: "活动记录",
     agentActivityTitle: "活动记录",
@@ -2689,7 +2693,7 @@ export const messages = {
     notifierWebhookTokenHelp: "须与调用方请求头一致。妥善保管，勿泄露或写入版本库。",
     notifierWebhookTokenInputPlaceholder: "粘贴 Webhook 访问令牌（不是 LLM 的 API Key）",
     notifierRemoteURL: "收件箱服务地址 (remote_url)",
-    notifierRemoteURLPlaceholder: "https://relay.example.com/api/v1/inbox/messages",
+    notifierRemoteURLPlaceholder: "https://example.com/api/v1/inbox/messages",
     notifierRemoteURLSummary:
       "GET 列表的完整 URL，或仅 origin。误填 .../webhooks/ingress 时自动改为同前缀 inbox 的 GET/ack。",
     notifierRemoteURLHelp:
@@ -3390,8 +3394,13 @@ export const messages = {
       agent_delete_requires_archive_management: "请在归档管理中确认删除智能体。",
       agent_identity_deleted: "智能体信息已失效，请重新创建。",
       model_protocol_unsupported: "发布端模型不支持 Responses 工具协议，请在源智能体设置中选择兼容的模型服务。",
-      executor_files_unsupported: "发布端 CSGClaw 或 Relay 尚不支持附件，请升级后重试。",
-      relay_task_text_only: "云端任务目前仅支持文本，运行配置由发布端维护。",
+      executor_resources_unsupported:
+        "云端智能体版本暂不支持所选资源。请更新云端智能体后重试，或移除资源后发送普通消息。",
+      cloud_resources_unavailable: "暂时无法读取云端智能体的资源，请稍后重试或检查云端服务状态。",
+      cloud_endpoint_unavailable: "云端智能体的只读接口不可用，请检查实例状态。",
+      cloud_resource_access_denied: "无权查看此云端智能体的资源，请检查登录账号和实例访问权限。",
+      executor_files_unsupported: "云端智能体版本暂不支持附件，请更新云端智能体后重试。",
+      relay_task_text_only: "仅任务创建者可以发送消息，暂不支持引用已有文件或发送线程回复。",
       relay_chat_reference_unavailable: "连接信息已失效，请在广场重新添加智能体。",
       relay_chat_failed: "聊天结果暂未确认，请重试查询原请求。",
       relay_chat_request_expired: "这条未确认消息已超过安全重试期限，请新建对话。",
@@ -5599,6 +5608,11 @@ export const messages = {
     agentSkillsEmptyHint: "Add the skills this agent needs from the global Skills catalog.",
     agentProfileSectionNavLabel: "Profile sections",
     agentProfileTab: "Profile",
+    cloudProfileReadonly: "This cloud agent profile is read-only and reflects the running instance.",
+    cloudResourceSendFailed:
+      "The selected cloud resources could not be verified, so this message was not sent. Try again later, or remove the resources to send a regular message.",
+    cloudRuntimeSectionDescription: "View the cloud agent runtime environment.",
+    cloudModelSectionDescription: "View the models configured for the cloud agent.",
     agentMemoryTab: "Memory",
     agentActivityTab: "Activity",
     agentActivityTitle: "Activity",
@@ -6329,7 +6343,7 @@ export const messages = {
     notifierWebhookTokenHelp: "Must match the inbound webhook header. Keep it secret and out of source control.",
     notifierWebhookTokenInputPlaceholder: "Paste webhook access token (not an LLM API key)",
     notifierRemoteURL: "Inbox service URL (remote_url)",
-    notifierRemoteURLPlaceholder: "https://relay.example.com/api/v1/inbox/messages",
+    notifierRemoteURLPlaceholder: "https://example.com/api/v1/inbox/messages",
     notifierRemoteURLSummary:
       "Full GET inbox URL, or origin only. A mistaken .../webhooks/ingress POST URL is rewritten to inbox GET/ack under the same prefix.",
     notifierRemoteURLHelp:
@@ -7089,9 +7103,17 @@ export const messages = {
       agent_identity_deleted: "The agent information is no longer valid. Please create the agent again.",
       model_protocol_unsupported:
         "The published agent requires a model provider with native Responses tool support. Update the source agent settings.",
+      executor_resources_unsupported:
+        "This cloud agent version does not support the selected resources. Update the cloud agent and try again, or remove the resources to send a regular message.",
+      cloud_resources_unavailable:
+        "Cloud agent resources are temporarily unavailable. Try again later or check the cloud service status.",
+      cloud_endpoint_unavailable: "The cloud agent's read endpoint is unavailable. Check the instance status.",
+      cloud_resource_access_denied:
+        "You do not have access to this cloud agent's resources. Check your account and instance permissions.",
       executor_files_unsupported:
-        "The publishing CSGClaw or Relay does not support attachments. Upgrade it and try again.",
-      relay_task_text_only: "Cloud tasks support text only. Runtime settings are managed by the publisher.",
+        "This cloud agent version does not support attachments. Update the cloud agent and try again.",
+      relay_task_text_only:
+        "Only the task creator can send messages. Existing file references and thread replies are not supported.",
       relay_chat_reference_unavailable: "This connection is no longer available. Add the agent again from the plaza.",
       relay_chat_failed: "The chat result is unconfirmed. Retry to query the same request.",
       relay_chat_request_expired: "This unconfirmed message is too old to resubmit safely. Start a new conversation.",
