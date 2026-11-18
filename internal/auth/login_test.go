@@ -120,7 +120,7 @@ func TestCompleteCallbackStoresCredentials(t *testing.T) {
 	if credentials.AIGatewayBuiltinAPIKey != "gk_aigateway-key" {
 		t.Fatalf("AIGatewayBuiltinAPIKey = %q, want gk_aigateway-key", credentials.AIGatewayBuiltinAPIKey)
 	}
-	if credentials.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+	if credentials.AIGatewayBaseURL != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("AIGatewayBaseURL = %q", credentials.AIGatewayBaseURL)
 	}
 }
@@ -189,10 +189,10 @@ func TestCompleteCallbackDerivesEnvironmentFromSiteAIGatewayBaseURL(t *testing.T
 	}
 }
 
-func TestCallbackEnvironmentDerivesStageBaseURLFromAIGatewayHost(t *testing.T) {
+func TestCallbackEnvironmentDerivesStageBaseURLFromAIGatewayPath(t *testing.T) {
 	service := &Service{}
 	env, err := service.callbackEnvironment(url.Values{
-		"ai_gateway_base_url": []string{"https://aigateway.opencsg-stg.com/v1"},
+		"ai_gateway_base_url": []string{"https://opencsg-stg.com/aigateway/v1"},
 	})
 	if err != nil {
 		t.Fatalf("callbackEnvironment() error = %v", err)
@@ -203,7 +203,7 @@ func TestCallbackEnvironmentDerivesStageBaseURLFromAIGatewayHost(t *testing.T) {
 	if env.CSGHubBaseURL != "https://opencsg-stg.com" {
 		t.Fatalf("CSGHubBaseURL = %q, want stg hub", env.CSGHubBaseURL)
 	}
-	if env.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+	if env.AIGatewayBaseURL != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("AIGatewayBaseURL = %q, want stg gateway", env.AIGatewayBaseURL)
 	}
 }
@@ -220,7 +220,7 @@ func TestLoginUsesOpenCSGSSOCallbackURL(t *testing.T) {
 		CallbackURL:      callbackURL,
 		OpenCSGBaseURL:   "https://opencsg-stg.com",
 		CSGHubBaseURL:    "https://opencsg-stg.com/",
-		AIGatewayBaseURL: "https://aigateway.opencsg-stg.com",
+		AIGatewayBaseURL: "https://opencsg-stg.com/aigateway",
 	})
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
@@ -257,14 +257,14 @@ func TestLoginUsesOpenCSGSSOCallbackURL(t *testing.T) {
 	if got := values.Get("csghub_base_url"); got != "https://opencsg-stg.com" {
 		t.Fatalf("csghub_base_url = %q", got)
 	}
-	if got := values.Get("ai_gateway_base_url"); got != "https://aigateway.opencsg-stg.com/v1" {
+	if got := values.Get("ai_gateway_base_url"); got != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("ai_gateway_base_url = %q", got)
 	}
 }
 
 func TestLoginUsesAdvertisedCallbackAndReturnURLs(t *testing.T) {
 	service := &Service{}
-	advertiseBaseURL := "https://aigateway.opencsg-stg.com/v1/sandboxes/jared-1784118727"
+	advertiseBaseURL := "https://opencsg-stg.com/aigateway/v1/sandboxes/jared-1784118727"
 	returnURL := advertiseBaseURL + "/#/workspace"
 	callbackURL := advertiseBaseURL + "/api/v1/auth/callback"
 
@@ -298,7 +298,7 @@ func TestCallbackReadsPackedAuthState(t *testing.T) {
 	callbackURL := callbackURLWithAuthState("http://127.0.0.1:18080/api/v1/auth/callback", authEnvironment{
 		OpenCSGBaseURL:   "https://opencsg-stg.com",
 		CSGHubBaseURL:    "https://opencsg-stg.com",
-		AIGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
+		AIGatewayBaseURL: "https://opencsg-stg.com/aigateway/v1",
 	}, returnURL)
 	parsedCallback, err := url.Parse(callbackURL)
 	if err != nil {
@@ -318,7 +318,7 @@ func TestCallbackReadsPackedAuthState(t *testing.T) {
 	if env.OpenCSGBaseURL != "https://opencsg-stg.com" || env.CSGHubBaseURL != "https://opencsg-stg.com" {
 		t.Fatalf("callback environment base URLs = %q/%q", env.OpenCSGBaseURL, env.CSGHubBaseURL)
 	}
-	if env.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+	if env.AIGatewayBaseURL != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("AIGatewayBaseURL = %q", env.AIGatewayBaseURL)
 	}
 }
@@ -328,7 +328,7 @@ func TestPackedAuthStateSurvivesUnescapedOAuthState(t *testing.T) {
 	callbackURL := callbackURLWithAuthState("http://127.0.0.1:18080/api/v1/auth/callback", authEnvironment{
 		OpenCSGBaseURL:   "https://opencsg-stg.com",
 		CSGHubBaseURL:    "https://opencsg-stg.com",
-		AIGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
+		AIGatewayBaseURL: "https://opencsg-stg.com/aigateway/v1",
 	}, returnURL)
 	opencsgCallback, err := url.Parse("https://opencsg-stg.com/api/v1/callback/casdoor?code=oauth-code&state=" + callbackURL)
 	if err != nil {
@@ -368,7 +368,7 @@ func TestLoginDerivesStageEnvironmentFromOpenCSGBaseURL(t *testing.T) {
 	if got := values.Get("csghub_base_url"); got != "https://opencsg-stg.com" {
 		t.Fatalf("csghub_base_url = %q", got)
 	}
-	if got := values.Get("ai_gateway_base_url"); got != "https://aigateway.opencsg-stg.com/v1" {
+	if got := values.Get("ai_gateway_base_url"); got != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("ai_gateway_base_url = %q", got)
 	}
 }
@@ -484,12 +484,12 @@ func TestCallbackReturnURLRejectsExternalURLs(t *testing.T) {
 }
 
 func TestCallbackReturnURLAcceptsAdvertisedPathOnly(t *testing.T) {
-	advertiseBaseURL := "https://aigateway.opencsg-stg.com/v1/sandboxes/jared-1784118727"
+	advertiseBaseURL := "https://opencsg-stg.com/aigateway/v1/sandboxes/jared-1784118727"
 	want := advertiseBaseURL + "/#/workspace"
 	if got := callbackReturnURL(url.Values{"return_url": []string{want}}, advertiseBaseURL); got != want {
 		t.Fatalf("callbackReturnURL() = %q, want %q", got, want)
 	}
-	otherSandbox := "https://aigateway.opencsg-stg.com/v1/sandboxes/other/#/workspace"
+	otherSandbox := "https://opencsg-stg.com/aigateway/v1/sandboxes/other/#/workspace"
 	if got := callbackReturnURL(url.Values{"return_url": []string{otherSandbox}}, advertiseBaseURL); got != "" {
 		t.Fatalf("callbackReturnURL() = %q, want empty for another sandbox", got)
 	}

@@ -114,6 +114,7 @@ show_upgrade = true
 
 当 OpenCSG AIGateway 的模型目录包含 `auto` 时，CSGClaw 默认优先选择 `auto`。
 这适用于当前登录的 OpenCSG 提供方，以及指向生产或 stg AIGateway 的自定义提供方。
+STG 环境的 AI Gateway 地址为 `https://opencsg-stg.com/aigateway/v1`。
 已明确选择的模型会保留；如果目录中没有 `auto`，则使用第一个可用模型。
 
 回复底部显示[本轮 token 消耗](token-usage.zh.md)；选择 `auto` 时隐藏模型名称。

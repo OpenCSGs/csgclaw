@@ -530,7 +530,7 @@ describe("ModelProviderPage", () => {
             preset: "opencsg",
             display_name: "OpenCSG",
             builtin: true,
-            base_url: "https://aigateway.opencsg-stg.com/v1",
+            base_url: "https://opencsg-stg.com/aigateway/v1",
             models: [],
             status: "unknown",
           },
@@ -547,7 +547,7 @@ describe("ModelProviderPage", () => {
       },
     );
 
-    expect(screen.getAllByText("https://aigateway.opencsg-stg.com/v1")).toHaveLength(2);
+    expect(screen.getAllByText("https://opencsg-stg.com/aigateway/v1")).toHaveLength(2);
     await user.click(await screen.findByRole("button", { name: "Sign in" }));
 
     expect(onLogin).toHaveBeenCalledWith();
@@ -569,7 +569,7 @@ describe("ModelProviderPage", () => {
             preset: "opencsg",
             display_name: "OpenCSG",
             builtin: true,
-            base_url: "https://aigateway.opencsg-stg.com/v1",
+            base_url: "https://opencsg-stg.com/aigateway/v1",
             models: [],
             status: "unknown",
           },
@@ -591,7 +591,7 @@ describe("ModelProviderPage", () => {
         "opencsg",
         expect.objectContaining({
           api_key: "",
-          base_url: "https://aigateway.opencsg-stg.com/v1",
+          base_url: "https://opencsg-stg.com/aigateway/v1",
         }),
       ),
     );
@@ -611,7 +611,7 @@ describe("ModelProviderPage", () => {
       preset: "opencsg",
       display_name: "OpenCSG",
       builtin: true,
-      base_url: "https://aigateway.opencsg-stg.com/v1",
+      base_url: "https://opencsg-stg.com/aigateway/v1",
       status: "connected",
     };
     const { rerenderWithCatalog } = renderModelProviderPage(

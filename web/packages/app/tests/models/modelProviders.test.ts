@@ -210,13 +210,13 @@ describe("model provider catalog helpers", () => {
     });
 
     const signedOut = modelProviderCatalogForOpenCSGState(catalog, {
-      aiGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1/",
+      aiGatewayBaseURL: "https://opencsg-stg.com/aigateway/v1/",
       authenticationRequiredMessage: "需要登录 OpenCSG",
       authenticated: false,
     });
 
     expect(signedOut?.providers[0]).toMatchObject({
-      base_url: "https://aigateway.opencsg-stg.com/v1",
+      base_url: "https://opencsg-stg.com/aigateway/v1",
       models: [],
       status: "failed",
       message: "需要登录 OpenCSG",

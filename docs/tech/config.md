@@ -114,6 +114,7 @@ show_upgrade = true
 
 OpenCSG AIGateway uses `auto` as the initial model choice when the gateway advertises it.
 This applies to the signed-in OpenCSG provider and custom providers pointing to the production or staging AIGateway.
+The staging AI Gateway base URL is `https://opencsg-stg.com/aigateway/v1`.
 An explicitly selected model remains selected; when `auto` is unavailable, CSGClaw uses the first available model.
 
 Reply footers show [per-turn token consumption](token-usage.md); `auto` hides the model name.

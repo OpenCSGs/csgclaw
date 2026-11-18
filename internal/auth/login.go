@@ -16,7 +16,7 @@ const (
 	DefaultCSGHubBaseURL    = "https://hub.opencsg.com"
 	StageOpenCSGBaseURL     = "https://opencsg-stg.com"
 	StageCSGHubBaseURL      = "https://opencsg-stg.com"
-	StageAIGatewayBaseURL   = "https://aigateway.opencsg-stg.com/v1"
+	StageAIGatewayBaseURL   = "https://opencsg-stg.com/aigateway/v1"
 	callbackAuthStateParam  = "auth_state"
 	customAIGatewayPathName = "/aigateway"
 )

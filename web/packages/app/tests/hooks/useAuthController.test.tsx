@@ -165,7 +165,7 @@ describe("useAuthController", () => {
       user_uuid: "user-1",
       opencsg_base_url: "https://opencsg-stg.com",
       base_url: "https://opencsg-stg.com",
-      ai_gateway_base_url: "https://aigateway.opencsg-stg.com/v1",
+      ai_gateway_base_url: "https://opencsg-stg.com/aigateway/v1",
     });
 
     const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
@@ -265,7 +265,7 @@ describe("useAuthController", () => {
     expect(beginAuthLogin).toHaveBeenCalledWith(returnURL, {
       opencsg_base_url: "https://opencsg-stg.com",
       csghub_base_url: "https://opencsg-stg.com",
-      ai_gateway_base_url: "https://aigateway.opencsg-stg.com/v1",
+      ai_gateway_base_url: "https://opencsg-stg.com/aigateway/v1",
     });
   });
 

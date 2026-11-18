@@ -278,7 +278,7 @@ func TestAppNoAuthRejectsInvalidAgent(t *testing.T) {
 
 func TestAppPlatformAllowsPortalRequestsThroughProxy(t *testing.T) {
 	h, alice, _, _, _ := newAppPlatformAuthFixture(t)
-	h.SetAdvertiseBaseURL("https://aigateway.opencsg-stg.com/v1/sandboxes/template-instance")
+	h.SetAdvertiseBaseURL("https://opencsg-stg.com/aigateway/v1/sandboxes/template-instance")
 	for _, site := range []string{"same-site", "cross-site"} {
 		t.Run(site, func(t *testing.T) {
 			for _, tc := range []struct{ method, path string }{

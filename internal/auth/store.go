@@ -514,5 +514,9 @@ func normalizeAIGatewayBaseURL(raw string) string {
 	}
 	u.RawQuery = ""
 	u.Fragment = ""
-	return strings.TrimRight(u.String(), "/")
+	baseURL := strings.TrimRight(u.String(), "/")
+	if baseURL == "https://aigateway.opencsg-stg.com/v1" {
+		return StageAIGatewayBaseURL
+	}
+	return baseURL
 }

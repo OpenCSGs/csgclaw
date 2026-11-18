@@ -38,7 +38,7 @@ const STAGE_AUTH_ENVIRONMENT_PRESET: AuthEnvironmentPreset = {
   label: "opencsg-stg.com",
   opencsgBaseURL: "https://opencsg-stg.com",
   csgHubBaseURL: "https://opencsg-stg.com",
-  aiGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
+  aiGatewayBaseURL: "https://opencsg-stg.com/aigateway/v1",
 };
 
 const EAST_AUTH_ENVIRONMENT_PRESET: AuthEnvironmentPreset = {
