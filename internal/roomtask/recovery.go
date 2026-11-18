@@ -8,60 +8,10 @@ import (
 	"time"
 )
 
-// releaseCapacity records a new coordination event in each affected room. A
-// released slot is not permission to execute: the Manager must dispatch again.
-func (s *Service) releaseCapacity() error {
-	rooms := map[string]bool{}
-	s.mu.Lock()
-	tasks := s.List("")
-	byID := map[string]taskcore.Task{}
-	for _, t := range tasks {
-		byID[t.ID] = t
-	}
-	var failure error
-	for _, t := range tasks {
-		if t.WaitingOnTaskID == "" || t.Status != taskcore.StatusBlocked {
-			continue
-		}
-		occupied, found := byID[t.WaitingOnTaskID]
-		if found && occupied.AssignedTo == t.AssignedTo && reservesWorker(occupied, t.RoomID) {
-			continue
-		}
-		r, err := s.members(t.RoomID)
-		if err != nil {
-			continue
-		}
-		err = s.core.Mutate(t.ID, func(a *taskcore.Snapshot, _ func() (string, error)) error {
-			c := child(a, t.ID)
-			if c == nil || Terminal(a.Root.Status) || a.Root.Status == taskcore.StatusStopping {
-				return nil
-			}
-			c.Status, c.WaitingOnTaskID, c.Error, c.UpdatedAt = taskcore.StatusPending, "", "", time.Now().UTC()
-			feedback(a, r, c, c.ID+": worker capacity released; inspect current dependencies and explicitly dispatch if still appropriate")
-			rooms[t.RoomID] = true
-			return nil
-		})
-		if err != nil {
-			failure = err
-			break
-		}
-	}
-	s.mu.Unlock()
-	if failure != nil {
-		return failure
-	}
-	for room := range rooms {
-		if err := s.RetryDelivery(room); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // RequestStop revokes work not yet claimed. Running work remains running until
 // the execution controller confirms its exact attempt stopped (or it reports).
 func (s *Service) RequestStop(room, id string) error {
-	return s.change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+	return s.change(room, id, func(r Roster, a *taskcore.Snapshot, _ func() (string, error)) error {
 		if a.Root.ID != id {
 			return fmt.Errorf("stop requires a parent task")
 		}
@@ -86,11 +36,8 @@ func (s *Service) RequestStop(room, id string) error {
 // Recover is called once when the host opens its persisted task store. It never
 // replays an uncertain execution. Manager verification is required before retry.
 func (s *Service) Recover() error {
-	rooms, err := s.markInterrupted()
+	rooms, err := s.recoverUnfinished()
 	if err != nil {
-		return err
-	}
-	if err := s.releaseCapacity(); err != nil {
 		return err
 	}
 	for room := range rooms {
@@ -101,7 +48,7 @@ func (s *Service) Recover() error {
 	return nil
 }
 
-func (s *Service) markInterrupted() (map[string]bool, error) {
+func (s *Service) recoverUnfinished() (map[string]bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rooms := map[string]bool{}
@@ -114,10 +61,17 @@ func (s *Service) markInterrupted() (map[string]bool, error) {
 			continue
 		}
 		if err := s.core.Mutate(root.ID, func(a *taskcore.Snapshot, _ func() (string, error)) error {
+			// Older versions queued goals behind the oldest parent in the room.
+			if a.Root.Status == taskcore.StatusQueued {
+				a.Root.Status, a.Root.UpdatedAt = taskcore.StatusAssigned, time.Now().UTC()
+				feedback(a, r, &a.Root, "Review this goal and explicitly dispatch ready work independently of other room goals.")
+			}
 			for i := range a.Children {
 				c := &a.Children[i]
-				if c.RecoveryRequired {
-					rooms[root.RoomID] = true
+				// A legacy wait for another task has no outstanding execution to replay.
+				if c.Status == taskcore.StatusBlocked && c.WaitingOnTaskID != "" && !c.RecoveryRequired && a.Root.Status != taskcore.StatusStopping {
+					c.Status, c.WaitingOnTaskID, c.Error, c.UpdatedAt = taskcore.StatusPending, "", "", time.Now().UTC()
+					feedback(a, r, c, c.ID+": previous worker capacity wait cleared; check dependencies and explicitly dispatch if appropriate")
 				}
 				if !running(*c) {
 					continue
@@ -126,18 +80,20 @@ func (s *Service) markInterrupted() (map[string]bool, error) {
 				c.Error = "service restarted; verify the previous execution and saved artifacts before resuming"
 				c.UpdatedAt = time.Now().UTC()
 				feedback(a, r, c, c.ID+": "+c.Error)
-				rooms[root.RoomID] = true
 			}
 			return nil
 		}); err != nil {
 			return nil, err
 		}
+		// Replay stable event IDs even if a previous startup saved the recovery
+		// feedback and exited before delivering it.
+		rooms[root.RoomID] = true
 	}
 	return rooms, nil
 }
 
 func (s *Service) ResolveRecovery(room, id string, attempt int, assessment string) error {
-	return s.change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+	return s.change(room, id, func(r Roster, a *taskcore.Snapshot, _ func() (string, error)) error {
 		c := child(a, id)
 		if c == nil || c.Attempt != attempt || attempt < 1 || strings.TrimSpace(assessment) == "" {
 			return fmt.Errorf("current attempt and recovery assessment are required")

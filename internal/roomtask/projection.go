@@ -118,16 +118,6 @@ func (s *Service) RetryDelivery(room string) (deliveryErr error) {
 			}
 		}
 	}
-	created, err := s.recordNext(room)
-	if err != nil {
-		return err
-	}
-	if created {
-		return s.RetryDelivery(room)
-	}
-	if err := s.releaseCapacity(); err != nil {
-		return err
-	}
 	return nil
 }
 

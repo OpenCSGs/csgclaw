@@ -47,7 +47,7 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 		{name: "worker submits"},
 		{name: "claim with projection unavailable", failOldProjection: true},
 		{name: "runtime fails before claim", failWorkerStart: true},
-		{name: "user stops one worker", stopWorker: true},
+		{name: "user stops one of two parallel sessions of the same worker", stopWorker: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := &roomTaskExecutionRuntime{uiFixtureRuntime: uiFixtureRuntime{fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex}}}
@@ -104,7 +104,7 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 			client := &http.Client{Timeout: 5 * time.Second}
 			managerClient := apiclient.New(server.URL, "room-e2e-token", client).WithCallerAgentID("manager")
 			workerClient := apiclient.New(server.URL, "room-e2e-token", client).WithCallerAgentID("pt-dev")
-			started, release := make(chan struct{}, 1), make(chan struct{})
+			started, release := make(chan string, 2), make(chan struct{})
 			finished := make(chan error, 2)
 			managerNotified := make(chan struct{}, 1)
 			const workerFailure = "fixture model quota exhausted"
@@ -129,7 +129,7 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 				}
 				runs.Add(1)
 				select {
-				case started <- struct{}{}:
+				case started <- taskID:
 				default:
 				}
 				select {
@@ -197,31 +197,35 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			sourceMessage, err := messages.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "admin", Content: "Build the fixture"})
-			if err != nil {
-				t.Fatal(err)
+			dispatchGoal := func(title string) (apitypes.RoomTask, apitypes.RoomTask) {
+				t.Helper()
+				sourceMessage, err := messages.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "admin", Content: title})
+				if err != nil {
+					t.Fatal(err)
+				}
+				parent, err := managerClient.CreateRoomTask(context.Background(), room.ID, apitypes.CreateRoomTaskRequest{SourceMessageID: sourceMessage.ID, Title: title})
+				if err != nil {
+					t.Fatal(err)
+				}
+				plan, err := managerClient.PlanRoomTask(context.Background(), room.ID, parent.ID, apitypes.PlanRoomTaskRequest{AutoStart: true, Tasks: []apitypes.RoomTaskPlanItem{{IDRef: "dev", Title: title, AssignedTo: "pt-dev"}}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				child, err := managerClient.DispatchRoomTask(context.Background(), room.ID, plan.CreatedTasks[0].ID, "")
+				if err != nil || child.Attempt != 1 {
+					t.Fatalf("dispatch: %+v %v", child, err)
+				}
+				select {
+				case taskID := <-started:
+					if taskID != child.ID {
+						t.Fatalf("unexpected session for %s: %s", child.ID, taskID)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatalf("worker did not enter the task session for %s", child.ID)
+				}
+				return parent, child
 			}
-			parent, err := managerClient.CreateRoomTask(context.Background(), room.ID, apitypes.CreateRoomTaskRequest{SourceMessageID: sourceMessage.ID, Title: "Build fixture"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			plan, err := managerClient.PlanRoomTask(context.Background(), room.ID, parent.ID, apitypes.PlanRoomTaskRequest{AutoStart: true, Tasks: []apitypes.RoomTaskPlanItem{{IDRef: "dev", Title: "Build fixture", AssignedTo: "pt-dev"}}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			child := plan.CreatedTasks[0]
-			dispatched, err := managerClient.DispatchRoomTask(context.Background(), room.ID, child.ID, "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			select {
-			case <-started:
-			case <-time.After(5 * time.Second):
-				t.Fatal("Worker never received dispatch with full broadcast buffer")
-			}
-			if dispatched.Attempt != 1 {
-				t.Fatal("wrong execution attempt", dispatched.Attempt)
-			}
+			parent, child := dispatchGoal("Build fixture")
 			if _, err := managerClient.RetryRoomDelivery(context.Background(), room.ID); err != nil {
 				t.Fatal(err)
 			}
@@ -236,6 +240,9 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 			}
 		drained:
 			if tc.stopWorker {
+				// The first runtime is held at release. The same Worker must enter its
+				// second session before either goal has completed.
+				_, independent := dispatchGoal("Document fixture")
 				stoppedWorker := false
 				for _, work := range leases.ActiveWork(room.ID) {
 					if work.TaskID != child.ID || work.ParticipantID != "pt-dev" {
@@ -263,8 +270,21 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 					t.Fatalf("Worker's stopped attempt was not recorded: %+v %v", task, err)
 				}
 				goal, err := managerClient.GetRoomTask(context.Background(), room.ID, parent.ID)
-				if err != nil || goal.Status != taskcore.StatusInProgress || runs.Load() != 1 {
+				if err != nil || goal.Status != taskcore.StatusInProgress || runs.Load() != 2 {
 					t.Fatalf("stopping one worker either halted the plan or replayed the attempt: %+v %v", goal, err)
+				}
+				close(release)
+				select {
+				case err := <-finished:
+					if err != nil {
+						t.Fatal(err)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("independent session did not finish after stopping its peer")
+				}
+				other, err := managerClient.GetRoomTask(context.Background(), room.ID, independent.ID)
+				if err != nil || other.Status != taskcore.StatusReview || other.Attempt != 1 || other.Result != "fixture deliverable verified" {
+					t.Fatalf("wrong outcome for independent session: %+v %v", other, err)
 				}
 				return
 			}

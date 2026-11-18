@@ -26,7 +26,7 @@ func (s *Service) AppendPlan(room, id, requestID, summary string, items []PlanIt
 		return err
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256(data))
-	return s.change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, allocate func() (string, error)) error {
+	return s.change(room, id, func(r Roster, a *taskcore.Snapshot, allocate func() (string, error)) error {
 		if a.Root.ID != id {
 			return fmt.Errorf("append requires the existing parent task")
 		}

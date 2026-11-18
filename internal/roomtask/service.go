@@ -5,7 +5,6 @@ package roomtask
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -126,7 +125,7 @@ func (s *Service) Create(room, source, requester, title, body string) (taskcore.
 	if len(r.WorkerIDs) == 0 {
 		return taskcore.Task{}, fmt.Errorf("add an available room worker before starting")
 	}
-	return s.core.CreateRoot(taskcore.CreateRootInput{Status: taskcore.StatusQueued, AssignmentType: taskcore.AssignmentTypeRoom, AssignmentID: room, RoomID: room, ExecutionChannel: "csgclaw", AssignedTo: r.ManagerID, CreatedBy: requester, SourceMessageID: source, Title: title, Body: body})
+	return s.core.CreateRoot(taskcore.CreateRootInput{AssignmentType: taskcore.AssignmentTypeRoom, AssignmentID: room, RoomID: room, ExecutionChannel: "csgclaw", AssignedTo: r.ManagerID, CreatedBy: requester, SourceMessageID: source, Title: title, Body: body})
 }
 
 // The manager supplies the plan it has reasoned about. Planning does not start
@@ -187,16 +186,16 @@ func validatePlan(items []PlanItem, roster Roster, existing ...taskcore.Task) er
 }
 
 // change delivers projections after the durable mutation succeeds.
-func (s *Service) change(room, id string, fn func(Roster, []taskcore.Task, *taskcore.Snapshot, func() (string, error)) error) error {
+func (s *Service) change(room, id string, fn func(Roster, *taskcore.Snapshot, func() (string, error)) error) error {
 	if err := s.changeState(room, id, fn); err != nil {
 		return err
 	}
 	return s.RetryDelivery(room)
 }
 
-// changeState serializes admission across parents and workers, not model execution.
+// changeState serializes mutations with room deletion and recovery.
 // A claim has no outgoing projection and must not depend on replaying old messages.
-func (s *Service) changeState(room, id string, fn func(Roster, []taskcore.Task, *taskcore.Snapshot, func() (string, error)) error) error {
+func (s *Service) changeState(room, id string, fn func(Roster, *taskcore.Snapshot, func() (string, error)) error) error {
 	s.mu.Lock()
 	var err error
 	if s.closingRooms[room] {
@@ -212,9 +211,8 @@ func (s *Service) changeState(room, id string, fn func(Roster, []taskcore.Task, 
 		}
 	}
 	if err == nil {
-		tasks := s.List(room)
 		err = s.core.Mutate(id, func(a *taskcore.Snapshot, allocate func() (string, error)) error {
-			return fn(roster, tasks, a, allocate)
+			return fn(roster, a, allocate)
 		})
 	}
 	s.mu.Unlock()
@@ -250,27 +248,8 @@ func (s *Service) BeginRoomDeletion(room string) (func(), error) {
 	}, nil
 }
 
-func firstParent(tasks []taskcore.Task, room string) string {
-	parents := []taskcore.Task{}
-	for _, t := range tasks {
-		if t.RoomID == room && t.ParentID == "" && !Terminal(t.Status) {
-			parents = append(parents, t)
-		}
-	}
-	sort.Slice(parents, func(i, j int) bool {
-		if parents[i].CreatedAt.Equal(parents[j].CreatedAt) {
-			return parents[i].ID < parents[j].ID
-		}
-		return parents[i].CreatedAt.Before(parents[j].CreatedAt)
-	})
-	if len(parents) == 0 {
-		return ""
-	}
-	return parents[0].ID
-}
-
 func (s *Service) Plan(room, id, summary string, items []PlanItem, autoStart bool) error {
-	return s.change(room, id, func(r Roster, tasks []taskcore.Task, a *taskcore.Snapshot, allocate func() (string, error)) error {
+	return s.change(room, id, func(r Roster, a *taskcore.Snapshot, allocate func() (string, error)) error {
 		if a.Root.ID != id || Terminal(a.Root.Status) || a.Root.Status == taskcore.StatusStopping {
 			return fmt.Errorf("only a manager parent task can be planned")
 		}
@@ -298,7 +277,7 @@ func (s *Service) Plan(room, id, summary string, items []PlanItem, autoStart boo
 			appendEvent(a, taskcore.EventTaskCreated, &t, r.ManagerID, t.Title)
 		}
 		a.Root.PlanSummary, a.Root.UpdatedAt = summary, now
-		if autoStart && firstParent(tasks, room) == id {
+		if autoStart {
 			a.Root.Status = taskcore.StatusInProgress
 		}
 		appendEvent(a, EventPlanned, &a.Root, r.ManagerID, first(summary, a.Root.Title))
@@ -306,16 +285,13 @@ func (s *Service) Plan(room, id, summary string, items []PlanItem, autoStart boo
 	})
 }
 
-// Start activates a queued parent. Only explicit Manager Dispatch starts workers.
+// Start activates a planned parent. Only explicit Manager Dispatch starts workers.
 func (s *Service) Start(room, id string) error {
-	return s.change(room, id, func(r Roster, tasks []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+	return s.change(room, id, func(r Roster, a *taskcore.Snapshot, _ func() (string, error)) error {
 		if a.Root.ID != id || Terminal(a.Root.Status) || a.Root.Status == taskcore.StatusStopping || len(a.Children) == 0 {
 			return fmt.Errorf("a planned parent is required")
 		}
-		if firstParent(tasks, room) != id {
-			return fmt.Errorf("another parent task is ahead in the room queue")
-		}
-		if a.Root.Status == taskcore.StatusQueued {
+		if a.Root.Status == taskcore.StatusAssigned || a.Root.Status == taskcore.StatusQueued {
 			a.Root.Status = taskcore.StatusInProgress
 		}
 		return nil
@@ -349,19 +325,15 @@ func running(t taskcore.Task) bool {
 	return t.Status == taskcore.StatusInProgress || t.Status == taskcore.StatusAssigned && t.DispatchedAt != nil
 }
 
-func reservesWorker(t taskcore.Task, roomID string) bool {
-	return t.RoomID == roomID && (running(t) || t.RecoveryRequired)
-}
-
 // Dispatch is a Manager decision. A dependency becoming ready never calls it.
 func (s *Service) Dispatch(room, id, assignee string) error {
-	return s.change(room, id, func(r Roster, tasks []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+	return s.change(room, id, func(r Roster, a *taskcore.Snapshot, _ func() (string, error)) error {
 		t := child(a, id)
 		if t == nil || t.ParentID != a.Root.ID {
 			return fmt.Errorf("first-version dispatch requires a direct worker child")
 		}
-		if firstParent(tasks, room) != a.Root.ID || Terminal(a.Root.Status) || a.Root.Status == taskcore.StatusStopping {
-			return fmt.Errorf("parent task is not active in the room queue")
+		if Terminal(a.Root.Status) || a.Root.Status == taskcore.StatusStopping {
+			return fmt.Errorf("parent task is stopping or has ended")
 		}
 		if t.RecoveryRequired {
 			return fmt.Errorf("verify the previous execution and resolve recovery before dispatch")
@@ -383,15 +355,6 @@ func (s *Service) Dispatch(room, id, assignee string) error {
 		}
 		if !dependenciesReady(a, t) {
 			return fmt.Errorf("waiting for predecessor acceptance by the manager")
-		}
-		for _, other := range tasks {
-			if other.ID != id && other.AssignedTo == assignee && reservesWorker(other, room) {
-				t.AssignedTo, t.Status = assignee, taskcore.StatusBlocked
-				t.WaitingOnTaskID = other.ID
-				t.Error = "worker is busy on task " + other.ID + "; waiting for capacity"
-				appendEvent(a, taskcore.EventTaskBlocked, t, r.ManagerID, t.Error)
-				return nil
-			}
 		}
 		now := time.Now().UTC()
 		t.AssignedTo, t.ClaimedBy, t.Status = assignee, "", taskcore.StatusAssigned
@@ -421,7 +384,7 @@ func (s *Service) UpdateExecution(room, id, actor, status, result, reason string
 	if status == taskcore.StatusInProgress {
 		change = s.changeState
 	}
-	err := change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+	err := change(room, id, func(r Roster, a *taskcore.Snapshot, _ func() (string, error)) error {
 		t := child(a, id)
 		if t == nil || !worker(r, actor) || actor != t.AssignedTo {
 			return fmt.Errorf("only the assigned current room worker can update a subtask")
@@ -469,7 +432,7 @@ func (s *Service) UpdateExecution(room, id, actor, status, result, reason string
 }
 
 func (s *Service) Review(room, id string, attempt int, accept bool, summary string) error {
-	return s.change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+	return s.change(room, id, func(r Roster, a *taskcore.Snapshot, _ func() (string, error)) error {
 		t := child(a, id)
 		if t == nil || attempt != t.Attempt || attempt < 1 || strings.TrimSpace(summary) == "" {
 			return fmt.Errorf("task, current attempt and review summary are required")
@@ -505,7 +468,7 @@ func (s *Service) Review(room, id string, attempt int, accept bool, summary stri
 }
 
 func (s *Service) Report(room, id, outcome, summary string) (taskcore.Task, error) {
-	err := s.change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+	err := s.change(room, id, func(r Roster, a *taskcore.Snapshot, _ func() (string, error)) error {
 		if a.Root.ID != id || strings.TrimSpace(summary) == "" {
 			return fmt.Errorf("parent task and summary are required")
 		}
@@ -558,46 +521,12 @@ func (s *Service) Report(room, id, outcome, summary string) (taskcore.Task, erro
 	return t, err
 }
 
-// recordNext is replay-safe, including recovery after a saved report was delivered.
-// It only wakes the Manager; it never executes the queued parent.
-func (s *Service) recordNext(room string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	tasks := s.List(room)
-	delivered := false
-	for _, t := range tasks {
-		delivered = delivered || t.ParentID == "" && t.ReportStatus == "delivered"
-	}
-	id := firstParent(tasks, room)
-	if !delivered || id == "" {
-		return false, nil
-	}
-	r, err := s.members(room)
-	if err != nil {
-		return false, err
-	}
-	created := false
-	err = s.core.Mutate(id, func(a *taskcore.Snapshot, _ func() (string, error)) error {
-		if a.Root.Status != taskcore.StatusQueued {
-			return nil
-		}
-		for _, e := range a.Events {
-			if e.Type == EventFeedback && e.TaskID == id {
-				return nil
-			}
-		}
-		feedback(a, r, &a.Root, "Previous parent ended. Review this queued parent, plan/start it and explicitly dispatch eligible worker tasks.")
-		created = true
-		return nil
-	})
-	return created, err
-}
 func (s *Service) MembersChanged(room string) error {
 	for _, root := range s.List(room) {
 		if root.ParentID != "" || Terminal(root.Status) {
 			continue
 		}
-		if err := s.change(room, root.ID, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+		if err := s.change(room, root.ID, func(r Roster, a *taskcore.Snapshot, _ func() (string, error)) error {
 			for i := range a.Children {
 				t := &a.Children[i]
 				if memberRemovalBlocks(t.Status) && !worker(r, t.AssignedTo) {
@@ -633,7 +562,7 @@ func (s *Service) workerTurnEnded(room, id, actor string, attempt int, status, r
 	if id == "" {
 		return nil
 	}
-	return s.change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+	return s.change(room, id, func(r Roster, a *taskcore.Snapshot, _ func() (string, error)) error {
 		t := child(a, id)
 		if t == nil || t.AssignedTo != actor || t.Attempt != attempt || attempt < 1 {
 			return fmt.Errorf("stale worker turn outcome")
