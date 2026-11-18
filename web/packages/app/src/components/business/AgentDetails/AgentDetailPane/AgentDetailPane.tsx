@@ -1,3 +1,4 @@
+import { TemplatePublishProgress } from "@/components/business/TemplatePublishProgress";
 import { EntityField, EntityAvatar, EntityPane } from "@/components/business/EntityDetail";
 import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import agentDetailPaneStyles from "./AgentDetailPane.module.css";
@@ -422,6 +423,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
   const [publishTemplateNameError, setPublishTemplateNameError] = useState("");
   const [publishAttempted, setPublishAttempted] = useState(false);
+  const isPublishingToCommunity = publishTarget === "official" && publishBusy;
   const [isProfileScrolling, setIsProfileScrolling] = useState(false);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -1486,7 +1488,12 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           </div>
         </DialogContent>
       </DialogRoot>
-      <DialogRoot open={publishTarget !== null} onOpenChange={(open) => (!open ? setPublishTarget(null) : undefined)}>
+      <DialogRoot
+        open={publishTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !isPublishingToCommunity) setPublishTarget(null);
+        }}
+      >
         <DialogContent className="agent-publish-dialog" portalContainer={dialogPortalContainer}>
           <DialogHeader>
             <div>
@@ -1499,7 +1506,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                   : t("agentPublishTemplateLocalSubtitle")}
               </DialogDescription>
             </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" disabled={isPublishingToCommunity} />
           </DialogHeader>
           <DialogBody className={agentPublicationStyles["agent-publish-dialog-body"]}>
             <section
@@ -1605,6 +1612,18 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             ) : null}
           </DialogBody>
           <DialogFooter>
+            {publishTarget === "official" ? (
+              <TemplatePublishProgress
+                active={isPublishingToCommunity}
+                failed={publishAttempted && !publishBusy && Boolean(publishError)}
+                labels={{
+                  preparing: t("templatePublishPreparing"),
+                  uploading: t("templatePublishUploading"),
+                  complete: t("templatePublishCompleted"),
+                  failed: t("templatePublishFailed"),
+                }}
+              />
+            ) : null}
             <Button variant="secondaryGray" size="md" disabled={publishBusy} onClick={() => setPublishTarget(null)}>
               {t("cancel")}
             </Button>

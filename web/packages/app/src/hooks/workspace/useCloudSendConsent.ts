@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
-import { CLOUD_SEND_CONSENT_STORAGE_KEY } from "@/shared/storage/keys";
+import { CLOUD_ATTACHMENT_CONSENT_STORAGE_KEY, CLOUD_SEND_CONSENT_STORAGE_KEY } from "@/shared/storage/keys";
 
 export function useCloudSendConsent(scope: string) {
-  const [pending, setPending] = useState<{ scope: string; send: () => void } | null>(null);
+  const [pending, setPending] = useState<{ scope: string; storageKey: string; send: () => void } | null>(null);
   useEffect(() => setPending(null), [scope]);
 
-  function request(send: () => void) {
+  function request(send: () => void, hasAttachments: boolean) {
+    const storageKey = hasAttachments ? CLOUD_ATTACHMENT_CONSENT_STORAGE_KEY : CLOUD_SEND_CONSENT_STORAGE_KEY;
     try {
-      if (localStorage.getItem(CLOUD_SEND_CONSENT_STORAGE_KEY) === "true") return false;
+      if (localStorage.getItem(storageKey) === "true") return false;
     } catch {
       // Confirm each send when storage is unavailable.
     }
-    setPending({ scope, send });
+    setPending({ scope, storageKey, send });
     return true;
   }
 
@@ -25,7 +26,7 @@ export function useCloudSendConsent(scope: string) {
             setPending(null);
             if (remember) {
               try {
-                localStorage.setItem(CLOUD_SEND_CONSENT_STORAGE_KEY, "true");
+                localStorage.setItem(confirmation.storageKey, "true");
               } catch {
                 // Continue with this send even if the preference cannot be saved.
               }

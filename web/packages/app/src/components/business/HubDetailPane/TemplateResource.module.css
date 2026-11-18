@@ -763,11 +763,6 @@
   overflow-y: auto;
 }
 
-.hub-template-publish-footer > [data-template-publish-progress] {
-  flex: 0 0 100%;
-  min-width: 0;
-}
-
 .hub-template-publish-error {
   flex-shrink: 0;
   margin: 0 var(--space-5) var(--space-4);

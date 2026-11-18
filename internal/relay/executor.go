@@ -6,10 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"csgclaw/internal/apitypes"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -20,7 +24,17 @@ type ExecutionHandler interface {
 	Execute(context.Context, Frame) Frame
 }
 
+type fileDelivery struct {
+	SessionID   string
+	Text        string
+	Attachments []apitypes.MessageAttachment
+	Deadline    time.Time
+}
+
 type executionRecord struct {
+	Delivery *fileDelivery `json:"delivery,omitempty"`
+	Started  bool          `json:"-"`
+
 	InstanceID            string `json:"instance_id"`
 	InvocationFingerprint string `json:"invocation_fingerprint,omitempty"`
 	Result                Frame  `json:"result"`
@@ -56,6 +70,7 @@ type Executor struct {
 	sessions     map[string]executionSession
 	instance     string
 	activeID     string
+	phaseChanged chan struct{}
 	cancel       context.CancelFunc
 	fatal        error
 	workers      sync.WaitGroup
@@ -75,6 +90,7 @@ func (e *Executor) Run(ctx context.Context) error {
 	defer lock.Close()
 	e.records = map[string]executionRecord{}
 	e.sessions = map[string]executionSession{}
+	e.phaseChanged = make(chan struct{}, 1)
 	data, err := os.ReadFile(e.StatePath)
 	if err == nil {
 		var state executorState
@@ -101,10 +117,12 @@ func (e *Executor) Run(ctx context.Context) error {
 		}
 	}
 	for id, record := range e.records {
-		if record.Result.Type == "request.accepted" {
+		if record.Result.Type == "request.accepted" && record.Delivery == nil {
 			record.Result = Frame{Type: "response.failed", ResponseID: id, Sequence: 1, Error: &ProtocolError{Code: "execution_interrupted", Message: "executor restarted; invocation was not repeated"}}
-			e.records[id] = record
+		} else if !record.Acked && record.Result.Type != "request.accepted" {
+			record.Result = terminalExecutionResult(id, record.Result)
 		}
+		e.records[id] = record
 	}
 	if err = e.saveLocked(); err != nil {
 		return err
@@ -225,7 +243,7 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 		}
 		e.mu.Lock()
 		defer e.mu.Unlock()
-		return Frame{Type: typ, ProtocolVersion: 1, InstanceID: instance, Ready: ready && e.fatal == nil, Busy: e.activeID != ""}
+		return Frame{Type: typ, Capabilities: []string{CapabilityInputFiles}, ProtocolVersion: 1, InstanceID: instance, Ready: ready && e.fatal == nil, Busy: e.activeID != ""}
 	}
 	if err := send(status("hello")); err != nil {
 		return err
@@ -278,23 +296,48 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 		}
 		return true
 	}
+	var startedSent, deliveringSent string
 	flush := func() error {
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		if e.fatal != nil {
 			return e.fatal
 		}
-		for _, record := range e.records {
-			if !record.Acked && record.InstanceID == instance && record.Result.Type != "request.accepted" {
+		for id, record := range e.records {
+			if record.Acked || record.InstanceID != instance {
+				continue
+			}
+			if record.Result.Type != "request.accepted" {
 				if err := send(record.Result); err != nil {
 					return err
 				}
+				continue
+			}
+			// Reconcile phases on each connection, in order. Relay ignores phase
+			// events it has already applied, including request.started for text jobs.
+			if (record.Started || record.Delivery != nil) && startedSent != id {
+				if err := send(record.Result); err != nil {
+					return err
+				}
+				if err := send(Frame{Type: "request.started", ResponseID: id}); err != nil {
+					return err
+				}
+				startedSent = id
+			}
+			if record.Delivery != nil && deliveringSent != id {
+				if err := send(Frame{Type: "response.delivering", ResponseID: id}); err != nil {
+					return err
+				}
+				deliveringSent = id
 			}
 		}
 		return nil
 	}
 	if err := flush(); err != nil {
 		return err
+	}
+	if recovering {
+		e.resumeDelivery(ctx, instance)
 	}
 	for {
 		select {
@@ -307,6 +350,10 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 				return err
 			}
 			if err := send(status("heartbeat")); err != nil {
+				return err
+			}
+		case <-e.phaseChanged:
+			if err := flush(); err != nil {
 				return err
 			}
 		case <-retry.C:
@@ -353,12 +400,15 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 		return fmt.Errorf("invalid relay request identity or deadline")
 	}
 	input, err := InputText(frame.Input)
-	if err != nil {
+	if err != nil && len(frame.InputFiles) == 0 {
 		return fmt.Errorf("invalid relay request input")
 	}
 	// Relay response IDs can repeat after the idempotency record expires.
 	// The original deadline is stable across redeliveries of one admission.
 	identity, _ := json.Marshal([]string{frame.SessionID, frame.PreviousResponseID, frame.Deadline.UTC().Format(time.RFC3339Nano), input})
+	if len(frame.InputFiles) > 0 {
+		identity, _ = json.Marshal([]any{json.RawMessage(identity), frame.InputFiles})
+	}
 	fingerprint := fmt.Sprintf("%x", sha256.Sum256(identity))
 	record := executionRecord{InstanceID: e.instance, InvocationFingerprint: fingerprint}
 	ready := e.Handler.Ready(ctx)
@@ -446,31 +496,72 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 		return err
 	}
 	deadline := frame.Deadline
-	if max := time.Now().Add(5 * time.Minute); deadline.After(max) {
+	limit := 5 * time.Minute
+	if len(frame.InputFiles) > 0 {
+		limit = stageDuration(frame.TransferTimeoutSeconds, 10*time.Minute)
+	}
+	if max := time.Now().Add(limit); deadline.After(max) {
 		deadline = max
 	}
-	runCtx, cancel := context.WithDeadline(ctx, deadline)
+	jobCtx, cancel := context.WithCancel(ctx)
+	runCtx, stopPreparing := context.WithDeadline(jobCtx, deadline)
+	frame.fileClient = e.Client
+	frame.fileScope = fileScope{ResponseID: frame.ResponseID, AgentID: e.AgentID, InstanceID: record.InstanceID}
+	if len(frame.InputFiles) > 0 {
+		frame.start = func() (context.Context, context.CancelFunc) {
+			if runCtx.Err() != nil {
+				return context.WithCancel(runCtx)
+			}
+			e.mu.Lock()
+			current := e.records[frame.ResponseID]
+			if current.InvocationFingerprint != fingerprint || current.Result.Type != "request.accepted" {
+				e.mu.Unlock()
+				cancel()
+				return context.WithCancel(jobCtx)
+			}
+			current.Started = true
+			e.records[frame.ResponseID] = current
+			e.mu.Unlock()
+			e.notifyPhaseChanged()
+			return context.WithTimeout(jobCtx, stageDuration(frame.ExecutionTimeoutSeconds, 5*time.Minute))
+		}
+	}
+	frame.deliver = func(text string, attachments []apitypes.MessageAttachment) Frame {
+		delivery := &fileDelivery{SessionID: frame.SessionID, Text: text, Attachments: attachments,
+			Deadline: deliveryUploadDeadline(time.Now(), stageDuration(frame.TransferTimeoutSeconds, 10*time.Minute))}
+		e.mu.Lock()
+		current := e.records[frame.ResponseID]
+		if current.InvocationFingerprint != fingerprint || current.Result.Type != "request.accepted" {
+			e.mu.Unlock()
+			return deliveryFailure()
+		}
+		current.Delivery = delivery
+		e.records[frame.ResponseID] = current
+		e.fatal = e.saveLocked()
+		err := e.fatal
+		e.mu.Unlock()
+		if err != nil {
+			return deliveryFailure()
+		}
+		e.notifyPhaseChanged()
+		return e.deliverFiles(jobCtx, frame.fileScope, delivery)
+	}
 	e.activeID = frame.ResponseID
 	e.cancel = cancel
 	e.mu.Unlock()
+	acceptedErr := send(Frame{Type: "request.accepted", ResponseID: frame.ResponseID})
 	// Persist and start even if the acceptance write fails: relay does not redispatch
 	// on acceptance timeout and this result can be delivered after reconnection.
 	e.workers.Add(1)
 	go func() {
 		defer e.workers.Done()
 		defer cancel()
+		defer stopPreparing()
 		result := Frame{Type: "response.cancelled", ResponseID: frame.ResponseID, Sequence: 1}
 		if runCtx.Err() == nil {
 			result = e.Handler.Execute(runCtx, frame)
 		}
-		result.ResponseID = frame.ResponseID
-		result.Sequence = 1
-		if result.Type != "response.completed" && result.Type != "response.failed" && result.Type != "response.cancelled" {
-			result = Frame{Type: "response.failed", ResponseID: frame.ResponseID, Sequence: 1, Error: &ProtocolError{Code: "execution_failed", Message: "invalid executor result"}}
-		}
-		if data, _ := json.Marshal(result); len(data) > 2<<20 {
-			result = Frame{Type: "response.failed", ResponseID: frame.ResponseID, Sequence: 1, Error: &ProtocolError{Code: "output_too_large", Message: "executor result exceeds frame limit"}}
-		}
+		result = terminalExecutionResult(frame.ResponseID, result)
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		e.activeID = ""
@@ -481,12 +572,135 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 			// Leave its session uncertain and preserve the new rejection.
 			return
 		}
+		if ctx.Err() != nil && current.Delivery != nil {
+			return
+		}
 		record.Result = result
 		e.records[frame.ResponseID] = record
 		if result.Type == "response.completed" {
 			e.sessions[frame.SessionID] = executionSession{Tip: frame.ResponseID, UpdatedAt: time.Now().UTC()}
+		} else if len(frame.InputFiles) > 0 && !current.Started &&
+			(result.Type == "response.cancelled" || (result.Error != nil && result.Error.Code == "input_file_unavailable")) {
+			// Input preparation stopped before the Session API could advance history.
+			session.Dirty = false
+			e.sessions[frame.SessionID] = session
 		}
 		e.fatal = e.saveLocked()
+		e.notifyPhaseChanged()
 	}()
-	return send(Frame{Type: "request.accepted", ResponseID: frame.ResponseID})
+	return acceptedErr
+}
+
+func (e *Executor) notifyPhaseChanged() {
+	select {
+	case e.phaseChanged <- struct{}{}:
+	default:
+	}
+}
+
+func terminalExecutionResult(id string, result Frame) Frame {
+	switch result.Type {
+	case "response.completed", "response.failed", "response.cancelled":
+		result.ResponseID, result.Sequence = id, 1
+		if data, _ := json.Marshal(result); len(data) <= 2<<20 {
+			return result
+		}
+		return Frame{Type: "response.failed", ResponseID: id, Sequence: 1, Error: &ProtocolError{Code: "output_too_large", Message: "executor result exceeds frame limit"}}
+	default:
+		return Frame{Type: "response.failed", ResponseID: id, Sequence: 1, Error: &ProtocolError{Code: "execution_failed", Message: "invalid executor result"}}
+	}
+}
+
+func stageDuration(seconds float64, fallback time.Duration) time.Duration {
+	if seconds <= 0 || seconds > float64(24*time.Hour/time.Second) {
+		return fallback
+	}
+	return time.Duration(seconds * float64(time.Second))
+}
+
+// Reserve part of Relay's delivery window for journaling and sending the result.
+func deliveryUploadDeadline(start time.Time, window time.Duration) time.Time {
+	reserve := min(5*time.Second, window/5)
+	return start.Add(window - reserve)
+}
+
+func deliveryFailure() Frame {
+	return Frame{Type: "response.failed", Error: &ProtocolError{Code: "file_delivery_failed", Message: "could not deliver Relay output attachments"}}
+}
+
+func (e *Executor) deliverFiles(ctx context.Context, scope fileScope, delivery *fileDelivery) Frame {
+	local, ok := e.Handler.(*LocalExecutor)
+	if !ok {
+		return deliveryFailure()
+	}
+	ctx, cancel := context.WithDeadline(ctx, delivery.Deadline)
+	defer cancel()
+	result := Frame{Type: "response.completed", OutputText: delivery.Text}
+	for _, attachment := range delivery.Attachments {
+		key := fmt.Sprintf("output:%x", sha256.Sum256([]byte(scope.ResponseID+"\x00"+attachment.ID)))
+		file := File{Name: attachment.Name, MediaType: attachment.MediaType, Size: attachment.SizeBytes, SHA256: attachment.SHA256}
+		var uploaded File
+		err := retryFileTransfer(ctx, func() error {
+			var err error
+			uploaded, err = e.Client.uploadFile(ctx, scope, key, file, func() (io.ReadCloser, error) {
+				return local.Client.OpenPublishedAttachment(ctx, attachment.ID)
+			})
+			return err
+		})
+		if err != nil {
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		result.Files = append(result.Files, File{ID: uploaded.ID})
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return Frame{Type: "response.cancelled"}
+	}
+	if failed := len(delivery.Attachments) - len(result.Files); failed > 0 {
+		note := fmt.Sprintf("Output attachment delivery failed for %d of %d files.", failed, len(delivery.Attachments))
+		if strings.TrimSpace(result.OutputText) == "" {
+			result.OutputText = note
+		} else {
+			result.OutputText += "\n\n" + note
+		}
+	}
+	return result
+}
+
+func (e *Executor) resumeDelivery(ctx context.Context, instance string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.activeID != "" {
+		return
+	}
+	for id, record := range e.records {
+		if record.InstanceID != instance || record.Delivery == nil || record.Result.Type != "request.accepted" {
+			continue
+		}
+		jobCtx, cancel := context.WithCancel(ctx)
+		e.activeID, e.cancel = id, cancel
+		e.workers.Add(1)
+		go func() {
+			defer e.workers.Done()
+			defer cancel()
+			result := e.deliverFiles(jobCtx, fileScope{ResponseID: id, AgentID: e.AgentID, InstanceID: instance}, record.Delivery)
+			result = terminalExecutionResult(id, result)
+			e.mu.Lock()
+			defer e.mu.Unlock()
+			e.activeID, e.cancel = "", nil
+			if ctx.Err() != nil {
+				return
+			}
+			if result.Type == "response.completed" {
+				e.sessions[record.Delivery.SessionID] = executionSession{Tip: id, UpdatedAt: time.Now().UTC()}
+			}
+			record.Delivery, record.Result = nil, result
+			e.records[id] = record
+			e.fatal = e.saveLocked()
+			e.notifyPhaseChanged()
+		}()
+		return
+	}
 }

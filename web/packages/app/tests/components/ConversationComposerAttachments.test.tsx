@@ -36,6 +36,7 @@ const t: TranslateFn = (key, params) => {
     retrySend: "Retry send",
     stopSending: "Stop sending",
     undo: "Undo",
+    slashCreateAgent: "创建智能体",
     suggestedActions: "Suggested actions",
     suggestedActionsOnly: "Suggestions only; nothing runs automatically",
     composerTip: "Enter to send · Shift + Enter for a new line",
@@ -107,6 +108,18 @@ describe("ConversationComposer attachments", () => {
     expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
     expect(screen.queryByText("GitLab")).not.toBeInTheDocument();
     expect(within(dialog).getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("accepts files for a cloud conversation", async () => {
+    const user = userEvent.setup();
+    const onAddAttachments = vi.fn();
+    renderComposer({ textOnly: true, onAddAttachments });
+    await user.click(screen.getByRole("button", { name: "Add content" }));
+    const dialog = screen.getByRole("dialog", { name: "Add content" });
+    expect(within(dialog).getAllByRole("button")).toHaveLength(1);
+    const file = new File(["hello"], "note.txt", { type: "text/plain" });
+    await user.upload(screen.getByLabelText("Add attachment", { selector: "input" }), file);
+    expect(onAddAttachments).toHaveBeenCalledWith([file]);
   });
 
   it("places the add and send controls in one composer toolbar without visible shortcut copy", () => {

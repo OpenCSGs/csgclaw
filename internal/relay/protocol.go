@@ -2,16 +2,22 @@
 package relay
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 	"time"
+
+	"csgclaw/internal/apitypes"
 )
 
 const Subprotocol = "csgrelay.v1"
 
+const CapabilityInputFiles = "input_files"
+
 type Agent struct {
+	Capabilities  []string   `json:"capabilities,omitempty"`
 	ID            string     `json:"id"`
 	Name          string     `json:"name"`
 	Description   string     `json:"description"`
@@ -75,14 +81,16 @@ type Response struct {
 }
 
 type Output struct {
-	ID      string    `json:"id"`
-	Type    string    `json:"type"`
-	Role    string    `json:"role"`
-	Status  string    `json:"status"`
-	Content []Content `json:"content"`
+	Attachments []apitypes.MessageAttachment `json:"attachments,omitempty"`
+	ID          string                       `json:"id"`
+	Type        string                       `json:"type"`
+	Role        string                       `json:"role"`
+	Status      string                       `json:"status"`
+	Content     []Content                    `json:"content"`
 }
 
 type Content struct {
+	File        *File  `json:"file,omitempty"`
 	Type        string `json:"type"`
 	Text        string `json:"text"`
 	Annotations []any  `json:"annotations"`
@@ -101,6 +109,16 @@ func (r Response) Text() string {
 }
 
 type Frame struct {
+	Capabilities            []string `json:"capabilities,omitempty"`
+	InputFiles              []File   `json:"input_files,omitempty"`
+	Files                   []File   `json:"files,omitempty"`
+	ExecutionTimeoutSeconds float64  `json:"execution_timeout_seconds,omitempty"`
+	TransferTimeoutSeconds  float64  `json:"transfer_timeout_seconds,omitempty"`
+	fileClient              *Client
+	fileScope               fileScope
+	start                   func() (context.Context, context.CancelFunc)
+	deliver                 func(string, []apitypes.MessageAttachment) Frame
+
 	parentValidated          bool
 	Type                     string          `json:"type"`
 	ProtocolVersion          int             `json:"protocol_version,omitempty"`

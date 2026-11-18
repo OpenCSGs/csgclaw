@@ -1182,20 +1182,19 @@ export function useConversationController({
 
     const roomID = activeConversation.id;
     const senderID = data.current_user_id;
-    const attachments = cloudTask ? [] : attachmentDrafts.map((draft) => draft.file);
+    const attachments = attachmentDrafts.map((draft) => draft.file);
     const serializedDraft = serializeComposerSegments(draftSegments);
     const { content, resource_refs } = cloudTask
       ? { content: draftText.trim(), resource_refs: [] }
       : resourceAgentID || draftSegments.some((segment) => segment.type === "resource")
         ? resourceMessageInput(draftSegments, serializedDraft)
         : { content: normalizeSlashShorthandForPayload(serializedDraft), resource_refs: [] };
-    if (cloudTask && (!content || (!confirmed && cloudConsent.request(() => void sendMessage(true))))) return;
+    if (cloudTask) {
+      if (!content && !attachments.length) return;
+      if (!confirmed && cloudConsent.request(() => void sendMessage(true), attachments.length > 0)) return;
+    }
     const fileReferences = cloudTask ? [] : composerFileReferences(draftSegments);
-    const fingerprint = messageFingerprint(
-      content + JSON.stringify(fileReferences),
-      cloudTask ? [] : attachmentDrafts,
-      resource_refs,
-    );
+    const fingerprint = messageFingerprint(content + JSON.stringify(fileReferences), attachmentDrafts, resource_refs);
     if (sendLocksRef.current[roomID]) {
       return;
     }
@@ -1831,7 +1830,7 @@ export function useConversationController({
   }
 
   function addComposerAttachments(files: File[]): void {
-    if (cloudTask || !activeConversationId || files.length === 0) {
+    if (!activeConversationId || files.length === 0) {
       return;
     }
     const selection = selectAttachmentFiles(files, attachmentDrafts);

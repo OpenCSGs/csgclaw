@@ -15,7 +15,7 @@ import { useTemplateInstructionsEditor } from "./useTemplateInstructionsEditor";
 import { templateAvatar, templateInGroup, templateSourceLabelKey, type TemplateGroup } from "@/models/templateGroups";
 import { AgentAvatarImage } from "@/components/business/AgentAvatar";
 import { defaultAgentAvatar } from "@/shared/avatarOptions";
-import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
+import { agenticHubTemplatesURL } from "@/models/agenticHub";
 import { parseMCPServerDocument } from "@/models/mcpServerDocument";
 import { GlobalAppsPanel } from "@/components/business/Apps";
 import { ResourceListCard } from "@/components/business/ResourceListCard";
@@ -90,7 +90,7 @@ import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 import { RemoteMCPList } from "./RemoteMCPList";
 import { TemplateVersionHistory } from "./TemplateVersionHistory";
-import { TemplatePublishProgress } from "./TemplatePublishProgress";
+import { TemplatePublishProgress } from "@/components/business/TemplatePublishProgress";
 import styles from "./HubDetailPane.module.css";
 import skillResourceStyles from "./SkillResource.module.css";
 import mCPResourceStyles from "./MCPResource.module.css";
@@ -880,7 +880,7 @@ export function HubDetailPane({
   const publishCompletionTimerRef = useRef<number | null>(null);
   const isTemplatePublishing =
     publishBusy || publishProgressState === "publishing" || publishProgressState === "complete";
-  const publishSuccessURL = agenticHubCreateAgentURL(agenticHubSiteURL, publishedTemplate?.id || publishedTemplateID);
+  const publishSuccessURL = publishedTemplate?.id || publishedTemplateID ? templatesURL : "";
   const dismissPublishSuccess = () => {
     setPublishSuccessDialogOpen(false);
     onDismissPublishedTemplate?.();
@@ -3091,10 +3091,10 @@ export function HubDetailPane({
                 href={publishSuccessURL}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={t("agentTemplateCreateInHubHint")}
+                title={t("templateViewCommunity")}
               >
                 <ExternalLink size={14} aria-hidden="true" />
-                {t("agentTemplateCreateInHub")}
+                {t("templateViewCommunity")}
               </LinkButton>
             ) : null}
             <Button variant="primary" size="sm" onClick={dismissPublishSuccess}>
@@ -3186,7 +3186,7 @@ export function HubDetailPane({
               <span className="whitespace-pre-wrap break-words">{publishError}</span>
             </InlineError>
           ) : null}
-          <DialogFooter className={templateResourceStyles["hub-template-publish-footer"]}>
+          <DialogFooter>
             <TemplatePublishProgress
               active={publishProgressState === "publishing" || publishBusy}
               complete={publishProgressState === "complete"}

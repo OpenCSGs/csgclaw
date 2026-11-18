@@ -8,10 +8,24 @@ Runtime Adapter path.
 Publish from the agent detail page with **Publish to Relay**, or use one
 foreground `relay publish` process per explicitly selected agent. Both support
 host Codex/DSH agents, matching the existing Session API. Sandbox agents are not
-supported. Only text input is supported. Execution uses the local agent's runtime
+supported. Cloud task conversations support text and file attachments, including
+attachment-only input and downloadable generated files. Execution uses the local agent's runtime
 policy; blocking interactions are rejected by the Session API. Final results are
 returned after local execution; token-by-token producer streaming is not yet
 available.
+
+## Attachment compatibility
+
+File-capable executors advertise `capabilities: ["input_files"]` in their WebSocket
+hello. Relay exposes those capabilities from the current connection in agent
+queries and rejects file admissions to connections lacking `input_files` with
+`executor_files_unsupported`. CSGClaw checks this capability before uploading
+attachments. Relay performs the admission check for new file requests while
+idempotent replays can recover a saved result after the executor disconnects.
+
+Deploy the matching Relay capability support and restart or reconnect publishing
+CSGClaw executors before testing file sends. A Relay version that omits the field
+causes CSGClaw to show an upgrade message. Text calls remain available.
 
 ## Publish from the Web UI
 

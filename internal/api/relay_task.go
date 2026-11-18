@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"os"
@@ -126,11 +127,13 @@ func (h *Handler) runCloudTask(roomID string) {
 
 		content := result.Text()
 		metadata := map[string]any{}
+		var attachments []im.MessageAttachmentUpload
+		var releaseAttachments func()
 		if err != nil || result.Status != "completed" {
 			code := "execution_failed"
 			if result.Error != nil {
 				switch result.Error.Code {
-				case "model_protocol_unsupported":
+				case "model_protocol_unsupported", "input_file_unavailable", "file_delivery_failed", "file_delivery_invalid":
 					code = result.Error.Code
 				case "execution_interrupted", "execution_timeout", "cancellation_unconfirmed", "relay_invocation_identity_mismatch":
 					code = "relay_task_result_unavailable"
@@ -141,6 +144,9 @@ func (h *Handler) runCloudTask(roomID string) {
 				(errors.As(err, &remote) && remote.Detail.Code == "response_not_found") {
 				code = "relay_task_result_unavailable"
 			}
+			if errors.Is(err, errCloudTaskAttachment) {
+				code = "input_file_unavailable"
+			}
 			if errors.Is(err, relay.ErrRequestTooLarge) {
 				code = "relay_task_input_too_large"
 			}
@@ -149,7 +155,27 @@ func (h *Handler) runCloudTask(roomID string) {
 			metadata["relay_task_failed"] = true
 		} else {
 			metadata["relay_response_id"] = result.ID
-			if content == "" {
+			var files []relay.File
+			for _, output := range result.Output {
+				for _, part := range output.Content {
+					if part.Type == "output_file" && part.File != nil {
+						files = append(files, *part.File)
+					}
+				}
+			}
+			if len(files) > 0 {
+				attachments, releaseAttachments, err = h.cloudOutputAttachments(parent, room, files)
+				if err != nil && parent.Err() == nil {
+					code := "file_delivery_failed"
+					if len(attachments) > 0 {
+						code = "file_delivery_partial"
+					}
+					metadata["relay_error_code"] = code
+					note := cloudTaskFailureText(room.Locale, code)
+					content = strings.TrimSpace(content + "\n\n" + note)
+				}
+			}
+			if content == "" && len(attachments) == 0 {
 				content = "(empty response)"
 			}
 		}
@@ -157,9 +183,12 @@ func (h *Handler) runCloudTask(roomID string) {
 		var created bool
 		saveErr := retryCloudTaskWrite(parent, func() error {
 			var err error
-			reply, created, err = h.im.CreateMessageOnce(im.CreateMessageRequest{RoomID: roomID, SenderID: room.CloudAgent.UserID, Content: content, ClientMessageID: "relay-reply:" + message.ID, Metadata: metadata, Locale: room.Locale})
+			reply, created, err = h.im.CreateMessageOnce(im.CreateMessageRequest{RoomID: roomID, SenderID: room.CloudAgent.UserID, Content: content, ClientMessageID: "relay-reply:" + message.ID, Metadata: metadata, Locale: room.Locale, Attachments: attachments})
 			return err
 		})
+		if releaseAttachments != nil {
+			releaseAttachments()
+		}
 		if saveErr != nil {
 			h.cloudTaskMu.Lock()
 			delete(h.cloudTasks, roomID)
@@ -197,6 +226,15 @@ func retryCloudTaskWrite(ctx context.Context, write func() error) error {
 func cloudTaskFailureText(locale, code string) string {
 	var en, zh string
 	switch code {
+	case "input_file_unavailable":
+		en = "The cloud agent could not receive the input attachments."
+		zh = "云端智能体未能收到输入附件。"
+	case "file_delivery_partial":
+		en = "Some of the cloud agent's output files could not be delivered."
+		zh = "云端智能体的部分输出文件未能交付。"
+	case "file_delivery_failed", "file_delivery_invalid":
+		en = "The cloud agent's output files could not be delivered."
+		zh = "云端智能体的输出文件未能交付。"
 	case "relay_task_input_too_large":
 		en = "This message exceeds the cloud task request size limit. Shorten the message and send it again."
 		zh = "这条消息超过了云端任务的请求大小限制，请缩短消息后再发送。"
@@ -216,6 +254,7 @@ func cloudTaskFailureText(locale, code string) string {
 	return zh
 }
 
+var errCloudTaskAttachment = errors.New("cloud task input attachment unavailable")
 var errCloudTaskPersistence = errors.New("cloud task recovery state could not be saved")
 var errCloudTaskResultUnavailable = errors.New("cloud task execution result could not be confirmed")
 
@@ -223,6 +262,7 @@ const (
 	cloudTaskMaxInvalidPolls  = 3
 	cloudTaskUnsubmittedKey   = "relay_task_unsubmitted"
 	cloudTaskResponseKey      = "relay_pending_response_id"
+	cloudTaskInputFilesKey    = "relay_input_files"
 	cloudTaskRecoveryKey      = "relay_context_recovery_input"
 	cloudTaskStartedAtKey     = "relay_task_started_at"
 	cloudTaskRetryAfterKey    = "relay_task_retry_after"
@@ -233,43 +273,52 @@ const (
 // Build a text checkpoint from successful turns in this room. Replies can be
 // appended after the next user message when several messages are queued.
 func cloudTaskRecoveryInput(room im.Room, message im.Message) string {
-	replies := make(map[string]string)
+	const unavailableFiles = "Attachments from earlier turns are unavailable in this restored session. If the current request needs one of those files, ask the user to attach it again. Do not infer its contents from the conversation."
+	replies := make(map[string]im.Message)
 	for _, reply := range room.Messages {
 		if id, _ := reply.Metadata["relay_response_id"].(string); reply.SenderID == room.CloudAgent.UserID && id != "" {
-			replies[reply.ClientMessageID] = reply.Content
+			replies[reply.ClientMessageID] = reply
 		}
 	}
 	budget := (16 << 10) - len("[]")
 	var turns []string
+	hadAttachments := false
 	for i := slices.IndexFunc(room.Messages, func(m im.Message) bool { return m.ID == message.ID }) - 1; i >= 0; i-- {
 		prior := room.Messages[i]
 		reply, ok := replies["relay-reply:"+prior.ID]
-		if prior.SenderID != room.CreatedBy || prior.Kind == im.MessageKindEvent || !ok {
+		if prior.SenderID != room.CreatedBy || prior.Kind == im.MessageKindEvent {
 			continue
 		}
-		if len(prior.Content)+len(reply) >= budget {
+		hadAttachments = hadAttachments || len(prior.Attachments) > 0 || len(reply.Attachments) > 0
+		if !ok || len(prior.Content)+len(reply.Content) >= budget {
 			continue
 		}
 		turn, _ := json.Marshal(struct {
 			User  string `json:"user"`
 			Agent string `json:"agent"`
-		}{prior.Content, reply})
+		}{prior.Content, reply.Content})
 		if len(turn)+1 > budget {
 			continue
 		}
 		budget -= len(turn) + 1
 		turns = append(turns, string(turn))
 	}
+	fallback := message.Content
+	currentInput := "Current user message:\n" + message.Content
+	if hadAttachments {
+		currentInput = unavailableFiles + "\n\n" + currentInput
+		fallback = currentInput
+	}
 	if len(turns) == 0 {
-		return message.Content
+		return fallback
 	}
 	slices.Reverse(turns)
 	input := "The remote session context was lost. Use the following completed turns as background. Do not repeat prior actions. Respond to the current user message.\n[" +
-		strings.Join(turns, ",") + "]\n\nCurrent user message:\n" + message.Content
+		strings.Join(turns, ",") + "]\n\n" + currentInput
 	// Leave room for the Relay request envelope when the current message
 	// alone is already close to the request size limit.
 	if encoded, _ := json.Marshal(input); len(encoded) > (1<<20)-1024 {
-		return message.Content
+		return fallback
 	}
 	return input
 }
@@ -304,9 +353,9 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 		metadata = map[string]any{}
 	}
 	responseID, _ := metadata[cloudTaskResponseKey].(string)
-	recoveryInput, _ := metadata[cloudTaskRecoveryKey].(string)
+	_, recovering := metadata[cloudTaskRecoveryKey].(string)
 	startedAtKey, retryAfterKey := cloudTaskStartedAtKey, cloudTaskRetryAfterKey
-	if recoveryInput != "" {
+	if recovering {
 		startedAtKey, retryAfterKey = cloudTaskRecoveryStartKey, cloudTaskRecoveryRetryKey
 	}
 	startedAt, _ := metadata[startedAtKey].(string)
@@ -314,7 +363,7 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 	submissionStartedAt, err := time.Parse(time.RFC3339Nano, startedAt)
 	if err != nil {
 		submissionStartedAt = message.CreatedAt
-		if unsubmitted && recoveryInput == "" && responseID == "" {
+		if unsubmitted && !recovering && responseID == "" {
 			submissionStartedAt = time.Now().UTC()
 		}
 	}
@@ -327,6 +376,13 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 			return err
 		})
 	}
+	var relayFiles []relay.File
+	if saved, ok := metadata[cloudTaskInputFilesKey]; ok {
+		data, err := json.Marshal(saved)
+		if err != nil || json.Unmarshal(data, &relayFiles) != nil || len(relayFiles) != len(message.Attachments) {
+			return relay.Response{}, errCloudTaskResultUnavailable
+		}
+	}
 	invalidPolls := 0
 	for {
 		if ctx.Err() != nil {
@@ -334,10 +390,31 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 		}
 		responseID, _ := metadata[cloudTaskResponseKey].(string)
 		retryAfter, _ := metadata[retryAfterKey].(string)
-		recoveryInput, _ := metadata[cloudTaskRecoveryKey].(string)
+		recoveryInput, recovering := metadata[cloudTaskRecoveryKey].(string)
 		unsubmitted, _ := metadata[cloudTaskUnsubmittedKey].(bool)
+		knownUnsubmitted := unsubmitted && !recovering && responseID == ""
+		freshSubmission := knownUnsubmitted && retryAfter == ""
 		submissionDeadline := submissionStartedAt.Add(10 * time.Minute)
-		knownUnsubmitted := unsubmitted && recoveryInput == "" && responseID == ""
+		if responseID == "" && len(message.Attachments) > 0 && relayFiles == nil &&
+			(freshSubmission || time.Now().Before(submissionDeadline)) {
+			uploadDeadline := submissionDeadline
+			if freshSubmission {
+				uploadDeadline = time.Now().Add(10 * time.Minute)
+			}
+			uploadCtx, cancel := context.WithDeadline(ctx, uploadDeadline)
+			files, err := h.uploadCloudTaskAttachments(uploadCtx, room, message)
+			cancel()
+			if err != nil {
+				return relay.Response{}, err
+			}
+			relayFiles = files
+			metadata[cloudTaskInputFilesKey] = files
+			needsCheckpoint = true
+			if freshSubmission {
+				submissionStartedAt = time.Now().UTC()
+				submissionDeadline = submissionStartedAt.Add(10 * time.Minute)
+			}
+		}
 		if knownUnsubmitted {
 			// Consume this marker before the POST so a restart cannot mistake
 			// an already attempted submission for a new one.
@@ -366,13 +443,13 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 			result, err = h.relayManager.ChatResponse(callCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, responseID)
 		} else {
 			key, input, parent := "task:"+room.ID+":"+message.ID, message.Content, previous
-			if recoveryInput != "" {
+			if recovering {
 				key, input, parent = "task-recovery:"+room.ID+":"+message.ID, recoveryInput, ""
 			}
 			if retryAfter != "" {
 				key = fmt.Sprintf("task-recovery:%x", sha256.Sum256([]byte(key+"\x00"+retryAfter)))
 			}
-			result, err = h.relayManager.Chat(callCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, key, input, parent)
+			result, err = h.relayManager.Chat(callCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, key, input, parent, relayFiles...)
 			if errors.As(err, &remote) {
 				if id := remote.PendingResponseID(); id != "" {
 					result.ID, result.Status, err = id, "in_progress", nil
@@ -389,7 +466,7 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 		} else if err == nil {
 			invalidPolls = 0
 		}
-		restore := recoveryInput == "" && previous != "" && cloudTaskCanRestoreContext(result, remote, knownUnsubmitted)
+		restore := !recovering && previous != "" && cloudTaskCanRestoreContext(result, remote, knownUnsubmitted)
 		retryRejected := err == nil && result.ID != retryAfter && cloudTaskRejectedBeforeExecution(result)
 		metadataChanged := true
 		switch {
@@ -405,7 +482,7 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 			// A recorded rejection is terminal for its key, so persist the
 			// identity of the next attempt before sending it.
 			metadata[retryAfterKey] = result.ID
-			if recoveryInput == "" {
+			if !recovering {
 				metadata[cloudTaskUnsubmittedKey] = true
 				metadata[startedAtKey] = submissionStartedAt.Format(time.RFC3339Nano)
 			}
@@ -460,4 +537,88 @@ func cloudTaskRetryable(err error) bool {
 		return remote.Status >= http.StatusInternalServerError || remote.Status == http.StatusRequestTimeout || remote.Status == http.StatusTooManyRequests
 	}
 	return true
+}
+
+func (h *Handler) uploadCloudTaskAttachments(ctx context.Context, room im.Room, message im.Message) ([]relay.File, error) {
+	var relayFiles []relay.File
+	for _, attachment := range message.Attachments {
+		source, err := h.im.RoomAttachmentFile(room.ID, attachment.ID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errCloudTaskAttachment, err)
+		}
+		file, err := h.relayManager.UploadAttachment(ctx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, message.ID, attachment, func() (io.ReadCloser, error) {
+			return os.Open(source.Path)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errCloudTaskAttachment, err)
+		}
+		relayFiles = append(relayFiles, file)
+	}
+	return relayFiles, nil
+}
+
+func (h *Handler) cloudOutputAttachments(ctx context.Context, room im.Room, files []relay.File) ([]im.MessageAttachmentUpload, func(), error) {
+	paths := make([]string, len(files))
+	uploads := make([]im.MessageAttachmentUpload, len(files))
+	for i, file := range files {
+		uploads[i] = im.MessageAttachmentUpload{Name: file.Name, MediaType: file.MediaType, SizeBytes: file.Size, Open: func() (io.ReadCloser, error) {
+			return os.Open(paths[i])
+		}}
+	}
+	cleanup := func() {
+		for _, path := range paths {
+			if path != "" {
+				_ = os.Remove(path)
+			}
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	var delivered []im.MessageAttachmentUpload
+	var transferErr error
+	var totalBytes int64
+	for i, file := range files {
+		if err := im.ValidateMessageAttachmentUploads(uploads[i : i+1]); err != nil {
+			transferErr = err
+			continue
+		}
+		if len(delivered) >= im.MaxAttachmentsPerMessage || file.Size > im.MaxAttachmentMessageBytes-totalBytes {
+			transferErr = fmt.Errorf("output attachments exceed conversation limits")
+			continue
+		}
+		path, err := h.stageCloudOutputAttachment(ctx, room, file)
+		paths[i] = path
+		if err != nil {
+			transferErr = err
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		delivered = append(delivered, uploads[i])
+		totalBytes += file.Size
+	}
+	return delivered, cleanup, transferErr
+}
+
+func (h *Handler) stageCloudOutputAttachment(ctx context.Context, room im.Room, file relay.File) (string, error) {
+	target, err := os.CreateTemp("", "csgclaw-relay-output-*")
+	if err != nil {
+		return "", err
+	}
+	for attempt := 0; attempt < 3; attempt++ {
+		if err = target.Truncate(0); err != nil {
+			break
+		}
+		if _, err = target.Seek(0, io.SeekStart); err != nil {
+			break
+		}
+		err = h.relayManager.DownloadAttachment(ctx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, file, target)
+		var remote *relay.HTTPError
+		if err == nil || ctx.Err() != nil || (errors.As(err, &remote) && remote.Status >= 400 && remote.Status < 500) {
+			break
+		}
+	}
+	return target.Name(), errors.Join(err, target.Close())
 }

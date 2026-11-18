@@ -353,10 +353,10 @@ export const ConversationComposer = memo(function ConversationComposer({
               : conversationComposerStyles["composer-toolbar"]
           }
         >
-          {!textOnly ? (
+          {!textOnly || onAddAttachments ? (
             <>
               <ComposerAddMenu
-                onOpenResourcePicker={resourcePicker.open}
+                onOpenResourcePicker={textOnly ? undefined : resourcePicker.open}
                 disabled={interactionDisabled || !onAddAttachments}
                 t={t}
                 onAddFiles={() => fileInputRef.current?.click()}

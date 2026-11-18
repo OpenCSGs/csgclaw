@@ -368,7 +368,7 @@ function StartTaskForm({
   }
 
   function addAttachments(files: File[]) {
-    if (busy || cloudTarget || !files.length) return;
+    if (busy || !files.length) return;
     const selection = selectAttachmentFiles(files, attachments);
     setAttachmentWarning(attachmentSelectionError(selection, t));
     if (!selection.files.length) return;
@@ -406,7 +406,17 @@ function StartTaskForm({
       setError(t("taskEntryMissingTarget"));
       return;
     }
-    if (!empty && selectedCloud && !confirmed && consent.request(() => void start(false, prompt, true))) return;
+    if (selectedCloud && selectedCloud.status !== "online") {
+      setError(t("cloudChatOffline"));
+      return;
+    }
+    if (
+      !empty &&
+      selectedCloud &&
+      !confirmed &&
+      consent.request(() => void start(false, prompt, true), attachments.length > 0)
+    )
+      return;
     inFlight.current = true;
     setBusy(true);
     setError("");
@@ -475,7 +485,7 @@ function StartTaskForm({
           attachments.map(({ file }) => [file.name, file.size, file.lastModified]),
         ]);
         if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: createUUID() };
-        const messageFiles = selectedCloud ? [] : attachments.map(({ file }) => file);
+        const messageFiles = attachments.map(({ file }) => file);
         const payload = {
           room_id: room.id,
           sender_id: readySidebar.currentUserID,
@@ -614,7 +624,7 @@ function StartTaskForm({
                 onDragOver={(event) => {
                   if (!dataTransferHasFiles(event.dataTransfer)) return;
                   event.preventDefault();
-                  event.dataTransfer.dropEffect = busy || cloudTarget ? "none" : "copy";
+                  event.dataTransfer.dropEffect = busy ? "none" : "copy";
                 }}
                 onDrop={(event) => {
                   const dropped = filesFromDataTransfer(event.dataTransfer);
@@ -709,11 +719,11 @@ function StartTaskForm({
                     onPaste={(event) => {
                       const pasted = filesFromDataTransfer(event.clipboardData);
                       const text = event.clipboardData.getData("text/plain");
-                      if (pasted.length && (!cloudTarget || !text)) {
+                      if (pasted.length) {
                         event.preventDefault();
                         addAttachments(pasted);
                       }
-                      if (text && !cloudTarget) {
+                      if (text && (!cloudTarget || pasted.length)) {
                         event.preventDefault();
                         promptMentions.pasteText(event.currentTarget, text);
                         syncSlash(event.currentTarget);
@@ -854,27 +864,27 @@ function StartTaskForm({
                   {t("composerTip")}
                 </span>
                 <div className={selectedCloud ? `${styles.actions} ${styles.cloudActions}` : styles.actions}>
+                  <input
+                    type="file"
+                    multiple
+                    ref={fileInput}
+                    className="sr-only"
+                    aria-label={t("addAttachment")}
+                    disabled={busy}
+                    onChange={(event) => {
+                      addAttachments(Array.from(event.currentTarget.files ?? []));
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <ComposerAddMenu
+                    onOpenResourcePicker={selectedCloud ? undefined : resourcePicker.open}
+                    disabled={busy}
+                    t={t}
+                    buttonClassName={`composer-add-button ${styles.addButton}`}
+                    onAddFiles={() => fileInput.current?.click()}
+                  />
                   {!selectedCloud ? (
                     <>
-                      <input
-                        type="file"
-                        multiple
-                        ref={fileInput}
-                        className="sr-only"
-                        aria-label={t("addAttachment")}
-                        disabled={busy}
-                        onChange={(event) => {
-                          addAttachments(Array.from(event.currentTarget.files ?? []));
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                      <ComposerAddMenu
-                        onOpenResourcePicker={resourcePicker.open}
-                        disabled={busy}
-                        t={t}
-                        buttonClassName={`composer-add-button ${styles.addButton}`}
-                        onAddFiles={() => fileInput.current?.click()}
-                      />
                       <TaskConfigurationToolbar
                         configuration={configuration}
                         onChange={async (value) => {

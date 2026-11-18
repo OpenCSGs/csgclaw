@@ -104,6 +104,38 @@ function Harness({
   );
 }
 
+describe("AgentDetailPane template publishing", () => {
+  it("shows community publish progress and restores the controls after a failure", async () => {
+    const user = userEvent.setup();
+    let finishPublish: (published: boolean) => void = () => {};
+    const onPublish = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishPublish = resolve;
+        }),
+    );
+    const { rerender } = render(<Harness onPublish={onPublish} />);
+    await user.click(screen.getByRole("button", { name: "agentMoreActions" }));
+    await user.click(screen.getByRole("menuitem", { name: "agentSaveAndPublishTemplate" }));
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.queryByRole("status", { name: "templatePublishPreparing" })).not.toBeInTheDocument();
+    await user.click(dialog.getByRole("button", { name: "agentSaveAndPublishTemplate" }));
+    expect(onPublish).toHaveBeenCalledOnce();
+
+    rerender(<Harness onPublish={onPublish} publishBusy />);
+    expect(dialog.getByRole("status", { name: /templatePublishPreparing|templatePublishUploading/ })).toBeVisible();
+    expect(dialog.getByRole("button", { name: "cancel" })).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog")).toBeVisible();
+
+    await act(async () => finishPublish(false));
+    rerender(<Harness onPublish={onPublish} publishError="Upload failed" />);
+    expect(dialog.getByRole("status", { name: "templatePublishFailed" })).toBeVisible();
+    expect(dialog.getByText("Upload failed")).toBeVisible();
+    expect(dialog.getByRole("button", { name: "agentSaveAndPublishTemplate" })).toBeEnabled();
+  });
+});
+
 describe("AgentDetailPane metadata editing", () => {
   it("returns to Profile when a routed tab is cleared without remounting", async () => {
     const user = userEvent.setup();

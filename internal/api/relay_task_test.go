@@ -1,16 +1,20 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,8 +32,8 @@ func newCloudTaskTestRelay(t *testing.T, ctx context.Context, agentID string, re
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents":
 			_ = json.NewEncoder(w).Encode(relay.Publication{Agent: relay.Agent{ID: agentID}})
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/agents/"+agentID:
-			_ = json.NewEncoder(w).Encode(relay.Agent{ID: agentID, Status: "online"})
-		case strings.HasPrefix(r.URL.Path, "/v1/responses"):
+			_ = json.NewEncoder(w).Encode(relay.Agent{ID: agentID, Status: "online", Capabilities: []string{relay.CapabilityInputFiles}})
+		case strings.HasPrefix(r.URL.Path, "/v1/responses") || strings.HasPrefix(r.URL.Path, "/v1/files"):
 			responses(w, r)
 		default:
 			http.NotFound(w, r)
@@ -129,6 +133,156 @@ func TestCloudTaskRecoversKnownResponseAfterRestart(t *testing.T) {
 	reloaded, err := im.LoadBootstrap(path)
 	if err != nil || len(reloaded.Rooms) != 1 || reloaded.Rooms[0].CloudAgent == nil || reloaded.Rooms[0].CloudAgent.ConnectionID != connectionID {
 		t.Fatal("cloud task reference did not survive persistence")
+	}
+}
+
+func TestCloudTaskRestoresAttachmentsWhenSavedResponseRequiresRetry(t *testing.T) {
+	for _, code := range []string{"agent_busy", "relay_branch_unsupported"} {
+		t.Run(code, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			var mu sync.Mutex
+			var requests []string
+			var uploadKey string
+			m, connectionID := newCloudTaskTestRelay(t, ctx, "agt_cloud", func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				defer mu.Unlock()
+				requests = append(requests, r.Method+" "+r.URL.Path)
+				switch r.URL.Path {
+				case "/v1/responses/resp_saved":
+					_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_saved", Model: "agt_cloud", Status: "failed", Error: &relay.ProtocolError{Code: code}})
+				case "/v1/files":
+					uploadKey = r.Header.Get("Idempotency-Key")
+					_ = json.NewEncoder(w).Encode(relay.File{ID: "file_saved", Status: "available"})
+				case "/v1/responses":
+					var req relay.CallRequest
+					if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+						t.Error(err)
+					}
+					want := `[{"content":[{"file_id":"file_saved","type":"input_file"}],"role":"user"}]`
+					if string(req.Input) != want {
+						t.Errorf("retry input = %s, want %s", req.Input, want)
+					}
+					if code == "relay_branch_unsupported" && req.PreviousResponseID != "" {
+						t.Errorf("context recovery retained parent %q", req.PreviousResponseID)
+					}
+					_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_retry", Model: "agt_cloud", Status: "completed"})
+				default:
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			})
+			room := im.Room{ID: "cloud-task", TaskSession: true, IsDirect: true, CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", ConnectionID: connectionID, UserID: "relay-user"}}
+			svc := newPersistedCloudTaskTestService(t, filepath.Join(t.TempDir(), "state.json"), room)
+			message, err := svc.CreateMessage(im.CreateMessageRequest{
+				RoomID: room.ID, SenderID: im.AdminUserID,
+				Metadata:    map[string]any{cloudTaskResponseKey: "resp_saved"},
+				Attachments: []im.MessageAttachmentUpload{{Name: "input.txt", Data: []byte("original input")}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := &Handler{im: svc, relayManager: m}
+			result, err := h.awaitCloudTask(ctx, room, message, "resp_previous")
+			if err != nil || result.ID != "resp_retry" {
+				t.Fatalf("recovery got %+v, %v", result, err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			expectedFileKey := fmt.Sprintf("input:%x", sha256.Sum256([]byte(message.ID+"\x00"+message.Attachments[0].ID)))
+			if uploadKey != expectedFileKey {
+				t.Errorf("upload key = %q, want %q", uploadKey, expectedFileKey)
+			}
+			want := []string{"GET /v1/responses/resp_saved", "POST /v1/files", "POST /v1/responses"}
+			if !slices.Equal(requests, want) {
+				t.Fatalf("requests = %v, want %v", requests, want)
+			}
+		})
+	}
+}
+
+func TestCloudTaskInvalidOutputAttachmentsPreserveReplyAndContinue(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var calls atomic.Int32
+	const report = "report contents"
+	m, connectionID := newCloudTaskTestRelay(t, ctx, "agt_cloud", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/files/") {
+			switch r.URL.Path {
+			case "/v1/files/file_valid/content", "/v1/files/file_later/content":
+				_, _ = w.Write([]byte(report))
+			case "/v1/files/file_missing/content":
+				w.WriteHeader(http.StatusNotFound)
+			default:
+				t.Errorf("unexpected file request: %s", r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+			return
+		}
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/responses" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		call := calls.Add(1)
+		content := []relay.Content{{Type: "output_text", Text: "response text"}}
+		if call == 1 {
+			for i := range im.MaxAttachmentsPerMessage + 1 {
+				content = append(content, relay.Content{Type: "output_file", File: &relay.File{ID: fmt.Sprintf("file_%d", i), Name: "report.txt", Size: 0}})
+			}
+			content = append(content, relay.Content{Type: "output_file", File: &relay.File{
+				ID: "file_valid", Name: "report.txt", Size: int64(len(report)), SHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(report))),
+			}})
+		} else {
+			var req relay.CallRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PreviousResponseID != "resp_1" {
+				t.Errorf("follow-up lost the session tip: %+v, %v", req, err)
+			}
+			for _, id := range []string{"file_valid", "file_missing", "file_later"} {
+				content = append(content, relay.Content{Type: "output_file", File: &relay.File{
+					ID: id, Name: id + ".txt", Size: int64(len(report)), SHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(report))),
+				}})
+			}
+		}
+		_ = json.NewEncoder(w).Encode(relay.Response{
+			ID: fmt.Sprintf("resp_%d", call), Model: "agt_cloud", Status: "completed",
+			Output: []relay.Output{{Content: content}},
+		})
+	})
+	room := im.Room{ID: "cloud-task", TaskSession: true, IsDirect: true, Locale: "en", CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", ConnectionID: connectionID, UserID: "relay-user"}}
+	svc := newPersistedCloudTaskTestService(t, filepath.Join(t.TempDir(), "state.json"), room)
+	for _, content := range []string{"generate reports", "follow up"} {
+		if _, err := svc.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: im.AdminUserID, Content: content}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &Handler{im: svc, relayManager: m, relayContext: ctx}
+	h.runCloudTask(room.ID)
+	saved, _ := svc.Room(room.ID)
+	if len(saved.Messages) != 4 {
+		t.Fatalf("got %d messages, want two requests and two replies", len(saved.Messages))
+	}
+	reply := saved.Messages[2]
+	want := "response text\n\n" + cloudTaskFailureText(room.Locale, "file_delivery_partial")
+	if reply.Content != want || len(reply.Attachments) != 1 || reply.Metadata["relay_error_code"] != "file_delivery_partial" {
+		t.Fatalf("unexpected fallback reply: %+v", reply)
+	}
+	followUp := saved.Messages[3]
+	wantPartial := "response text\n\n" + cloudTaskFailureText(room.Locale, "file_delivery_partial")
+	if followUp.Content != wantPartial || followUp.Metadata["relay_error_code"] != "file_delivery_partial" ||
+		followUp.Metadata["relay_response_id"] != "resp_2" || len(followUp.Attachments) != 2 {
+		t.Fatalf("follow-up attachments were not partially delivered: %+v", followUp)
+	}
+	for i, name := range []string{"file_valid.txt", "file_later.txt"} {
+		attachment := followUp.Attachments[i]
+		file, err := svc.RoomAttachmentFile(room.ID, attachment.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(file.Path)
+		if err != nil || attachment.Name != name || string(data) != report {
+			t.Fatalf("delivered attachment %s = %q, %v", attachment.Name, data, err)
+		}
 	}
 }
 
@@ -656,6 +810,28 @@ func TestCloudTaskRecoveryInputSkipsOversizedTurns(t *testing.T) {
 	}
 }
 
+func TestCloudTaskRecoveryInputFlagsUnavailableHistoricalAttachments(t *testing.T) {
+	current := im.Message{ID: "current", SenderID: im.AdminUserID, Content: "Expand the second section."}
+	prior := im.Message{ID: "prior", SenderID: im.AdminUserID, Content: strings.Repeat("x", 16<<10)}
+	reply := im.Message{SenderID: "cloud", ClientMessageID: "relay-reply:prior", Metadata: map[string]any{"relay_response_id": "resp_prior"}}
+	room := im.Room{CreatedBy: im.AdminUserID, CloudAgent: &apitypes.CloudAgentReference{UserID: "cloud"},
+		Messages: []im.Message{prior, reply, current}}
+	for _, index := range []int{0, 1} {
+		room.Messages[index].Attachments = []im.MessageAttachment{{Name: "report.docx"}}
+		got := cloudTaskRecoveryInput(room, current)
+		if !strings.Contains(got, "Attachments from earlier turns are unavailable") ||
+			!strings.Contains(got, "ask the user to attach it again") || !strings.HasSuffix(got, current.Content) {
+			t.Fatalf("history attachment warning missing for message %d: %q", index, got)
+		}
+		room.Messages[index].Attachments = nil
+	}
+	current.Attachments = []im.MessageAttachment{{Name: "new.docx"}}
+	room.Messages[2] = current
+	if got := cloudTaskRecoveryInput(room, current); got != current.Content {
+		t.Fatalf("current attachments unexpectedly triggered the warning: %q", got)
+	}
+}
+
 func TestCloudTaskShutdownDoesNotConsumePendingMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -749,4 +925,147 @@ func TestCloudTaskAcceptsRegisteredCommunityAgentWithoutLocalPublication(t *test
 			t.Fatalf("lookups=%d submissions=%d error=%v", delayedLookups.Load(), submissions.Load(), err)
 		}
 	})
+}
+
+func TestCloudAttachmentPreflightDoesNotBlockOtherRooms(t *testing.T) {
+	h, svc, _, _ := newAgentSessionTestHandler(t, nil, &fakeSessionEngine{}, "")
+	entered := make(chan struct{})
+	var slow atomic.Bool
+	release := make(chan struct{})
+	defer close(release)
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents":
+			writeJSON(w, http.StatusOK, relay.Publication{Agent: relay.Agent{ID: "agt_preflight"}})
+		case r.URL.Path == "/v1/agents/agt_preflight":
+			if !slow.Load() {
+				writeJSON(w, http.StatusOK, relay.Agent{ID: "agt_preflight", Status: "online"})
+				return
+			}
+			select {
+			case <-entered:
+			default:
+				close(entered)
+			}
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+			writeJSON(w, http.StatusOK, relay.Agent{ID: "agt_preflight", Capabilities: []string{relay.CapabilityInputFiles}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer remote.Close()
+	manager, err := relay.NewManager(t.Context(), t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if err := manager.Configure(remote.URL, "token"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Publish(t.Context(), relay.PublishRequest{SourceAgentID: "local", Visibility: "public"}); err != nil {
+		t.Fatal(err)
+	}
+	// Keep background cloud workers stopped so this test isolates message admission.
+	stopped, stop := context.WithCancel(t.Context())
+	stop()
+	h.relayContext, h.relayManager = stopped, manager
+	user, _, err := svc.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "preflight-cloud", Name: "PreflightCloud", Role: "cloud", SkipDirectRoom: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rooms []im.Room
+	for _, name := range []string{"attachment", "text"} {
+		room, err := svc.CreateRoom(im.CreateRoomRequest{Title: name, Type: apitypes.RoomTypeFree, IsDirect: true,
+			TaskSession: true, CreatorID: im.AdminUserID, MemberIDs: []string{user.ID},
+			CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_preflight", ConnectionID: manager.Catalog(t.Context())[0].ConnectionID, UserID: user.ID}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rooms = append(rooms, room)
+	}
+	send := func(roomID string, attachment bool) *httptest.ResponseRecorder {
+		body := fmt.Sprintf(`{"room_id":%q,"sender_id":%q,"content":"test","client_message_id":%q}`, roomID, im.AdminUserID, roomID)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(body))
+		if attachment {
+			var buffer bytes.Buffer
+			form := multipart.NewWriter(&buffer)
+			_ = form.WriteField("payload", body)
+			file, _ := form.CreateFormFile("files", "input.txt")
+			_, _ = file.Write([]byte("test attachment"))
+			_ = form.Close()
+			req = httptest.NewRequest(http.MethodPost, "/api/v1/messages", &buffer)
+			req.Header.Set("Content-Type", form.FormDataContentType())
+		}
+		w := httptest.NewRecorder()
+		h.handleCreateMessage(w, req)
+		return w
+	}
+	slow.Store(true)
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() { done <- send(rooms[0].ID, true) }()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("preflight did not start")
+	}
+	textDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() { textDone <- send(rooms[1].ID, false) }()
+	select {
+	case w := <-textDone:
+		if w.Code != http.StatusCreated {
+			t.Fatalf("text send: %d %s", w.Code, w.Body.String())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("text send blocked behind another room's capability lookup")
+	}
+	// The preflight must also finish on its own bounded deadline.
+	select {
+	case w := <-done:
+		if w.Code != http.StatusConflict {
+			t.Fatalf("preflight timeout: %d %s", w.Code, w.Body.String())
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("preflight did not respect its deadline")
+	}
+}
+
+func TestCloudAttachmentReplayAfterRestartUsesSavedFileReferences(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var submissions atomic.Int32
+	manager, connectionID := newCloudTaskTestRelay(t, ctx, "agt_replay", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/responses" {
+			t.Errorf("recovery attempted an upload: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		submissions.Add(1)
+		var request relay.CallRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || !strings.Contains(string(request.Input), "file_saved") {
+			t.Errorf("saved attachment missing: %s, %v", request.Input, err)
+		}
+		if r.Header.Get("Idempotency-Key") != "task:replay-room:pending" {
+			t.Error("replay key changed")
+		}
+		writeJSON(w, http.StatusOK, relay.Response{ID: "resp_saved", Model: "agt_replay", Status: "completed"})
+	})
+	room := im.Room{ID: "replay-room", CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_replay", ConnectionID: connectionID, UserID: "cloud"},
+		Messages: []im.Message{{ID: "pending", SenderID: im.AdminUserID, Content: "read file", CreatedAt: time.Now(),
+			Attachments: []im.MessageAttachment{{ID: "local_input", Name: "input.txt"}},
+			Metadata:    map[string]any{cloudTaskInputFilesKey: []relay.File{{ID: "file_saved"}}}}}}
+	path := filepath.Join(t.TempDir(), "state.json")
+	_ = newPersistedCloudTaskTestService(t, path, room)
+	svc, err := im.NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, _ := svc.Room(room.ID)
+	h := &Handler{im: svc, relayManager: manager}
+	result, err := h.awaitCloudTask(ctx, saved, saved.Messages[0], "")
+	if err != nil || result.ID != "resp_saved" || submissions.Load() != 1 {
+		t.Fatalf("saved attachment replay = %+v, %v, submissions=%d", result, err, submissions.Load())
+	}
 }
