@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"csgclaw/internal/activity"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/codexmodel"
 	"csgclaw/internal/identity"
 	"csgclaw/internal/opencsgmcp"
@@ -529,19 +530,27 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 }
 
 func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntime.State, error) {
+	return r.start(ctx, h, nil)
+}
+
+func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, model *contract.TurnModel) (agentruntime.State, error) {
 	var sessionRestoreErr error
 	if current, err := r.Info(ctx, h); err == nil && current.State == agentruntime.StateRunning {
 		if _, restoreErr := r.sessionManager().Session(SessionHandle{RuntimeID: strings.TrimSpace(h.RuntimeID)}); restoreErr == nil {
-			return current.State, nil
+			// Session can hydrate a new process from disk. Check its actual catalog
+			// before granting the turn a shared lease on the process.
+			if live := r.liveAppServer(h.RuntimeID); live == nil || live.supportsTurnModel(model) {
+				return current.State, nil
+			}
 		} else {
 			sessionRestoreErr = restoreErr
 			slog.Warn("restore running codex session failed; repairing with a fresh session",
 				"runtime_id", strings.TrimSpace(h.RuntimeID),
 				"error", restoreErr,
 			)
-			if _, stopErr := r.Stop(ctx, h); stopErr != nil && !errors.Is(stopErr, sandbox.ErrNotFound) && !errors.Is(stopErr, os.ErrNotExist) {
-				return agentruntime.StateUnknown, fmt.Errorf("prepare codex session repair after restore failed (%v): %w", restoreErr, stopErr)
-			}
+		}
+		if _, stopErr := r.Stop(ctx, h); stopErr != nil && !errors.Is(stopErr, sandbox.ErrNotFound) && !errors.Is(stopErr, os.ErrNotExist) {
+			return agentruntime.StateUnknown, fmt.Errorf("stop Codex App Server before restarting: %w", errors.Join(sessionRestoreErr, stopErr))
 		}
 	}
 
@@ -567,11 +576,16 @@ func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntim
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return agentruntime.StateUnknown, fmt.Errorf("read persisted codex conversations: %w", readErr)
 	}
+	var extra []codexmodel.Profile
+	if model != nil && model.ModelID != "" && model.Metadata.Normalized().ContextSource != "default" {
+		extra = []codexmodel.Profile{{Provider: agentRef.Profile.Provider, ModelID: model.ModelID, Metadata: model.Metadata}}
+	}
 	_, err = r.ensureSession(ctx, SessionSpec{
 		RuntimeID:                   strings.TrimSpace(h.RuntimeID),
 		AgentID:                     strings.TrimSpace(agentRef.ID),
 		AgentName:                   strings.TrimSpace(agentRef.Name),
 		Profile:                     agentRef.Profile,
+		ModelCatalog:                extra,
 		ConversationSessions:        conversationSessions,
 		FilePublishingConversations: filePublishingConversations,
 	}, false)
@@ -797,6 +811,13 @@ func (r *Runtime) sessionManager() Manager {
 	return r.deps.Manager
 }
 
+func (r *Runtime) liveAppServer(runtimeID string) *liveSession {
+	if manager, ok := r.currentSessionManager().(*appServerManager); ok {
+		return manager.liveSession(runtimeID)
+	}
+	return nil
+}
+
 func (r *Runtime) currentSessionManager() Manager {
 	r.managerMu.Lock()
 	defer r.managerMu.Unlock()
@@ -885,7 +906,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if err := r.seedCodexHomeAuth(spec.CodexHomeDir, spec.Profile); err != nil {
 		return nil, err
 	}
-	spec.ModelCatalog = r.sessionModelCatalog(spec.AgentID, spec.Profile)
+	spec.ModelCatalog = r.sessionModelCatalog(spec.AgentID, spec.Profile, spec.ModelCatalog...)
 	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers, spec.ModelCatalog...); err != nil {
 		return nil, err
 	}

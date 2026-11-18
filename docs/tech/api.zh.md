@@ -1576,11 +1576,11 @@ Codex Agent 支持可选的字符串字段 `model` 和 `reasoning_effort`，用�
 }
 ```
 
-`model` 使用 Agent 当前 provider 提供的模型 ID。字段省略或为空时使用 Agent 默认 Profile。这些参数只作用于当前 turn，保留会话历史，无需修改 Agent 配置或重启 App Server。后续请求继续使用相同选择时，需要再次传入参数。其他 runtime 收到非空模型参数时返回 `400 invalid_request`。
+`model` 使用 Agent 当前 provider 提供的模型 ID。字段省略或为空时使用 Agent 默认 Profile。这些参数只作用于本轮对话。后续请求继续使用相同选择时，需要再次传入参数。其他 runtime 收到非空模型参数时返回 `400 invalid_request`。
 
 `reasoning_effort` 接受 `auto`、`none`、`minimal`、`low`、`medium`、`high`、`xhigh` 和 `max`；`off` 是 `none` 的别名。所选 provider/model 需要支持请求的级别。`auto` 使用模型自身的默认推理级别。两个字段分别使用各自的 Profile 默认值，例如只传入 `model` 时，推理级别仍来自 Profile。两个字段也支持 `stream: true`。
 
-请求中的 `model` 可以指定当前 provider 提供的任意聊天模型，包括配置列表之外的模型。如果更改了 Codex 已加载模型的上下文长度，需要重新加载 Runtime 才能使用新值。
+请求中的 `model` 可以指定当前 provider 提供的任意聊天模型，包括配置列表之外的模型。指定图片或视频生成模型时，接口返回 HTTP 400，错误参数为 `model`。如果所选模型需要新的上下文窗口，CSGClaw 会等待该 Agent 正在处理的对话轮次结束，自动重新加载 Codex App Server，并保留已有会话的历史记录。
 
 请求可以通过可选的 `extra` 和 `extra_type` 为当前用户消息附加额外的纯文本上下文：
 

@@ -304,11 +304,15 @@ func TestTurnModelIsScopedToNativeThreadAndTurn(t *testing.T) {
 	}
 }
 
-func TestTurnModelChecksMetadataForLoadedModels(t *testing.T) {
+func TestTurnModelRequiresCatalogForSpecificContextWindows(t *testing.T) {
 	live := &liveSession{spec: SessionSpec{Profile: agentruntime.Profile{ModelID: "model", ModelMetadata: modelcap.Resolved{ContextWindow: 32000}}}}
-	selection := contract.TurnModel{ModelID: "unlisted", Metadata: modelcap.Resolved{ContextWindow: 64000}}
+	selection := contract.TurnModel{ModelID: "unlisted", Metadata: modelcap.Resolved{}.Normalized()}
 	if got, err := live.resolveTurnModel(&selection); err != nil || got != selection {
 		t.Fatalf("unlisted model = %+v, error = %v", got, err)
+	}
+	selection.Metadata = modelcap.Resolved{ContextWindow: 64000, ContextSource: "user"}
+	if _, err := live.resolveTurnModel(&selection); err == nil {
+		t.Fatal("accepted an unlisted model with an unapplied context window")
 	}
 	selection.ModelID = "model"
 	if _, err := live.resolveTurnModel(&selection); err == nil {

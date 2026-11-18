@@ -28,7 +28,7 @@ func (c *configuredConversation) Compact(ctx context.Context, req contract.Compa
 	if err != nil {
 		return contract.CompactResult{}, err
 	}
-	release, err := c.runtime.prepareConversation(ctx, agentruntime.Handle{RuntimeID: c.runtimeID}, state, desired, scoped != nil || req.RoomConfiguration == nil)
+	release, err := c.runtime.prepareConversation(ctx, agentruntime.Handle{RuntimeID: c.runtimeID}, state, desired, scoped != nil || req.RoomConfiguration == nil, nil)
 	if err != nil {
 		return contract.CompactResult{}, err
 	}

@@ -5,8 +5,10 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/modelcap"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/conversationconfig"
 	skill "csgclaw/internal/skill/state"
 	"csgclaw/internal/taskconfig"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -163,6 +165,40 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "agent-one", "task-sessions")); !os.IsNotExist(err) {
 		t.Fatal("created another conversation store")
+	}
+}
+
+func TestContextWindowReloadWaitsForActiveTurns(t *testing.T) {
+	withAppServerHelperCommand(t, "room-configuration")
+	spec := testAppServerSessionSpec(t.TempDir())
+	manager := newAppServerManager(testAppServerManagerDeps())
+	session, err := manager.Start(context.Background(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle := SessionHandle{RuntimeID: spec.RuntimeID}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), handle) })
+	rt := New(Dependencies{Manager: manager})
+	h := agentruntime.Handle{RuntimeID: spec.RuntimeID}
+	state := rt.conversationState(h.RuntimeID)
+	settings := conversationconfig.Settings{Profile: spec.Profile}
+	state.Set(settings)
+	release, err := rt.prepareConversation(context.Background(), h, state, settings, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	updated := contract.TurnModel{ModelID: "added-model", Metadata: modelcap.Resolved{ContextWindow: 32000, ContextSource: "user"}}
+	if done, err := rt.prepareConversation(ctx, h, state, settings, true, &updated); err == nil {
+		done()
+		t.Fatal("granted a conflicting context window during an active turn")
+	} else if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("waiting for a catalog reload: %v", err)
+	}
+	if live, err := manager.LiveSession(handle); err != nil || live.ProcessID != session.ProcessID {
+		t.Fatalf("active App Server changed: session=%+v error=%v", live, err)
 	}
 }
 

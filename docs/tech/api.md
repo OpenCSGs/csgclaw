@@ -1617,11 +1617,11 @@ For a Codex agent, optional string fields `model` and `reasoning_effort` select 
 }
 ```
 
-`model` is a model ID served by the agent's configured provider. Omitted or empty fields use the agent's default profile. These options apply to this turn, preserve the session history, and do not change the agent configuration or require restarting App Server. Send the options again on later requests to keep using them. Non-empty options on other runtimes return `400 invalid_request`.
+`model` is a model ID served by the agent's configured provider. Omitted or empty fields use the agent's default profile. These options apply to the current turn. Send the options again on later requests to keep using them. Non-empty options on other runtimes return `400 invalid_request`.
 
 `reasoning_effort` accepts `auto`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; `off` is an alias for `none`. The selected provider/model must support the requested level. `auto` lets the model choose its reasoning default. Each omitted field independently inherits its Profile value, including when the other field is specified. Both fields also work with `stream: true`.
 
-An explicit `model` can name any chat model served by the configured provider, including one absent from its configured model list. If the context window changes for a model already loaded by Codex, reload the Runtime to use the updated value.
+An explicit `model` can name any chat model served by the configured provider, including one absent from its configured model list. Image and video generation models return HTTP 400 with `param: model`. When a selected model requires a new context window, CSGClaw waits for the agent's active turns to finish and reloads the Codex App Server automatically. Existing sessions retain their conversation history.
 
 The request may attach supplemental text to the current user message with the
 optional `extra` and `extra_type` fields:

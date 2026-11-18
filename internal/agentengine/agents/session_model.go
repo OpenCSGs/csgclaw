@@ -26,10 +26,8 @@ func (s *ModelConfiguration) SessionModelProfiles(agentID string) ([]AgentProfil
 		return nil, err
 	}
 	profiles := []AgentProfile{profile}
-	images := imageModels(providerID, provider.Models, provider.ImageModels)
-	videos := videoModels(providerID, provider.Models, provider.VideoModels)
 	for _, model := range prioritizeOpenCSGAutoModel(providerID, provider.BaseURL, provider.Models) {
-		if model == profile.ModelID || containsModelID(images, model) || containsModelID(videos, model) {
+		if model == profile.ModelID || isMediaGenerationModel(provider, model) {
 			continue
 		}
 		selected := profile
@@ -45,11 +43,14 @@ func (s *ModelConfiguration) SessionModelProfiles(agentID string) ([]AgentProfil
 func (s *ModelConfiguration) ResolvedSessionProfile(agentID, model, reasoningEffort string) (AgentProfile, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	selected, providerID, _, err := s.sessionModelProviderLocked(agentID)
+	selected, providerID, provider, err := s.sessionModelProviderLocked(agentID)
 	if err != nil {
 		return AgentProfile{}, err
 	}
 	model = strings.TrimSpace(model)
+	if model != "" && isMediaGenerationModel(provider, model) {
+		return AgentProfile{}, &SessionModelError{Field: "model", Message: fmt.Sprintf("model %q is a media generation model and cannot be used for chat", model)}
+	}
 	if model != "" && model != selected.ModelID {
 		selected.ModelID = model
 		selected.ModelProviderID = providerID

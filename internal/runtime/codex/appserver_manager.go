@@ -409,12 +409,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	spec := roomThreadSpec(ctx, live.spec)
-	model := req.Model
-	if _, scoped := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); scoped && model == nil {
-		selected := turnModelFromProfile(spec.Profile)
-		model = &selected
-	}
-	selectedModel, err := live.resolveTurnModel(model)
+	selectedModel, err := live.resolveTurnModel(req.Model)
 	if err != nil {
 		return PromptResponse{}, err
 	}
@@ -426,7 +421,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	diagnostics.From(ctx).Capture("runtime.turn_model", selectedModel)
 	diagnostics.From(ctx).RuntimeInfo("codex", selectedModel.ModelID)
 	live.appClient.logInfoContext(ctx, "model request configuration", "model", selectedModel.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
-	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, model != nil)
+	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, req.Model != nil)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
@@ -895,6 +890,9 @@ func (m *appServerManager) startThread(ctx context.Context, live *liveSession, p
 
 func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, threadID string) (string, error) {
 	params := roomThreadParams(ctx, appServerThreadResumeParams(roomThreadSpec(ctx, live.spec), threadID))
+	// Resume applies the current profile, so read the persisted selection while
+	// the thread is still unloaded. A thread with no saved turns may be unreadable.
+	previous, havePrevious := live.persistedThreadModel(ctx, threadID)
 	raw, err := live.appClient.request(ctx, "thread/resume", params)
 	if err != nil {
 		return "", err
@@ -903,8 +901,10 @@ func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, 
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(resumed) == "" {
-		return threadID, nil
+	if havePrevious && resumed == threadID {
+		live.mu.Lock()
+		live.rememberThreadModel(threadID, previous)
+		live.mu.Unlock()
 	}
 	return resumed, nil
 }
@@ -1840,10 +1840,7 @@ func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServ
 		accepted := waiter.accepted
 		waiter.mu.RUnlock()
 		if accepted {
-			if s.threadModels == nil {
-				s.threadModels = make(map[string]contract.TurnModel)
-			}
-			s.threadModels[threadID] = waiter.model
+			s.rememberThreadModel(threadID, waiter.model)
 		} else if waiter.previousContextUsage != nil {
 			// Revert a pending model selection while retaining same-model usage
 			// updates, including a compaction completed during context recovery.
