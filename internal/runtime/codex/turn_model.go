@@ -1,7 +1,10 @@
 package codex
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"csgclaw/internal/agentengine/contract"
@@ -18,12 +21,12 @@ func turnModelFromProfile(profile agentruntime.Profile) contract.TurnModel {
 	}
 }
 
-func (r *Runtime) sessionModelCatalog(agentID string, profile agentruntime.Profile) []codexmodel.Profile {
+func (r *Runtime) sessionModelCatalog(agentID string, profile agentruntime.Profile, additional ...codexmodel.Profile) []codexmodel.Profile {
 	var catalog []codexmodel.Profile
 	if r.deps.ModelCatalog != nil {
 		catalog = r.deps.ModelCatalog(agentID)
 	}
-	return mergedModelCatalog(profile, catalog)
+	return mergedModelCatalog(profile, append(slices.Clip(catalog), additional...))
 }
 
 func mergedModelCatalog(profile agentruntime.Profile, catalog []codexmodel.Profile) []codexmodel.Profile {
@@ -49,23 +52,30 @@ func mergedModelCatalog(profile agentruntime.Profile, catalog []codexmodel.Profi
 }
 
 func (s *liveSession) resolveTurnModel(override *contract.TurnModel) (contract.TurnModel, error) {
-	if override == nil {
+	if override == nil || strings.TrimSpace(override.ModelID) == "" {
 		return turnModelFromProfile(s.spec.Profile), nil
 	}
 	selected := *override
 	selected.ModelID = strings.TrimSpace(selected.ModelID)
 	selected.ReasoningEffort = config.NormalizeReasoningEffort(selected.ReasoningEffort)
 	selected.Metadata = selected.Metadata.Normalized()
-	for _, model := range mergedModelCatalog(s.spec.Profile, s.spec.ModelCatalog) {
-		if model.ModelID != selected.ModelID {
-			continue
-		}
-		if model.Metadata.Normalized().ContextWindow != selected.Metadata.ContextWindow {
-			return contract.TurnModel{}, fmt.Errorf("model %q context metadata differs from the running Codex catalog", selected.ModelID)
-		}
-		return selected, nil
+	if !s.supportsTurnModel(&selected) {
+		return contract.TurnModel{}, fmt.Errorf("running Codex catalog does not have the requested context window for model %q", selected.ModelID)
 	}
-	return contract.TurnModel{}, fmt.Errorf("model %q is unavailable in the running Codex catalog", selected.ModelID)
+	return selected, nil
+}
+
+// An unlisted model can use the native fallback until a specific context window
+// is known. Explicit windows take effect through the App Server's startup catalog.
+func (s *liveSession) supportsTurnModel(model *contract.TurnModel) bool {
+	if model == nil || model.ModelID == "" {
+		return true
+	}
+	metadata := model.Metadata.Normalized()
+	if loaded, ok := s.loadedTurnModel(model.ModelID); ok {
+		return loaded.Metadata.ContextWindow == metadata.ContextWindow
+	}
+	return metadata.ContextSource == "default"
 }
 
 // TurnModel resolves a model request belonging to the active native conversation.
@@ -106,14 +116,14 @@ func (r *Runtime) TurnModel(agentID, threadID, turnID, requestedModel string) (c
 	}
 	defer live.mu.Unlock()
 	if waiter.compacting && requestedModel != "" && requestedModel != waiter.model.ModelID {
+		// Native compaction can use the last accepted model before starting
+		// inference with the current turn's selection.
+		if previous, ok := live.threadModels[threadID]; ok && previous.ModelID == requestedModel {
+			return previous, true, nil
+		}
 		loaded, available := live.loadedTurnModel(requestedModel)
 		if !available {
 			return contract.TurnModel{}, false, fmt.Errorf("compaction model %q is unavailable in the running Codex catalog", requestedModel)
-		}
-		// Native compaction can use the last accepted model before starting
-		// inference with the current turn's selection.
-		if previous, ok := live.threadModels[threadID]; ok && previous.ModelID == loaded.ModelID {
-			loaded.ReasoningEffort = previous.ReasoningEffort
 		}
 		return loaded, true, nil
 	}
@@ -135,6 +145,33 @@ func (s *liveSession) loadedTurnModel(modelID string) (contract.TurnModel, bool)
 		return selected, true
 	}
 	return contract.TurnModel{}, false
+}
+
+func (s *liveSession) persistedThreadModel(ctx context.Context, threadID string) (contract.TurnModel, bool) {
+	raw, err := s.appClient.request(ctx, "thread/read", map[string]any{"threadId": threadID, "includeTurns": false})
+	var result struct {
+		Thread struct {
+			ID              string `json:"id"`
+			Model           string `json:"model"`
+			ReasoningEffort string `json:"reasoningEffort"`
+		} `json:"thread"`
+	}
+	if err != nil || json.Unmarshal(raw, &result) != nil || result.Thread.ID != threadID || result.Thread.Model == "" {
+		return contract.TurnModel{}, false
+	}
+	model, _ := s.loadedTurnModel(result.Thread.Model)
+	model.ModelID = result.Thread.Model
+	model.ReasoningEffort = config.NormalizeReasoningEffort(result.Thread.ReasoningEffort)
+	model.Metadata = model.Metadata.Normalized()
+	return model, true
+}
+
+// The caller holds s.mu.
+func (s *liveSession) rememberThreadModel(threadID string, model contract.TurnModel) {
+	if s.threadModels == nil {
+		s.threadModels = make(map[string]contract.TurnModel)
+	}
+	s.threadModels[threadID] = model
 }
 
 func (s *liveSession) setTurnCompacting(threadID, turnID, method string) {

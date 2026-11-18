@@ -72,8 +72,12 @@ func (c *configuredConversation) Run(ctx context.Context, request contract.TurnR
 	if err != nil {
 		return resultFromContext(ctx, err)
 	}
+	if scoped != nil && request.Model == nil {
+		selected := turnModelFromProfile(scoped.Profile)
+		request.Model = &selected
+	}
 	finishPrepare := diagnostics.Measure(ctx, "runtime.conversation.prepare", "runtime")
-	release, err := r.prepareConversation(ctx, h, state, desired, scoped != nil || request.RoomConfiguration == nil)
+	release, err := r.prepareConversation(ctx, h, state, desired, scoped != nil || request.RoomConfiguration == nil, request.Model)
 	finishPrepare()
 	if err != nil {
 		return resultFromContext(ctx, err)
@@ -97,19 +101,21 @@ func (c *configuredConversation) Reset(ctx context.Context, key contract.Convers
 	return c.RuntimeConversation.Reset(ctx, key)
 }
 
-func (r *Runtime) prepareConversation(ctx context.Context, h agentruntime.Handle, state *codexConversationState, desired conversationconfig.Settings, shared bool) (func(), error) {
+func (r *Runtime) prepareConversation(ctx context.Context, h agentruntime.Handle, state *codexConversationState, desired conversationconfig.Settings, shared bool, model *contract.TurnModel) (func(), error) {
 	if err := state.prepare.Acquire(ctx, 1); err != nil {
 		return nil, err
 	}
 	defer state.prepare.Release(1)
+	if model == nil {
+		selected := turnModelFromProfile(desired.Profile)
+		model = &selected
+	}
 	if shared && state.Matches(desired) {
-		if manager, ok := r.currentSessionManager().(*appServerManager); ok {
-			if live := manager.liveSession(h.RuntimeID); live != nil && live.session != nil && processAlive(live.session.ProcessID) {
-				if err := state.turns.Acquire(ctx, 1); err != nil {
-					return nil, err
-				}
-				return func() { state.turns.Release(1) }, nil
+		if live := r.liveAppServer(h.RuntimeID); live != nil && processAlive(live.session.ProcessID) && live.supportsTurnModel(model) {
+			if err := state.turns.Acquire(ctx, 1); err != nil {
+				return nil, err
 			}
+			return func() { state.turns.Release(1) }, nil
 		}
 	}
 	if err := state.turns.Acquire(ctx, conversationPermits); err != nil {
@@ -129,7 +135,7 @@ func (r *Runtime) prepareConversation(ctx context.Context, h agentruntime.Handle
 		state.Set(desired)
 	}
 	finishStart := diagnostics.Measure(ctx, "runtime.conversation.start", "runtime")
-	_, err := r.Start(ctx, h)
+	_, err := r.start(ctx, h, model)
 	finishStart()
 	if err != nil {
 		state.turns.Release(conversationPermits)

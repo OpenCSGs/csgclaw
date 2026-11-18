@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -28,20 +29,82 @@ import (
 	"csgclaw/internal/runtime/codex"
 )
 
+type modelSelection struct{ model, effort string }
+
 func TestNativeSessionModelOptionsThroughBridge(t *testing.T) {
-	runNativeSessionModelBridge(t, 100, false)
+	b := newNativeSessionModelBridge(t, "low")
+	initial := b.pid()
+	override, profile := modelSelection{"model-b", "high"}, modelSelection{"model-a", "low"}
+	b.turn("a", override, 100, override)
+	b.turn("b", modelSelection{}, 100, profile)
+	b.turn("a", modelSelection{}, 100, profile)
+	b.turn("b", modelSelection{}, 100, profile)
+	if b.pid() != initial {
+		t.Fatal("selecting an unlisted model restarted the App Server")
+	}
 }
 
 func TestNativeSessionModelCompactionThroughBridge(t *testing.T) {
-	for _, explicitModel := range []bool{true, false} {
-		name := "profile_default"
-		if explicitModel {
-			name = "explicit_model"
-		}
-		t.Run(name, func(t *testing.T) {
-			runNativeSessionModelBridge(t, 40000, explicitModel)
+	for _, tc := range []struct {
+		name    string
+		next    modelSelection
+		restart bool
+	}{
+		{name: "profile_default"},
+		{name: "explicit_model", next: modelSelection{model: "model-a"}},
+		{name: "after_restart", restart: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := newNativeSessionModelBridge(t, "none")
+			override, profile := modelSelection{"model-b", "high"}, modelSelection{"model-a", "none"}
+			b.turn("a", override, 40000, override)
+			b.turn("b", modelSelection{}, 100, profile)
+			if tc.restart {
+				initial := b.pid()
+				if _, err := b.controller.Stop(b.ctx, b.agentID); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := b.controller.Start(b.ctx, b.agentID); err != nil {
+					t.Fatal(err)
+				}
+				if b.pid() == initial {
+					t.Fatal("App Server did not restart")
+				}
+			}
+			pid := b.pid()
+			b.turn("a", tc.next, 100, override, profile)
+			b.turn("b", modelSelection{}, 100, profile)
+			if b.pid() != pid {
+				t.Fatal("compaction restarted the App Server")
+			}
 		})
 	}
+}
+
+func TestNativeSessionModelUpdatedWindowThroughBridge(t *testing.T) {
+	b := newNativeSessionModelBridge(t, "none")
+	override, profile := modelSelection{"model-b", "high"}, modelSelection{"model-a", "none"}
+	b.turn("a", modelSelection{}, 100, profile)
+	b.turn("b", modelSelection{}, 100, profile)
+	setWindow := func(window int64) {
+		cfg := b.providers.Normalized()
+		provider := cfg.Providers["fixture"]
+		provider.Models = []string{"model-a", "model-b"}
+		provider.ModelOverrides = map[string]modelcap.Metadata{"model-b": {ContextWindow: window}}
+		cfg.Providers["fixture"] = provider
+		b.controller.Models().SetLLMConfig(cfg)
+	}
+	setWindow(32000)
+	b.turn("a", override, 40000, override)
+	pid := b.pid()
+	b.turn("a", override, 100, override, override)
+	b.turn("b", modelSelection{}, 100, profile)
+	if b.pid() != pid {
+		t.Fatal("unchanged window restarted the App Server")
+	}
+	setWindow(128000)
+	b.turn("a", override, 40000, override)
+	b.turn("a", override, 100, override)
 }
 
 type sessionModelBridgePayload struct {
@@ -53,7 +116,22 @@ type sessionModelBridgePayload struct {
 	} `json:"reasoning"`
 }
 
-func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDefaultModel bool) {
+type nativeSessionModelBridge struct {
+	t                  *testing.T
+	ctx                context.Context
+	server             *httptest.Server
+	controller         *agent.Controller
+	runtime            *codex.Runtime
+	agentID, runtimeID string
+	providers          config.LLMConfig
+	bindings           *agentsession.Store
+	threads            map[string]string
+	mu                 sync.Mutex
+	upstream, native   []sessionModelBridgePayload
+	inputTokens        int
+}
+
+func newNativeSessionModelBridge(t *testing.T, defaultEffort string) *nativeSessionModelBridge {
 	t.Helper()
 	binary := os.Getenv("CSGCLAW_TEST_CODEX_BINARY")
 	if binary == "" {
@@ -74,14 +152,7 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 	}
 	t.Cleanup(func() { _ = os.Remove(bundled) })
 
-	type selection struct{ model, effort string }
-	defaultEffort := "low"
-	if firstInputTokens == 40000 {
-		defaultEffort = "none"
-	}
-	var mu sync.Mutex
-	var observed []sessionModelBridgePayload
-	var native []sessionModelBridgePayload
+	b := &nativeSessionModelBridge{t: t, threads: make(map[string]string)}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/models" {
 			w.Header().Set("Content-Type", "application/json")
@@ -103,14 +174,11 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 			fmt.Fprint(w, `{"id":"probe","object":"response","status":"completed","output":[]}`)
 			return
 		}
-		mu.Lock()
-		observed = append(observed, payload)
-		responseID := fmt.Sprintf("fixture-%d", len(observed))
-		inputTokens := 100
-		if len(observed) == 1 {
-			inputTokens = firstInputTokens
-		}
-		mu.Unlock()
+		b.mu.Lock()
+		b.upstream = append(b.upstream, payload)
+		responseID := fmt.Sprintf("fixture-%d", len(b.upstream))
+		inputTokens := b.inputTokens
+		b.mu.Unlock()
 		if payload.Model == "model-b" && payload.Reasoning.Effort != "high" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -126,7 +194,7 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 		emit(map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "message", "role": "assistant", "id": responseID, "content": []any{map[string]any{"type": "output_text", "text": "Done."}}}})
 		emit(map[string]any{"type": "response.completed", "response": map[string]any{"id": responseID, "status": "completed", "usage": map[string]any{"input_tokens": inputTokens, "output_tokens": 10, "total_tokens": inputTokens + 10}}})
 	}))
-	defer upstream.Close()
+	t.Cleanup(upstream.Close)
 
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")
@@ -143,16 +211,16 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 		t.Fatal(err)
 	}
 	providers := config.LLMConfig{Default: "fixture.model-a", Providers: map[string]config.ProviderConfig{
-		"fixture": {BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", APIProtocol: "responses", Models: []string{"model-a", "model-b"}, ReasoningEffort: defaultEffort, ModelMetadata: map[string]modelcap.Metadata{"model-a": {ContextWindow: 32000}, "model-b": {ContextWindow: 64000}}},
+		"fixture": {BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", APIProtocol: "responses", Models: []string{"model-a"}, ReasoningEffort: defaultEffort, ModelMetadata: map[string]modelcap.Metadata{"model-a": {ContextWindow: 32000}}},
 	}}
 	server := httptest.NewUnstartedServer(nil)
-	defer server.Close()
+	t.Cleanup(server.Close)
 	controller, err := agent.NewControllerWithLLM(providers, config.ServerConfig{ListenAddr: server.Listener.Addr().String(), AccessToken: "fixture-token"}, "", statePath, runtimewiring.WithCodexRuntime())
 	if err != nil {
 		server.Close()
 		t.Fatal(err)
 	}
-	defer controller.Close()
+	t.Cleanup(func() { controller.Close() })
 	engine := agentengine.New(controller)
 	bindings, err := agentsession.NewStore(filepath.Join(root, "sessions"))
 	if err != nil {
@@ -166,7 +234,7 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 	if err := handler.EnableConnectors(filepath.Join(root, "apps.json")); err != nil {
 		t.Fatal(err)
 	}
-	defer handler.CloseConnectors()
+	t.Cleanup(func() { handler.CloseConnectors() })
 	handler.SetAgentEngine(engine, bindings)
 	routes := handler.Routes()
 	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -183,16 +251,16 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 			if err := json.Unmarshal(body, &payload); err != nil {
 				t.Error(err)
 			} else if payload.Stream {
-				mu.Lock()
-				native = append(native, payload)
-				mu.Unlock()
+				b.mu.Lock()
+				b.native = append(b.native, payload)
+				b.mu.Unlock()
 			}
 		}
 		routes.ServeHTTP(w, r)
 	})
 	server.Start()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	started, err := controller.Start(ctx, item.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -201,123 +269,99 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := runtimeImpl.(*codex.Runtime)
-	handle := codex.SessionHandle{RuntimeID: started.RuntimeID}
-	initial, err := runtime.SessionManager().LiveSession(handle)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if initial.ProcessID <= 0 {
-		t.Fatalf("invalid runtime PID: %d", initial.ProcessID)
-	}
+	b.ctx, b.server, b.controller = ctx, server, controller
+	b.runtime, b.runtimeID, b.agentID = runtimeImpl.(*codex.Runtime), started.RuntimeID, item.ID
+	b.providers, b.bindings = providers, bindings
 	initialProfile, err := controller.ResolvedAgentProfile(item.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	finalBody := map[string]any{"input": "Reply done again."}
-	if explicitDefaultModel {
-		finalBody["model"] = "model-a"
+	t.Cleanup(func() {
+		profile, err := controller.ResolvedAgentProfile(item.ID)
+		if err != nil || !reflect.DeepEqual(profile, initialProfile) {
+			t.Errorf("agent defaults changed: model=%q effort=%q error=%v", profile.ModelID, profile.ReasoningEffort, err)
+		}
+	})
+	return b
+}
+
+func (b *nativeSessionModelBridge) pid() int {
+	b.t.Helper()
+	live, err := b.runtime.SessionManager().LiveSession(codex.SessionHandle{RuntimeID: b.runtimeID})
+	if err != nil || live.ProcessID <= 0 {
+		b.t.Fatalf("live session=%+v error=%v", live, err)
 	}
-	threads := map[string]string{}
-	for stepIndex, step := range []struct {
-		session string
-		body    map[string]any
-		want    selection
-	}{
-		{"session-a", map[string]any{"input": "Reply done.", "model": "model-b", "reasoning_effort": "high"}, selection{"model-b", "high"}},
-		{"session-b", map[string]any{"input": "Reply done."}, selection{"model-a", defaultEffort}},
-		{"session-a", finalBody, selection{"model-a", defaultEffort}},
-		{"session-b", map[string]any{"input": "Reply done again."}, selection{"model-a", defaultEffort}},
-	} {
-		mu.Lock()
-		beforeUpstream, beforeNative := len(observed), len(native)
-		mu.Unlock()
-		payload, err := json.Marshal(step.body)
-		if err != nil {
-			t.Fatal(err)
+	return live.ProcessID
+}
+
+func (b *nativeSessionModelBridge) turn(session string, request modelSelection, tokens int, want ...modelSelection) {
+	t := b.t
+	t.Helper()
+	b.mu.Lock()
+	beforeUpstream, beforeNative := len(b.upstream), len(b.native)
+	b.inputTokens = tokens
+	b.mu.Unlock()
+	payload := map[string]any{"input": "Reply done."}
+	if request.model != "" {
+		payload["model"] = request.model
+	}
+	if request.effort != "" {
+		payload["reasoning_effort"] = request.effort
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequestWithContext(b.ctx, http.MethodPost, b.server.URL+"/api/v1/agents/"+b.agentID+"/sessions/"+session+"/responses", bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer fixture-token")
+	response, err := b.server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result agentSessionResponse
+	if err := json.Unmarshal(body, &result); err != nil || response.StatusCode != http.StatusOK || result.Status != "completed" {
+		t.Fatalf("session %s: HTTP %d body=%s error=%v", session, response.StatusCode, body, err)
+	}
+
+	b.mu.Lock()
+	upstream := slices.Clone(b.upstream[beforeUpstream:])
+	native := slices.Clone(b.native[beforeNative:])
+	b.mu.Unlock()
+	for _, traffic := range []struct {
+		name  string
+		calls []sessionModelBridgePayload
+	}{{"native", native}, {"upstream", upstream}} {
+		if len(traffic.calls) != len(want) {
+			t.Fatalf("session %s %s calls=%d, want %v", session, traffic.name, len(traffic.calls), want)
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/agents/"+item.ID+"/sessions/"+step.session+"/responses", bytes.NewReader(payload))
-		if err != nil {
-			t.Fatal(err)
-		}
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("Authorization", "Bearer fixture-token")
-		response, err := server.Client().Do(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body, readErr := io.ReadAll(response.Body)
-		response.Body.Close()
-		var result agentSessionResponse
-		decodeErr := json.Unmarshal(body, &result)
-		if readErr != nil || decodeErr != nil || response.StatusCode != http.StatusOK || result.Status != "completed" {
-			t.Fatalf("session %s: HTTP %d body=%s read=%v decode=%v", step.session, response.StatusCode, body, readErr, decodeErr)
-		}
-		mu.Lock()
-		upstreamCalls := append([]sessionModelBridgePayload(nil), observed[beforeUpstream:]...)
-		nativeCalls := append([]sessionModelBridgePayload(nil), native[beforeNative:]...)
-		mu.Unlock()
-		wantModels := []string{step.want.model}
-		compaction := firstInputTokens == 40000 && stepIndex == 2
-		if compaction {
-			wantModels = []string{"model-b", "model-a"}
-		}
-		for _, traffic := range []struct {
-			name  string
-			calls []sessionModelBridgePayload
-		}{{"native", nativeCalls}, {"upstream", upstreamCalls}} {
-			models := make([]string, 0, len(traffic.calls))
-			for _, call := range traffic.calls {
-				models = append(models, call.Model)
+		for i, call := range traffic.calls {
+			answer := i == len(want)-1
+			if call.Model != want[i].model || (len(call.Tools) > 0) != answer || ((answer || traffic.name == "upstream") && call.Reasoning.Effort != want[i].effort) {
+				t.Errorf("session %s %s call %d: model=%q effort=%q tools=%d, want %+v answer=%t", session, traffic.name, i, call.Model, call.Reasoning.Effort, len(call.Tools), want[i], answer)
 			}
-			if !reflect.DeepEqual(models, wantModels) {
-				t.Errorf("session %s %s models=%v, want %v", step.session, traffic.name, models, wantModels)
-			}
-			if len(traffic.calls) != len(wantModels) {
-				continue
-			}
-			if compaction && len(traffic.calls[0].Tools) != 0 {
-				t.Errorf("%s compaction request unexpectedly includes tools", traffic.name)
-			}
-			if compaction && traffic.name == "upstream" && traffic.calls[0].Reasoning.Effort != "high" {
-				t.Errorf("compaction effort=%q, want the previous model's accepted high effort", traffic.calls[0].Reasoning.Effort)
-			}
-			last := traffic.calls[len(traffic.calls)-1]
-			if last.Reasoning.Effort != step.want.effort || len(last.Tools) == 0 {
-				t.Errorf("session %s %s answer effort=%q tools=%d, want effort=%q and tools", step.session, traffic.name, last.Reasoning.Effort, len(last.Tools), step.want.effort)
-			}
-		}
-		binding, ok := bindings.Lookup(item.ID, step.session)
-		if !ok {
-			t.Fatal("missing session binding")
-		}
-		thread, exists, err := runtime.ExistingEngineSession(ctx, started.RuntimeID, binding.ConversationKey)
-		if err != nil || !exists || thread == "" {
-			t.Fatalf("native thread=%q exists=%t error=%v", thread, exists, err)
-		}
-		if previous := threads[step.session]; previous != "" && previous != thread {
-			t.Fatalf("session %s changed thread from %s to %s", step.session, previous, thread)
-		}
-		threads[step.session] = thread
-		live, err := runtime.SessionManager().LiveSession(handle)
-		if err != nil || live.ProcessID != initial.ProcessID {
-			t.Fatalf("runtime restarted: initial PID=%d session=%+v error=%v", initial.ProcessID, live, err)
 		}
 	}
-	if threads["session-a"] == threads["session-b"] {
-		t.Fatal("sessions share a native thread")
+	binding, ok := b.bindings.Lookup(b.agentID, session)
+	if !ok {
+		t.Fatal("missing session binding")
 	}
-	profile, err := controller.ResolvedAgentProfile(item.ID)
-	if err != nil || !reflect.DeepEqual(profile, initialProfile) {
-		t.Fatalf("agent defaults changed: model=%q effort=%q error=%v", profile.ModelID, profile.ReasoningEffort, err)
+	thread, exists, err := b.runtime.ExistingEngineSession(b.ctx, b.runtimeID, binding.ConversationKey)
+	if err != nil || !exists || thread == "" {
+		t.Fatalf("native thread=%q exists=%t error=%v", thread, exists, err)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	wantCalls := 4
-	if firstInputTokens == 40000 {
-		wantCalls++
+	for key, previous := range b.threads {
+		if (key == session) != (previous == thread) {
+			t.Fatalf("session %s uses thread %s; previous bindings %v", session, thread, b.threads)
+		}
 	}
-	if len(observed) != wantCalls || len(native) != wantCalls {
-		t.Fatalf("upstream calls=%d native calls=%d, want %d", len(observed), len(native), wantCalls)
-	}
+	b.threads[session] = thread
 }

@@ -26,10 +26,8 @@ func (s *ModelConfiguration) SessionModelProfiles(agentID string) ([]AgentProfil
 		return nil, err
 	}
 	profiles := []AgentProfile{profile}
-	images := imageModels(providerID, provider.Models, provider.ImageModels)
-	videos := videoModels(providerID, provider.Models, provider.VideoModels)
 	for _, model := range prioritizeOpenCSGAutoModel(providerID, provider.BaseURL, provider.Models) {
-		if model == profile.ModelID || containsModelID(images, model) || containsModelID(videos, model) {
+		if model == profile.ModelID || isMediaGenerationModel(provider, model) {
 			continue
 		}
 		selected := profile
@@ -50,14 +48,16 @@ func (s *ModelConfiguration) ResolvedSessionProfile(agentID, model, reasoningEff
 		return AgentProfile{}, err
 	}
 	model = strings.TrimSpace(model)
+	if model != "" && isMediaGenerationModel(provider, model) {
+		return AgentProfile{}, &SessionModelError{Field: "model", Message: fmt.Sprintf("model %q is a media generation model and cannot be used for chat", model)}
+	}
 	if model != "" && model != selected.ModelID {
-		if !slices.Contains(provider.Models, model) || containsModelID(imageModels(providerID, []string{model}, provider.ImageModels), model) || containsModelID(videoModels(providerID, nil, provider.VideoModels), model) {
-			return AgentProfile{}, &SessionModelError{Field: "model", Message: "selected model is unavailable in the Agent's provider"}
-		}
-		selected.Provider = ProfileProviderForModelProviderID(providerID)
-		selected.ModelProviderID = providerID
 		selected.ModelID = model
-		selected = hydrateProfileFromProvider(selected, provider)
+		selected.ModelProviderID = providerID
+		if providerID == "" {
+			selected.InputModalities = resolvedInputModalities(selected.Provider, model, false)
+		}
+		selected = s.hydrateProfileFromCatalogLocked(selected)
 	}
 	if effort := config.NormalizeReasoningEffort(reasoningEffort); effort != "" {
 		switch effort {

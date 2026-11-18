@@ -960,10 +960,14 @@ func videoModels(providerID string, models, declared []string) []string {
 	return sortModelIDs(declared)
 }
 
+func isMediaGenerationModel(provider config.ProviderConfig, model string) bool {
+	return modelprovider.IsImageGenerationModel(model) || containsModelID(provider.ImageModels, model) || containsModelID(provider.VideoModels, model)
+}
+
 func resolvedProviderMetadata(id string, provider config.ProviderConfig) map[string]modelcap.Resolved {
 	out := make(map[string]modelcap.Resolved, len(provider.Models))
 	for _, model := range provider.Models {
-		if modelprovider.IsImageGenerationModel(model) || slices.Contains(provider.ImageModels, model) || slices.Contains(provider.VideoModels, model) {
+		if isMediaGenerationModel(provider, model) {
 			continue
 		}
 		out[model] = modelcap.Resolve(id, provider.BaseURL, model, provider.ModelMetadata[model], provider.ModelOverrides[model])

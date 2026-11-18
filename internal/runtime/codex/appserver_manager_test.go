@@ -3429,6 +3429,8 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			case "thread/start":
 				threads++
 				return rpcResult(msg["id"], map[string]any{"threadId": fmt.Sprintf("thread-%d-%d", os.Getpid(), threads)}), true
+			case "thread/read":
+				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": params["threadId"]}}), true
 			case "thread/resume":
 				return rpcResult(msg["id"], map[string]any{"threadId": params["threadId"]}), true
 			case "turn/start":
@@ -3465,7 +3467,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	case "resume-fallback":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {
-			case "thread/resume":
+			case "thread/read", "thread/resume":
 				return rpcError(msg["id"], -32000, "thread not found"), true
 			case "thread/start":
 				return rpcResult(msg["id"], map[string]any{"threadId": "new-thread"}), true
@@ -3476,6 +3478,8 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	case "resume-success":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {
+			case "thread/read":
+				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": "resumed-thread", "model": "saved-model", "reasoningEffort": "high"}}), true
 			case "thread/resume":
 				return rpcResult(msg["id"], map[string]any{"threadId": "resumed-thread"}), true
 			case "thread/start":

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
 )
 
 func TestParseAgentSessionModelOptionsJSON(t *testing.T) {
@@ -104,5 +106,26 @@ func TestAgentSessionTurnModelOptionsRemainRequestScoped(t *testing.T) {
 	}
 	if requests[1].Model != nil || requests[0].ConversationKey != requests[1].ConversationKey {
 		t.Fatalf("subsequent turn = %+v, initial conversation = %q", requests[1], requests[0].ConversationKey)
+	}
+}
+
+func TestAgentSessionRejectsMediaGenerationModelsBeforeExecution(t *testing.T) {
+	item := sessionCodexAgent("agent-alpha", "Alpha")
+	item.AgentProfile = agent.AgentProfile{Provider: agent.ProviderAPI, ModelProviderID: "fixture", ModelID: "chat"}
+	calls := 0
+	engine := &fakeSessionEngine{run: func(context.Context, string, agentengine.TurnRequest, agentengine.EventSink) agentengine.TurnResult {
+		calls++
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "ok"}
+	}}
+	handler, _, bindings, _ := newAgentSessionTestHandler(t, []agent.Agent{item}, engine, "")
+	handler.agentModels.(*agent.ModelConfiguration).SetLLMConfig(config.LLMConfig{Default: "fixture.chat", Providers: map[string]config.ProviderConfig{
+		"fixture": {BaseURL: "https://example.com/v1", APIKey: "test-key", Models: []string{"chat", "image", "video"}, ImageModels: []string{"image"}, VideoModels: []string{"video"}},
+	}})
+	for _, model := range []string{"gpt-image-1", "image", "video"} {
+		recorder := performAgentSessionRequest(t, handler, item.ID, "media", map[string]any{"input": "hello", "model": model})
+		var result agentSessionErrorEnvelope
+		if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil || recorder.Code != http.StatusBadRequest || result.Error.Param == nil || *result.Error.Param != "model" || calls != 0 || len(bindings.Bindings()) != 0 {
+			t.Fatalf("%s: HTTP %d body=%s calls=%d bindings=%d error=%v", model, recorder.Code, recorder.Body.String(), calls, len(bindings.Bindings()), err)
+		}
 	}
 }
