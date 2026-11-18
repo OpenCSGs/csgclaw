@@ -206,11 +206,15 @@ describe("OpenCSGConnectionDialog", () => {
     await screen.findByText("OpenCSG Main Site");
     await chooseSite(user, /legacy\.example\.com/);
     await user.click(screen.getByRole("button", { name: "csghubSiteEdit" }));
+    expect(screen.queryByRole("button", { name: "csghubConnectContinue" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "csghubSiteCancelEdit" }));
+    expect(screen.getByRole("button", { name: "csghubConnectContinue" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "csghubSiteEdit" }));
     await user.type(screen.getByRole("textbox", { name: "csghubSiteName" }), "Partner");
     const address = screen.getByRole("textbox", { name: "csghubOpenCSGBaseURL" });
     await user.clear(address);
     await user.type(address, "partner.example.com");
-    await user.click(screen.getByRole("button", { name: "csghubSaveCustomSite" }));
+    await user.click(screen.getByRole("button", { name: "csghubSiteSaveChanges" }));
     expect(screen.getByRole("combobox")).toHaveTextContent("Partner");
     expect(JSON.parse(window.localStorage.getItem(AUTH_CUSTOM_SITES_STORAGE_KEY) || "[]")).toEqual([
       { name: "Partner", url: "https://partner.example.com" },
