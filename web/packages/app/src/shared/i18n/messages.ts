@@ -3382,6 +3382,7 @@ export const messages = {
       agent_delete_requires_archive_management: "请在归档管理中确认删除智能体。",
       agent_identity_deleted: "智能体信息已失效，请重新创建。",
       model_protocol_unsupported: "发布端模型不支持 Responses 工具协议，请在源智能体设置中选择兼容的模型服务。",
+      executor_files_unsupported: "发布端 CSGClaw 或 Relay 尚不支持附件，请升级后重试。",
       relay_task_text_only: "云端任务目前仅支持文本，运行配置由发布端维护。",
       relay_chat_reference_unavailable: "连接信息已失效，请在广场重新添加智能体。",
       relay_chat_failed: "聊天结果暂未确认，请重试查询原请求。",
@@ -7070,6 +7071,8 @@ export const messages = {
       agent_identity_deleted: "The agent information is no longer valid. Please create the agent again.",
       model_protocol_unsupported:
         "The published agent requires a model provider with native Responses tool support. Update the source agent settings.",
+      executor_files_unsupported:
+        "The publishing CSGClaw or Relay does not support attachments. Upgrade it and try again.",
       relay_task_text_only: "Cloud tasks support text only. Runtime settings are managed by the publisher.",
       relay_chat_reference_unavailable: "This connection is no longer available. Add the agent again from the plaza.",
       relay_chat_failed: "The chat result is unconfirmed. Retry to query the same request.",

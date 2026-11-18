@@ -556,9 +556,6 @@ func (h *Handler) cloudOutputAttachments(ctx context.Context, room im.Room, file
 			return os.Open(paths[i])
 		}}
 	}
-	if err := im.ValidateMessageAttachmentUploads(uploads); err != nil {
-		return nil, nil, err
-	}
 	cleanup := func() {
 		for _, path := range paths {
 			if path != "" {
@@ -571,7 +568,16 @@ func (h *Handler) cloudOutputAttachments(ctx context.Context, room im.Room, file
 	defer cancel()
 	var delivered []im.MessageAttachmentUpload
 	var transferErr error
+	var totalBytes int64
 	for i, file := range files {
+		if err := im.ValidateMessageAttachmentUploads(uploads[i : i+1]); err != nil {
+			transferErr = err
+			continue
+		}
+		if len(delivered) >= im.MaxAttachmentsPerMessage || file.Size > im.MaxAttachmentMessageBytes-totalBytes {
+			transferErr = fmt.Errorf("output attachments exceed conversation limits")
+			continue
+		}
 		path, err := h.stageCloudOutputAttachment(ctx, room, file)
 		paths[i] = path
 		if err != nil {
@@ -582,6 +588,7 @@ func (h *Handler) cloudOutputAttachments(ctx context.Context, room im.Room, file
 			continue
 		}
 		delivered = append(delivered, uploads[i])
+		totalBytes += file.Size
 	}
 	return delivered, cleanup, transferErr
 }

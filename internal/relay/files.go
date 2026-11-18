@@ -104,6 +104,9 @@ func (m *Manager) UploadAttachment(ctx context.Context, agentID, connectionID, m
 	if err != nil {
 		return File{}, err
 	}
+	if err := client.checkAttachmentSupport(ctx, agentID); err != nil {
+		return File{}, err
+	}
 	key := fmt.Sprintf("input:%x", sha256.Sum256([]byte(messageID+"\x00"+attachment.ID)))
 	file := File{Name: attachment.Name, MediaType: attachment.MediaType, Size: attachment.SizeBytes, SHA256: attachment.SHA256}
 	var uploaded File

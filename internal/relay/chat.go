@@ -7,10 +7,32 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 )
 
 var ErrChatReference = errors.New("published agent or relay connection is no longer available")
 var ErrInvalidChatResponse = errors.New("invalid relay chat response")
+
+var ErrExecutorFilesUnsupported = errors.New("upgrade the publishing CSGClaw and Relay to support attachments")
+
+func (m *Manager) CheckAttachmentSupport(ctx context.Context, id, connectionID string) error {
+	client, err := m.invocationClient(ctx, id, connectionID)
+	if err != nil {
+		return err
+	}
+	return client.checkAttachmentSupport(ctx, id)
+}
+
+func (c *Client) checkAttachmentSupport(ctx context.Context, id string) error {
+	var agent Agent
+	if err := c.Request(ctx, http.MethodGet, "/v1/agents/"+url.PathEscape(id), "", nil, &agent); err != nil {
+		return err
+	}
+	if agent.ID != id || !slices.Contains(agent.Capabilities, CapabilityInputFiles) {
+		return ErrExecutorFilesUnsupported
+	}
+	return nil
+}
 
 // invocationClient resolves only a server-owned reference. Browsers cannot
 // supply a URL or a token and cannot silently switch to another identity.
@@ -46,6 +68,11 @@ func (m *Manager) Chat(ctx context.Context, id, connectionID, key string, input 
 	c, err := m.invocationClient(ctx, id, connectionID)
 	if err != nil {
 		return Response{}, err
+	}
+	if len(attachments) > 0 {
+		if err := c.checkAttachmentSupport(ctx, id); err != nil {
+			return Response{}, err
+		}
 	}
 	var wireInput any = input
 	if len(attachments) > 0 {

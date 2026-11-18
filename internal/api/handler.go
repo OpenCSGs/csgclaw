@@ -3174,6 +3174,20 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 				writeAgentSessionError(w, 400, "relay_task_text_only", "only the task creator can send messages, and resource references and threads are unsupported", nil)
 				return
 			}
+			if len(serviceReq.Attachments) > 0 {
+				if existing, found := h.im.MessageByClientID(room.ID, serviceReq.SenderID, serviceReq.ClientMessageID); found {
+					writeJSON(w, http.StatusCreated, existing)
+					return
+				}
+				if err := h.relayManager.CheckAttachmentSupport(r.Context(), room.CloudAgent.AgentID, room.CloudAgent.ConnectionID); err != nil {
+					code := "relay_chat_reference_unavailable"
+					if errors.Is(err, relay.ErrExecutorFilesUnsupported) {
+						code = "executor_files_unsupported"
+					}
+					writeAgentSessionError(w, http.StatusConflict, code, err.Error(), nil)
+					return
+				}
+			}
 			serviceReq.Metadata = map[string]any{cloudTaskUnsubmittedKey: true}
 			message, created, err := channel.SendMessageOnce(serviceReq)
 			if err != nil {

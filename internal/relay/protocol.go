@@ -14,7 +14,10 @@ import (
 
 const Subprotocol = "csgrelay.v1"
 
+const CapabilityInputFiles = "input_files"
+
 type Agent struct {
+	Capabilities  []string   `json:"capabilities,omitempty"`
 	ID            string     `json:"id"`
 	Name          string     `json:"name"`
 	Description   string     `json:"description"`
@@ -106,10 +109,11 @@ func (r Response) Text() string {
 }
 
 type Frame struct {
-	InputFiles              []File  `json:"input_files,omitempty"`
-	Files                   []File  `json:"files,omitempty"`
-	ExecutionTimeoutSeconds float64 `json:"execution_timeout_seconds,omitempty"`
-	TransferTimeoutSeconds  float64 `json:"transfer_timeout_seconds,omitempty"`
+	Capabilities            []string `json:"capabilities,omitempty"`
+	InputFiles              []File   `json:"input_files,omitempty"`
+	Files                   []File   `json:"files,omitempty"`
+	ExecutionTimeoutSeconds float64  `json:"execution_timeout_seconds,omitempty"`
+	TransferTimeoutSeconds  float64  `json:"transfer_timeout_seconds,omitempty"`
 	fileClient              *Client
 	fileScope               fileScope
 	start                   func() (context.Context, context.CancelFunc)

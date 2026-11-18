@@ -3,15 +3,17 @@ package apiclient
 import (
 	"context"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
 
 	"csgclaw/internal/apitypes"
 )
 
-func (c *Client) UploadSessionFile(ctx context.Context, path, name string, source *os.File) ([]apitypes.MessageAttachment, error) {
+func (c *Client) UploadSessionFile(ctx context.Context, path, name, mediaType string, source *os.File) ([]apitypes.MessageAttachment, error) {
 	reader, writer := io.Pipe()
 	defer reader.Close()
 	form := multipart.NewWriter(writer)
@@ -24,7 +26,13 @@ func (c *Client) UploadSessionFile(ctx context.Context, path, name string, sourc
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		part, err := form.CreateFormFile("files", name)
+		headers := make(textproto.MIMEHeader)
+		headers.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": "files", "filename": name}))
+		if mediaType == "" {
+			mediaType = "application/octet-stream"
+		}
+		headers.Set("Content-Type", mediaType)
+		part, err := form.CreatePart(headers)
 		if err == nil {
 			_, err = io.Copy(part, source)
 		}

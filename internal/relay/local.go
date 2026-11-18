@@ -140,7 +140,7 @@ func (e *LocalExecutor) prepareInputs(ctx context.Context, frame Frame, base str
 			}); err != nil {
 				return "", err
 			}
-			attachments, err := e.Client.UploadSessionFile(ctx, base+"/attachments", input.Name, file)
+			attachments, err := e.Client.UploadSessionFile(ctx, base+"/attachments", input.Name, input.MediaType, file)
 			if err != nil {
 				return "", err
 			}

@@ -30,7 +30,7 @@ func newCloudTaskTestRelay(t *testing.T, ctx context.Context, agentID string, re
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents":
 			_ = json.NewEncoder(w).Encode(relay.Publication{Agent: relay.Agent{ID: agentID}})
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/agents/"+agentID:
-			_ = json.NewEncoder(w).Encode(relay.Agent{ID: agentID, Status: "online"})
+			_ = json.NewEncoder(w).Encode(relay.Agent{ID: agentID, Status: "online", Capabilities: []string{relay.CapabilityInputFiles}})
 		case strings.HasPrefix(r.URL.Path, "/v1/responses") || strings.HasPrefix(r.URL.Path, "/v1/files"):
 			responses(w, r)
 		default:
@@ -226,8 +226,11 @@ func TestCloudTaskInvalidOutputAttachmentsPreserveReplyAndContinue(t *testing.T)
 		content := []relay.Content{{Type: "output_text", Text: "response text"}}
 		if call == 1 {
 			for i := range im.MaxAttachmentsPerMessage + 1 {
-				content = append(content, relay.Content{Type: "output_file", File: &relay.File{ID: fmt.Sprintf("file_%d", i), Name: "report.txt", Size: 1}})
+				content = append(content, relay.Content{Type: "output_file", File: &relay.File{ID: fmt.Sprintf("file_%d", i), Name: "report.txt", Size: 0}})
 			}
+			content = append(content, relay.Content{Type: "output_file", File: &relay.File{
+				ID: "file_valid", Name: "report.txt", Size: int64(len(report)), SHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(report))),
+			}})
 		} else {
 			var req relay.CallRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PreviousResponseID != "resp_1" {
@@ -258,8 +261,8 @@ func TestCloudTaskInvalidOutputAttachmentsPreserveReplyAndContinue(t *testing.T)
 		t.Fatalf("got %d messages, want two requests and two replies", len(saved.Messages))
 	}
 	reply := saved.Messages[2]
-	want := "response text\n\n" + cloudTaskFailureText(room.Locale, "file_delivery_failed")
-	if reply.Content != want || len(reply.Attachments) != 0 || reply.Metadata["relay_error_code"] != "file_delivery_failed" {
+	want := "response text\n\n" + cloudTaskFailureText(room.Locale, "file_delivery_partial")
+	if reply.Content != want || len(reply.Attachments) != 1 || reply.Metadata["relay_error_code"] != "file_delivery_partial" {
 		t.Fatalf("unexpected fallback reply: %+v", reply)
 	}
 	followUp := saved.Messages[3]

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -286,13 +287,16 @@ func TestExecutorRetriesInputDownloadWithoutBreakingSession(t *testing.T) {
 						_, _ = io.WriteString(w, "partial")
 					}
 				case strings.HasSuffix(r.URL.Path, "/attachments"):
-					file, _, err := r.FormFile("files")
+					file, header, err := r.FormFile("files")
 					if err != nil {
 						t.Error(err)
 						w.WriteHeader(http.StatusBadRequest)
 						return
 					}
 					defer file.Close()
+					if got := header.Header.Get("Content-Type"); got != "image/png" {
+						t.Errorf("session image media type = %q", got)
+					}
 					data, err := io.ReadAll(file)
 					if err != nil || string(data) != content {
 						t.Errorf("session input was not verified: %q, %v", data, err)
@@ -312,7 +316,7 @@ func TestExecutorRetriesInputDownloadWithoutBreakingSession(t *testing.T) {
 				records:   make(map[string]executionRecord), sessions: map[string]executionSession{"sess_test": {Tip: "resp_previous"}}}
 			frame := Frame{Type: "request", ResponseID: "resp_current", SessionID: "sess_test", PreviousResponseID: "resp_previous",
 				Input: textInput("read attachment"), Deadline: time.Now().Add(5 * time.Second),
-				InputFiles: []File{{ID: "file_input", Name: "input.txt", Size: int64(len(content)),
+				InputFiles: []File{{ID: "file_input", Name: "input.png", MediaType: "image/png", Size: int64(len(content)),
 					SHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(content)))}}}
 			if err := e.accept(t.Context(), frame, func(Frame) error { return nil }); err != nil {
 				t.Fatal(err)
@@ -331,6 +335,84 @@ func TestExecutorRetriesInputDownloadWithoutBreakingSession(t *testing.T) {
 				}
 			} else if runs.Load() != 0 || result.Error == nil || result.Error.Code != "input_file_unavailable" {
 				t.Fatalf("want preparation failure before execution, got %d and %+v", runs.Load(), result)
+			}
+		})
+	}
+}
+
+func TestExecutorReservesTimeForPartialDeliveryResult(t *testing.T) {
+	const window = 500 * time.Millisecond
+	start := time.Now()
+	deadline := deliveryUploadDeadline(start, window)
+	if reserve := start.Add(window).Sub(deadline); reserve != window/5 {
+		t.Fatalf("delivery reserve = %s, want %s", reserve, window/5)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var file File
+		if err := json.NewDecoder(r.Body).Decode(&file); err != nil {
+			t.Error(err)
+			return
+		}
+		if file.Name == "ready.txt" {
+			writeTestJSON(w, http.StatusOK, File{ID: "file_ready", Status: "available"})
+			return
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	e := Executor{Client: testClient(t, server.URL, "secret"), Handler: &LocalExecutor{}}
+	result := e.deliverFiles(t.Context(), fileScope{ResponseID: "resp_partial"}, &fileDelivery{
+		Text: "Completed reply", Deadline: deadline,
+		Attachments: []apitypes.MessageAttachment{{ID: "ready", Name: "ready.txt"}, {ID: "blocked", Name: "blocked.txt"}},
+	})
+	if result.Type != "response.completed" || len(result.Files) != 1 || !strings.HasPrefix(result.OutputText, "Completed reply") {
+		t.Fatalf("partial result was lost: %+v", result)
+	}
+	if !time.Now().Before(start.Add(window)) {
+		t.Fatal("no time remains to publish the partial result")
+	}
+}
+
+func TestAttachmentSupportRejectsLegacyExecutorBeforeUpload(t *testing.T) {
+	for _, capable := range []bool{false, true} {
+		t.Run(fmt.Sprint(capable), func(t *testing.T) {
+			var uploads atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1/agents/agt_test":
+					agent := Agent{ID: "agt_test"}
+					if capable {
+						agent.Capabilities = []string{CapabilityInputFiles}
+					}
+					writeTestJSON(w, http.StatusOK, agent)
+				case "/v1/files":
+					uploads.Add(1)
+					writeTestJSON(w, http.StatusOK, File{ID: "file_input", Status: "available"})
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			manager, err := NewManager(t.Context(), t.TempDir(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer manager.Close()
+			if err := manager.Configure(server.URL, "test-token"); err != nil {
+				t.Fatal(err)
+			}
+			manager.manifest.Agents["agt_test"] = PublishRequest{Visibility: "public"}
+			_, err = manager.UploadAttachment(t.Context(), "agt_test", manager.manifest.ConnectionID, "message",
+				apitypes.MessageAttachment{ID: "input", Name: "input.txt"}, func() (io.ReadCloser, error) {
+					t.Fatal("available upload was reopened")
+					return nil, nil
+				})
+			if capable {
+				if err != nil || uploads.Load() != 1 {
+					t.Fatalf("capable executor upload = %d, %v", uploads.Load(), err)
+				}
+			} else if !errors.Is(err, ErrExecutorFilesUnsupported) || uploads.Load() != 0 {
+				t.Fatalf("legacy executor upload = %d, %v", uploads.Load(), err)
 			}
 		})
 	}

@@ -243,7 +243,7 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 		}
 		e.mu.Lock()
 		defer e.mu.Unlock()
-		return Frame{Type: typ, ProtocolVersion: 1, InstanceID: instance, Ready: ready && e.fatal == nil, Busy: e.activeID != ""}
+		return Frame{Type: typ, Capabilities: []string{CapabilityInputFiles}, ProtocolVersion: 1, InstanceID: instance, Ready: ready && e.fatal == nil, Busy: e.activeID != ""}
 	}
 	if err := send(status("hello")); err != nil {
 		return err
@@ -528,7 +528,7 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 	}
 	frame.deliver = func(text string, attachments []apitypes.MessageAttachment) Frame {
 		delivery := &fileDelivery{SessionID: frame.SessionID, Text: text, Attachments: attachments,
-			Deadline: time.Now().Add(stageDuration(frame.TransferTimeoutSeconds, 10*time.Minute))}
+			Deadline: deliveryUploadDeadline(time.Now(), stageDuration(frame.TransferTimeoutSeconds, 10*time.Minute))}
 		e.mu.Lock()
 		current := e.records[frame.ResponseID]
 		if current.InvocationFingerprint != fingerprint || current.Result.Type != "request.accepted" {
@@ -586,6 +586,7 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 			e.sessions[frame.SessionID] = session
 		}
 		e.fatal = e.saveLocked()
+		e.notifyPhaseChanged()
 	}()
 	return acceptedErr
 }
@@ -615,6 +616,12 @@ func stageDuration(seconds float64, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return time.Duration(seconds * float64(time.Second))
+}
+
+// Reserve part of Relay's delivery window for journaling and sending the result.
+func deliveryUploadDeadline(start time.Time, window time.Duration) time.Time {
+	reserve := min(5*time.Second, window/5)
+	return start.Add(window - reserve)
 }
 
 func deliveryFailure() Frame {
@@ -692,6 +699,7 @@ func (e *Executor) resumeDelivery(ctx context.Context, instance string) {
 			record.Delivery, record.Result = nil, result
 			e.records[id] = record
 			e.fatal = e.saveLocked()
+			e.notifyPhaseChanged()
 		}()
 		return
 	}
