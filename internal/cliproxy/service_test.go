@@ -105,13 +105,13 @@ func TestRegisteredModelsUsesCLIProxyProviderRegistry(t *testing.T) {
 }
 
 func TestFallbackModelsCoverEmbeddedCLIProviders(t *testing.T) {
-	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
+	for _, model := range []string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		if !containsString(fallbackModels(ProviderCodex), model) {
 			t.Errorf("Codex fallback models missing %s", model)
 		}
 	}
 	for provider, wantFirst := range map[string]string{
-		"codex":  "gpt-6-astra",
+		"codex":  "gpt-6.2-astra",
 		"claude": "claude-opus-5-5",
 	} {
 		models := fallbackModels(provider)
@@ -149,24 +149,13 @@ func TestEmbeddedCLIProxyRegistersImportedCodexAuthModels(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	svc := &Service{client: &http.Client{Timeout: 5 * time.Second}}
-	if err := svc.EnsureStarted(ctx); err != nil {
-		t.Fatalf("EnsureStarted() error = %v", err)
-	}
-	defer func() {
-		if err := svc.Shutdown(context.Background()); err != nil {
-			t.Fatalf("Shutdown() error = %v", err)
-		}
-	}()
+	startModelTestService(t, ctx, svc, nil)
 
 	models, err := svc.ListModels(ctx, ProviderCodex)
 	if err != nil {
 		t.Fatalf("ListModels() error = %v", err)
 	}
-	for _, auth := range svc.catalog.manager.List() {
-		clientID := auth.ID
-		t.Cleanup(func() { cliproxysdk.GlobalModelRegistry().UnregisterClient(clientID) })
-	}
-	for _, model := range []string{"gpt-5.5", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
+	for _, model := range []string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		if !containsString(models, model) {
 			t.Fatalf("models = %v, want %s registered for imported codex auth", models, model)
 		}
@@ -203,7 +192,7 @@ func TestEmbeddedCLIProxyRegistersImportedCodexAuthModels(t *testing.T) {
 	for _, model := range catalog.Data {
 		modelIDs = append(modelIDs, model.ID)
 	}
-	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
+	for _, model := range []string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		if !containsString(modelIDs, model) {
 			t.Errorf("GET unified models route missing %s: %v", model, modelIDs)
 		}

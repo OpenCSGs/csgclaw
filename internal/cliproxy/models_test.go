@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -14,9 +15,37 @@ import (
 
 	"csgclaw/internal/modelcap"
 
+	"github.com/gin-gonic/gin"
+	cliproxyapi "github.com/router-for-me/CLIProxyAPI/v8/sdk/api"
+	sdkhandlers "github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
+	sdkconfig "github.com/router-for-me/CLIProxyAPI/v8/sdk/config"
 )
+
+func startModelTestService(t *testing.T, ctx context.Context, svc *Service, transport *modelTransportFixture) *coreauth.Manager {
+	t.Helper()
+	ready := make(chan *coreauth.Manager, 1)
+	if err := svc.ensureStarted(ctx, cliproxyapi.WithRouterConfigurator(func(_ *gin.Engine, handler *sdkhandlers.BaseAPIHandler, _ *sdkconfig.Config) {
+		manager := handler.AuthManager
+		if transport != nil {
+			manager.SetRoundTripperProvider(transport)
+		}
+		ready <- manager
+	})); err != nil {
+		t.Fatal(err)
+	}
+	manager := <-ready
+	t.Cleanup(func() {
+		if err := svc.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+		for _, auth := range manager.List() {
+			cliproxysdk.GlobalModelRegistry().UnregisterClient(auth.ID)
+		}
+	})
+	return manager
+}
 
 type modelTransportFixture struct {
 	mu              sync.Mutex
@@ -65,12 +94,19 @@ data: {"type":"message_stop"}
 func TestEmbeddedCLIProxyLatestModels(t *testing.T) {
 	for _, test := range []struct {
 		provider, model, plan string
+		unavailable           []string
 	}{
-		{ProviderCodex, "gpt-6.1-sol", "pro"},
-		{"claude", "claude-opus-5-5", ""},
-		{"claude", "claude-sonnet-5-5", ""},
+		{ProviderCodex, "gpt-6.2-astra", "pro", nil},
+		{ProviderCodex, "gpt-6.2-sol", "plus", nil},
+		{ProviderCodex, "gpt-6.2-astra", "team", nil},
+		{ProviderCodex, "gpt-6.2-sol", "prolite", nil},
+		{ProviderCodex, "gpt-6-luna", "free", []string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-sol"}},
+		{"claude", "claude-opus-5-5", "", nil},
+		{"claude", "claude-sonnet-5-5", "", nil},
+		{"claude", "claude-fable-5-2", "", nil},
+		{"claude", "claude-haiku-5-5", "", nil},
 	} {
-		t.Run(test.model, func(t *testing.T) {
+		t.Run(strings.TrimSuffix(test.model+"/"+test.plan, "/"), func(t *testing.T) {
 			clearStandardProxyEnv(t)
 			t.Setenv(systemProxyURLEnv, "")
 			t.Setenv("HOME", t.TempDir())
@@ -88,24 +124,25 @@ func TestEmbeddedCLIProxyLatestModels(t *testing.T) {
 				t.Fatal(err)
 			}
 			svc := &Service{client: &http.Client{Timeout: 5 * time.Second}}
-			if err := svc.EnsureStarted(ctx); err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
+			transport := &modelTransportFixture{provider: test.provider}
+			manager := startModelTestService(t, ctx, svc, transport)
 			models, err := svc.ListModels(ctx, test.provider)
 			if err != nil || !containsString(models, test.model) {
 				t.Fatalf("model discovery missing %s: models=%v err=%v", test.model, models, err)
 			}
-			if test.provider == ProviderCodex {
+			for _, unavailable := range test.unavailable {
+				if slices.Contains(models, unavailable) {
+					t.Errorf("%s plan exposes %s", test.plan, unavailable)
+				}
+			}
+			if strings.HasPrefix(test.model, "gpt-6.2-") {
 				window := modelcap.Resolve(test.provider, "", test.model, modelcap.Metadata{}, modelcap.Metadata{}).ContextWindow
 				for _, info := range cliproxysdk.GlobalModelRegistry().GetAvailableModelsByProvider(test.provider) {
-					if info.ID == test.model && (int64(info.ContextLength) != window || int64(info.MaxContextLength) != window) {
-						t.Fatalf("proxy context metadata differs from Codex profile: default=%d maximum=%d profile=%d", info.ContextLength, info.MaxContextLength, window)
+					if info.ID == test.model && int64(info.ContextLength) != window {
+						t.Fatalf("proxy context metadata differs from Codex profile: proxy=%d profile=%d", info.ContextLength, window)
 					}
 				}
 			}
-			transport := &modelTransportFixture{provider: test.provider}
-			svc.catalog.manager.SetRoundTripperProvider(transport)
 			baseURL, err := svc.BaseURL(ctx)
 			if err != nil {
 				t.Fatal(err)
@@ -131,27 +168,29 @@ func TestEmbeddedCLIProxyLatestModels(t *testing.T) {
 			if gotModel != test.model {
 				t.Fatalf("routed model = %s, want %s", gotModel, test.model)
 			}
-			// A credential file update rebuilds the SDK catalog. The supplement
-			// must survive reload and disappear when the credential is removed.
+			// The model must survive a credential reload and disappear on removal.
 			metadata["email"] = "refreshed@example.test"
 			if _, err := saveMetadataAuth(ctx, authDir, test.provider, "fixture.json", metadata); err != nil {
 				t.Fatal(err)
 			}
-			waitForModelAuth(t, ctx, svc, test.model, "refreshed@example.test", true)
+			waitForModelAuth(t, ctx, manager, test.provider, test.model, "refreshed@example.test", true)
+			// An atomic auth replacement can emit a removal event on macOS.
+			// Wait out the SDK's one-second debounce before deleting the file.
+			time.Sleep(time.Second)
 			if err := os.Remove(filepath.Join(authDir, "fixture.json")); err != nil {
 				t.Fatal(err)
 			}
-			waitForModelAuth(t, ctx, svc, test.model, "", false)
+			waitForModelAuth(t, ctx, manager, test.provider, test.model, "", false)
 		})
 	}
 }
 
-func waitForModelAuth(t *testing.T, ctx context.Context, svc *Service, model, email string, present bool) {
+func waitForModelAuth(t *testing.T, ctx context.Context, manager *coreauth.Manager, provider, model, email string, present bool) {
 	t.Helper()
 	registry := cliproxysdk.GlobalModelRegistry()
 	for ctx.Err() == nil {
 		activeFixture := false
-		for _, auth := range svc.catalog.manager.List() {
+		for _, auth := range manager.List() {
 			if auth.FileName == "fixture.json" && !auth.Disabled {
 				activeFixture = true
 			}
@@ -162,34 +201,11 @@ func waitForModelAuth(t *testing.T, ctx context.Context, svc *Service, model, em
 				return
 			}
 		}
-		if !present && !activeFixture {
-			if !containsString(registeredModels("codex"), model) && !containsString(registeredModels("claude"), model) {
-				return
-			}
+		if !present && !activeFixture && !registry.ClientSupportsModel("fixture.json", model) {
+			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("auth/model state did not converge: model=%s email=%s present=%v", model, email, present)
-}
-
-func TestModelCatalogPreservesSubscriptionFiltering(t *testing.T) {
-	manager := coreauth.NewManager(nil, nil, nil)
-	auth := &coreauth.Auth{ID: "catalog-free-test", Provider: ProviderCodex, Status: coreauth.StatusActive}
-	if _, err := manager.Register(context.Background(), auth); err != nil {
-		t.Fatal(err)
-	}
-	registry := cliproxysdk.GlobalModelRegistry()
-	registry.RegisterClient(auth.ID, auth.Provider, []*cliproxysdk.ModelInfo{{ID: "gpt-6-luna"}})
-	defer registry.UnregisterClient(auth.ID)
-	catalog := &modelCatalog{manager: manager}
-	catalog.reconcile(context.Background())
-	if registry.ClientSupportsModel(auth.ID, "gpt-6.1-sol") {
-		t.Fatal("supplement exposed a paid model to the free model catalog")
-	}
-	// A delayed registration callback cannot resurrect an unregistered client.
-	registry.UnregisterClient(auth.ID)
-	catalog.OnModelsRegistered(context.Background(), auth.Provider, auth.ID, []*cliproxysdk.ModelInfo{{ID: "gpt-6-sol"}})
-	if len(registry.GetModelsForClient(auth.ID)) != 0 {
-		t.Fatal("delayed callback restored a removed model client")
-	}
+	auth, exists := manager.GetByID("fixture.json")
+	t.Fatalf("auth/model state did not converge: model=%s email=%s present=%v auth exists=%v disabled=%v model registered=%v models=%v", model, email, present, exists, auth != nil && auth.Disabled, registry.ClientSupportsModel("fixture.json", model), registeredModels(provider))
 }

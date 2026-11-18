@@ -367,7 +367,8 @@ func claudeMetadataFromKeychain(raw []byte) (map[string]any, error) {
 func saveMetadataAuth(ctx context.Context, authDir, provider, fileName string, metadata map[string]any) (string, error) {
 	store := sdkauth.NewFileTokenStore()
 	store.SetBaseDir(authDir)
-	return store.Save(ctx, &cliproxyauth.Auth{
+	// Imports are explicit credential replacements after source selection.
+	return store.Save(cliproxyauth.WithAuthCreationIntent(ctx), &cliproxyauth.Auth{
 		ID:       fileName,
 		Provider: provider,
 		FileName: fileName,
