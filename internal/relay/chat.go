@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"time"
 )
 
 var ErrChatReference = errors.New("published agent or relay connection is no longer available")
@@ -37,32 +38,73 @@ func (c *Client) checkAttachmentSupport(ctx context.Context, id string) error {
 // invocationClient resolves only a server-owned reference. Browsers cannot
 // supply a URL or a token and cannot silently switch to another identity.
 func (m *Manager) invocationClient(ctx context.Context, id, connectionID string) (*Client, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	if err := m.lockInvocation(ctx); err != nil {
+		return nil, err
+	}
 	if m.community != nil {
 		expected, refErr := m.connectionReference()
 		if refErr != nil {
+			m.mu.Unlock()
 			return nil, refErr
 		}
 		if connectionID == "" || connectionID != expected || !safeID(id) {
+			m.mu.Unlock()
 			return nil, ErrChatReference
 		}
-		instances, err := m.community.List(ctx)
+		client, err := m.client(m.manifest.Endpoint, m.manifest.Token)
+		community := m.community
+		m.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		// Catalog reads use the caller's deadline without holding the manager
+		// mutex, so a slow invocation cannot block another room's preflight.
+		instances, err := community.List(ctx)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if err != nil {
 			return nil, err
 		}
 		for _, item := range instances {
 			if item.relayID() == id {
-				return m.client(m.manifest.Endpoint, m.manifest.Token)
+				return client, nil
 			}
 		}
 		return nil, ErrChatReference
 	}
+	defer m.mu.Unlock()
 	req, exists := m.manifest.Agents[id]
 	if !exists || req.Visibility != "public" || connectionID == "" || connectionID != m.manifest.ConnectionID || !safeID(id) {
 		return nil, ErrChatReference
 	}
 	return m.client(m.manifest.Endpoint, m.manifest.Token)
+}
+
+// Publication can hold mu across network calls. Invocation callers must be able
+// to abandon that wait without leaving a goroutine queued to acquire the lock.
+func (m *Manager) lockInvocation(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m.mu.TryLock() {
+		return nil
+	}
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if m.mu.TryLock() {
+				return nil
+			}
+		}
+	}
 }
 func (m *Manager) Chat(ctx context.Context, id, connectionID, key string, input string, previous string, attachments ...File) (Response, error) {
 	c, err := m.invocationClient(ctx, id, connectionID)
