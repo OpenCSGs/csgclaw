@@ -137,7 +137,7 @@ export function AgentOverviewPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [listOpen]);
-  const templatesQuery = useWorkspaceHubTemplatesQuery({ enabled: templatesTab });
+  const templatesQuery = useWorkspaceHubTemplatesQuery({ enabled: templatesTab, refreshWhenVisible: true });
   const templates = useMemo(
     () => (templatesQuery.data ?? []).filter(isVisibleInHubTemplateList),
     [templatesQuery.data],
@@ -160,7 +160,7 @@ export function AgentOverviewPage() {
   const props = controller.sidebarProps;
   const { t } = props;
   const authed = isAuthenticated(props.authStatus) && !props.authExpired;
-  const selectedTemplateID = requestedTemplateID;
+  const selectedTemplateID = templates.some((item) => item.id === requestedTemplateID) ? requestedTemplateID : "";
   const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   const agents = props.workerAgentItems.filter((agent) => matches(agent.name || agent.id || ""));
   const teams = props.teams.filter((team) => matches(team.title));

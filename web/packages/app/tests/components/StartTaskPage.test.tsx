@@ -13,6 +13,8 @@ import { fetchRelayCatalog } from "@/api/relay";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import {
   CLOUD_AGENTS_STORAGE_KEY,
+  CLOUD_ATTACHMENT_CONSENT_STORAGE_KEY,
+  CLOUD_SEND_CONSENT_STORAGE_KEY,
   PINNED_ENTITIES_STORAGE_KEY,
   TASK_EXAMPLES_HIDDEN_STORAGE_KEY,
 } from "@/shared/storage/keys";
@@ -743,6 +745,8 @@ describe("collaboration directory selection", () => {
 describe("cloud task targets", () => {
   afterEach(() => {
     localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY);
+    localStorage.removeItem(CLOUD_ATTACHMENT_CONSENT_STORAGE_KEY);
+    localStorage.removeItem(CLOUD_SEND_CONSENT_STORAGE_KEY);
     vi.mocked(fetchRelayCatalog).mockResolvedValue([]);
   });
   it.each(["/new", "/new?cloud=agt_demo_contract_reviewer"])(
@@ -760,7 +764,7 @@ describe("cloud task targets", () => {
       expect(await screen.findByRole("button", { name: /iaTargetLabel.*合同条款审阅/ })).toBeVisible();
       expect(screen.queryByRole("group", { name: "collaborationMode" })).not.toBeInTheDocument();
       expect(screen.queryByText("taskEntryModelMissing")).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "composerAddContent" })).not.toBeInTheDocument();
+      expect(screen.getByLabelText("addAttachment")).toBeEnabled();
       fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), {
         target: { value: "Review this contract" },
       });
@@ -786,6 +790,34 @@ describe("cloud task targets", () => {
       expect(requireAuth).not.toHaveBeenCalled();
     },
   );
+  it("confirms the first attachment send even when text confirmation was dismissed permanently", async () => {
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify(cloudAgentFixture));
+    localStorage.setItem(CLOUD_SEND_CONSENT_STORAGE_KEY, "true");
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([...cloudAgentFixture]);
+    vi.mocked(sendMessageRequest)
+      .mockReset()
+      .mockResolvedValue({} as never);
+    const { create } = setup("/new?cloud=agt_demo_contract_reviewer", "");
+    const user = userEvent.setup();
+    const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    const file = new File(["contract"], "contract.txt", { type: "text/plain" });
+    fireEvent.paste(editor, { clipboardData: { files: [file], getData: () => "" } });
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+
+    const dialog = within(await screen.findByRole("dialog", { name: "cloudPrivacyTitle" }));
+    expect(create).not.toHaveBeenCalled();
+    expect(sendMessageRequest).not.toHaveBeenCalled();
+    await user.click(dialog.getByRole("checkbox", { name: "cloudPrivacyRemember" }));
+    await user.click(dialog.getByRole("button", { name: "cloudPrivacyContinue" }));
+    await waitFor(() =>
+      expect(sendMessageRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ content: "", attachments: [file] }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
+    expect(localStorage.getItem(CLOUD_ATTACHMENT_CONSENT_STORAGE_KEY)).toBe("true");
+  });
+
   it("keeps an offline cloud agent visible and unavailable for selection", async () => {
     const offline = { ...cloudAgentFixture[0], status: "offline" as const };
     localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([offline]));

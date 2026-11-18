@@ -36,7 +36,7 @@ export const messages = {
     cloudPrivacyTitle: "这是云端智能体",
     cloudPrivacyAgent: "「{name}」在云端运行。",
     cloudPrivacyMessage:
-      "你发送的文字会离开本机，并在云端处理。发送涉及本地代码、密钥或客户数据的内容前，请确认这些信息可以外发。",
+      "你发送的文字和附件会离开本机，并在云端处理。发送涉及本地代码、密钥或客户数据的内容前，请确认这些信息可以外发。",
     cloudPrivacyRemember: "以后不再提示",
     cloudPrivacyContinue: "继续",
     cloudChatPlaceholder: "输入要发送给云端智能体的消息…",
@@ -3587,7 +3587,7 @@ export const messages = {
     cloudPrivacyTitle: "This is a cloud agent",
     cloudPrivacyAgent: "{name} runs in the cloud.",
     cloudPrivacyMessage:
-      "The text you send leaves this device and is processed in the cloud. Before sending local code, secrets, or customer data, make sure you can share it externally.",
+      "The text and attachments you send leave this device and are processed in the cloud. Before sending local code, secrets, or customer data, make sure you can share it externally.",
     cloudPrivacyRemember: "Don't show this again",
     cloudPrivacyContinue: "Continue",
     cloudChatPlaceholder: "Send a message to this cloud agent…",

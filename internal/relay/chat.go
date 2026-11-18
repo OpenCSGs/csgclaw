@@ -42,12 +42,23 @@ func (m *Manager) invocationClient(ctx context.Context, id, connectionID string)
 	}
 	return m.client(m.manifest.Endpoint, m.manifest.Token)
 }
-func (m *Manager) Chat(ctx context.Context, id, connectionID, key string, input string, previous string) (Response, error) {
+func (m *Manager) Chat(ctx context.Context, id, connectionID, key string, input string, previous string, attachments ...File) (Response, error) {
 	c, err := m.invocationClient(ctx, id, connectionID)
 	if err != nil {
 		return Response{}, err
 	}
-	raw, err := json.Marshal(input)
+	var wireInput any = input
+	if len(attachments) > 0 {
+		parts := make([]map[string]string, 0, len(attachments)+1)
+		if input != "" {
+			parts = append(parts, map[string]string{"type": "input_text", "text": input})
+		}
+		for _, attachment := range attachments {
+			parts = append(parts, map[string]string{"type": "input_file", "file_id": attachment.ID})
+		}
+		wireInput = []map[string]any{{"role": "user", "content": parts}}
+	}
+	raw, err := json.Marshal(wireInput)
 	if err != nil {
 		return Response{}, err
 	}

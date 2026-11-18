@@ -90,7 +90,7 @@ import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 import { RemoteMCPList } from "./RemoteMCPList";
 import { TemplateVersionHistory } from "./TemplateVersionHistory";
-import { TemplatePublishProgress } from "./TemplatePublishProgress";
+import { TemplatePublishProgress } from "@/components/business/TemplatePublishProgress";
 import styles from "./HubDetailPane.module.css";
 import skillResourceStyles from "./SkillResource.module.css";
 import mCPResourceStyles from "./MCPResource.module.css";
@@ -3186,7 +3186,7 @@ export function HubDetailPane({
               <span className="whitespace-pre-wrap break-words">{publishError}</span>
             </InlineError>
           ) : null}
-          <DialogFooter className={templateResourceStyles["hub-template-publish-footer"]}>
+          <DialogFooter>
             <TemplatePublishProgress
               active={publishProgressState === "publishing" || publishBusy}
               complete={publishProgressState === "complete"}

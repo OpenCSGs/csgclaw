@@ -1,5 +1,7 @@
 .progress {
   display: grid;
+  flex: 0 0 100%;
+  min-width: 0;
   gap: var(--space-2);
   padding: var(--space-3);
   box-sizing: border-box;

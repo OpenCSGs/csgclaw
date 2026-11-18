@@ -13,6 +13,7 @@ import { createTranslator } from "@/shared/i18n";
 import { CLOUD_AGENTS_STORAGE_KEY, PINNED_ENTITIES_STORAGE_KEY } from "@/shared/storage/keys";
 import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 import { fetchCloudAgentTemplate, fetchRelayCatalog } from "@/api/relay";
+import * as hubAPI from "@/api/hub";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { paneFromLocation } from "@/models/routing";
 import { createQueryWrapper } from "../helpers/queryClient";
@@ -482,6 +483,37 @@ describe("agent overview guidance and template loading", () => {
     expect(screen.getByRole("button", { name: /Codex worker/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "选一个模板" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "正在加载智能体模板…" })).not.toBeInTheDocument();
+  });
+
+  it("removes an unlisted remote template and closes its detail after window focus", async () => {
+    const { useWorkspaceHubTemplatesQuery: useActualQuery } = await vi.importActual<
+      typeof import("@/hooks/workspace/workspaceQueries")
+    >("@/hooks/workspace/workspaceQueries");
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockImplementation(useActualQuery);
+    const remote: HubTemplate = {
+      ...template,
+      id: "agentichub/visit-prep",
+      name: "Visit Prep",
+      source: { kind: "remote" },
+    };
+    let catalog = [remote];
+    const fetch = vi.spyOn(hubAPI, "fetchHubTemplates").mockImplementation(async (scope) => {
+      return scope === "remote" ? catalog : [template];
+    });
+    try {
+      render(<Page route="/agents?tab=templates&template=agentichub%2Fvisit-prep" />);
+      expect(await screen.findByRole("button", { name: "Visit Prep" })).toBeVisible();
+      expect(await screen.findByRole("region", { name: "Template detail" })).toHaveTextContent(remote.id!);
+
+      catalog = [];
+      act(() => window.dispatchEvent(new Event("focus")));
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Visit Prep" })).not.toBeInTheDocument());
+      expect(screen.queryByRole("region", { name: "Template detail" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Codex worker" })).toBeVisible();
+    } finally {
+      fetch.mockRestore();
+      vi.mocked(useWorkspaceHubTemplatesQuery).mockReset();
+    }
   });
 
   it("reports a community failure without hiding loaded templates and allows retry", async () => {

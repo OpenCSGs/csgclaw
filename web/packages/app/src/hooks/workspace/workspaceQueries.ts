@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { fetchAgentProfileModels, fetchAgentWorkspace, fetchAgentWorkspaceFile, fetchAgents } from "@/api/agents";
@@ -279,9 +279,12 @@ export function useWorkspaceRuntimeImagesQuery(): UseQueryResult<string[]> {
   });
 }
 
-export function useWorkspaceHubTemplatesQuery(options: { enabled?: boolean } = {}): UseQueryResult<HubTemplate[]> {
+export function useWorkspaceHubTemplatesQuery(
+  options: { enabled?: boolean; refreshWhenVisible?: boolean } = {},
+): UseQueryResult<HubTemplate[]> {
   const queryClient = useQueryClient();
-  return useQuery<HubTemplate[]>({
+  const refreshWhenVisible = options.enabled !== false && options.refreshWhenVisible === true;
+  const query = useQuery<HubTemplate[]>({
     queryKey: workspaceQueryKeys.hubTemplates(),
     queryFn: async () => {
       const local = await fetchHubTemplates("local");
@@ -295,10 +298,23 @@ export function useWorkspaceHubTemplatesQuery(options: { enabled?: boolean } = {
       const current = queryClient.getQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates()) || items;
       return [...current.filter((item) => item.source?.kind !== "remote"), ...(Array.isArray(payload) ? payload : [])];
     },
-    staleTime: 30_000,
+    staleTime: refreshWhenVisible ? 0 : 30_000,
+    refetchInterval: refreshWhenVisible ? 60_000 : false,
+    refetchOnWindowFocus: refreshWhenVisible,
     retry: false,
     enabled: options.enabled !== false,
   });
+  const { refetch } = query;
+  useEffect(() => {
+    if (!refreshWhenVisible) return;
+    const refreshOnFocus = () => {
+      void refetch({ cancelRefetch: false });
+    };
+    // Desktop windows can regain focus without a visibilitychange event.
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [refetch, refreshWhenVisible]);
+  return query;
 }
 
 export function useWorkspaceMCPServersQuery(options: { enabled?: boolean } = {}): UseQueryResult<JSONRecord> {

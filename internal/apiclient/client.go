@@ -627,6 +627,10 @@ func (c *Client) DoJSON(ctx context.Context, method, path string, body any, out 
 	if c.callerAgentID != "" {
 		req.Header.Set("X-CSGClaw-Caller-Agent", c.callerAgentID)
 	}
+	return c.doJSONRequest(req, out)
+}
+
+func (c *Client) doJSONRequest(req *http.Request, out any) error {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err

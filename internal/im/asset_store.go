@@ -98,15 +98,10 @@ func discardPreparedAttachments(files []preparedAttachment) {
 	}
 }
 
-func (s *Service) prepareMessageAttachments(uploads []MessageAttachmentUpload, sources ...AttachmentSource) ([]preparedAttachment, error) {
-	if len(uploads) == 0 && len(sources) == 0 {
-		return nil, nil
-	}
-	if s == nil || strings.TrimSpace(s.statePath) == "" {
-		return nil, fmt.Errorf("attachment storage requires persistent IM state")
-	}
+// ValidateMessageAttachmentUploads checks message upload metadata without opening the files.
+func ValidateMessageAttachmentUploads(uploads []MessageAttachmentUpload) error {
 	if len(uploads) > MaxAttachmentsPerMessage {
-		return nil, fmt.Errorf("too many attachments: max %d", MaxAttachmentsPerMessage)
+		return fmt.Errorf("too many attachments: max %d", MaxAttachmentsPerMessage)
 	}
 	total := int64(0)
 	for _, upload := range uploads {
@@ -115,18 +110,31 @@ func (s *Service) prepareMessageAttachments(uploads []MessageAttachmentUpload, s
 			size = upload.SizeBytes
 		}
 		if size <= 0 {
-			return nil, fmt.Errorf("attachment %q is empty", strings.TrimSpace(upload.Name))
+			return fmt.Errorf("attachment %q is empty", strings.TrimSpace(upload.Name))
 		}
 		if size > MaxAttachmentFileBytes {
-			return nil, fmt.Errorf("attachment %q exceeds %d bytes", strings.TrimSpace(upload.Name), MaxAttachmentFileBytes)
+			return fmt.Errorf("attachment %q exceeds %d bytes", strings.TrimSpace(upload.Name), MaxAttachmentFileBytes)
 		}
 		total += size
 		if total > MaxAttachmentMessageBytes {
-			return nil, fmt.Errorf("attachments exceed %d bytes per message", MaxAttachmentMessageBytes)
+			return fmt.Errorf("attachments exceed %d bytes per message", MaxAttachmentMessageBytes)
 		}
 		if _, err := ValidateAttachmentName(upload.Name); err != nil {
-			return nil, err
+			return err
 		}
+	}
+	return nil
+}
+
+func (s *Service) prepareMessageAttachments(uploads []MessageAttachmentUpload, sources ...AttachmentSource) ([]preparedAttachment, error) {
+	if len(uploads) == 0 && len(sources) == 0 {
+		return nil, nil
+	}
+	if s == nil || strings.TrimSpace(s.statePath) == "" {
+		return nil, fmt.Errorf("attachment storage requires persistent IM state")
+	}
+	if err := ValidateMessageAttachmentUploads(uploads); err != nil {
+		return nil, err
 	}
 
 	for _, upload := range uploads {

@@ -3170,8 +3170,8 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 			h.cloudTaskMu.Lock()
 			defer h.cloudTaskMu.Unlock()
 			serviceReq.SenderID = h.im.ResolveUserID(serviceReq.SenderID)
-			if len(req.FileReferences) > 0 || len(req.ResourceRefs) > 0 || len(serviceReq.Attachments) > 0 || serviceReq.RelatesTo != nil || serviceReq.SenderID != room.CreatedBy {
-				writeAgentSessionError(w, 400, "relay_task_text_only", "cloud tasks support text messages from the task creator", nil)
+			if len(req.FileReferences) > 0 || len(req.ResourceRefs) > 0 || serviceReq.RelatesTo != nil || serviceReq.SenderID != room.CreatedBy {
+				writeAgentSessionError(w, 400, "relay_task_text_only", "only the task creator can send messages, and resource references and threads are unsupported", nil)
 				return
 			}
 			serviceReq.Metadata = map[string]any{cloudTaskUnsubmittedKey: true}

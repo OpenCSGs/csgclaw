@@ -741,7 +741,7 @@ function ConversationPaneContent({
           workingParticipants={conversation.cloud_agent || collaboration ? [] : messageControls.composerParticipants}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}
-          onAddAttachments={conversation.cloud_agent ? undefined : onAddAttachments}
+          onAddAttachments={onAddAttachments}
           onComposerCompositionEnd={onComposerCompositionEnd}
           onComposerCompositionStart={onComposerCompositionStart}
           onComposerKeyDown={onComposerKeyDown}
