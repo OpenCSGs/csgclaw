@@ -4,7 +4,7 @@ import { EntityAvatar, EntityPane } from "@/components/business/EntityDetail";
 import { AgentProfileHeader } from "@/components/business/AgentDetails";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { fetchCloudAgentTemplate, fetchRelayCatalog } from "@/api/relay";
+import { fetchCloudAgentTemplate, fetchCloudProfile, fetchRelayCatalog } from "@/api/relay";
 import { Check, Cloud, MoreHorizontal, Plus, Search, Sparkles } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import {
@@ -306,7 +306,14 @@ export function CloudAgentDetail({
     cloudRuntimeProfileSections.find((item) => item.id === (requestedProfileTab ?? activeSection))?.id ?? "profile";
   const online = agent.status === "online";
   const runtimeProfile =
-    agent.publisher.toLowerCase() === "agentichub" && ["csgclaw", "csgclaw-workspace"].includes(agent.type ?? "");
+    agent.cloudReadAvailable === true && ["csgclaw", "csgclaw-workspace"].includes(agent.type ?? "");
+  const liveProfile = useQuery({
+    queryKey: ["cloud-runtime-profile", agent.connectionID, agent.id],
+    queryFn: ({ signal }) => fetchCloudProfile(agent, signal),
+    enabled: runtimeProfile && (section === "profile" || section === "instructions"),
+    retry: false,
+  });
+  const description = runtimeProfile && liveProfile.isSuccess ? liveProfile.data.description : agent.description;
   const template = useQuery({
     queryKey: ["cloud-agent-template", agent.connectionID, agent.id],
     queryFn: ({ signal }) => fetchCloudAgentTemplate(agent, signal),
@@ -352,9 +359,9 @@ export function CloudAgentDetail({
             </>
           }
           description={
-            agent.description ? (
-              <div className="entity-description-display-copy" title={agent.description}>
-                {agent.description}
+            description ? (
+              <div className="entity-description-display-copy" title={description}>
+                {description}
               </div>
             ) : null
           }

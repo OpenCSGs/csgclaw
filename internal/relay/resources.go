@@ -15,6 +15,26 @@ import (
 
 var ErrResourcesUnsupported = errors.New("update the cloud agent to support resource selection")
 var ErrCloudEndpointUnavailable = errors.New("cloud agent read endpoint unavailable")
+var ErrCloudAgentOffline = errors.New("cloud agent is offline; passive reads cannot resume it")
+
+func (m *Manager) cloudReadConnection(ctx context.Context) (knowledgebase.Connection, error) {
+	if m.credentials == nil {
+		return knowledgebase.Connection{}, ErrChatReference
+	}
+	cred, err := m.boundCredentials()
+	if err != nil {
+		return knowledgebase.Connection{}, err
+	}
+	loadConnection := m.cloudConnection
+	if loadConnection == nil {
+		loadConnection = knowledgebase.LoadConnection
+	}
+	connection, err := loadConnection(ctx)
+	if err != nil || strings.TrimRight(connection.CSGHubBaseURL, "/") != strings.TrimRight(cred.Site, "/") || connection.CSGHubAccessToken != cred.Token {
+		return knowledgebase.Connection{}, ErrChatReference
+	}
+	return connection, nil
+}
 
 // CloudProfile deliberately excludes environment, provider credentials and MCP configuration.
 // A runtime instance, rather than its template, is authoritative for these fields.
@@ -56,20 +76,22 @@ func (m *Manager) cloudReader(ctx context.Context, id, connectionID string) (*Cl
 	if err != nil {
 		return nil, "", err
 	}
-	if m.credentials == nil || m.community == nil || entry.Source != "platform" || (entry.Type != "csgclaw" && entry.Type != "csgclaw-workspace") || !safeID(entry.Agent.SourceAgentID) {
+	if m.credentials == nil || m.community == nil || entry.Source != "platform" || (entry.Type != "csgclaw" && entry.Type != "csgclaw-workspace") {
+		return nil, "", ErrCloudEndpointUnavailable
+	}
+	if entry.Agent.Status != "online" {
+		return nil, "", ErrCloudAgentOffline
+	}
+	if !safeID(entry.Agent.SourceAgentID) {
 		return nil, "", ErrCloudEndpointUnavailable
 	}
 	cred, err := m.boundCredentials()
 	if err != nil {
 		return nil, "", err
 	}
-	loadConnection := m.cloudConnection
-	if loadConnection == nil {
-		loadConnection = knowledgebase.LoadConnection
-	}
-	connection, err := loadConnection(ctx)
-	if err != nil || strings.TrimRight(connection.CSGHubBaseURL, "/") != strings.TrimRight(cred.Site, "/") || connection.CSGHubAccessToken != cred.Token {
-		return nil, "", ErrChatReference
+	connection, err := m.cloudReadConnection(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 	instances, err := m.community.List(ctx)
 	if err != nil {

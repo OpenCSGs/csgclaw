@@ -827,7 +827,7 @@ export function useConversationController({
       (agent) =>
         agent.id === cloudTask.agent_id &&
         agent.connectionID === cloudTask.connection_id &&
-        agent.publisher.toLowerCase() === "agentichub" &&
+        agent.cloudReadAvailable === true &&
         ["csgclaw", "csgclaw-workspace"].includes(agent.type ?? ""),
     );
   const resourceAgentID =
@@ -1398,14 +1398,17 @@ export function useConversationController({
       return t("sendNetworkError");
     }
     const code = apiErrorCode(error);
-    if (code.startsWith("resource_") || code === "invalid_resource_reference") {
-      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(resourceAgentID) });
-      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(resourceAgentID) });
-    }
     if (cloudTask && (code === "cloud_resources_unavailable" || code === "resource_service_unavailable")) {
       return t("cloudResourceSendFailed");
     }
-    return localizeAPIError(error, t, errorMessage(error, t("sendFailed")));
+    if (code.startsWith("resource_") || code === "invalid_resource_reference") {
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(resourceAgentID) });
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(resourceAgentID) });
+      return localizeAPIError(error, t, errorMessage(error, t("sendFailed")));
+    }
+    return cloudTask
+      ? localizeAPIError(error, t, errorMessage(error, t("sendFailed")))
+      : errorMessage(error, t("sendFailed"));
   }
 
   async function sendThreadReply(): Promise<void> {

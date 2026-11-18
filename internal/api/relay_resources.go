@@ -32,12 +32,17 @@ func (h *Handler) writeCloudReadError(w http.ResponseWriter, err error) {
 	if errors.Is(err, relay.ErrCloudEndpointUnavailable) {
 		code, status = "cloud_endpoint_unavailable", http.StatusConflict
 	}
+	if errors.Is(err, relay.ErrCloudAgentOffline) {
+		code, status = "agent_offline", http.StatusConflict
+	}
 	var remote *relay.HTTPError
 	if errors.As(err, &remote) && (remote.Status == 401 || remote.Status == 403) {
 		code, status = "cloud_resource_access_denied", http.StatusForbidden
 	}
 	message := "Cloud agent resources are temporarily unavailable. Check the cloud service and try again."
 	switch code {
+	case "agent_offline":
+		message = "The cloud agent is offline. Wait for it to reconnect before reading its profile or resources."
 	case "executor_resources_unsupported":
 		message = "This cloud agent version does not support the selected resources. Update the cloud agent and try again."
 	case "relay_chat_reference_unavailable":

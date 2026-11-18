@@ -135,6 +135,8 @@ func (h *Handler) runCloudTask(roomID string) {
 				switch result.Error.Code {
 				case "model_protocol_unsupported", "input_file_unavailable", "file_delivery_failed", "file_delivery_invalid":
 					code = result.Error.Code
+				case "resource_not_attached", "resource_disabled", "resource_unavailable", "invalid_resource_reference":
+					code = result.Error.Code
 				case "execution_interrupted", "execution_timeout", "cancellation_unconfirmed", "relay_invocation_identity_mismatch":
 					code = "relay_task_result_unavailable"
 				}
@@ -226,6 +228,9 @@ func retryCloudTaskWrite(ctx context.Context, write func() error) error {
 func cloudTaskFailureText(locale, code string) string {
 	var en, zh string
 	switch code {
+	case "resource_not_attached", "resource_disabled", "resource_unavailable", "invalid_resource_reference":
+		en = "A selected resource is no longer available. Remove or reselect the resource before sending the message again."
+		zh = "所选资源已不可用，请移除或重新选择资源后再发送消息。"
 	case "input_file_unavailable":
 		en = "The cloud agent could not receive the input attachments."
 		zh = "云端智能体未能收到输入附件。"
@@ -294,9 +299,10 @@ func cloudTaskRecoveryInput(room im.Room, message im.Message) string {
 			continue
 		}
 		turn, _ := json.Marshal(struct {
-			User  string `json:"user"`
-			Agent string `json:"agent"`
-		}{prior.Content, reply.Content})
+			User      string                      `json:"user"`
+			Agent     string                      `json:"agent"`
+			Resources *apitypes.ResourceSelection `json:"resource_selection,omitempty"`
+		}{prior.Content, reply.Content, apitypes.ResourceSelectionFromMetadata(prior.Metadata)})
 		if len(turn)+1 > budget {
 			continue
 		}
@@ -313,7 +319,7 @@ func cloudTaskRecoveryInput(room im.Room, message im.Message) string {
 		return fallback
 	}
 	slices.Reverse(turns)
-	input := "The remote session context was lost. Use the following completed turns as background. Do not repeat prior actions. Respond to the current user message.\n[" +
+	input := "The remote session context was lost. Use the following completed turns as background. Historical resource selections describe those turns only; do not apply them to the current turn unless selected again. Do not repeat prior actions. Respond to the current user message.\n[" +
 		strings.Join(turns, ",") + "]\n\n" + currentInput
 	// Leave room for the Relay request envelope when the current message
 	// alone is already close to the request size limit.

@@ -19,6 +19,7 @@ export const publishRelayAgent = (id: string): Promise<RelayPublicationStatus> =
 export const unpublishRelayAgent = (id: string): Promise<RelayPublicationStatus> => del(path(id));
 
 export type RelayCatalogEntry = {
+  cloud_read_available?: boolean;
   recommended?: boolean;
   type?: string;
   source?: "platform" | "external";
@@ -61,6 +62,7 @@ export async function fetchRelayCatalog(
   const result = await get<{ data: RelayCatalogEntry[] }>(`api/v1/relay/agents${query}`, { signal });
   return result.data.map((entry) => ({
     id: entry.agent.id,
+    cloudReadAvailable: entry.cloud_read_available === true,
     relayURL: entry.relay_url,
     connectionID: entry.connection_id,
     name: entry.agent.name,

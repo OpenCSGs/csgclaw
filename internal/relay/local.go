@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -88,6 +89,13 @@ func (e *LocalExecutor) Execute(ctx context.Context, frame Frame) Frame {
 	}
 	if err != nil {
 		result.Error = &ProtocolError{Code: "execution_failed", Message: "local Session API execution failed"}
+		var apiError *apiclient.APIError
+		if errors.As(err, &apiError) {
+			switch apiError.Code {
+			case "resource_not_attached", "resource_disabled", "resource_unavailable", "invalid_resource_reference":
+				result.Error = &ProtocolError{Code: apiError.Code, Message: "The selected resource is unavailable. Remove or reselect it before sending again."}
+			}
+		}
 		// Translate only this locally generated diagnostic. Never relay arbitrary
 		// upstream error text, which may contain credentials or private inputs.
 		if strings.Contains(err.Error(), "this request contains Responses tool definitions or tool-use history") && strings.Contains(err.Error(), "native Responses tool support") {

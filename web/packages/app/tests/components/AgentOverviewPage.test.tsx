@@ -868,7 +868,7 @@ describe("cloud agent plaza", () => {
   afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
 
   it("keeps cloud profile sections in the URL and restores them with browser history", async () => {
-    const cloud = { ...cloudAgentFixture[0], type: "csgclaw", publisher: "Agentichub" };
+    const cloud = { ...cloudAgentFixture[0], cloudReadAvailable: true, type: "csgclaw", publisher: "Agentichub" };
     vi.mocked(fetchRelayCatalog).mockResolvedValue([cloud]);
     vi.mocked(fetchCloudProfile).mockResolvedValue({
       id: "worker",

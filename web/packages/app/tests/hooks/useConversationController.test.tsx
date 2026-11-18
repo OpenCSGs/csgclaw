@@ -461,8 +461,22 @@ describe("useConversationController", () => {
     apiMocks.sendMessageRequest.mockReset();
   });
 
+  it.each([false, undefined])("hides cloud resource selection without a read capability (%s)", (cloudReadAvailable) => {
+    const cloud = { ...cloudAgentFixture[0], cloudReadAvailable, type: "csgclaw" };
+    const conversation = {
+      ...directConversation,
+      cloud_agent: { agent_id: cloud.id, connection_id: cloud.connectionID, user_id: "u-demo" },
+    };
+    const { result } = renderConversationController({
+      data: { ...dataWithMessages([]), rooms: [conversation] },
+      cloudCatalog: [cloud],
+      addedCloudAgentIDs: [cloud.id],
+    });
+    expect(result.current.conversationViewProps.resourceAgentID).toBe("");
+  });
+
   it("sends selected cloud resources through the persisted message API", async () => {
-    const cloud = { ...cloudAgentFixture[0], type: "csgclaw" };
+    const cloud = { ...cloudAgentFixture[0], cloudReadAvailable: true, type: "csgclaw" };
     const conversation = {
       ...directConversation,
       cloud_agent: { agent_id: cloud.id, connection_id: cloud.connectionID, user_id: "u-demo" },
@@ -498,7 +512,7 @@ describe("useConversationController", () => {
   ])("localizes cloud resource send errors for %s and preserves the selected skill", async (code, copyKey) => {
     for (const locale of ["zh", "en"] as const) {
       const t = createTranslator(locale);
-      const cloud = { ...cloudAgentFixture[0], type: "csgclaw" };
+      const cloud = { ...cloudAgentFixture[0], cloudReadAvailable: true, type: "csgclaw" };
       const conversation = {
         ...directConversation,
         cloud_agent: { agent_id: cloud.id, connection_id: cloud.connectionID, user_id: "u-demo" },

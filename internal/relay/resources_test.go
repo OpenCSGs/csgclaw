@@ -43,19 +43,27 @@ func TestCloudReadUsesRuntimeAndResourceChatStillUsesRelay(t *testing.T) {
 	var server *httptest.Server
 	var sourceCalls, relayCalls int
 	capability := true
+	status, instanceType, endpointOverride := "online", "csgclaw", ""
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer fixture-token" {
 			t.Error("missing caller authentication")
 		}
 		switch r.URL.Path {
 		case "/api/v1/agent/instances":
-			writeTestJSON(w, 200, map[string]any{"data": []CommunityInstance{{ID: 1, Source: "platform", Type: "csgclaw", Kind: "runtime", ContentID: "instance", Endpoint: server.URL + "/v1/sandboxes/instance", Relay: &RelayRegistration{AgentID: id}}}})
+			endpoint := server.URL + "/v1/sandboxes/instance"
+			if endpointOverride != "" {
+				endpoint = endpointOverride
+				if endpointOverride == "missing" {
+					endpoint = ""
+				}
+			}
+			writeTestJSON(w, 200, map[string]any{"data": []CommunityInstance{{ID: 1, Source: "platform", Type: instanceType, Kind: "runtime", ContentID: "instance", Endpoint: endpoint, Relay: &RelayRegistration{AgentID: id}}}})
 		case "/api/v1/relay/v1/agents/" + id:
 			capabilities := []string{}
 			if capability {
 				capabilities = append(capabilities, CapabilityResourceRefs)
 			}
-			writeTestJSON(w, 200, Agent{ID: id, SourceAgentID: "worker", Status: "online", Capabilities: capabilities})
+			writeTestJSON(w, 200, Agent{ID: id, SourceAgentID: "worker", Status: status, Capabilities: capabilities})
 		case "/v1/sandboxes/instance/api/v1/agents/worker":
 			sourceCalls++
 			if r.Method != http.MethodGet {
@@ -116,6 +124,52 @@ func TestCloudReadUsesRuntimeAndResourceChatStillUsesRelay(t *testing.T) {
 	}
 	if _, err = m.CloudProfile(t.Context(), id, "other-login"); !errors.Is(err, ErrChatReference) {
 		t.Fatalf("wrong account accepted: %v", err)
+	}
+	for _, tc := range []struct {
+		typ, endpoint string
+		readable      bool
+	}{
+		{"csgclaw", "", true},
+		{"csgclaw", "missing", false},
+		{"csgclaw-workspace", "missing", false},
+		{"csgclaw", "https://untrusted.invalid/v1/sandboxes/instance", false},
+	} {
+		instanceType, endpointOverride = tc.typ, tc.endpoint
+		entries, err := m.DiscoverCatalog(t.Context(), []string{})
+		if err != nil || len(entries) != 1 || entries[0].CloudReadAvailable != tc.readable {
+			t.Fatalf("read capability for %+v: entries=%+v err=%v", tc, entries, err)
+		}
+	}
+	instanceType, endpointOverride, status = "csgclaw", "", "offline"
+	before := sourceCalls
+	if _, err := m.CloudProfile(t.Context(), id, connection); !errors.Is(err, ErrCloudAgentOffline) {
+		t.Fatalf("offline profile must not call sandbox: %v", err)
+	}
+	if _, err := m.CloudResources(t.Context(), id, connection, url.Values{"type": {"skill"}}); !errors.Is(err, ErrCloudAgentOffline) {
+		t.Fatalf("offline resources must not call sandbox: %v", err)
+	}
+	if sourceCalls != before {
+		t.Fatal("offline read reached the sandbox auto-resume route")
+	}
+}
+
+func TestLocalExecutorPreservesOnlyAllowlistedResourceErrors(t *testing.T) {
+	for _, code := range []string{"resource_not_attached", "resource_disabled", "resource_unavailable", "invalid_resource_reference", "unexpected_secret_code"} {
+		t.Run(code, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeTestJSON(w, 400, map[string]any{"error": map[string]string{"code": code, "message": "private-upstream-diagnostic"}})
+			}))
+			defer server.Close()
+			executor := LocalExecutor{Client: apiclient.New(server.URL, "fixture-token", server.Client()), AgentID: "worker"}
+			result := executor.Execute(t.Context(), Frame{ResponseID: "resp", SessionID: "session", Input: json.RawMessage(`"inspect"`), ResourceRefs: []apitypes.ResourceReference{{Source: "mcp", ID: "search"}}})
+			want := code
+			if code == "unexpected_secret_code" {
+				want = "execution_failed"
+			}
+			if result.Type != "response.failed" || result.Error == nil || result.Error.Code != want || strings.Contains(result.Error.Message, "private-upstream-diagnostic") {
+				t.Fatalf("unsafe or missing error code: %+v", result)
+			}
+		})
 	}
 }
 

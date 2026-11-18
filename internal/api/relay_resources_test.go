@@ -20,6 +20,7 @@ func TestCloudReadErrorsExplainRecoveryWithoutExposingDiagnostics(t *testing.T) 
 		{"unsupported executor", relay.ErrResourcesUnsupported, 409, "executor_resources_unsupported", "Update the cloud agent"},
 		{"unsupported upstream", &relay.HTTPError{Status: 409, Detail: relay.ProtocolError{Code: "executor_resources_unsupported"}}, 409, "executor_resources_unsupported", "Update the cloud agent"},
 		{"endpoint", relay.ErrCloudEndpointUnavailable, 409, "cloud_endpoint_unavailable", "Check the instance"},
+		{"offline", relay.ErrCloudAgentOffline, 409, "agent_offline", "Wait for it to reconnect"},
 		{"permission", &relay.HTTPError{Status: 403}, 403, "cloud_resource_access_denied", "Check your account"},
 		{"unknown", errors.New("private-upstream-diagnostic"), 502, "cloud_resources_unavailable", "Check the cloud service"},
 	} {
@@ -40,6 +41,17 @@ func TestCloudReadErrorsExplainRecoveryWithoutExposingDiagnostics(t *testing.T) 
 				t.Fatal("upstream diagnostic exposed")
 			}
 		})
+	}
+}
+
+func TestCloudTaskResourceFailureExplainsReselection(t *testing.T) {
+	for _, code := range []string{"resource_not_attached", "resource_disabled", "resource_unavailable", "invalid_resource_reference"} {
+		if got := cloudTaskFailureText("en", code); !strings.Contains(got, "Remove or reselect") {
+			t.Fatalf("missing English recovery action for %s: %s", code, got)
+		}
+		if got := cloudTaskFailureText("zh", code); !strings.Contains(got, "移除或重新选择") {
+			t.Fatalf("missing Chinese recovery action for %s: %s", code, got)
+		}
 	}
 }
 

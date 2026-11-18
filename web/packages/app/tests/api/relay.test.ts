@@ -11,6 +11,7 @@ it.each([
         data: [
           {
             source,
+            cloud_read_available: source === "platform",
             recommended: true,
             owned_by_current_user: source === "platform" ? true : undefined,
             type: "csgclaw",
@@ -46,6 +47,7 @@ it.each([
     recommended: true,
     ownedByCurrentUser: source === "platform",
     publisher,
+    cloudReadAvailable: source === "platform",
     type: "csgclaw",
     avatar: "avatar/cloud-csgclaw.png",
   });
@@ -55,13 +57,11 @@ it.each([
 it("routes cloud resource reads through the local read-only proxy", async () => {
   const { cloudResourceScope } = await import("@/models/cloudResourceScope");
   const { fetchConversationResourceBatch } = await import("@/api/agentResources");
-  const fetcher = vi
-    .fn()
-    .mockResolvedValue(
-      new Response(JSON.stringify({ items: [], total: 0, list_revision: "revision", has_more: false }), {
-        status: 200,
-      }),
-    );
+  const fetcher = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ items: [], total: 0, list_revision: "revision", has_more: false }), {
+      status: 200,
+    }),
+  );
   vi.stubGlobal("fetch", fetcher);
   await fetchConversationResourceBatch(
     cloudResourceScope("agt_remote", "account-reference"),
