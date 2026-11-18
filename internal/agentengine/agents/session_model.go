@@ -45,19 +45,18 @@ func (s *ModelConfiguration) SessionModelProfiles(agentID string) ([]AgentProfil
 func (s *ModelConfiguration) ResolvedSessionProfile(agentID, model, reasoningEffort string) (AgentProfile, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	selected, providerID, provider, err := s.sessionModelProviderLocked(agentID)
+	selected, providerID, _, err := s.sessionModelProviderLocked(agentID)
 	if err != nil {
 		return AgentProfile{}, err
 	}
 	model = strings.TrimSpace(model)
 	if model != "" && model != selected.ModelID {
-		if !slices.Contains(provider.Models, model) || containsModelID(imageModels(providerID, []string{model}, provider.ImageModels), model) || containsModelID(videoModels(providerID, nil, provider.VideoModels), model) {
-			return AgentProfile{}, &SessionModelError{Field: "model", Message: "selected model is unavailable in the Agent's provider"}
-		}
-		selected.Provider = ProfileProviderForModelProviderID(providerID)
-		selected.ModelProviderID = providerID
 		selected.ModelID = model
-		selected = hydrateProfileFromProvider(selected, provider)
+		selected.ModelProviderID = providerID
+		if providerID == "" {
+			selected.InputModalities = resolvedInputModalities(selected.Provider, model, false)
+		}
+		selected = s.hydrateProfileFromCatalogLocked(selected)
 	}
 	if effort := config.NormalizeReasoningEffort(reasoningEffort); effort != "" {
 		switch effort {

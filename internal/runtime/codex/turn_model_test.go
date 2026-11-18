@@ -21,7 +21,8 @@ func TestTurnModelCompactionUsesLoadedModelForCurrentTurn(t *testing.T) {
 	for _, overridden := range []bool{false, true} {
 		t.Run(fmt.Sprint(overridden), func(t *testing.T) {
 			profile := agentruntime.Profile{Provider: "api", ModelID: "small", ReasoningEffort: "high", ModelMetadata: modelcap.Resolved{ContextWindow: 32000}}
-			live := &liveSession{spec: SessionSpec{AgentID: canonicalRuntimeAgentID("alice"), RuntimeID: "runtime", Profile: profile, ModelCatalog: []codexmodel.Profile{{Provider: "api", ModelID: "large", Metadata: modelcap.Resolved{ContextWindow: 64000}}, {Provider: "other", ModelID: "other-provider"}}}, session: &Session{SessionID: "thread"}, threadModels: map[string]contract.TurnModel{"thread": {ModelID: "large", ReasoningEffort: "high"}}}
+			previous := contract.TurnModel{ModelID: "large", ReasoningEffort: "high", Metadata: modelcap.Resolved{ContextWindow: 64000}}
+			live := &liveSession{spec: SessionSpec{AgentID: canonicalRuntimeAgentID("alice"), RuntimeID: "runtime", Profile: profile, ModelCatalog: []codexmodel.Profile{{Provider: "other", ModelID: "other-provider"}}}, session: &Session{SessionID: "thread"}, threadModels: map[string]contract.TurnModel{"thread": previous}}
 			manager := newAppServerManager(managerDeps{})
 			manager.sessions["runtime"] = live
 			rt := New(Dependencies{Manager: manager})
@@ -303,15 +304,15 @@ func TestTurnModelIsScopedToNativeThreadAndTurn(t *testing.T) {
 	}
 }
 
-func TestTurnModelRequiresLoadedCatalogMetadata(t *testing.T) {
+func TestTurnModelChecksMetadataForLoadedModels(t *testing.T) {
 	live := &liveSession{spec: SessionSpec{Profile: agentruntime.Profile{ModelID: "model", ModelMetadata: modelcap.Resolved{ContextWindow: 32000}}}}
-	for _, selection := range []contract.TurnModel{
-		{ModelID: "missing", Metadata: modelcap.Resolved{ContextWindow: 32000}},
-		{ModelID: "model", Metadata: modelcap.Resolved{ContextWindow: 64000}},
-	} {
-		if _, err := live.resolveTurnModel(&selection); err == nil {
-			t.Fatalf("accepted unavailable metadata: %+v", selection)
-		}
+	selection := contract.TurnModel{ModelID: "unlisted", Metadata: modelcap.Resolved{ContextWindow: 64000}}
+	if got, err := live.resolveTurnModel(&selection); err != nil || got != selection {
+		t.Fatalf("unlisted model = %+v, error = %v", got, err)
+	}
+	selection.ModelID = "model"
+	if _, err := live.resolveTurnModel(&selection); err == nil {
+		t.Fatal("accepted conflicting context windows for a loaded model")
 	}
 }
 

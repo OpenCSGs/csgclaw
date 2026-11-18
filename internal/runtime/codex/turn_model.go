@@ -49,23 +49,17 @@ func mergedModelCatalog(profile agentruntime.Profile, catalog []codexmodel.Profi
 }
 
 func (s *liveSession) resolveTurnModel(override *contract.TurnModel) (contract.TurnModel, error) {
-	if override == nil {
+	if override == nil || strings.TrimSpace(override.ModelID) == "" {
 		return turnModelFromProfile(s.spec.Profile), nil
 	}
 	selected := *override
 	selected.ModelID = strings.TrimSpace(selected.ModelID)
 	selected.ReasoningEffort = config.NormalizeReasoningEffort(selected.ReasoningEffort)
 	selected.Metadata = selected.Metadata.Normalized()
-	for _, model := range mergedModelCatalog(s.spec.Profile, s.spec.ModelCatalog) {
-		if model.ModelID != selected.ModelID {
-			continue
-		}
-		if model.Metadata.Normalized().ContextWindow != selected.Metadata.ContextWindow {
-			return contract.TurnModel{}, fmt.Errorf("model %q context metadata differs from the running Codex catalog", selected.ModelID)
-		}
-		return selected, nil
+	if loaded, ok := s.loadedTurnModel(selected.ModelID); ok && loaded.Metadata.Normalized().ContextWindow != selected.Metadata.ContextWindow {
+		return contract.TurnModel{}, fmt.Errorf("model %q context metadata differs from the running Codex catalog", selected.ModelID)
 	}
-	return contract.TurnModel{}, fmt.Errorf("model %q is unavailable in the running Codex catalog", selected.ModelID)
+	return selected, nil
 }
 
 // TurnModel resolves a model request belonging to the active native conversation.
@@ -106,14 +100,14 @@ func (r *Runtime) TurnModel(agentID, threadID, turnID, requestedModel string) (c
 	}
 	defer live.mu.Unlock()
 	if waiter.compacting && requestedModel != "" && requestedModel != waiter.model.ModelID {
+		// Native compaction can use the last accepted model before starting
+		// inference with the current turn's selection.
+		if previous, ok := live.threadModels[threadID]; ok && previous.ModelID == requestedModel {
+			return previous, true, nil
+		}
 		loaded, available := live.loadedTurnModel(requestedModel)
 		if !available {
 			return contract.TurnModel{}, false, fmt.Errorf("compaction model %q is unavailable in the running Codex catalog", requestedModel)
-		}
-		// Native compaction can use the last accepted model before starting
-		// inference with the current turn's selection.
-		if previous, ok := live.threadModels[threadID]; ok && previous.ModelID == loaded.ModelID {
-			loaded.ReasoningEffort = previous.ReasoningEffort
 		}
 		return loaded, true, nil
 	}

@@ -143,7 +143,7 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 		t.Fatal(err)
 	}
 	providers := config.LLMConfig{Default: "fixture.model-a", Providers: map[string]config.ProviderConfig{
-		"fixture": {BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", APIProtocol: "responses", Models: []string{"model-a", "model-b"}, ReasoningEffort: defaultEffort, ModelMetadata: map[string]modelcap.Metadata{"model-a": {ContextWindow: 32000}, "model-b": {ContextWindow: 64000}}},
+		"fixture": {BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", APIProtocol: "responses", Models: []string{"model-a"}, ReasoningEffort: defaultEffort, ModelMetadata: map[string]modelcap.Metadata{"model-a": {ContextWindow: 32000}}},
 	}}
 	server := httptest.NewUnstartedServer(nil)
 	defer server.Close()

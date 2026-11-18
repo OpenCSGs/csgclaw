@@ -1580,7 +1580,7 @@ Codex Agent 支持可选的字符串字段 `model` 和 `reasoning_effort`，用�
 
 `reasoning_effort` 接受 `auto`、`none`、`minimal`、`low`、`medium`、`high`、`xhigh` 和 `max`；`off` 是 `none` 的别名。所选 provider/model 需要支持请求的级别。`auto` 使用模型自身的默认推理级别。两个字段分别使用各自的 Profile 默认值，例如只传入 `model` 时，推理级别仍来自 Profile。两个字段也支持 `stream: true`。
 
-模型切换使用 Codex 进程启动时加载的当前 provider 模型目录。启动后新增的模型，或者上下文长度配置发生变化的模型，需要重新加载 Runtime 后才能选择。不可用的选择会返回错误，现有进程继续运行。
+请求中的 `model` 可以指定当前 provider 提供的任意聊天模型，包括配置列表之外的模型。如果更改了 Codex 已加载模型的上下文长度，需要重新加载 Runtime 才能使用新值。
 
 请求可以通过可选的 `extra` 和 `extra_type` 为当前用户消息附加额外的纯文本上下文：
 

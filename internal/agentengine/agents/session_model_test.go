@@ -35,6 +35,8 @@ func TestSessionModelOptionsUseIndependentProfileDefaults(t *testing.T) {
 		window                               int64
 	}{
 		{"second", "high", "second", "high", 64000},
+		{"unlisted", "", "unlisted", "low", modelcap.DefaultContextWindow},
+		{"other-model", "", "other-model", "low", modelcap.DefaultContextWindow},
 		{"", "", "first", "low", 32000},
 		{"second", "", "second", "low", 64000},
 		{"", "high", "first", "high", 32000},
@@ -49,10 +51,8 @@ func TestSessionModelOptionsUseIndependentProfileDefaults(t *testing.T) {
 			t.Fatalf("selection %q/%q: model=%q effort=%q window=%d", test.model, test.effort, profile.ModelID, profile.ReasoningEffort, profile.ModelMetadata.ContextWindow)
 		}
 	}
-	for _, test := range []struct{ model, effort string }{{"unknown", ""}, {"other-model", ""}, {"image", ""}, {"first", "invalid"}} {
-		if _, err := controller.Models().ResolvedSessionProfile("agent-test", test.model, test.effort); err == nil {
-			t.Fatalf("accepted invalid selection %q/%q", test.model, test.effort)
-		}
+	if _, err := controller.Models().ResolvedSessionProfile("agent-test", "first", "invalid"); err == nil {
+		t.Fatal("accepted invalid reasoning effort")
 	}
 	after, _ := controller.Agent("agent-test")
 	if !reflect.DeepEqual(before, after) {
@@ -88,11 +88,6 @@ func TestSessionModelOptionsFollowProviderUpdates(t *testing.T) {
 	if selected.APIKey != "updated-key" || selected.BaseURL != provider.BaseURL || selected.ModelMetadata.ContextWindow != 96000 || selected.ModelMetadata.ContextSource != "user" || selected.ReasoningEffort != before.ReasoningEffort {
 		t.Fatalf("updated selection = %+v", selected)
 	}
-	for _, model := range []string{"model-0001", "gpt-image-1", "video"} {
-		if _, err := service.ResolvedSessionProfile("agent-test", model, ""); err == nil {
-			t.Fatalf("accepted unavailable chat model %q", model)
-		}
-	}
 	selected.Headers["X-Provider"] = "changed"
 	catalog, err := service.SessionModelProfiles("agent-test")
 	if err != nil || len(catalog) != 2 || catalog[0].ModelID != "model-0000" || catalog[1].ModelID != "replacement" || catalog[1].Headers["X-Provider"] != "updated" || catalog[1].ModelMetadata.ContextWindow != 96000 {
@@ -110,6 +105,12 @@ func TestSessionModelOptionsResolveInlineProvider(t *testing.T) {
 	selected, err := service.ResolvedSessionProfile("agent-test", "model-0001", "high")
 	if err != nil || selected.ModelProviderID != "example" || selected.ModelID != "model-0001" || selected.ReasoningEffort != "high" || selected.ModelMetadata.ContextWindow != 32000 {
 		t.Fatalf("inline selection = %+v, error = %v", selected, err)
+	}
+	item.AgentProfile.BaseURL = "https://inline.example/v1"
+	service.agents["agent-test"] = item
+	selected, err = service.ResolvedSessionProfile("agent-test", "unlisted", "")
+	if err != nil || selected.ModelID != "unlisted" || selected.BaseURL != item.AgentProfile.BaseURL || selected.APIKey != item.AgentProfile.APIKey {
+		t.Fatal("unlisted model did not use the inline provider", err)
 	}
 }
 

@@ -1621,7 +1621,7 @@ For a Codex agent, optional string fields `model` and `reasoning_effort` select 
 
 `reasoning_effort` accepts `auto`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; `off` is an alias for `none`. The selected provider/model must support the requested level. `auto` lets the model choose its reasoning default. Each omitted field independently inherits its Profile value, including when the other field is specified. Both fields also work with `stream: true`.
 
-Model switching uses the current provider's catalog loaded when the Codex process starts. Models added afterward, or models whose context-window metadata has changed, require reloading the Runtime before they can be selected. An unavailable selection returns an error and keeps the running process intact.
+An explicit `model` can name any chat model served by the configured provider, including one absent from its configured model list. If the context window changes for a model already loaded by Codex, reload the Runtime to use the updated value.
 
 The request may attach supplemental text to the current user message with the
 optional `extra` and `extra_type` fields:
