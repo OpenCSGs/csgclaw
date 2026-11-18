@@ -603,12 +603,12 @@ it("moves the signed-in user's community templates to My templates with a cloud 
   );
   const view = render(<Page username="alice" />);
   expect(screen.getByRole("button", { name: /agentichub worker/ })).toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: /仅云端/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: /云端/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /alice worker/ })).not.toBeInTheDocument();
   await userEvent.setup().click(screen.getByRole("button", { name: "我的 2" }));
   expect(screen.getByRole("button", { name: /alice worker 云端/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
-  const cloudHeading = screen.getByRole("heading", { name: "仅云端（1）" });
+  const cloudHeading = screen.getByRole("heading", { name: "云端（1）" });
   expect(screen.getByRole("button", { name: "Local worker" }).compareDocumentPosition(cloudHeading)).toBe(
     Node.DOCUMENT_POSITION_FOLLOWING,
   );
@@ -624,7 +624,7 @@ it("moves the signed-in user's community templates to My templates with a cloud 
   view.rerender(<Page />);
   expect(screen.queryByRole("button", { name: /alice worker/ })).not.toBeInTheDocument();
   expect(within(screen.getByRole("complementary")).queryByText("云端")).not.toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: /仅云端/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: /云端/ })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
 });
 
@@ -697,7 +697,7 @@ describe("personal template cloud sign-in", () => {
     expect(screen.getByRole("button", { name: "去登录" })).toBeVisible();
     view.rerender(<Page route={route} username="alice" />);
     const list = within(screen.getByRole("complementary"));
-    const heading = list.getByRole("heading", { name: "仅云端（0）" });
+    const heading = list.getByRole("heading", { name: "云端（0）" });
     const empty = list.getByText("暂无云端智能体");
     expect(heading.compareDocumentPosition(empty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(list.queryByRole("button", { name: "去登录" })).not.toBeInTheDocument();
@@ -710,7 +710,7 @@ describe("personal template cloud sign-in", () => {
     (state) => {
       vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState(state));
       render(<Page route={route} username="alice" />);
-      expect(screen.getByRole("heading", { name: "仅云端（0）" })).toBeVisible();
+      expect(screen.getByRole("heading", { name: "云端（0）" })).toBeVisible();
       expect(screen.queryByText("暂无云端智能体")).not.toBeInTheDocument();
     },
   );
@@ -718,7 +718,7 @@ describe("personal template cloud sign-in", () => {
   it("localizes the empty cloud section", () => {
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [] }));
     render(<Page route={route} username="alice" locale="en" />);
-    expect(screen.getByRole("heading", { name: "Cloud only (0)" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Cloud (0)" })).toBeVisible();
     expect(screen.getByText("No cloud agents yet")).toBeVisible();
   });
 
@@ -726,7 +726,7 @@ describe("personal template cloud sign-in", () => {
     render(<Page route={route} username="alice" />);
     await userEvent.setup().type(screen.getByRole("textbox", { name: "搜索模板名称、用途说明或来源" }), "missing");
     const list = within(screen.getByRole("complementary"));
-    expect(list.getByRole("heading", { name: "仅云端（0）" })).toBeVisible();
+    expect(list.getByRole("heading", { name: "云端（0）" })).toBeVisible();
     expect(list.getByText(createTranslator("zh")("workspaceSearchNoResults"))).toBeVisible();
     expect(list.queryByText("暂无云端智能体")).not.toBeInTheDocument();
   });
