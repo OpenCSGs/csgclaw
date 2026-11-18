@@ -20,10 +20,12 @@
 
 .body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
 .actions {
+  flex-wrap: wrap;
   gap: var(--space-2);
   padding: 16px 22px 22px;
 }
@@ -94,6 +96,8 @@
 }
 
 .returnHint {
+  min-width: 0;
+  overflow-wrap: anywhere;
   margin: 0;
   color: var(--gray-500);
   font-size: 13px;
@@ -121,4 +125,44 @@
   border-color: var(--gray-700);
   background: var(--surface);
   color: var(--gray-100);
+}
+
+.siteActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.probeResult {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-sm-size);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.probeResult svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.probeSuccess {
+  color: var(--success-text);
+}
+
+.probeFailure {
+  color: var(--danger-text);
+}
+
+.siteManagement {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  margin-inline-start: auto;
 }

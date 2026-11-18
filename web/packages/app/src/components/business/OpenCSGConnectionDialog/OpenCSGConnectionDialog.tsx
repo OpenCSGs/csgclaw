@@ -1,3 +1,4 @@
+import { CircleCheck, CircleX } from "lucide-react";
 import { checkAuthSite, fetchAuthLoginSites } from "@/api/auth";
 import type { AuthLoginSite } from "@/api/auth";
 import { useEffect, useId, useRef, useState } from "react";
@@ -73,6 +74,7 @@ export function OpenCSGConnectionDialog({
 }: OpenCSGConnectionDialogProps) {
   const customFieldErrorID = useId();
   const siteFieldID = useId();
+  const customFieldHintID = useId();
   const previousOpenRef = useRef(false);
   const [draft, setDraft] = useState(environment);
   const [customFieldTouched, setCustomFieldTouched] = useState(false);
@@ -103,6 +105,8 @@ export function OpenCSGConnectionDialog({
   const switching = variant === "switch-site";
   const sameSite = switching && draftURL === normalizeBaseURL(environment.opencsgBaseURL);
   const authenticationRequired = variant === "authentication-required";
+  const targetLabel =
+    selectedSite?.locales[siteLocale].title || selectedSavedSite?.name || (ready ? new URL(draftURL).host : "");
 
   useEffect(() => {
     if (open && !previousOpenRef.current) {
@@ -237,7 +241,15 @@ export function OpenCSGConnectionDialog({
       <DialogContent className={styles.dialog}>
         <DialogHeader className={styles.header}>
           <div className={styles.copy}>
-            <DialogTitle>{t(authenticationRequired ? "openCSGLoginRequiredTitle" : "csghubConnectTitle")}</DialogTitle>
+            <DialogTitle>
+              {t(
+                editingURL
+                  ? "csghubSiteEdit"
+                  : authenticationRequired
+                    ? "openCSGLoginRequiredTitle"
+                    : "csghubConnectTitle",
+              )}
+            </DialogTitle>
             <DialogDescription>
               {t(authenticationRequired ? "openCSGLoginRequiredDescription" : "csghubConnectDescription")}
             </DialogDescription>
@@ -330,7 +342,9 @@ export function OpenCSGConnectionDialog({
                 <span>{t("csghubOpenCSGBaseURL")}</span>
                 <TextInput
                   disabled={busy}
-                  aria-describedby={showCustomFieldError ? customFieldErrorID : undefined}
+                  aria-describedby={[customFieldHintID, showCustomFieldError ? customFieldErrorID : ""]
+                    .filter(Boolean)
+                    .join(" ")}
                   aria-invalid={showCustomFieldError || undefined}
                   value={draft.opencsgBaseURL}
                   placeholder="https://openeast.opencsg.com"
@@ -348,7 +362,22 @@ export function OpenCSGConnectionDialog({
                   </span>
                 ) : null}
               </label>
-              <div>
+              <p id={customFieldHintID} className={styles.returnHint}>
+                {t(
+                  !ready
+                    ? "csghubCustomSiteInputHint"
+                    : editingURL
+                      ? "csghubSiteEditingHint"
+                      : "csghubCustomSiteSaveHint",
+                )}
+              </p>
+              {duplicateEdit ? <InlineError>{t("csghubSiteDuplicate")}</InlineError> : null}
+            </div>
+          ) : null}
+
+          <div className={styles.siteActions}>
+            {showCustomField && !editingURL ? (
+              <>
                 <Button
                   variant="secondaryGray"
                   size="sm"
@@ -357,38 +386,20 @@ export function OpenCSGConnectionDialog({
                 >
                   {t("csghubSaveCustomSite")}
                 </Button>
-                {editingURL ? (
-                  <Button
-                    variant="tertiaryGray"
-                    size="sm"
-                    onClick={() => {
-                      setDraft(siteDraft(editingURL));
-                      setManual(false);
-                      setEditingURL("");
-                      setSaveError(false);
-                      resetProbe();
-                    }}
-                  >
-                    {t("cancel")}
-                  </Button>
-                ) : null}
-              </div>
-              {duplicateEdit ? <InlineError>{t("csghubSiteDuplicate")}</InlineError> : null}
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
+              </>
+            ) : null}
             <Button
               variant="secondaryGray"
               size="sm"
               disabled={busy || !ready}
               loading={probe === "testing"}
+              loadingLabel={t("csghubSiteTesting")}
               onClick={() => void testSite()}
             >
               {t("csghubSiteTest")}
             </Button>
             {selectedSavedSite && !showCustomField ? (
-              <>
+              <div className={styles.siteManagement}>
                 <Button
                   variant="secondaryGray"
                   size="sm"
@@ -404,7 +415,7 @@ export function OpenCSGConnectionDialog({
                 {confirmDelete ? (
                   <>
                     <Button
-                      variant="secondaryGray"
+                      variant="danger"
                       size="sm"
                       disabled={busy}
                       onClick={() => deleteSite(selectedSavedSite.url)}
@@ -416,42 +427,80 @@ export function OpenCSGConnectionDialog({
                     </Button>
                   </>
                 ) : (
-                  <Button variant="secondaryGray" size="sm" disabled={busy} onClick={() => setConfirmDelete(true)}>
+                  <Button variant="outlineDanger" size="sm" disabled={busy} onClick={() => setConfirmDelete(true)}>
                     {t("delete")}
                   </Button>
                 )}
-              </>
+              </div>
             ) : null}
           </div>
           {sameSite ? <p className={styles.returnHint}>{t("csghubSiteAlreadyConnected")}</p> : null}
           {typeof probe === "number" ? (
-            <p role="status" className={styles.returnHint}>
-              {t("csghubSiteTestPassed", { latency: String(probe) })}
+            <p role="status" className={`${styles.probeResult} ${styles.probeSuccess}`}>
+              <CircleCheck size={16} aria-hidden="true" />
+              <span>{t("csghubSiteTestPassed", { latency: String(probe) })}</span>
             </p>
           ) : null}
-          {probe === "failed" ? <InlineError>{t("csghubSiteTestFailed")}</InlineError> : null}
+          {probe === "failed" ? (
+            <p role="alert" className={`${styles.probeResult} ${styles.probeFailure}`}>
+              <CircleX size={16} aria-hidden="true" />
+              <span>{t("csghubSiteTestFailed")}</span>
+            </p>
+          ) : null}
           {saveError ? <InlineError>{t("csghubSaveCustomSiteFailed")}</InlineError> : null}
 
-          <p className={styles.returnHint}>
-            {t(authenticationRequired ? "openCSGLoginRequiredHint" : "csghubConnectReturnHint")}
-          </p>
+          {!editingURL ? (
+            <p className={styles.returnHint}>
+              {ready && !sameSite ? t("csghubLoginTargetHint", { site: targetLabel }) : null}
+              {ready && !sameSite ? " " : null}
+              {t(authenticationRequired ? "openCSGLoginRequiredHint" : "csghubConnectReturnHint")}
+            </p>
+          ) : null}
           {error ? <InlineError>{error}</InlineError> : null}
         </DialogBody>
         <DialogFooter className={styles.actions}>
-          <Button variant="secondaryGray" size="md" disabled={busy} onClick={() => handleOpenChange(false)}>
-            {t("cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            size="md"
-            loading={busy}
-            disabled={!ready || sameSite || Boolean(editingURL)}
-            onClick={() => onConnect(manual ? siteDraft(draftURL) : draft)}
-          >
-            {t(
-              switching ? "csghubSwitchEnvironment" : authenticationRequired ? "csghubSignIn" : "csghubConnectContinue",
-            )}
-          </Button>
+          {editingURL ? (
+            <>
+              <Button
+                variant="secondaryGray"
+                size="md"
+                disabled={busy}
+                onClick={() => {
+                  setDraft(siteDraft(editingURL));
+                  setManual(false);
+                  setEditingURL("");
+                  setSaveError(false);
+                  resetProbe();
+                }}
+              >
+                {t("csghubSiteCancelEdit")}
+              </Button>
+              <Button variant="primary" size="md" disabled={busy || !ready || duplicateEdit} onClick={saveCustomSite}>
+                {t("csghubSiteSaveChanges")}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="secondaryGray" size="md" disabled={busy} onClick={() => handleOpenChange(false)}>
+                {t("cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                loading={busy}
+                disabled={!ready || sameSite || Boolean(editingURL)}
+                onClick={() => onConnect(manual ? siteDraft(draftURL) : draft)}
+              >
+                {t(
+                  switching
+                    ? "csghubSwitchEnvironment"
+                    : authenticationRequired
+                      ? "csghubSignIn"
+                      : "csghubConnectContinue",
+                )}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </DialogRoot>
