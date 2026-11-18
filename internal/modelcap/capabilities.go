@@ -80,6 +80,8 @@ func codexReasoningEfforts(model string) []string {
 	}
 	switch model {
 	case "gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-chat-thinking":
+		// The Codex Ultra preset depends on native multi-agent delegation, which
+		// CSGClaw disables. The Responses endpoint accepts efforts through max.
 		return []string{"low", "medium", "high", "xhigh", "max"}
 	case "gpt-6-sol", "gpt-6-luna", "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna":
 		return []string{"none", "low", "medium", "high", "xhigh", "max"}

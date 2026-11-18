@@ -60,7 +60,7 @@ func catalog(provider, _, model string) Metadata {
 		switch {
 		case matchesModelAlias(name, "gpt-6-2-astra"), matchesModelAlias(name, "gpt-6-chat-thinking"):
 			return Metadata{ContextWindow: 272000}
-		case matchesModelAlias(name, "gpt-6-2-sol"), matchesModelAlias(name, "gpt-6-1-terra"):
+		case matchesModelAlias(name, "gpt-6-2-sol"), matchesModelAlias(name, "gpt-6-1-sol"), matchesModelAlias(name, "gpt-6-1-terra"):
 			return Metadata{ContextWindow: 500000}
 		}
 	}
