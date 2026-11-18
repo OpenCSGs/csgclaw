@@ -1,4 +1,4 @@
-ARG GO_IMAGE=golang:1.26.2-alpine
+ARG GO_IMAGE=golang:1.26.10-alpine
 ARG NODE_IMAGE=node:22.13.0-alpine
 ARG PNPM_VERSION=11.1.3
 ARG NPM_REGISTRY=https://registry.npmmirror.com

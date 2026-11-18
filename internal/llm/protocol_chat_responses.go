@@ -18,11 +18,15 @@ func init() {
 	})
 }
 
-func chatRequestToResponses(model string, raw []byte, stream bool) []byte {
+func chatRequestToResponses(model string, raw []byte, stream bool) ([]byte, error) {
 	converted := translator.TranslateRequest(translator.FormatOpenAI, translator.FormatCodex, model, raw, stream)
 	var source, target map[string]json.RawMessage
-	_ = json.Unmarshal(raw, &source)
-	_ = json.Unmarshal(converted, &target)
+	if err := json.Unmarshal(raw, &source); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(converted, &target); err != nil {
+		return nil, err
+	}
 	// These parameters are supported by ordinary Responses services. The Codex
 	// converter either drops them or supplies Codex-specific defaults.
 	for _, field := range []string{"temperature", "top_p", "parallel_tool_calls", "service_tier", "metadata", "user", "safety_identifier", "prompt_cache_key", "prompt_cache_retention", "include"} {
@@ -43,8 +47,7 @@ func chatRequestToResponses(model string, raw []byte, stream bool) []byte {
 	if source["reasoning_effort"] == nil {
 		delete(target, "reasoning")
 	}
-	encoded, _ := json.Marshal(target)
-	return encoded
+	return json.Marshal(target)
 }
 
 func responsesJSONToChat(ctx context.Context, model string, original, request, raw []byte, state *any) []byte {

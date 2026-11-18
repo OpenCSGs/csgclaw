@@ -25,6 +25,8 @@ func TestSearchCapabilityRequiresKnownProviderAndModel(t *testing.T) {
 		want            bool
 	}{
 		{"codex", "gpt-5.5", true}, {"codex", "gpt-5.6-sol", true},
+		{"codex", "gpt-6.2-astra", true}, {"codex", "gpt-6.2-sol", true},
+		{"api", "gpt-6.2-astra", false}, {"api", "gpt-6.2-sol", false},
 		{"codex", "gpt-6.1-sol", true}, {"codex", "gpt-6-sol", true}, {"codex", "gpt-6-luna", true},
 		{"api", "gpt-6.1-sol", false}, {"api", "gpt-6-sol", false}, {"api", "gpt-6-luna", false},
 		{"api", "gpt-5.5", false}, {"csghub", "gpt-5.5", false},
@@ -37,7 +39,7 @@ func TestSearchCapabilityRequiresKnownProviderAndModel(t *testing.T) {
 }
 
 func TestKnownVisionModelsDeclareImageInput(t *testing.T) {
-	for _, model := range []string{"qwen3.7-plus", "qwen3.7-plus-20260901", "qwen3-vl"} {
+	for _, model := range []string{"gpt-6.2-astra", "gpt-6.2-sol", "qwen3.7-plus", "qwen3.7-plus-20260901", "qwen3-vl"} {
 		got := ForProviderModel("api", model).InputModalities
 		if len(got) != 2 || got[0] != "text" || got[1] != "image" {
 			t.Errorf("api/%s input modalities = %v, want text and image", model, got)
@@ -53,7 +55,7 @@ func TestCodexReasoningCapabilities(t *testing.T) {
 		models []string
 		levels []string
 	}{
-		{[]string{"gpt-6.1-sol", "gpt-6-astra"}, []string{"low", "medium", "high", "xhigh", "max"}},
+		{[]string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-sol", "gpt-6-astra"}, []string{"low", "medium", "high", "xhigh", "max"}},
 		{[]string{"gpt-6-sol", "gpt-6-luna", "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}, []string{"none", "low", "medium", "high", "xhigh", "max"}},
 		{[]string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"}, []string{"none", "low", "medium", "high", "xhigh"}},
 		{[]string{"gpt-5.3-codex-spark"}, []string{"low", "medium", "high", "xhigh"}},

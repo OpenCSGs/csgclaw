@@ -11,6 +11,10 @@ func TestMetadataResolution(t *testing.T) {
 	}{
 		{"unknown", "custom", "http://local/v1", "x", Metadata{}, Metadata{}, 200000, "default"},
 		{"official", "api", "https://api.openai.com/v1", "gpt-4o", Metadata{}, Metadata{}, 128000, "catalog"},
+		{"Astra 6.2 API", "api", "https://api.openai.com/v1", "gpt-6.2-astra", Metadata{}, Metadata{}, 1050000, "catalog"},
+		{"Sol 6.2 API", "api", "https://api.openai.com/v1", "gpt-6.2-sol", Metadata{}, Metadata{}, 1050000, "catalog"},
+		{"Astra 6.2 Codex default", "codex", "http://localhost/v1", "gpt-6.2-astra", Metadata{}, Metadata{}, 272000, "catalog"},
+		{"Sol 6.2 Codex default", "codex", "http://localhost/v1", "gpt-6.2-sol", Metadata{}, Metadata{}, 500000, "catalog"},
 		{"Sol 6.1 API", "api", "https://api.openai.com/v1", "gpt-6.1-sol", Metadata{}, Metadata{}, 1050000, "catalog"},
 		{"Sol 6.1 Codex capacity", "codex", "http://localhost/v1", "gpt-6.1-sol", Metadata{}, Metadata{}, 1050000, "catalog"},
 		{"private deployment", "custom", "http://local/v1", "gpt-4o", Metadata{}, Metadata{}, 128000, "catalog"},

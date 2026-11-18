@@ -34,7 +34,9 @@ func CloneImageGeneration(in *ImageGenerationConfig) *ImageGenerationConfig {
 // Other image models are discovered through provider task metadata.
 func IsGPTImageModel(model string) bool {
 	switch model {
-	case "gpt-image-1", "gpt-image-1-mini", "gpt-image-1.5", "gpt-image-2", "gpt-image-2.5", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst":
+	case "gpt-image-1", "gpt-image-1-mini", "gpt-image-1.5", "gpt-image-2",
+		"gpt-image-2.5", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst",
+		"gpt-image-2.6", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst":
 		return true
 	default:
 		return false

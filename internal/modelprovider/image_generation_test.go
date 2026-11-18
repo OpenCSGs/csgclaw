@@ -48,12 +48,12 @@ func TestGenerateImageUsesImagesEndpointAndValidatesContent(t *testing.T) {
 }
 
 func TestImageCapabilityDoesNotConfuseVisionWithGeneration(t *testing.T) {
-	for _, id := range []string{"gpt-6-astra", "gpt-5.5", "qwen-vl", "fake-gpt-image-2"} {
+	for _, id := range []string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6-astra", "gpt-5.5", "qwen-vl", "fake-gpt-image-2"} {
 		if IsGPTImageModel(id) {
 			t.Fatalf("incorrect image capability for %s", id)
 		}
 	}
-	for _, id := range []string{"gpt-image-1.5", "gpt-image-2", "gpt-image-2.5", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"} {
+	for _, id := range []string{"gpt-image-1.5", "gpt-image-2", "gpt-image-2.5", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.6", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
 		if !IsGPTImageModel(id) {
 			t.Fatalf("missing image capability for %s", id)
 		}
