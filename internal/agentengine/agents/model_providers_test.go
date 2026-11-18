@@ -128,10 +128,11 @@ func TestModelProviderCatalogPrefersAvailableOpenCSGAuto(t *testing.T) {
 		{"signed-in gateway", ModelProviderIDOpenCSG, "https://gateway.example/v1", []string{"gpt-5", "auto", "qwen3"}, []string{"auto", "gpt-5", "qwen3"}},
 		{"production custom provider", "company-prod", "https://ai.space.opencsg.com/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
 		{"production gateway", "company-prod", "https://aigateway.opencsg.com/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
-		{"staging custom provider", "company-stg", "https://aigateway.opencsg-stg.com/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
+		{"staging custom provider", "company-stg", "https://opencsg-stg.com/aigateway/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
+		{"other staging service", "custom", "https://opencsg-stg.com/other/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
 		{"auto absent", ModelProviderIDOpenCSG, "", []string{"gpt-5", "qwen3"}, []string{"gpt-5", "qwen3"}},
 		{"ordinary provider", "custom", "https://api.example/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
-		{"similar hostname", "custom", "https://aigateway.opencsg-stg.com.example/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
+		{"similar hostname", "custom", "https://opencsg-stg.com.example/aigateway/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			original := strings.Join(tc.models, ",")
@@ -159,7 +160,7 @@ func TestModelProviderCatalogExposesOpenCSGKind(t *testing.T) {
 	oldGatewayBaseURL := defaultOpenCSGAIGatewayBaseURL
 	t.Cleanup(func() { defaultOpenCSGAIGatewayBaseURL = oldGatewayBaseURL })
 	defaultOpenCSGAIGatewayBaseURL = func() string {
-		return "https://aigateway.opencsg-stg.com/v1"
+		return "https://opencsg-stg.com/aigateway/v1"
 	}
 
 	catalog := ModelProviderCatalogFromLLM(config.LLMConfig{})
@@ -180,7 +181,7 @@ func TestModelProviderCatalogExposesOpenCSGKind(t *testing.T) {
 	if provider.Preset != ModelProviderIDOpenCSG {
 		t.Fatalf("OpenCSG provider preset = %q, want %q", provider.Preset, ModelProviderIDOpenCSG)
 	}
-	if provider.BaseURL != "https://aigateway.opencsg-stg.com/v1" {
+	if provider.BaseURL != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("OpenCSG provider BaseURL = %q, want stg gateway", provider.BaseURL)
 	}
 }

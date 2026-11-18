@@ -15,7 +15,7 @@ Genius 创建知识库助手时，可能需要用户选择资料来源或补充�
 启用实例服务认证时，设置 `user_input: true` 发送消息、查询待回答的问题和提交答案都需要该实例的有效服务凭证。Portal 对这三个请求使用与附件访问相同的实例地址和网关授权方式。缺少凭证或凭证无效时，接口返回 `401 unauthorized`。取消已启用表单的执行，或在仍有表单等待处理时发送普通消息，也需要有效凭证。会话中没有待处理表单时，普通文本 JSON 请求可以省略 `user_input` 并匿名发送。
 
 ```sh
-ENDPOINT='https://aigateway.opencsg-stg.com/v1/sandboxes/<sandbox-name>'
+ENDPOINT='https://opencsg-stg.com/aigateway/v1/sandboxes/<sandbox-name>'
 AGENT='codex-worker'
 SESSION_ID='knowledge-assistant-demo'
 SESSION_URL="${ENDPOINT%/}/api/v1/agents/$AGENT/sessions/$SESSION_ID"

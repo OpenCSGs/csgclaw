@@ -725,6 +725,10 @@ func prioritizeOpenCSGAutoModel(providerID, baseURL string, models []string) []s
 		}
 		switch strings.ToLower(endpoint.Hostname()) {
 		case "ai.space.opencsg.com", "aigateway.opencsg.com", "aigateway.opencsg-stg.com":
+		case "opencsg-stg.com":
+			if strings.TrimRight(endpoint.EscapedPath(), "/") != "/aigateway/v1" {
+				return out
+			}
 		default:
 			return out
 		}

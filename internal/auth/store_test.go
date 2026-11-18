@@ -347,6 +347,28 @@ func TestRefreshAIGatewayCredentialsReplacesCachedBuiltinAPIKey(t *testing.T) {
 	}
 }
 
+func TestAIGatewayCredentialsLoadsLegacyStageURL(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	store, err := DefaultStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := store.CSGHubProviderPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := updateRootOpenCSGAuth(path, func(state *openCSGAuthRecord) {
+		state.AIGatewayBaseURL = "https://aigateway.opencsg-stg.com/v1"
+		state.AIGatewayBuiltinAPIKey = "gk_existing"
+	}); err != nil {
+		t.Fatal(err)
+	}
+	baseURL, key, ok, err := store.AIGatewayCredentials()
+	if err != nil || !ok || baseURL != StageAIGatewayBaseURL || key != "gk_existing" {
+		t.Fatalf("loading saved stage credentials: base URL %q, available %v, error %v", baseURL, ok, err)
+	}
+}
+
 func TestDefaultStorePersistsOpenCSGAuthInRootState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -407,7 +429,7 @@ func TestDefaultStorePersistsOpenCSGAuthInRootState(t *testing.T) {
 	if openCSG["ai_gateway_builtin_api_key"] != "gk_api-key" {
 		t.Fatalf("ai gateway key = %v, want gk_api-key", openCSG["ai_gateway_builtin_api_key"])
 	}
-	if openCSG["ai_gateway_base_url"] != "https://aigateway.opencsg-stg.com/v1" {
+	if openCSG["ai_gateway_base_url"] != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("ai gateway base url = %v, want stg gateway", openCSG["ai_gateway_base_url"])
 	}
 
@@ -425,14 +447,14 @@ func TestDefaultStorePersistsOpenCSGAuthInRootState(t *testing.T) {
 	if credentials.AIGatewayBuiltinAPIKey != "gk_api-key" {
 		t.Fatalf("AIGatewayBuiltinAPIKey = %q, want gk_api-key", credentials.AIGatewayBuiltinAPIKey)
 	}
-	if credentials.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+	if credentials.AIGatewayBaseURL != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("AIGatewayBaseURL = %q, want stg gateway", credentials.AIGatewayBaseURL)
 	}
 	status, err := store.Status()
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
 	}
-	if status.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+	if status.AIGatewayBaseURL != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("status.AIGatewayBaseURL = %q, want stg gateway", status.AIGatewayBaseURL)
 	}
 	statusRaw, err := json.Marshal(status)

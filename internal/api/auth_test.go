@@ -67,7 +67,7 @@ func TestHandleAuthLogin(t *testing.T) {
 		"return_url":"http://127.0.0.1:18080/#/dms/room-1",
 		"opencsg_base_url":"https://opencsg-stg.com",
 		"csghub_base_url":"https://opencsg-stg.com",
-		"ai_gateway_base_url":"https://aigateway.opencsg-stg.com/v1"
+		"ai_gateway_base_url":"https://opencsg-stg.com/aigateway/v1"
 	}`))
 	req.Host = "127.0.0.1:18080"
 	(&Handler{}).Routes().ServeHTTP(rec, req)
@@ -90,13 +90,13 @@ func TestHandleAuthLogin(t *testing.T) {
 	if gotOpenCSGBaseURL != "https://opencsg-stg.com" || gotCSGHubBaseURL != "https://opencsg-stg.com" {
 		t.Fatalf("login base urls = %q/%q", gotOpenCSGBaseURL, gotCSGHubBaseURL)
 	}
-	if gotAIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+	if gotAIGatewayBaseURL != "https://opencsg-stg.com/aigateway/v1" {
 		t.Fatalf("ai_gateway_base_url = %q", gotAIGatewayBaseURL)
 	}
 }
 
 func TestHandleAuthLoginUsesAdvertiseBaseURL(t *testing.T) {
-	const advertiseBaseURL = "https://aigateway.opencsg-stg.com/v1/sandboxes/jared-1784118727"
+	const advertiseBaseURL = "https://opencsg-stg.com/aigateway/v1/sandboxes/jared-1784118727"
 	t.Setenv("CSGCLAW_ADVERTISE_BASE_URL", advertiseBaseURL)
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	content := `[server]
@@ -118,7 +118,7 @@ advertise_base_url = "${CSGCLAW_ADVERTISE_BASE_URL}"
 	handler.SetConfigPath(configPath)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{
-		"return_url":"https://aigateway.opencsg-stg.com/v1/sandboxes/jared-1784118727/#/workspace"
+		"return_url":"https://opencsg-stg.com/aigateway/v1/sandboxes/jared-1784118727/#/workspace"
 	}`))
 	req.Host = "csgclaw.internal:18080"
 	handler.Routes().ServeHTTP(rec, req)
