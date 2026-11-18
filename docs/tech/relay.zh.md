@@ -9,7 +9,7 @@
 
 支持附件的执行器在 WebSocket hello 中声明 `capabilities: ["input_files"]`。
 Relay 在 Agent 查询中返回当前连接的能力，并以 `executor_files_unsupported`
-拒绝向缺少该能力的执行器提交文件任务。CSGClaw 在上传附件和提交任务前分别检查能力。
+拒绝向缺少该能力的执行器提交文件任务。CSGClaw 在上传附件前检查能力，Relay 在新任务接单时校验。已提交的任务可沿用原幂等键恢复结果，即使执行器已离线。
 
 部署配套 Relay 后，需重启或重连发布端 CSGClaw 执行器，才能验证附件发送。
 旧版 Relay 未返回能力字段时，CSGClaw 会提示升级。纯文本调用仍可使用。

@@ -1,11 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -923,4 +925,147 @@ func TestCloudTaskAcceptsRegisteredCommunityAgentWithoutLocalPublication(t *test
 			t.Fatalf("lookups=%d submissions=%d error=%v", delayedLookups.Load(), submissions.Load(), err)
 		}
 	})
+}
+
+func TestCloudAttachmentPreflightDoesNotBlockOtherRooms(t *testing.T) {
+	h, svc, _, _ := newAgentSessionTestHandler(t, nil, &fakeSessionEngine{}, "")
+	entered := make(chan struct{})
+	var slow atomic.Bool
+	release := make(chan struct{})
+	defer close(release)
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents":
+			writeJSON(w, http.StatusOK, relay.Publication{Agent: relay.Agent{ID: "agt_preflight"}})
+		case r.URL.Path == "/v1/agents/agt_preflight":
+			if !slow.Load() {
+				writeJSON(w, http.StatusOK, relay.Agent{ID: "agt_preflight", Status: "online"})
+				return
+			}
+			select {
+			case <-entered:
+			default:
+				close(entered)
+			}
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+			writeJSON(w, http.StatusOK, relay.Agent{ID: "agt_preflight", Capabilities: []string{relay.CapabilityInputFiles}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer remote.Close()
+	manager, err := relay.NewManager(t.Context(), t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if err := manager.Configure(remote.URL, "token"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Publish(t.Context(), relay.PublishRequest{SourceAgentID: "local", Visibility: "public"}); err != nil {
+		t.Fatal(err)
+	}
+	// Keep background cloud workers stopped so this test isolates message admission.
+	stopped, stop := context.WithCancel(t.Context())
+	stop()
+	h.relayContext, h.relayManager = stopped, manager
+	user, _, err := svc.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "preflight-cloud", Name: "PreflightCloud", Role: "cloud", SkipDirectRoom: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rooms []im.Room
+	for _, name := range []string{"attachment", "text"} {
+		room, err := svc.CreateRoom(im.CreateRoomRequest{Title: name, Type: apitypes.RoomTypeFree, IsDirect: true,
+			TaskSession: true, CreatorID: im.AdminUserID, MemberIDs: []string{user.ID},
+			CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_preflight", ConnectionID: manager.Catalog(t.Context())[0].ConnectionID, UserID: user.ID}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rooms = append(rooms, room)
+	}
+	send := func(roomID string, attachment bool) *httptest.ResponseRecorder {
+		body := fmt.Sprintf(`{"room_id":%q,"sender_id":%q,"content":"test","client_message_id":%q}`, roomID, im.AdminUserID, roomID)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(body))
+		if attachment {
+			var buffer bytes.Buffer
+			form := multipart.NewWriter(&buffer)
+			_ = form.WriteField("payload", body)
+			file, _ := form.CreateFormFile("files", "input.txt")
+			_, _ = file.Write([]byte("test attachment"))
+			_ = form.Close()
+			req = httptest.NewRequest(http.MethodPost, "/api/v1/messages", &buffer)
+			req.Header.Set("Content-Type", form.FormDataContentType())
+		}
+		w := httptest.NewRecorder()
+		h.handleCreateMessage(w, req)
+		return w
+	}
+	slow.Store(true)
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() { done <- send(rooms[0].ID, true) }()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("preflight did not start")
+	}
+	textDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() { textDone <- send(rooms[1].ID, false) }()
+	select {
+	case w := <-textDone:
+		if w.Code != http.StatusCreated {
+			t.Fatalf("text send: %d %s", w.Code, w.Body.String())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("text send blocked behind another room's capability lookup")
+	}
+	// The preflight must also finish on its own bounded deadline.
+	select {
+	case w := <-done:
+		if w.Code != http.StatusConflict {
+			t.Fatalf("preflight timeout: %d %s", w.Code, w.Body.String())
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("preflight did not respect its deadline")
+	}
+}
+
+func TestCloudAttachmentReplayAfterRestartUsesSavedFileReferences(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var submissions atomic.Int32
+	manager, connectionID := newCloudTaskTestRelay(t, ctx, "agt_replay", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/responses" {
+			t.Errorf("recovery attempted an upload: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		submissions.Add(1)
+		var request relay.CallRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || !strings.Contains(string(request.Input), "file_saved") {
+			t.Errorf("saved attachment missing: %s, %v", request.Input, err)
+		}
+		if r.Header.Get("Idempotency-Key") != "task:replay-room:pending" {
+			t.Error("replay key changed")
+		}
+		writeJSON(w, http.StatusOK, relay.Response{ID: "resp_saved", Model: "agt_replay", Status: "completed"})
+	})
+	room := im.Room{ID: "replay-room", CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_replay", ConnectionID: connectionID, UserID: "cloud"},
+		Messages: []im.Message{{ID: "pending", SenderID: im.AdminUserID, Content: "read file", CreatedAt: time.Now(),
+			Attachments: []im.MessageAttachment{{ID: "local_input", Name: "input.txt"}},
+			Metadata:    map[string]any{cloudTaskInputFilesKey: []relay.File{{ID: "file_saved"}}}}}}
+	path := filepath.Join(t.TempDir(), "state.json")
+	_ = newPersistedCloudTaskTestService(t, path, room)
+	svc, err := im.NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, _ := svc.Room(room.ID)
+	h := &Handler{im: svc, relayManager: manager}
+	result, err := h.awaitCloudTask(ctx, saved, saved.Messages[0], "")
+	if err != nil || result.ID != "resp_saved" || submissions.Load() != 1 {
+		t.Fatalf("saved attachment replay = %+v, %v, submissions=%d", result, err, submissions.Load())
+	}
 }

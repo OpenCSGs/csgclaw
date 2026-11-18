@@ -69,11 +69,6 @@ func (m *Manager) Chat(ctx context.Context, id, connectionID, key string, input 
 	if err != nil {
 		return Response{}, err
 	}
-	if len(attachments) > 0 {
-		if err := c.checkAttachmentSupport(ctx, id); err != nil {
-			return Response{}, err
-		}
-	}
 	var wireInput any = input
 	if len(attachments) > 0 {
 		parts := make([]map[string]string, 0, len(attachments)+1)

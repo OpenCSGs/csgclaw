@@ -983,7 +983,7 @@ describe("HubDetailPane", () => {
     expect(onDeleteMCP).toHaveBeenCalledWith(mcp);
   });
 
-  it("offers cloud creation only after publishing succeeds, using the complete returned template ID", async () => {
+  it("opens the current site community templates after a local template is published", async () => {
     const user = userEvent.setup();
     renderHubDetailPane("template", {
       agenticHubSiteURL: "https://opencsg-stg.com/account",
@@ -1000,21 +1000,18 @@ describe("HubDetailPane", () => {
         .mockResolvedValue({ status: "success", template: { id: "alice/repo-id", name: "api-template" } }),
     });
     await openTemplateDetail(user);
-    expect(screen.queryByRole("link", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View community template" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
-    expect(screen.queryByRole("link", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View community template" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
     const success = await screen.findByRole("dialog", { name: "Published successfully" });
-    const link = within(success).getByRole("link", { name: "agentTemplateCreateInHub" });
-    expect(link).toHaveAttribute(
-      "href",
-      "https://opencsg-stg.com/agentichub?action=create-agent&template_name=alice%2Frepo-id",
-    );
+    const link = within(success).getByRole("link", { name: "View community template" });
+    expect(link).toHaveAttribute("href", "https://opencsg-stg.com/agentichub?view=resources&subview=template");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("shows success for an agent publication and uses its complete returned template ID", async () => {
+  it("opens community templates after saving and publishing an agent", async () => {
     renderHubDetailPane("template", {
       agenticHubSiteURL: "https://opencsg.com",
       publishedTemplate: {
@@ -1025,11 +1022,8 @@ describe("HubDetailPane", () => {
       },
     });
     const success = await screen.findByRole("dialog", { name: "Published successfully" });
-    const link = within(success).getByRole("link", { name: "agentTemplateCreateInHub" });
-    expect(link).toHaveAttribute(
-      "href",
-      "https://opencsg.com/agentichub?action=create-agent&template_name=alice%2Frepo",
-    );
+    const link = within(success).getByRole("link", { name: "View community template" });
+    expect(link).toHaveAttribute("href", "https://opencsg.com/agentichub?view=resources&subview=template");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
@@ -1061,7 +1055,7 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     await user.click(screen.getByRole("tab", { name: "taskEntryOverview_personal" }));
     const card = screen.getByRole("button", { name: /demo-template/ });
-    expect(screen.queryByRole("link", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View community template" })).not.toBeInTheDocument();
     expect(card.querySelector("img")).toHaveAttribute("src", "data:image/png;base64,aGVsbG8=");
     expect(card.querySelector('[class*="hub-template-source-badge"]')).toBeNull();
     expect(screen.getByText("resourcesMyTemplatesLoginHint")).toBeInTheDocument();

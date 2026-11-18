@@ -20,7 +20,8 @@ File-capable executors advertise `capabilities: ["input_files"]` in their WebSoc
 hello. Relay exposes those capabilities from the current connection in agent
 queries and rejects file admissions to connections lacking `input_files` with
 `executor_files_unsupported`. CSGClaw checks this capability before uploading
-attachments and again before submitting a file request.
+attachments. Relay performs the admission check for new file requests while
+idempotent replays can recover a saved result after the executor disconnects.
 
 Deploy the matching Relay capability support and restart or reconnect publishing
 CSGClaw executors before testing file sends. A Relay version that omits the field

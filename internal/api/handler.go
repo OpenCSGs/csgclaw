@@ -3167,8 +3167,6 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 
 	if h.im != nil {
 		if room, found := h.im.Room(serviceReq.RoomID); found && room.CloudAgent != nil {
-			h.cloudTaskMu.Lock()
-			defer h.cloudTaskMu.Unlock()
 			serviceReq.SenderID = h.im.ResolveUserID(serviceReq.SenderID)
 			if len(req.FileReferences) > 0 || len(req.ResourceRefs) > 0 || serviceReq.RelatesTo != nil || serviceReq.SenderID != room.CreatedBy {
 				writeAgentSessionError(w, 400, "relay_task_text_only", "only the task creator can send messages, and resource references and threads are unsupported", nil)
@@ -3179,7 +3177,10 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 					writeJSON(w, http.StatusCreated, existing)
 					return
 				}
-				if err := h.relayManager.CheckAttachmentSupport(r.Context(), room.CloudAgent.AgentID, room.CloudAgent.ConnectionID); err != nil {
+				checkCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+				err := h.relayManager.CheckAttachmentSupport(checkCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID)
+				cancel()
+				if err != nil {
 					code := "relay_chat_reference_unavailable"
 					if errors.Is(err, relay.ErrExecutorFilesUnsupported) {
 						code = "executor_files_unsupported"
@@ -3187,6 +3188,18 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 					writeAgentSessionError(w, http.StatusConflict, code, err.Error(), nil)
 					return
 				}
+			}
+			h.cloudTaskMu.Lock()
+			defer h.cloudTaskMu.Unlock()
+			current, found := h.im.Room(serviceReq.RoomID)
+			if !found || current.CloudAgent == nil || current.CreatedBy != room.CreatedBy ||
+				*current.CloudAgent != *room.CloudAgent {
+				writeAgentSessionError(w, http.StatusConflict, "relay_chat_reference_unavailable", "cloud task changed during attachment preflight", nil)
+				return
+			}
+			if existing, found := h.im.MessageByClientID(current.ID, serviceReq.SenderID, serviceReq.ClientMessageID); found {
+				writeJSON(w, http.StatusCreated, existing)
+				return
 			}
 			serviceReq.Metadata = map[string]any{cloudTaskUnsubmittedKey: true}
 			message, created, err := channel.SendMessageOnce(serviceReq)

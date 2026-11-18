@@ -262,6 +262,7 @@ const (
 	cloudTaskMaxInvalidPolls  = 3
 	cloudTaskUnsubmittedKey   = "relay_task_unsubmitted"
 	cloudTaskResponseKey      = "relay_pending_response_id"
+	cloudTaskInputFilesKey    = "relay_input_files"
 	cloudTaskRecoveryKey      = "relay_context_recovery_input"
 	cloudTaskStartedAtKey     = "relay_task_started_at"
 	cloudTaskRetryAfterKey    = "relay_task_retry_after"
@@ -376,6 +377,12 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 		})
 	}
 	var relayFiles []relay.File
+	if saved, ok := metadata[cloudTaskInputFilesKey]; ok {
+		data, err := json.Marshal(saved)
+		if err != nil || json.Unmarshal(data, &relayFiles) != nil || len(relayFiles) != len(message.Attachments) {
+			return relay.Response{}, errCloudTaskResultUnavailable
+		}
+	}
 	invalidPolls := 0
 	for {
 		if ctx.Err() != nil {
@@ -401,6 +408,8 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 				return relay.Response{}, err
 			}
 			relayFiles = files
+			metadata[cloudTaskInputFilesKey] = files
+			needsCheckpoint = true
 			if freshSubmission {
 				submissionStartedAt = time.Now().UTC()
 				submissionDeadline = submissionStartedAt.Add(10 * time.Minute)
