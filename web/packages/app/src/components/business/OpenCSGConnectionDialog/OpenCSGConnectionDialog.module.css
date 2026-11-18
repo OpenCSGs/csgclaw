@@ -20,6 +20,7 @@
 
 .body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
@@ -95,6 +96,8 @@
 }
 
 .returnHint {
+  min-width: 0;
+  overflow-wrap: anywhere;
   margin: 0;
   color: var(--gray-500);
   font-size: 13px;
@@ -151,7 +154,7 @@
 }
 
 .probeFailure {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .siteManagement {

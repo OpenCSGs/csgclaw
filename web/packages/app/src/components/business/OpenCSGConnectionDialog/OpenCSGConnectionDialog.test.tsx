@@ -250,7 +250,9 @@ describe("OpenCSGConnectionDialog", () => {
     await screen.findByText("OpenCSG Main Site");
     const proceed = screen.getByRole("button", { name: "csghubSwitchEnvironment" });
     expect(proceed).toBeDisabled();
+    expect(screen.queryByText("csghubLoginTargetHint")).not.toBeInTheDocument();
     await chooseSite(user, /Open East Community/);
+    expect(screen.getByText(/csghubLoginTargetHint/)).toBeInTheDocument();
     await user.click(proceed);
     expect(onConnect).toHaveBeenCalledWith(authEnvironmentDraftFromPreset("east"));
   });

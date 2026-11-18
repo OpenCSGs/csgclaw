@@ -451,8 +451,8 @@ export function OpenCSGConnectionDialog({
 
           {!editingURL ? (
             <p className={styles.returnHint}>
-              {ready && !editingURL ? t("csghubLoginTargetHint", { site: targetLabel }) : null}
-              {ready && !editingURL ? " " : null}
+              {ready && !sameSite ? t("csghubLoginTargetHint", { site: targetLabel }) : null}
+              {ready && !sameSite ? " " : null}
               {t(authenticationRequired ? "openCSGLoginRequiredHint" : "csghubConnectReturnHint")}
             </p>
           ) : null}
