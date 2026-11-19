@@ -52,11 +52,11 @@ func Clone(values map[string]Metadata) map[string]Metadata {
 }
 
 func Resolve(provider, endpoint, model string, discovered, override Metadata) Resolved {
-	out := Resolved{ContextWindow: DefaultContextWindow, ContextSource: "default"}
+	known := catalog(provider, endpoint, model)
+	out := Resolved{ContextWindow: DefaultContextWindow, ContextSource: "default", MaxOutputTokens: known.MaxOutputTokens}
 	if discovered.MaxOutputTokens > 0 {
 		out.MaxOutputTokens = discovered.MaxOutputTokens
 	}
-	known := catalog(provider, endpoint, model)
 	for _, entry := range []struct {
 		value  Metadata
 		source string

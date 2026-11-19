@@ -51,6 +51,18 @@ func (r *Runtime) handleNotification(proc *process, note notification) {
 	kind, _ := params.Update["sessionUpdate"].(string)
 	event := contract.TurnEvent{TurnID: turn.request.ID}
 	switch kind {
+	case "turn_end":
+		if note.Method == "csgclaw/context" {
+			reason, _ := params.Update["reason"].(map[string]any)
+			turn.nativeStopReason, _ = reason["kind"].(string)
+			if turn.nativeStopReason == "error" {
+				failure, _ := reason["error"].(map[string]any)
+				message, _ := failure["message"].(string)
+				turn.nativeError = &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: "DSH model request failed: " + message}
+			}
+		}
+		proc.mu.Unlock()
+		return
 	case "token_usage":
 		id, _ := params.Update["requestId"].(string)
 		if id == "" || turn.tokenRequests[id] {

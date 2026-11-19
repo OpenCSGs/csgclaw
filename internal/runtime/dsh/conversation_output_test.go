@@ -21,6 +21,8 @@ func TestConversationRequiresVisibleOutput(t *testing.T) {
 	}{
 		{name: "thought only", stop: "end_turn", wantCode: "empty_agent_response"},
 		{name: "thought reaches output limit", stop: "max_tokens", wantCode: "output_token_limit"},
+		{name: "native output limit masked by end turn", stop: "end_turn", update: "native_max_tokens", wantCode: "output_token_limit"},
+		{name: "native failure masked by end turn", stop: "end_turn", update: "native_error", wantCode: contract.ErrorRuntimeFailed},
 		{name: "whitespace is not an answer", stop: "end_turn", text: " \n", wantCode: "empty_agent_response"},
 		{name: "context error masked by end turn", stop: "end_turn", update: "context_error", wantCode: "context_length_exceeded"},
 		{name: "answer", stop: "end_turn", text: "Here is the answer."},
@@ -83,7 +85,14 @@ func TestConversationRequiresVisibleOutput(t *testing.T) {
 					chunk("agent_message_chunk", tc.text)
 				}
 				if tc.update != "" {
-					update("csgclaw/context", map[string]any{"sessionUpdate": tc.update})
+					switch tc.update {
+					case "native_max_tokens":
+						update("csgclaw/context", map[string]any{"sessionUpdate": "turn_end", "reason": map[string]any{"kind": "max-tokens"}})
+					case "native_error":
+						update("csgclaw/context", map[string]any{"sessionUpdate": "turn_end", "reason": map[string]any{"kind": "error", "error": map[string]any{"code": "INVALID_REQUEST", "message": "fixture output cap rejected"}}})
+					default:
+						update("csgclaw/context", map[string]any{"sessionUpdate": tc.update})
+					}
 				}
 				if tc.present {
 					update("session/update", map[string]any{

@@ -127,6 +127,10 @@ export function apply(ctx) {
   });
   forwardReasoning(ctx);
   ctx.on('session/event', (session, event) => {
+    if (event.type === 'turn/end') {
+      notify(session.header.id, {sessionUpdate:'turn_end', reason:event.data.reason});
+      return;
+    }
     if (event.type === 'assistant/message' || event.type === 'compaction/summary') {
       const params = { sessionId: session.header.id, update: { sessionUpdate: 'token_usage', requestId: String(event.seq), usage: event.data.usage ?? null, interrupted: Boolean(event.data.interrupted) } };
       process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method: 'csgclaw/context', params }) + '\n');

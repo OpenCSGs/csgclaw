@@ -23,7 +23,7 @@ import (
 
 // Exercises the bundled process, real Responses transport and event subscription.
 func TestContextUsageBundledCodexE2E(t *testing.T) {
-	for _, mode := range []string{"diagnostics", "usage", "manual_compact", "auto_compact", "overflow", "cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure"} {
+	for _, mode := range []string{"diagnostics", "usage", "manual_compact", "auto_compact", "overflow", "cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure", "output_budget"} {
 		t.Run(mode, func(t *testing.T) { testContextBundledCodex(t, mode) })
 	}
 }
@@ -67,6 +67,13 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
+		}
+		if mode == "output_budget" {
+			for _, key := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens"} {
+				if value, ok := body[key]; ok {
+					t.Errorf("Codex request unexpectedly imposed %s=%v", key, value)
+				}
+			}
 		}
 		if mode == "diagnostics" {
 			items, _ := body["input"].([]any)
@@ -115,6 +122,10 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	profile.Provider = "api"
 	profile.ModelMetadata = modelcap.Resolved{ContextWindow: 32768, ContextSource: "user"}
 	profile.ModelID = "fixture-model"
+	if mode == "output_budget" {
+		profile.ModelID = "deepseek-v4.1-flash"
+		profile.ModelMetadata = modelcap.Resolve("api", "", profile.ModelID, modelcap.Metadata{}, modelcap.Metadata{})
+	}
 	if mode == "luna_history" || mode == "sol61_auto_compact" || mode == "sol61_history" {
 		profile.Provider = "codex"
 		profile.ModelID = "gpt-5.6-luna"

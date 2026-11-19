@@ -17,6 +17,8 @@ The unknown-model capacity is 200,000 tokens.
 The catalog matches common GPT, Claude, DeepSeek, Qwen, GLM, Gemini, Kimi, MiniMax, MiMo and OpenCSG Agentic names across providers, including namespaces, punctuation, dates and serving suffixes.
 These are reference capacities; provider-reported limits and user overrides take precedence, and unrecognized versions retain the default.
 Catalog sources are recorded alongside the entries in `internal/modelcap/catalog.go`.
+The shared local catalog also supplies the publisher's 393,216-token output capacity for DeepSeek Flash, V4 Flash, V4.1 Flash (including the 1017 snapshot), and V4 Pro when discovery omits an output limit.
+An advertised deployment output limit always wins, including smaller limits. Unknown models retain the conservative runtime fallback.
 Provider extensions `context_window` and `context_length` are supported; their presence is not assumed for standard OpenAI model lists.
 
 Settings are persisted with the existing provider state and apply to all referencing agents.
@@ -36,7 +38,13 @@ A turn ends on native completion or failure, caller cancellation, or runtime pro
 
 DSH receives `contextWindow` through its native model settings.
 DSH caps each request's output at the smallest of the provider's advertised output limit, 65,536 tokens, and one quarter of the resolved context window.
-DSH uses an 8,192-token fallback when discovery provides no output limit, bounded by one quarter of the context window.
+DSH uses an 8,192-token fallback when neither discovery nor the local catalog provides an output limit, bounded by one quarter of the context window.
+For the known DeepSeek entries, the local output capacity raises DSH's initial budget to 65,536 tokens when the context window allows it, without changing its reasoning effort.
+When DSH reaches the output limit without an answer or presented file, the turn fails with `output_token_limit` and the existing localized progress message explains that no answer was generated.
+There is no automatic retry or continuation after output truncation. The transcript and reasoning remain available for the user's next action.
+Native turn failures are forwarded separately because ACP can project a model failure as `end_turn`.
+Output limits include model reasoning and do not reserve tokens for a visible answer. A larger budget cannot guarantee an answer.
+Codex shares resolved model metadata but keeps its native Responses request defaults. CSGClaw does not impose DSH's output budget on Codex.
 Providers can publish each deployment's output limit as `max_output_tokens` in its `/models` entry.
 Refresh an existing provider to discover its current output limit.
 Its managed compaction patch sets `thresholdRatio: 0.75` and `maxOverflowRetries: 1`.

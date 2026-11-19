@@ -132,6 +132,8 @@ type activeTurn struct {
 	presentedFiles   []presentedFile
 	presentedPaths   map[string]bool
 	interactionError *contract.TurnError
+	nativeStopReason string
+	nativeError      *contract.TurnError
 }
 
 type presentedFile struct {
