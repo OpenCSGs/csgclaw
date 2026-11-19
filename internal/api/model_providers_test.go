@@ -251,6 +251,57 @@ models = ["retired-model"]
 	}
 }
 
+func TestOpenCSGModelProviderCheckRecoversCatalogWithDisplayedGatewayURL(t *testing.T) {
+	const gatewayURL = "https://platform.example/aigateway/v1"
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	writeCachedOpenCSGModelsConfig(t, configPath)
+	handler := &Handler{}
+	handler.SetConfigPath(configPath)
+	routes := handler.Routes()
+
+	t.Run("background check times out", func(t *testing.T) {
+		t.Cleanup(stubModelProviderCheck(func(context.Context, agent.ModelProviderCheckInput) agent.ModelProviderCheckResult {
+			return agent.ModelProviderCheckResult{
+				Status:        agent.ModelProviderStatusFailed,
+				Message:       "The model service request timed out. Please try again.",
+				LastCheckedAt: "2026-11-19T00:42:58Z",
+			}
+		}))
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers/opencsg/check", strings.NewReader(`{}`)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("background check status = %d: %s", rec.Code, rec.Body.String())
+		}
+		provider := readOpenCSGProvider(t, handler)
+		if provider.Status != agent.ModelProviderStatusFailed || strings.Join(provider.Models, ",") != "prod-model" {
+			t.Fatalf("catalog after timeout: status = %q, models = %v", provider.Status, provider.Models)
+		}
+	})
+
+	t.Cleanup(stubModelProviderCheck(func(_ context.Context, input agent.ModelProviderCheckInput) agent.ModelProviderCheckResult {
+		if input.ID != agent.ModelProviderIDOpenCSG || !input.Verify || input.BaseURL != "" {
+			t.Errorf("expected signed-in OpenCSG check, got ID = %q, verify = %t, request base URL = %q", input.ID, input.Verify, input.BaseURL)
+		}
+		return agent.ModelProviderCheckResult{
+			Status:          agent.ModelProviderStatusConnected,
+			ResolvedBaseURL: gatewayURL,
+			Models:          []string{"recovered-model", "new-model"},
+			LastCheckedAt:   "2026-11-19T09:04:12Z",
+		}
+	}))
+	body := strings.NewReader(`{"connect":true,"base_url":"` + gatewayURL + `"}`)
+	rec := httptest.NewRecorder()
+	routes.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers/opencsg/check", body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detail check status = %d: %s", rec.Code, rec.Body.String())
+	}
+	provider := readOpenCSGProvider(t, handler)
+	if provider.Status != agent.ModelProviderStatusConnected || strings.Join(provider.Models, ",") != "recovered-model,new-model" ||
+		provider.LastCheckedAt != "2026-11-19T09:04:12Z" {
+		t.Fatalf("catalog after recovery: status = %q, models = %v, checked at = %q", provider.Status, provider.Models, provider.LastCheckedAt)
+	}
+}
+
 func TestModelProviderCreateKeepsWindowsHubRegistryPathStable(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	content := `[server]
