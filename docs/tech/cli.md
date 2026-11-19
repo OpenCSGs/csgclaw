@@ -567,6 +567,7 @@ Subcommands:
 - `--description string`: room description.
 - `--creator-id string`: creator participant ID, such as `manager`.
 - `--member-ids string`: comma-separated participant IDs, such as `manager,dev`.
+- `--type string`: CSGClaw room mode: `on_demand` (moderated, default) or `autonomous` (roundtable).
 - `--locale string`: room locale.
 
 Design note for `csgclaw-cli`: room creation should expose CSGClaw participant IDs, not channel user IDs, agent IDs, Feishu open IDs, Feishu app IDs, or app credentials. In the Feishu channel, the channel adapter resolves participant IDs to the configured Feishu app credentials and channel identifiers internally. When Feishu group creation needs a real human owner ID, CSGClaw continues to use the configured `admin_open_id` internally; callers should still pass participant IDs at the CLI boundary.

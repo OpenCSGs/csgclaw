@@ -96,6 +96,13 @@ func TestCompleteFlagValues(t *testing.T) {
 	assertEqual(t, got, []string{"codex", "claude-code"})
 }
 
+func TestCompleteRoomCreationModes(t *testing.T) {
+	for _, spec := range []CommandSpec{FullSpec(), LiteSpec()} {
+		got := Complete(spec, spec.Name, []string{spec.Name, "room", "create", "--type", ""})
+		assertEqual(t, got, []string{"on_demand", "autonomous"})
+	}
+}
+
 func TestGenerateScripts(t *testing.T) {
 	tests := []struct {
 		name    string

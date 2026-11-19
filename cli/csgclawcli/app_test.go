@@ -95,7 +95,7 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 		"participant     Manage channel participants.",
 		"pt              Manage channel participants.",
 		"template        Discover agent templates.",
-		"room            Manage IM rooms",
+		"room            Manage conversations and collaboration spaces",
 		"member          Manage IM room members",
 		"message         Manage IM messages.",
 		"task            Manage tasks across rooms, teams, and agents.",

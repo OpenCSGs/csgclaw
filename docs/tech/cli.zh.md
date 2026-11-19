@@ -566,6 +566,7 @@ csgclaw room <subcommand> [flags]
 - `--description string`：房间描述。
 - `--creator-id string`：创建者 participant ID，例如 `manager`。
 - `--member-ids string`：逗号分隔的 participant ID 列表，例如 `manager,dev`。
+- `--type string`：CSGClaw 房间模式，`on_demand`（主持，默认）或 `autonomous`（圆桌）。
 - `--locale string`：房间 locale。
 
 `csgclaw-cli` 设计约束：创建 room 时只暴露 CSGClaw participant ID，不暴露 channel user ID、agent ID、飞书 open_id、飞书 app_id 或应用凭证。Feishu 渠道由 adapter 在内部把 participant ID 兑换为已配置的飞书应用凭证和渠道标识。飞书建群需要真人 owner ID 时，代码仍使用配置里的 `admin_open_id`，CLI 调用方仍只传 participant ID。

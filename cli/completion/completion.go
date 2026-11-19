@@ -467,24 +467,24 @@ func participantSpec(name string) CommandSpec {
 func roomSpec() CommandSpec {
 	return CommandSpec{
 		Name:    "room",
-		Summary: "Manage IM rooms.",
+		Summary: "Manage conversations and collaboration spaces.",
 		Children: []CommandSpec{
 			{Name: "attachments", Summary: "Manage published room files", Children: []CommandSpec{
 				{Name: "list", Summary: "List room attachments", Flags: []FlagSpec{{Name: "room-id", TakesValue: true}, {Name: "query", TakesValue: true}, {Name: "message-id", TakesValue: true}, {Name: "from", TakesValue: true}, {Name: "limit", TakesValue: true}}},
 				{Name: "delete", Summary: "Delete a room attachment", Flags: []FlagSpec{{Name: "room-id", TakesValue: true}, {Name: "attachment-id", TakesValue: true}}},
 				{Name: "download", Summary: "Download a room attachment", Flags: []FlagSpec{{Name: "room-id", TakesValue: true}, {Name: "attachment-id", TakesValue: true}, {Name: "output", TakesValue: true}}},
 			}},
-			{Name: "list", Summary: "List rooms", Flags: channelFlags()},
+			{Name: "list", Summary: "List conversations and collaboration spaces", Flags: channelFlags()},
 			{
 				Name:    "create",
-				Summary: "Create a room",
+				Summary: "Create a collaboration space or Feishu group",
 				Flags: append(channelFlags(),
 					FlagSpec{Name: "title", TakesValue: true},
 					FlagSpec{Name: "description", TakesValue: true},
 					FlagSpec{Name: "creator-id", TakesValue: true},
 					FlagSpec{Name: "member-ids", TakesValue: true},
 					FlagSpec{Name: "locale", TakesValue: true},
-					FlagSpec{Name: "type", TakesValue: true, Values: []string{"on_demand", "free"}},
+					FlagSpec{Name: "type", TakesValue: true, Values: []string{"on_demand", "autonomous"}},
 				),
 			},
 			{Name: "delete", Summary: "Delete a room", Flags: channelFlags()},
