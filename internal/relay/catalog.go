@@ -60,16 +60,12 @@ func (m *Manager) discover(ctx context.Context, onlyID string, probeIDs []string
 		return m.catalog(ctx, onlyID, probeIDs), nil
 	}
 	m.mu.Lock()
-	c, err := m.client(m.manifest.Endpoint, m.manifest.Token)
-	connection, refErr := m.connectionReference()
+	c, community, connection, err := m.consumerConnection()
 	m.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
-	if refErr != nil {
-		return nil, refErr
-	}
-	instances, err := m.community.List(ctx)
+	instances, err := community.List(ctx)
 	if err != nil {
 		return nil, err
 	}

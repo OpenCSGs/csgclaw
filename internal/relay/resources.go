@@ -21,7 +21,7 @@ func (m *Manager) cloudReadConnection(ctx context.Context) (knowledgebase.Connec
 	if m.credentials == nil {
 		return knowledgebase.Connection{}, ErrChatReference
 	}
-	cred, err := m.boundCredentials()
+	cred, err := m.credentials()
 	if err != nil {
 		return knowledgebase.Connection{}, err
 	}
@@ -85,7 +85,7 @@ func (m *Manager) cloudReader(ctx context.Context, id, connectionID string) (*Cl
 	if !safeID(entry.Agent.SourceAgentID) {
 		return nil, "", ErrCloudEndpointUnavailable
 	}
-	cred, err := m.boundCredentials()
+	cred, err := m.credentials()
 	if err != nil {
 		return nil, "", err
 	}
@@ -93,7 +93,16 @@ func (m *Manager) cloudReader(ctx context.Context, id, connectionID string) (*Cl
 	if err != nil {
 		return nil, "", err
 	}
-	instances, err := m.community.List(ctx)
+	m.mu.Lock()
+	_, community, reference, err := m.consumerConnection()
+	m.mu.Unlock()
+	if err != nil {
+		return nil, "", err
+	}
+	if reference != connectionID {
+		return nil, "", ErrChatReference
+	}
+	instances, err := community.List(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -112,7 +121,7 @@ func (m *Manager) cloudReader(ctx context.Context, id, connectionID string) (*Cl
 		c, err := NewClient(endpoint, cred.Token, nil)
 		if err == nil {
 			c.credentials = func() (SiteCredentials, error) {
-				current, err := m.boundCredentials()
+				current, err := m.credentials()
 				if err != nil {
 					return SiteCredentials{}, err
 				}

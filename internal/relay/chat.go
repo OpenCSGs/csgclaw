@@ -44,21 +44,16 @@ func (m *Manager) invocationClient(ctx context.Context, id, connectionID string)
 		return nil, err
 	}
 	if m.community != nil {
-		expected, refErr := m.connectionReference()
-		if refErr != nil {
+		client, community, expected, err := m.consumerConnection()
+		if err != nil {
 			m.mu.Unlock()
-			return nil, refErr
+			return nil, err
 		}
 		if connectionID == "" || connectionID != expected || !safeID(id) {
 			m.mu.Unlock()
 			return nil, ErrChatReference
 		}
-		client, err := m.client(m.manifest.Endpoint, m.manifest.Token)
-		community := m.community
 		m.mu.Unlock()
-		if err != nil {
-			return nil, err
-		}
 		// Catalog reads use the caller's deadline without holding the manager
 		// mutex, so a slow invocation cannot block another room's preflight.
 		instances, err := community.List(ctx)
