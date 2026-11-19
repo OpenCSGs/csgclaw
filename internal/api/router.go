@@ -21,6 +21,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Get("/version", h.getVersion)
 		r.Get("/relay/agents", h.handleRelayCatalog)
 		r.Get("/relay/agents/{id}/template", h.handleRelayAgentTemplate)
+		r.Get("/relay/agents/{id}/profile", h.handleCloudProfile)
+		r.Get("/relay/agents/{id}/resources", h.handleCloudResources)
 		r.Post("/relay/agents/{id}/responses", h.handleRelayChat)
 		r.Get("/relay/agents/{id}/responses/{response_id}", h.handleRelayChat)
 		r.Post("/feedback", h.handleFeedback)

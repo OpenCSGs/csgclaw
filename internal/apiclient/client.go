@@ -655,12 +655,28 @@ func QueryInt(values url.Values, key string, value int) {
 	}
 }
 
+// APIError retains the stable code while preserving the existing diagnostic text.
+type APIError struct {
+	Status  int
+	Code    string
+	Message string
+}
+
+func (e *APIError) Error() string { return e.Message }
+
 func ExtractAPIError(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	if msg := ExtractAPIErrorMessage(body); msg != "" {
-		return fmt.Errorf("%s", msg)
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
 	}
-	return fmt.Errorf("request failed")
+	_ = json.Unmarshal(body, &envelope)
+	msg := ExtractAPIErrorMessage(body)
+	if msg == "" {
+		msg = "request failed"
+	}
+	return &APIError{Status: resp.StatusCode, Code: envelope.Error.Code, Message: msg}
 }
 
 func ExtractAPIErrorMessage(body []byte) string {

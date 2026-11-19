@@ -33,7 +33,8 @@ vi.mock("@/shared/realtime/imEvents", () => ({
   subscribeIMEvents: () => () => {},
 }));
 
-const t: TranslateFn = (key) => key;
+const commandLabels: Record<string, string> = { slashCreateAgent: "创建智能体", slashCreateRoom: "创建房间" };
+const t: TranslateFn = (key) => commandLabels[key] ?? key;
 
 const users: IMUser[] = [
   { id: "u-admin", name: "admin", role: "admin", avatar: "AD", accent_hex: "#dc2626" },

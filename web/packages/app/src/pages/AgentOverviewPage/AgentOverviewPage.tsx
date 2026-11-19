@@ -667,6 +667,13 @@ export function AgentOverviewPage() {
                 key={`${selectedCloudAgent.connectionID}:${selectedCloudAgent.id}`}
                 agent={selectedCloudAgent}
                 t={t}
+                requestedProfileTab={requestedTab === "connectors" ? "apps" : (requestedTab ?? "profile")}
+                onProfileTabChange={(section) => {
+                  const next = new URLSearchParams(location.search);
+                  if (section === "profile") next.delete("tab");
+                  else next.set("tab", section === "apps" ? "connectors" : section);
+                  navigate({ pathname: location.pathname, search: `?${next}` });
+                }}
                 renderTemplate={(repoPath, renderProfileIntro) => (
                   <CloudSourceTemplate
                     repoPath={repoPath}

@@ -32,6 +32,7 @@ export function withCloudAgentAvatars(
 }
 
 export type CloudAgent = {
+  cloudReadAvailable?: boolean;
   recommended?: boolean;
   id: string;
   relayURL: string;

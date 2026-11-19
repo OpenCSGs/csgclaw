@@ -14,7 +14,7 @@ import (
 
 func (h *Handler) handleRelayChat(w http.ResponseWriter, r *http.Request) {
 	if h.relayManager == nil {
-		writeAgentSessionError(w, 503, "relay_unavailable", "relay service is unavailable", nil)
+		writeAgentSessionError(w, 503, "relay_unavailable", "cloud agent service is unavailable", nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
@@ -50,10 +50,10 @@ func (h *Handler) handleRelayChat(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusAccepted, map[string]any{"id": responseID, "status": "in_progress", "model": id})
 				return
 			}
-			writeAgentSessionError(w, remote.Status, remote.Detail.Code, "relay request failed", nil)
+			writeAgentSessionError(w, remote.Status, remote.Detail.Code, "cloud agent request failed", nil)
 			return
 		}
-		writeAgentSessionError(w, 502, "relay_chat_failed", "unable to confirm relay response; retry the same request", nil)
+		writeAgentSessionError(w, 502, "relay_chat_failed", "unable to confirm the cloud agent response; retry the same request", nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)

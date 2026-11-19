@@ -3168,15 +3168,15 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	if h.im != nil {
 		if room, found := h.im.Room(serviceReq.RoomID); found && room.CloudAgent != nil {
 			serviceReq.SenderID = h.im.ResolveUserID(serviceReq.SenderID)
-			if len(req.FileReferences) > 0 || len(req.ResourceRefs) > 0 || serviceReq.RelatesTo != nil || serviceReq.SenderID != room.CreatedBy {
-				writeAgentSessionError(w, 400, "relay_task_text_only", "only the task creator can send messages, and resource references and threads are unsupported", nil)
+			if len(req.FileReferences) > 0 || serviceReq.RelatesTo != nil || serviceReq.SenderID != room.CreatedBy {
+				writeAgentSessionError(w, 400, "relay_task_text_only", "only the task creator can send messages, and file references and threads are unsupported", nil)
+				return
+			}
+			if existing, found := h.im.MessageByClientID(room.ID, serviceReq.SenderID, serviceReq.ClientMessageID); found {
+				writeJSON(w, http.StatusCreated, existing)
 				return
 			}
 			if len(serviceReq.Attachments) > 0 {
-				if existing, found := h.im.MessageByClientID(room.ID, serviceReq.SenderID, serviceReq.ClientMessageID); found {
-					writeJSON(w, http.StatusCreated, existing)
-					return
-				}
 				checkCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 				err := h.relayManager.CheckAttachmentSupport(checkCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID)
 				cancel()
@@ -3188,6 +3188,22 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 					writeAgentSessionError(w, http.StatusConflict, code, err.Error(), nil)
 					return
 				}
+			}
+			var resourceSelection *apitypes.ResourceSelection
+			if len(req.ResourceRefs) > 0 {
+				if h.relayManager == nil {
+					h.writeCloudReadError(w, relay.ErrChatReference)
+					return
+				}
+				checkCtx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+				content, selection, err := h.relayManager.ResolveCloudResources(checkCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, serviceReq.Content, req.ResourceRefs)
+				cancel()
+				if err != nil {
+					h.writeCloudReadError(w, err)
+					return
+				}
+				serviceReq.Content, resourceSelection = content, selection
+				serviceReq.ResourceSelection = selection
 			}
 			h.cloudTaskMu.Lock()
 			defer h.cloudTaskMu.Unlock()
@@ -3201,7 +3217,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusCreated, existing)
 				return
 			}
-			serviceReq.Metadata = map[string]any{cloudTaskUnsubmittedKey: true}
+			serviceReq.Metadata = apitypes.WithResourceSelection(map[string]any{cloudTaskUnsubmittedKey: true}, resourceSelection)
 			message, created, err := channel.SendMessageOnce(serviceReq)
 			if err != nil {
 				writeAPIError(w, err, 400)

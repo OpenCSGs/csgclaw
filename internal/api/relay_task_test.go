@@ -377,6 +377,33 @@ func TestCloudTaskResumesAfterTemporaryWriteFailure(t *testing.T) {
 	}
 }
 
+func TestCloudTaskDeliversResourceFailureWithRecoveryAction(t *testing.T) {
+	for _, code := range []string{"resource_not_attached", "resource_disabled", "resource_unavailable", "invalid_resource_reference"} {
+		for _, locale := range []string{"zh", "en"} {
+			t.Run(code+"/"+locale, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				defer cancel()
+				manager, connection := newCloudTaskTestRelay(t, ctx, "agt_cloud", func(w http.ResponseWriter, r *http.Request) {
+					_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_failed", Model: "agt_cloud", Status: "failed", Error: &relay.ProtocolError{Code: code, Message: "private-upstream-diagnostic"}})
+				})
+				room := im.Room{ID: "cloud-task", Locale: locale, CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", ConnectionID: connection, UserID: "cloud"},
+					Messages: []im.Message{{ID: "pending", SenderID: im.AdminUserID, Content: "Search the release notes.", CreatedAt: time.Now(), Metadata: map[string]any{cloudTaskUnsubmittedKey: true}}}}
+				svc := im.NewServiceFromBootstrap(cloudTaskTestBootstrap(room))
+				h := &Handler{im: svc, relayManager: manager, relayContext: ctx}
+				h.runCloudTask(room.ID)
+				saved, _ := svc.Room(room.ID)
+				if len(saved.Messages) != 2 {
+					t.Fatalf("expected failure reply, got %d messages", len(saved.Messages))
+				}
+				reply := saved.Messages[1]
+				if reply.Metadata["relay_error_code"] != code || reply.Content != cloudTaskFailureText(locale, code) || strings.Contains(reply.Content, "private-upstream-diagnostic") {
+					t.Fatalf("resource recovery action was lost: %+v", reply)
+				}
+			})
+		}
+	}
+}
+
 func TestCloudTaskReportsExpiredRecoveryAsUnconfirmed(t *testing.T) {
 	const roomID = "cloud-task"
 	now := time.Now()
@@ -810,6 +837,53 @@ func TestCloudTaskRecoveryInputSkipsOversizedTurns(t *testing.T) {
 	}
 }
 
+func TestCloudTaskRecoveryInputPreservesHistoricalResources(t *testing.T) {
+	for _, tc := range []struct {
+		name, content string
+		ref           apitypes.ResourceSnapshot
+	}{
+		{"connector", "Search the release notes.", apitypes.ResourceSnapshot{ResourceReference: apitypes.ResourceReference{Source: "mcp", ID: "private-search"}, Type: "connector", Name: "Private search"}},
+		{"skill only", "", apitypes.ResourceSnapshot{ResourceReference: apitypes.ResourceReference{Source: "skill", ID: "review"}, Type: "skill", Name: "Review"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			selection := &apitypes.ResourceSelection{Version: 1, AgentID: "agt", Refs: []apitypes.ResourceSnapshot{tc.ref}}
+			current := im.Message{ID: "current", SenderID: im.AdminUserID, Content: "Continue the previous task."}
+			room := im.Room{CreatedBy: im.AdminUserID, CloudAgent: &apitypes.CloudAgentReference{UserID: "cloud"}, Messages: []im.Message{
+				{ID: "prior", SenderID: im.AdminUserID, Content: tc.content, Metadata: apitypes.WithResourceSelection(nil, selection)},
+				{ID: "reply", SenderID: "cloud", ClientMessageID: "relay-reply:prior", Content: "Done.", Metadata: map[string]any{"relay_response_id": "resp_prior"}},
+				current,
+			}}
+			got := cloudTaskRecoveryInput(room, current)
+			start := strings.Index(got, "\n[")
+			end := strings.LastIndex(got, "]\n\nCurrent user message:")
+			if start < 0 || end < start {
+				t.Fatalf("missing recovery history: %q", got)
+			}
+			var turns []struct {
+				User      string                      `json:"user"`
+				Agent     string                      `json:"agent"`
+				Resources *apitypes.ResourceSelection `json:"resource_selection"`
+			}
+			if err := json.Unmarshal([]byte(got[start+1:end+1]), &turns); err != nil {
+				t.Fatal(err)
+			}
+			if len(turns) != 1 || turns[0].User != tc.content || turns[0].Agent != "Done." || turns[0].Resources == nil ||
+				turns[0].Resources.AgentID != selection.AgentID || turns[0].Resources.Version != 1 || !slices.Equal(turns[0].Resources.Refs, selection.Refs) {
+				t.Fatalf("historical selection lost: %+v", turns)
+			}
+			if !strings.Contains(got, "do not apply them to the current turn unless selected again") || !strings.HasSuffix(got, "Current user message:\n"+current.Content) {
+				t.Fatalf("historical selections must remain background: %q", got)
+			}
+			// The serialized snapshot must count toward the history budget.
+			selection.Refs[0].Name = strings.Repeat("x", 16<<10)
+			room.Messages[0].Metadata = apitypes.WithResourceSelection(nil, selection)
+			if got := cloudTaskRecoveryInput(room, current); got != current.Content {
+				t.Fatalf("oversized resource turn was not skipped: %q", got)
+			}
+		})
+	}
+}
+
 func TestCloudTaskRecoveryInputFlagsUnavailableHistoricalAttachments(t *testing.T) {
 	current := im.Message{ID: "current", SenderID: im.AdminUserID, Content: "Expand the second section."}
 	prior := im.Message{ID: "prior", SenderID: im.AdminUserID, Content: strings.Repeat("x", 16<<10)}
@@ -1068,4 +1142,61 @@ func TestCloudAttachmentReplayAfterRestartUsesSavedFileReferences(t *testing.T) 
 	if err != nil || result.ID != "resp_saved" || submissions.Load() != 1 {
 		t.Fatalf("saved attachment replay = %+v, %v, submissions=%d", result, err, submissions.Load())
 	}
+}
+
+func TestCloudTaskResourceSelectionSurvivesSubmissionRetry(t *testing.T) {
+	var submits atomic.Int32
+	var key string
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	manager, connection := newCloudTaskTestRelay(t, ctx, "agt_resources", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/v1/responses" {
+			t.Errorf("resource task bypassed Relay response endpoint: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(404)
+			return
+		}
+		var body relay.CallRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if len(body.ResourceRefs) != 1 || body.ResourceRefs[0].ID != "review" || body.PreviousResponseID != "resp_parent" {
+			t.Errorf("resource selection or parent lost: %+v", body)
+		}
+		if submits.Add(1) == 1 {
+			key = r.Header.Get("Idempotency-Key")
+			w.WriteHeader(503)
+			return
+		}
+		if key == "" || r.Header.Get("Idempotency-Key") != key {
+			t.Error("resource retry changed idempotency key")
+		}
+		_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_done", Model: "agt_resources", Status: "completed"})
+	})
+	svc := im.NewService()
+	room, err := svc.CreateRoom(im.CreateRoomRequest{Title: "Resources", CreatorID: im.AdminUserID, Type: apitypes.RoomTypeFree})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection := &apitypes.ResourceSelection{Version: 1, AgentID: "agt_resources", Refs: []apitypes.ResourceSnapshot{{ResourceReference: apitypes.ResourceReference{Source: "skill", ID: "review"}, Type: "skill", Name: "Review"}}}
+	message, err := svc.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: im.AdminUserID, ResourceSelection: selection, Metadata: map[string]any{cloudTaskUnsubmittedKey: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	room.CloudAgent = &apitypes.CloudAgentReference{AgentID: "agt_resources", ConnectionID: connection}
+	h := &Handler{im: svc, relayManager: manager}
+	response, err := h.awaitCloudTask(ctx, room, message, "resp_parent")
+	if err != nil || response.Status != "completed" || submits.Load() != 2 {
+		t.Fatalf("resource retry failed: %+v %v", response, err)
+	}
+	saved, _ := svc.Room(room.ID)
+	for _, persisted := range saved.Messages {
+		if persisted.ID != message.ID {
+			continue
+		}
+		if got := apitypes.ResourceSelectionFromMetadata(persisted.Metadata); got == nil || len(got.Refs) != 1 || got.Refs[0].ID != "review" {
+			t.Fatalf("checkpoint lost resource selection: %+v", got)
+		}
+		return
+	}
+	t.Fatal("resource message missing after checkpoint")
 }

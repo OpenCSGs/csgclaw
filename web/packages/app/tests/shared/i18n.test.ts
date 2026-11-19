@@ -256,3 +256,14 @@ describe("agent operation diagnostics", () => {
     expect(formatted).toContain("connect: connection refused");
   });
 });
+
+it("keeps implementation service names out of user-facing copy", () => {
+  function strings(value: unknown): string[] {
+    if (typeof value === "string") return [value];
+    if (value && typeof value === "object") return Object.values(value).flatMap(strings);
+    return [];
+  }
+  for (const locale of ["zh", "en"] as const) {
+    for (const copy of strings(messages[locale])) expect(copy).not.toMatch(/\b(?:csgrelay|relay)\b/i);
+  }
+});

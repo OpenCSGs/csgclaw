@@ -273,3 +273,29 @@ it("keeps the picker open through pagination and dismisses on a non-focusable ou
   await user.click(screen.getByTestId("outside-surface"));
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 });
+
+it("lists cloud resources without exposing local management actions", async () => {
+  const { cloudResourceScope } = await import("@/models/cloudResourceScope");
+  const scope = cloudResourceScope("agt_cloud", "connection");
+  vi.mocked(fetchConversationResourceBatch).mockResolvedValue({
+    items: [item("cloud-connector")],
+    total: 1,
+    list_revision: "cloud",
+    has_more: false,
+  });
+  const { wrapper } = createQueryWrapper();
+  const onPick = vi.fn();
+  render(<ConversationResourcePicker agentID={scope} kind="connector" t={t} onClose={() => {}} onPick={onPick} />, {
+    wrapper,
+  });
+  await userEvent.setup().click(await screen.findByRole("option", { name: /GitLab/ }));
+  expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ id: "cloud-connector" }));
+  expect(fetchConversationResourceBatch).toHaveBeenCalledWith(
+    scope,
+    "connector",
+    "",
+    { search: "" },
+    expect.any(AbortSignal),
+  );
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
+});

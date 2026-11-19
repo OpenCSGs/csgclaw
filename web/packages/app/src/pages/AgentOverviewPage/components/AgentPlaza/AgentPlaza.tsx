@@ -1,9 +1,10 @@
+import { CloudRuntimeProfile, cloudRuntimeProfileSections, type CloudProfileSection } from "./CloudRuntimeProfile";
 import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { EntityAvatar, EntityPane } from "@/components/business/EntityDetail";
 import { AgentProfileHeader } from "@/components/business/AgentDetails";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { fetchCloudAgentTemplate, fetchRelayCatalog } from "@/api/relay";
+import { fetchCloudAgentTemplate, fetchCloudProfile, fetchRelayCatalog } from "@/api/relay";
 import { Check, Cloud, MoreHorizontal, Plus, Search, Sparkles } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import {
@@ -286,25 +287,41 @@ export function AgentPlazaMetadata({
 export function CloudAgentDetail({
   agent,
   t,
+  requestedProfileTab,
+  onProfileTabChange,
   onNewTask,
   onRemove,
   renderTemplate,
 }: {
   agent: CloudAgent;
   t: TranslateFn;
+  requestedProfileTab?: string;
+  onProfileTabChange?: (section: CloudProfileSection) => void;
   onNewTask: () => void;
   onRemove: () => void;
   renderTemplate: (repoPath: string, renderProfileIntro: (showModel: boolean) => ReactNode) => ReactNode;
 }) {
+  const [activeSection, setActiveSection] = useState<CloudProfileSection>("profile");
+  const section =
+    cloudRuntimeProfileSections.find((item) => item.id === (requestedProfileTab ?? activeSection))?.id ?? "profile";
   const online = agent.status === "online";
+  const runtimeProfile =
+    agent.cloudReadAvailable === true && ["csgclaw", "csgclaw-workspace"].includes(agent.type ?? "");
+  const liveProfile = useQuery({
+    queryKey: ["cloud-runtime-profile", agent.connectionID, agent.id],
+    queryFn: ({ signal }) => fetchCloudProfile(agent, signal),
+    enabled: runtimeProfile && (section === "profile" || section === "instructions"),
+    retry: false,
+  });
+  const description = runtimeProfile && liveProfile.isSuccess ? liveProfile.data.description : agent.description;
   const template = useQuery({
     queryKey: ["cloud-agent-template", agent.connectionID, agent.id],
     queryFn: ({ signal }) => fetchCloudAgentTemplate(agent, signal),
-    enabled: agent.publisher === "Agentichub" && !agent.templateRepoPath,
+    enabled: !runtimeProfile && agent.publisher === "Agentichub" && !agent.templateRepoPath,
     staleTime: 60_000,
     retry: false,
   });
-  const repoPath = agent.templateRepoPath || template.data?.repo_path;
+  const repoPath = runtimeProfile ? undefined : agent.templateRepoPath || template.data?.repo_path;
   const renderProfileIntro = (showModel: boolean) => (
     <div className="profile-editor-shell agent-page-editor">
       {agent.description ? (
@@ -342,9 +359,9 @@ export function CloudAgentDetail({
             </>
           }
           description={
-            agent.description ? (
-              <div className="entity-description-display-copy" title={agent.description}>
-                {agent.description}
+            description ? (
+              <div className="entity-description-display-copy" title={description}>
+                {description}
               </div>
             ) : null
           }
@@ -367,14 +384,34 @@ export function CloudAgentDetail({
             </>
           }
         />
-        {!repoPath ? (
+        {runtimeProfile ? (
+          <nav className="agent-profile-section-nav" aria-label={t("agentProfileSectionNavLabel")}>
+            {cloudRuntimeProfileSections.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`agent-profile-section-tab ${section === tab.id ? "active" : ""}`.trim()}
+                aria-current={section === tab.id ? "location" : undefined}
+                aria-controls={`agent-profile-${tab.id}`}
+                onClick={() => {
+                  setActiveSection(tab.id);
+                  onProfileTabChange?.(tab.id);
+                }}
+              >
+                {t(tab.label)}
+              </button>
+            ))}
+          </nav>
+        ) : !repoPath ? (
           <div className="agent-profile-section-nav">
             <h2 className={`agent-profile-section-tab active ${styles.profileLabel}`}>{t("agentProfileTab")}</h2>
           </div>
         ) : null}
       </div>
       <div className="agent-profile-scroll-region">
-        {repoPath ? (
+        {runtimeProfile ? (
+          <CloudRuntimeProfile agent={agent} t={t} section={section} />
+        ) : repoPath ? (
           renderTemplate(repoPath, renderProfileIntro)
         ) : (
           <>

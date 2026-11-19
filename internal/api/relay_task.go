@@ -135,6 +135,8 @@ func (h *Handler) runCloudTask(roomID string) {
 				switch result.Error.Code {
 				case "model_protocol_unsupported", "input_file_unavailable", "file_delivery_failed", "file_delivery_invalid":
 					code = result.Error.Code
+				case "resource_not_attached", "resource_disabled", "resource_unavailable", "invalid_resource_reference":
+					code = result.Error.Code
 				case "execution_interrupted", "execution_timeout", "cancellation_unconfirmed", "relay_invocation_identity_mismatch":
 					code = "relay_task_result_unavailable"
 				}
@@ -226,6 +228,9 @@ func retryCloudTaskWrite(ctx context.Context, write func() error) error {
 func cloudTaskFailureText(locale, code string) string {
 	var en, zh string
 	switch code {
+	case "resource_not_attached", "resource_disabled", "resource_unavailable", "invalid_resource_reference":
+		en = "A selected resource is no longer available. Remove or reselect the resource before sending the message again."
+		zh = "所选资源已不可用，请移除或重新选择资源后再发送消息。"
 	case "input_file_unavailable":
 		en = "The cloud agent could not receive the input attachments."
 		zh = "云端智能体未能收到输入附件。"
@@ -239,14 +244,14 @@ func cloudTaskFailureText(locale, code string) string {
 		en = "This message exceeds the cloud task request size limit. Shorten the message and send it again."
 		zh = "这条消息超过了云端任务的请求大小限制，请缩短消息后再发送。"
 	case "relay_task_result_unavailable":
-		en = "Relay could not confirm the result of this message. Check whether it completed before sending it again."
-		zh = "Relay 无法确认这条消息的执行结果。请确认消息是否已执行，再决定是否重发。"
+		en = "The result of this message could not be confirmed. Check whether it completed before sending it again."
+		zh = "暂时无法确认这条消息的执行结果。请确认消息是否已执行，再决定是否重发。"
 	case "model_protocol_unsupported":
 		en = "The published agent's model does not support the Responses tool protocol required by its runtime. Select a compatible provider/model in the source agent's settings, then send again."
 		zh = "发布端智能体的模型不支持运行时所需的 Responses 工具协议。请在本地源智能体的设置中选择支持该协议的模型服务，再重新发送。"
 	default:
-		en = "Cloud task could not complete. Check Relay and agent availability before sending again."
-		zh = "云端任务未能完成，请检查 Relay 和智能体状态后重新发送。"
+		en = "The cloud task could not complete. Check the cloud agent status and try again later."
+		zh = "云端任务未能完成，请检查云端智能体状态后重试。"
 	}
 	if locale == "en" {
 		return en
@@ -294,9 +299,10 @@ func cloudTaskRecoveryInput(room im.Room, message im.Message) string {
 			continue
 		}
 		turn, _ := json.Marshal(struct {
-			User  string `json:"user"`
-			Agent string `json:"agent"`
-		}{prior.Content, reply.Content})
+			User      string                      `json:"user"`
+			Agent     string                      `json:"agent"`
+			Resources *apitypes.ResourceSelection `json:"resource_selection,omitempty"`
+		}{prior.Content, reply.Content, apitypes.ResourceSelectionFromMetadata(prior.Metadata)})
 		if len(turn)+1 > budget {
 			continue
 		}
@@ -313,7 +319,7 @@ func cloudTaskRecoveryInput(room im.Room, message im.Message) string {
 		return fallback
 	}
 	slices.Reverse(turns)
-	input := "The remote session context was lost. Use the following completed turns as background. Do not repeat prior actions. Respond to the current user message.\n[" +
+	input := "The remote session context was lost. Use the following completed turns as background. Historical resource selections describe those turns only; do not apply them to the current turn unless selected again. Do not repeat prior actions. Respond to the current user message.\n[" +
 		strings.Join(turns, ",") + "]\n\n" + currentInput
 	// Leave room for the Relay request envelope when the current message
 	// alone is already close to the request size limit.
@@ -449,7 +455,13 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 			if retryAfter != "" {
 				key = fmt.Sprintf("task-recovery:%x", sha256.Sum256([]byte(key+"\x00"+retryAfter)))
 			}
-			result, err = h.relayManager.Chat(callCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, key, input, parent, relayFiles...)
+			var refs []apitypes.ResourceReference
+			if selection := apitypes.ResourceSelectionFromMetadata(message.Metadata); selection != nil {
+				for _, ref := range selection.Refs {
+					refs = append(refs, ref.ResourceReference)
+				}
+			}
+			result, err = h.relayManager.ChatWithResources(callCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, key, input, parent, refs, relayFiles...)
 			if errors.As(err, &remote) {
 				if id := remote.PendingResponseID(); id != "" {
 					result.ID, result.Status, err = id, "in_progress", nil

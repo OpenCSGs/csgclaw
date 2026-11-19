@@ -12,13 +12,19 @@ import { AgentOverviewPage } from "@/pages/AgentOverviewPage/AgentOverviewPage";
 import { createTranslator } from "@/shared/i18n";
 import { CLOUD_AGENTS_STORAGE_KEY, PINNED_ENTITIES_STORAGE_KEY } from "@/shared/storage/keys";
 import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
-import { fetchCloudAgentTemplate, fetchRelayCatalog } from "@/api/relay";
+import { fetchCloudAgentTemplate, fetchRelayCatalog, fetchCloudProfile } from "@/api/relay";
+import { fetchConversationResourceBatch } from "@/api/agentResources";
 import * as hubAPI from "@/api/hub";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { paneFromLocation } from "@/models/routing";
 import { createQueryWrapper } from "../helpers/queryClient";
 
-vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn(), fetchCloudAgentTemplate: vi.fn() }));
+vi.mock("@/api/relay", () => ({
+  fetchRelayCatalog: vi.fn(),
+  fetchCloudAgentTemplate: vi.fn(),
+  fetchCloudProfile: vi.fn(),
+}));
+vi.mock("@/api/agentResources", () => ({ fetchConversationResourceBatch: vi.fn() }));
 beforeEach(() => {
   vi.mocked(fetchRelayCatalog).mockResolvedValue([]);
   vi.mocked(fetchCloudAgentTemplate).mockResolvedValue(null);
@@ -860,6 +866,41 @@ describe("cloud agent plaza", () => {
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState());
   });
   afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
+
+  it("keeps cloud profile sections in the URL and restores them with browser history", async () => {
+    const cloud = { ...cloudAgentFixture[0], cloudReadAvailable: true, type: "csgclaw", publisher: "Agentichub" };
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([cloud]);
+    vi.mocked(fetchCloudProfile).mockResolvedValue({
+      id: "worker",
+      name: "Worker",
+      description: "",
+      runtime: "codex",
+      model: "model",
+      instructions: "Runtime instructions",
+    });
+    vi.mocked(fetchConversationResourceBatch).mockResolvedValue({
+      items: [],
+      total: 0,
+      list_revision: "1",
+      has_more: false,
+    });
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([cloud]));
+    render(<Page route={`/agents?cloud=${cloud.id}`} />);
+    await screen.findByRole("region", { name: "运行环境" });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "指令" }));
+    expect(await screen.findByRole("textbox", { name: "指令" })).toHaveValue("Runtime instructions");
+    expect(screen.getByLabelText("Current URL")).toHaveTextContent(`cloud=${cloud.id}&tab=instructions`);
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByRole("region", { name: "运行环境" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "档案" })).toHaveAttribute("aria-current", "location");
+    await user.click(screen.getByRole("button", { name: "Forward" }));
+    expect(await screen.findByRole("textbox", { name: "指令" })).toHaveValue("Runtime instructions");
+    await user.click(screen.getByRole("button", { name: "连接器" }));
+    expect(screen.getByLabelText("Current URL")).toHaveTextContent(`cloud=${cloud.id}&tab=connectors`);
+    expect(screen.getByRole("button", { name: "连接器" })).toHaveAttribute("aria-current", "location");
+    expect(await screen.findByText("这个智能体还没有启用任何连接器。")).toBeVisible();
+  });
 
   it("refreshes the displayed agent's availability while the plaza stays open", async () => {
     vi.useFakeTimers();

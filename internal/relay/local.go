@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,7 +46,7 @@ func (e *LocalExecutor) Execute(ctx context.Context, frame Frame) Frame {
 		return result
 	}
 	text, err := InputText(frame.Input)
-	if err != nil && len(frame.InputFiles) == 0 {
+	if err != nil && len(frame.InputFiles) == 0 && len(frame.ResourceRefs) == 0 {
 		result.Error = &ProtocolError{Code: "invalid_request", Message: err.Error()}
 		return result
 	}
@@ -56,6 +57,9 @@ func (e *LocalExecutor) Execute(ctx context.Context, frame Frame) Frame {
 	base := "/api/v1/agents/" + url.PathEscape(e.AgentID) + "/sessions/" + session
 	path := base + "/responses"
 	payload := map[string]any{"input": text, "stream": false}
+	if len(frame.ResourceRefs) > 0 {
+		payload["resource_refs"] = frame.ResourceRefs
+	}
 	if len(frame.InputFiles) > 0 {
 		ids, err := e.prepareInputs(ctx, frame, base)
 		if err != nil {
@@ -85,6 +89,13 @@ func (e *LocalExecutor) Execute(ctx context.Context, frame Frame) Frame {
 	}
 	if err != nil {
 		result.Error = &ProtocolError{Code: "execution_failed", Message: "local Session API execution failed"}
+		var apiError *apiclient.APIError
+		if errors.As(err, &apiError) {
+			switch apiError.Code {
+			case "resource_not_attached", "resource_disabled", "resource_unavailable", "invalid_resource_reference":
+				result.Error = &ProtocolError{Code: apiError.Code, Message: "The selected resource is unavailable. Remove or reselect it before sending again."}
+			}
+		}
 		// Translate only this locally generated diagnostic. Never relay arbitrary
 		// upstream error text, which may contain credentials or private inputs.
 		if strings.Contains(err.Error(), "this request contains Responses tool definitions or tool-use history") && strings.Contains(err.Error(), "native Responses tool support") {

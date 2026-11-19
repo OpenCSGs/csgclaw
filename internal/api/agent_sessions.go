@@ -19,7 +19,9 @@ import (
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/agentsession"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/csgclaw/delivery"
+	"csgclaw/internal/conversationresource"
 	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
 )
@@ -46,14 +48,15 @@ var (
 )
 
 type agentSessionResponseRequest struct {
-	UserInput       bool            `json:"user_input,omitempty"`
-	Model           string          `json:"model,omitempty"`
-	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
-	AttachmentIDs   []string        `json:"attachment_ids,omitempty"`
-	Input           json.RawMessage `json:"input"`
-	Stream          *bool           `json:"stream,omitempty"`
-	Extra           string          `json:"extra,omitempty"`
-	ExtraType       string          `json:"extra_type,omitempty"`
+	ResourceRefs    []apitypes.ResourceReference `json:"resource_refs,omitempty"`
+	UserInput       bool                         `json:"user_input,omitempty"`
+	Model           string                       `json:"model,omitempty"`
+	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
+	AttachmentIDs   []string                     `json:"attachment_ids,omitempty"`
+	Input           json.RawMessage              `json:"input"`
+	Stream          *bool                        `json:"stream,omitempty"`
+	Extra           string                       `json:"extra,omitempty"`
+	ExtraType       string                       `json:"extra_type,omitempty"`
 }
 
 type agentSessionRequestValidationError struct {
@@ -148,6 +151,33 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	selected, ok := h.sessionRequestAgent(w, r)
 	if !ok {
 		return
+	}
+	if len(input.resourceRefs) > 0 {
+		if h.resources == nil {
+			writeCodedAPIError(w, 503, conversationresource.ServiceUnavailable, "resource service unavailable")
+			return
+		}
+		normalized, resolveErr := conversationresource.Normalize(input.Text, input.resourceRefs)
+		if resolveErr != nil {
+			writeConversationResourceError(w, resolveErr)
+			return
+		}
+		resolved, resolveErr := h.resources.Resolve(r.Context(), selected.ID, normalized.Refs)
+		if resolveErr != nil {
+			if !writeConversationResourceError(w, resolveErr) {
+				writeAPIError(w, resolveErr, 400)
+			}
+			return
+		}
+		if strings.TrimSpace(input.Text) == "" && len(input.Files)+len(input.attachmentIDs) == 0 && !resolved.Snapshot().SingleSkill() {
+			writeCodedAPIError(w, 400, "invalid_request", "input required for selected resources")
+			return
+		}
+		input.resourcePrompt, err = conversationresource.Render(resolved)
+		if err != nil {
+			writeAPIError(w, err, 400)
+			return
+		}
 	}
 	input.turnModel, err = h.sessionTurnModel(selected, input.model, input.reasoningEffort)
 	if err != nil {
@@ -310,6 +340,10 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 	if acceptUserInput {
 		policy = agentengine.InteractionUserInputOnly
 	}
+	turnInput := sessionTurnInput(input.Text, response.InputAttachments)
+	if input.resourcePrompt != "" {
+		turnInput = append(turnInput, agentengine.InputPart{Kind: agentengine.InputPartText, Text: input.resourcePrompt})
+	}
 	result := conversation.Run(runCtx, agentengine.TurnRequest{
 		Model:                       input.turnModel,
 		ID:                          agentengine.TurnID(responseID),
@@ -319,7 +353,7 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 		PreservePendingInteractions: input.preservePendingInteractions,
 		StreamReasoningSummary:      stream && input.reasoningSummary,
 		Interaction:                 policy,
-		Input:                       sessionTurnInput(input.Text, response.InputAttachments),
+		Input:                       turnInput,
 	}, sink)
 	if !acceptUserInput {
 		result.Interactions = nil
@@ -618,6 +652,10 @@ func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body
 			body.fieldEnd = decoder.InputOffset() + agentSessionResponseBodyLimit
 			request.AttachmentIDs, err = readSessionAttachmentIDs(decoder)
 			body.fieldEnd = 0
+		case strings.EqualFold(name, "resource_refs"):
+			body.fieldEnd = decoder.InputOffset() + agentSessionResponseBodyLimit
+			err = decoder.Decode(&request.ResourceRefs)
+			body.fieldEnd = 0
 		case strings.EqualFold(name, "input"):
 			err = decoder.Decode(&request.Input)
 		case strings.EqualFold(name, "user_input"):
@@ -646,7 +684,7 @@ func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body
 func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInputFile, requestBytes int64) (agentSessionInput, bool, error) {
 	var input agentSessionInput
 	if len(request.Input) == 0 || string(request.Input) == "null" {
-		if len(uploads) == 0 && len(request.AttachmentIDs) == 0 {
+		if len(uploads) == 0 && len(request.AttachmentIDs) == 0 && len(request.ResourceRefs) == 0 {
 			return agentSessionInput{}, false, fmt.Errorf("input is required")
 		}
 	} else {
@@ -666,7 +704,8 @@ func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInp
 	input.model = strings.TrimSpace(request.Model)
 	input.reasoningEffort = strings.TrimSpace(request.ReasoningEffort)
 	input.attachmentIDs = request.AttachmentIDs
-	if input.Text == "" && len(input.Files)+len(input.attachmentIDs) == 0 {
+	input.resourceRefs = request.ResourceRefs
+	if input.Text == "" && len(input.Files)+len(input.attachmentIDs) == 0 && len(input.resourceRefs) == 0 {
 		return agentSessionInput{}, false, fmt.Errorf("input must not be empty")
 	}
 	nonFileBytes := requestBytes

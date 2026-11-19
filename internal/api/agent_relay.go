@@ -50,7 +50,7 @@ func (h *Handler) CloseRelay() {
 }
 func (h *Handler) handleAgentRelay(w http.ResponseWriter, r *http.Request) {
 	if h.relayManager == nil {
-		writeAgentSessionError(w, 503, "relay_unavailable", "relay service is unavailable", nil)
+		writeAgentSessionError(w, 503, "relay_unavailable", "cloud agent service is unavailable", nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
@@ -133,7 +133,7 @@ func (h *Handler) handleAgentRelay(w http.ResponseWriter, r *http.Request) {
 // handleRelayCatalog serves browser-safe community discovery records.
 func (h *Handler) handleRelayCatalog(w http.ResponseWriter, r *http.Request) {
 	if h.relayManager == nil {
-		writeAgentSessionError(w, 503, "relay_unavailable", "relay service is unavailable", nil)
+		writeAgentSessionError(w, 503, "relay_unavailable", "cloud agent service is unavailable", nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -186,7 +186,7 @@ func (h *Handler) handleRelayCatalog(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleRelayAgentTemplate(w http.ResponseWriter, r *http.Request) {
 	if h.relayManager == nil {
-		writeAgentSessionError(w, 503, "relay_unavailable", "relay service is unavailable", nil)
+		writeAgentSessionError(w, 503, "relay_unavailable", "cloud agent service is unavailable", nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -205,7 +205,7 @@ func (h *Handler) handleRelayAgentTemplate(w http.ResponseWriter, r *http.Reques
 
 func (h *Handler) queueAgentPublication(id string) error {
 	if h.relayManager == nil {
-		return fmt.Errorf("relay service is unavailable")
+		return fmt.Errorf("cloud agent service is unavailable")
 	}
 	a, ok := h.svc.Agent(id)
 	if !ok {

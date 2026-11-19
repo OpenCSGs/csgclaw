@@ -13,6 +13,7 @@ import (
 // CatalogEntry is a browser-safe discovery record. ConnectionID is an opaque
 // server/login reference; it never contains credentials.
 type CatalogEntry struct {
+	CloudReadAvailable bool   `json:"cloud_read_available"`
 	Recommended        bool   `json:"recommended"`
 	RelayURL           string `json:"relay_url"`
 	ConnectionID       string `json:"connection_id"`
@@ -95,6 +96,23 @@ func (m *Manager) discover(ctx context.Context, onlyID string, probeIDs []string
 		instances = selected
 	}
 	entries := make([]CatalogEntry, len(instances))
+	// A visible catalog record need not expose an endpoint to this account.
+	// Only advertise reads after checking the same trusted gateway as cloudReader.
+	readable := make(map[int64]bool)
+	for _, item := range instances {
+		if item.Source != "platform" || item.Endpoint == "" {
+			continue
+		}
+		connection, err := m.cloudReadConnection(ctx)
+		if err == nil {
+			for _, candidate := range instances {
+				_, endpointErr := validatedCloudEndpoint(candidate.Endpoint, connection.AIGatewayBaseURL, candidate.ContentID)
+				readable[candidate.ID] = candidate.Source == "platform" &&
+					(candidate.Type == "csgclaw" || candidate.Type == "csgclaw-workspace") && endpointErr == nil
+			}
+		}
+		break
+	}
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 	// Bound fanout while avoiding one slow registration blocking every later one.
@@ -123,7 +141,8 @@ func (m *Manager) discover(ctx context.Context, onlyID string, probeIDs []string
 				}
 				a.Name, a.Description = item.Name, item.Description
 				entry := CatalogEntry{
-					RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar,
+					CloudReadAvailable: readable[item.ID],
+					RelayURL:           c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar,
 					Source: item.Source, Type: item.Type, CreatorName: item.CreatorName, ModelID: item.Metadata.ProvisionRequest.LLM.Model,
 					OwnedByCurrentUser: item.Editable,
 					Recommended:        item.Recommended,
