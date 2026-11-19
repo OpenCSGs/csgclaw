@@ -316,6 +316,7 @@ describe("TaskConversationList archive management", () => {
         compact
         activeID="collaboration"
         entry={{
+          liveRooms: new Map(),
           create: vi.fn(),
           onMessage: vi.fn(),
           patch: vi.fn(),
@@ -357,6 +358,7 @@ describe("TaskConversationList archive management", () => {
         compact
         directories={[{ path: "/projects/first", agentIDs: ["manager"] }]}
         entry={{
+          liveRooms: new Map(),
           create: vi.fn().mockResolvedValue(room),
           onMessage: vi.fn(),
           patch: vi.fn().mockResolvedValue(undefined),

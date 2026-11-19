@@ -1,9 +1,11 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createRoomRequest, deleteRoomRequest } from "@/api/im";
 import type { CreateRoomPayload } from "@/api/im";
 import { updateConversationMetadata, type ConversationMetadataPatch } from "@/api/taskConversations";
-import type { IMConversation, IMMessage } from "@/models/conversations";
+import { parseTurnProgress, progressActive } from "@/models/turnProgress";
+import { taskListChange, type RefreshScope } from "@/models/taskConversations";
+import { isThreadReply, type IMConversation, type IMMessage, type IMServerEvent } from "@/models/conversations";
 
 type Args = {
   currentUserID: string;
@@ -19,27 +21,56 @@ export function useTaskEntry({ currentUserID, rooms, onUpdate, onMessage, onDele
   const client = useQueryClient();
   const [busyID, setBusyID] = useState("");
   const refreshTimer = useRef<number | null>(null);
-  const refreshRevision = useRef(0);
+  const previousRooms = useRef<readonly IMConversation[] | null>(null);
+  const pending = useRef<RefreshScope | null>(null);
+  const liveRooms = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
+  const scheduleRefresh = useCallback(
+    (scope: RefreshScope) => {
+      if (pending.current !== "all") pending.current = scope;
+      if (refreshTimer.current !== null) return;
+      function refresh() {
+        const searchOnly = pending.current === "search";
+        pending.current = null;
+        void client
+          .invalidateQueries(
+            {
+              queryKey: ["task-conversations"],
+              predicate: searchOnly ? (query) => Boolean(query.queryKey[2]) : undefined,
+            },
+            { cancelRefetch: false },
+          )
+          .then(() => {
+            if (refreshTimer.current === null) return;
+            refreshTimer.current = pending.current ? window.setTimeout(refresh, 500) : null;
+          });
+      }
+      refreshTimer.current = window.setTimeout(refresh, 500);
+    },
+    [client],
+  );
   useEffect(() => {
-    refreshRevision.current += 1;
-    if (refreshTimer.current !== null) return;
-    function refresh() {
-      const revision = refreshRevision.current;
-      // Finish the current request, then reconcile changes that arrived during it.
-      void client.invalidateQueries({ queryKey: ["task-conversations"] }, { cancelRefetch: false }).then(() => {
-        if (refreshTimer.current === null) return;
-        refreshTimer.current = revision === refreshRevision.current ? null : window.setTimeout(refresh, 500);
-      });
-    }
-    refreshTimer.current = window.setTimeout(refresh, 500);
-  }, [client, rooms]);
+    const scope = taskListChange(previousRooms.current, rooms);
+    previousRooms.current = rooms;
+    if (scope) scheduleRefresh(scope);
+  }, [rooms, scheduleRefresh]);
+
   useEffect(
     () => () => {
       if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
       refreshTimer.current = null;
+      previousRooms.current = null;
+      pending.current = null;
     },
     [],
   );
+
+  function onHistoryEvent(event: IMServerEvent) {
+    if (event.type === "connection.open") scheduleRefresh("all");
+    // Thread replies are absent from bootstrap.rooms' main transcript.
+    if (event.type !== "message.created" || !isThreadReply(event.message)) return;
+    const progress = parseTurnProgress(event.message);
+    if (!progress || progress.revision <= 1 || !progressActive(progress)) scheduleRefresh("all");
+  }
 
   async function create(payload: Omit<CreateRoomPayload, "creator_id">) {
     const room = await createRoomRequest({ ...payload, creator_id: currentUserID, task_session: true });
@@ -66,7 +97,7 @@ export function useTaskEntry({ currentUserID, rooms, onUpdate, onMessage, onDele
       setBusyID("");
     }
   }
-  return { create, patch, remove, onMessage, open: onOpen, isWorking, busyID };
+  return { create, patch, remove, liveRooms, onHistoryEvent, onMessage, open: onOpen, isWorking, busyID };
 }
 
-export type TaskEntryController = ReturnType<typeof useTaskEntry>;
+export type TaskEntryController = Omit<ReturnType<typeof useTaskEntry>, "onHistoryEvent">;

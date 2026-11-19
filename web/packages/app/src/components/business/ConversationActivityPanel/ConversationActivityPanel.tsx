@@ -1,5 +1,6 @@
 import { ToolOutput } from "@/components/business/ToolOutput";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -69,6 +70,7 @@ import {
 import styles from "./ConversationActivityPanel.module.css";
 
 type ConversationActivityPanelProps = {
+  active?: boolean;
   embedded?: boolean;
   agents: readonly AgentLike[];
   conversation: IMConversation;
@@ -124,7 +126,8 @@ function persistPanelWidth(width: number) {
   }
 }
 
-export function ConversationActivityPanel({
+function ActivityPanel({
+  active = true,
   embedded = false,
   agents,
   conversation,
@@ -166,8 +169,11 @@ export function ConversationActivityPanel({
 
   const activityAgents = useMemo(() => conversationActivityAgents(conversation, agents), [agents, conversation]);
   const entries = useMemo(
-    () => conversationActivityEntries(messages, activityAgents, conversation.members, usersById, autonomous),
-    [activityAgents, conversation.members, messages, usersById, autonomous],
+    () =>
+      showTurns
+        ? []
+        : conversationActivityEntries(messages, activityAgents, conversation.members, usersById, autonomous),
+    [showTurns, activityAgents, conversation.members, messages, usersById, autonomous],
   );
   const activityActors = useMemo(
     () => conversationActivityActorOptions(activityAgents, entries, usersById, t),
@@ -214,6 +220,7 @@ export function ConversationActivityPanel({
   }, [conversation.id, t]);
 
   useEffect(() => {
+    if (!active) return;
     mountedRef.current = true;
     const unsubscribe = subscribeIMEvents((payload) => {
       if (payload.type !== "message.created" || payload.room_id !== conversation.id || !payload.message) {
@@ -228,11 +235,11 @@ export function ConversationActivityPanel({
       requestIDRef.current += 1;
       unsubscribe();
     };
-  }, [conversation.id, refresh]);
+  }, [active, conversation.id, refresh]);
 
   useEffect(() => {
-    setMessages((current) => mergeConversationActivityMessages(current, conversation.messages));
-  }, [conversation.messages]);
+    if (active) setMessages((current) => mergeConversationActivityMessages(current, conversation.messages));
+  }, [active, conversation.messages]);
 
   const scrollToEntry = useCallback((entryID: string) => {
     setSelectedEntryID(entryID);
@@ -669,6 +676,13 @@ export function ConversationActivityPanel({
     </aside>
   );
 }
+
+// A visited tab stays mounted to preserve its selected turn and filters.
+export const ConversationActivityPanel = memo(
+  ActivityPanel,
+  (previous, next) =>
+    previous.active === false && next.active === false && previous.conversation.id === next.conversation.id,
+);
 
 function ActivityFilterMenu({
   autonomous,

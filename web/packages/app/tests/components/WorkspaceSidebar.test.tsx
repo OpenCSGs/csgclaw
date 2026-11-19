@@ -18,6 +18,7 @@ function CurrentPath() {
 
 function taskEntry() {
   return {
+    liveRooms: new Map(),
     create: vi.fn(),
     onMessage: vi.fn(),
     patch: vi.fn(),

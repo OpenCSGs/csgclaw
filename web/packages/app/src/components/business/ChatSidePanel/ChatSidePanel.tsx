@@ -58,6 +58,7 @@ export type ChatSidePanelProps = {
   activeThreadRootID?: string;
   threadPanel?: ReactNode;
   roomTasksPanel?: ReactNode;
+  activityActive?: boolean;
   suspended?: boolean;
   onThreadSelect?: (rootID: string) => void;
   onThreadClose?: () => void;
@@ -91,6 +92,7 @@ export function ChatSidePanel({
   activeThreadRootID,
   threadPanel,
   roomTasksPanel,
+  activityActive = true,
   suspended = false,
   onThreadSelect,
   onThreadClose,
@@ -544,6 +546,7 @@ export function ChatSidePanel({
             ) : tab.kind === "activity" ? (
               conversation ? (
                 <ConversationActivityPanel
+                  active={activityActive && tab.id === state.activeID && visible}
                   embedded
                   agents={agents}
                   conversation={conversation}

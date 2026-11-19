@@ -77,6 +77,7 @@ export type ConversationWorkingParticipant = {
 };
 
 export type ConversationPaneProps = {
+  activityActive?: boolean;
   cloudSendConfirmation?: CloudSendConfirmation | null;
   memberPanelProps?: RoomMembersPanelProps | null;
   activeThreadRootID?: string;

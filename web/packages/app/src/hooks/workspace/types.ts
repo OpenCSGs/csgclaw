@@ -234,6 +234,7 @@ export type UseConversationControllerArgs = {
   messageActionBusy: string;
   messageActionFeedback: MessageActionFeedback;
   messageListActive?: boolean;
+  workspaceDialogOpen?: boolean;
   hasObservedWorkLease: ParticipantWorkStatus["hasObservedWorkLease"];
   stopWorkingTurn?: ParticipantWorkStatus["stopWorkingTurn"];
   workingParticipantsForRoom: ParticipantWorkStatus["workingParticipantsForRoom"];

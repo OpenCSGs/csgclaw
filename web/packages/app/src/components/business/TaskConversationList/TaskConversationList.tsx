@@ -27,7 +27,7 @@ import { useCloudAgentAvatarMetadata } from "@/hooks/workspace/useCloudAgentAvat
 import { cloudAgentAvatar } from "@/models/cloudAgents";
 import type { AuthStatus } from "@/models/auth";
 import { errorMessage } from "@/api/client";
-import { uniqueTaskConversations } from "@/models/taskConversations";
+import { taskConversationPreview, uniqueTaskConversations } from "@/models/taskConversations";
 import { resolveConversationUser } from "@/models/conversations";
 import type { IMConversation, IMMessage, TranslateFn, UsersById } from "@/models/conversations";
 import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
@@ -291,7 +291,7 @@ export function TaskConversationList({
               )
             : undefined;
           const searchMatch = query ? room.search_match : undefined;
-          const preview = searchMatch || room.messages.at(-1);
+          const preview = searchMatch || taskConversationPreview(room, entry.liveRooms?.get(room.id));
           const fullPreviewText = preview?.content?.replace(/<[^>]+>/g, " ") || "";
           const previewText = searchMatch ? searchExcerpt(fullPreviewText, query) : fullPreviewText.slice(0, 64);
           const timestamp = preview?.created_at || room.messages.at(-1)?.created_at || room.created_at;
