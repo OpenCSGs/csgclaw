@@ -613,8 +613,14 @@ func (h *Handler) registerAppRoomTools(agentID string) {
 		return
 	}
 	fields := platformTextFields("title", "source_room_id", "source_message_id", "type")
+	fields["type"] = map[string]any{
+		"type":        "string",
+		"enum":        []string{"", string(apitypes.RoomTypeOnDemand), string(apitypes.RoomTypeAutonomous)},
+		"default":     string(apitypes.RoomTypeOnDemand),
+		"description": "Room mode: on_demand (moderated collaboration, default) or autonomous (roundtable collaboration). Omitted or empty means on_demand. Legacy free rooms cannot be created.",
+	}
 	fields["member_ids"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
-	h.addAppPlatformTool(agentID, "room_create", "Create an explicitly requested room. The creator is resolved from a stored human request, never supplied as an identity argument.", fields, []string{"title", "source_room_id", "source_message_id", "member_ids"}, false, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
+	h.addAppPlatformTool(agentID, "room_create", "Create an explicitly requested CSGClaw collaboration space (group conversation), using moderated collaboration (on_demand) by default. Set type to autonomous for roundtable collaboration. This creates a group even with one invited Agent; it does not create a direct chat. The creator is resolved from a stored human request, never supplied as an identity argument.", fields, []string{"title", "source_room_id", "source_message_id", "member_ids"}, false, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
 		if err := h.requirePlatformManager(agentID); err != nil {
 			return nil, err
 		}
@@ -639,7 +645,11 @@ func (h *Handler) registerAppRoomTools(agentID string) {
 		for _, v := range args["member_ids"].([]any) {
 			members = append(members, v.(string))
 		}
-		payload := map[string]any{"title": args["title"], "creator_id": creator, "member_ids": members, "manager_id": h.agentPlatformParticipant(agentID), "type": platformText(args, "type")}
+		roomType := apitypes.RoomType(platformText(args, "type"))
+		if roomType == "" {
+			roomType = apitypes.RoomTypeOnDemand
+		}
+		payload := map[string]any{"title": args["title"], "creator_id": creator, "member_ids": members, "manager_id": h.agentPlatformParticipant(agentID), "type": roomType, "is_direct": false}
 		return h.invokeAppPlatformHandler(ctx, agentID, http.MethodPost, nil, nil, payload, h.handleCreateRoom)
 	})
 	memberFields := platformTextFields("room_id")

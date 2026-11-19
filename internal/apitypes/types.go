@@ -194,6 +194,9 @@ type EventPayload struct {
 // RoomType controls how messages are routed inside a group room. An empty type
 // is read as RoomTypeFree so rooms created before this field existed keep their
 // mention-driven behavior.
+// IsDirect distinguishes private chats from group collaboration spaces,
+// independently of member count. Direct chats use free delivery as well;
+// they are separate from legacy free group rooms.
 type RoomType string
 
 const (

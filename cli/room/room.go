@@ -21,7 +21,7 @@ func (cmd) Name() string {
 }
 
 func (cmd) Summary() string {
-	return "Manage IM rooms."
+	return "Manage conversations and collaboration spaces."
 }
 
 func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
@@ -51,15 +51,15 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 
 func (c cmd) usage(run *command.Context) {
 	run.UsageCommandGroup(c, run.Program+" room <subcommand> [flags]", []string{
-		"list               List rooms",
+		"list               List conversations and collaboration spaces",
 		"attachments        List, download, or delete room attachments",
-		"create             Create a room",
+		"create             Create a collaboration space or Feishu group",
 		"delete <id>        Delete a room",
 	})
 }
 
 func (c cmd) runList(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("room list", run.Program+" room list [flags]", "List rooms.")
+	fs := run.NewFlagSet("room list", run.Program+" room list [flags]", "List conversations and collaboration spaces. The DIRECT column identifies private chats.")
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -76,14 +76,14 @@ func (c cmd) runList(ctx context.Context, run *command.Context, args []string, g
 }
 
 func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("room create", run.Program+" room create [flags]", "Create a room.")
+	fs := run.NewFlagSet("room create", run.Program+" room create [flags]", "Create a CSGClaw collaboration space or a Feishu group. This creates a group conversation even with one invited Agent; direct chats use separate conversation workflows.")
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	title := fs.String("title", "", "room title")
 	description := fs.String("description", "", "room description")
 	creatorID := fs.String("creator-id", "", "creator participant id")
 	memberIDs := fs.String("member-ids", "", "comma-separated member participant ids")
 	locale := fs.String("locale", "", "room locale")
-	roomTypeValue := fs.String("type", "", "room type: on_demand, autonomous or free (CSGClaw defaults to on_demand)")
+	roomTypeValue := fs.String("type", "", "CSGClaw collaboration mode: on_demand (moderated, default) or autonomous (roundtable)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -91,20 +91,27 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		return fmt.Errorf("room create does not accept positional arguments")
 	}
 
+	channelValue := strings.ToLower(strings.TrimSpace(*channelName))
+	if channelValue == "" {
+		channelValue = "csgclaw"
+	}
 	roomType := apitypes.RoomType(strings.TrimSpace(*roomTypeValue))
+	if roomType != "" && roomType != apitypes.RoomTypeOnDemand && roomType != apitypes.RoomTypeAutonomous {
+		return fmt.Errorf("type must be one of: on_demand (moderated), autonomous (roundtable); free rooms can no longer be created")
+	}
 	if roomType == "" {
 		roomType = apitypes.RoomTypeFree
-		if *channelName == "csgclaw" {
+		if channelValue == "csgclaw" {
 			roomType = apitypes.RoomTypeOnDemand
 		}
 	}
-	if roomType != apitypes.RoomTypeFree && roomType != apitypes.RoomTypeOnDemand && roomType != apitypes.RoomTypeAutonomous {
-		return fmt.Errorf("type must be one of: on_demand, autonomous, free")
-	}
-	if (roomType == apitypes.RoomTypeOnDemand || roomType == apitypes.RoomTypeAutonomous) && *channelName != "csgclaw" {
+	if (roomType == apitypes.RoomTypeOnDemand || roomType == apitypes.RoomTypeAutonomous) && channelValue != "csgclaw" {
 		return fmt.Errorf("collaboration rooms currently support csgclaw only")
 	}
-	room, err := run.APIClient(globals).CreateRoomByChannel(ctx, *channelName, apitypes.CreateRoomRequest{
+	// Room is the shared conversation model. This entry creates group spaces;
+	// IsDirect, rather than the number of members, distinguishes private chats.
+	room, err := run.APIClient(globals).CreateRoomByChannel(ctx, channelValue, apitypes.CreateRoomRequest{
+		IsDirect:    false,
 		Type:        roomType,
 		Title:       *title,
 		Description: *description,
