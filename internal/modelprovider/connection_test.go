@@ -75,6 +75,38 @@ func TestServiceDiscoveryAndVerification(t *testing.T) {
 	}
 }
 
+func TestResponsesConnectionProbeValidatesNullableError(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, wantError string
+	}{
+		{name: "null error", body: `{"status":"completed","error":null,"output":[{"type":"message"}]}`},
+		{name: "upstream error", body: `{"status":"failed","error":{"message":"failed"},"output":[]}`, wantError: "invalid_response"},
+		{name: "wrong protocol", body: `{"error":null,"choices":[{"message":{"content":"OK"}}]}`, wantError: "invalid_response"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/models" {
+					fmt.Fprint(w, `{"data":[{"id":"deepseek-flash"}]}`)
+					return
+				}
+				fmt.Fprint(w, tc.body)
+			}))
+			defer upstream.Close()
+
+			_, err := CheckService(context.Background(), ServiceConnection{
+				BaseURL: upstream.URL, APIKey: "test-key", Protocol: modelpreset.Responses,
+			}, true)
+			if tc.wantError == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || ConnectionErrorCode(err) != tc.wantError {
+				t.Fatalf("error = %v, want %s", err, tc.wantError)
+			}
+		})
+	}
+}
+
 func TestServiceFailuresNeverBecomeConnectedViaPreset(t *testing.T) {
 	for _, status := range []int{401, 402, 403, 429, 500} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {

@@ -82,6 +82,57 @@ func TestModelProviderConnectIsAtomicAndPersistsProtocol(t *testing.T) {
 	}
 }
 
+func TestModelProviderConnectUsesResponsesPresetDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		preset, firstModel, probeModel string
+	}{
+		{"kimi", "kimi-k2.6", "kimi-k3.1-pro"},
+		{"deepseek", "deepseek-chat", "deepseek-flash"},
+		{"aliyun", "qwen-vl-max", "qwen3.8-flash"},
+		{"aliyun-token-plan", "kimi-k2.6", "auto"},
+	} {
+		t.Run(tc.preset, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodGet && r.URL.Path == "/models":
+					fmt.Fprintf(w, `{"data":[{"id":%q},{"id":%q}]}`, tc.firstModel, tc.probeModel)
+				case r.Method == http.MethodPost && r.URL.Path == "/responses":
+					var probe struct {
+						Model string `json:"model"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&probe); err != nil || probe.Model != tc.probeModel {
+						t.Errorf("probe model = %q, want %q (decode error: %v)", probe.Model, tc.probeModel, err)
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					fmt.Fprint(w, `{"status":"completed","error":null,"output":[{"type":"message","content":[{"type":"output_text","text":"OK"}]}]}`)
+				default:
+					t.Errorf("unexpected upstream request %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer upstream.Close()
+			path := filepath.Join(t.TempDir(), "config.toml")
+			writeMinimalAPIConfig(t, path)
+			h := newModelProviderTestHandler(t, path, nil)
+			req := fmt.Sprintf(`{"id":"vendor","preset":%q,"base_url":%q,"api_key":"fixture-key","connect":true}`, tc.preset, upstream.URL)
+			rec := httptest.NewRecorder()
+			h.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers", strings.NewReader(req)))
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("connect = %d %s", rec.Code, rec.Body)
+			}
+			cfg, err := config.Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			provider := cfg.Models.Providers["vendor"]
+			if provider.APIProtocol != modelpreset.Responses || provider.Status != "connected" || strings.Join(provider.Models, ",") != tc.probeModel+","+tc.firstModel {
+				t.Fatalf("protocol = %q, status = %q, models = %v", provider.APIProtocol, provider.Status, provider.Models)
+			}
+		})
+	}
+}
+
 func TestModelProviderPresetsAndInvalidRequests(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	writeMinimalAPIConfig(t, path)

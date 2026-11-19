@@ -246,7 +246,10 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 			return out, serviceError(r.StatusCode, b, c.APIKey)
 		}
 		var decoded map[string]json.RawMessage
-		if json.Unmarshal(b, &decoded) != nil || len(decoded) == 0 || decoded["error"] != nil {
+		decodeErr := json.Unmarshal(b, &decoded)
+		// Successful Responses payloads can explicitly include "error": null.
+		upstreamError := decoded["error"]
+		if decodeErr != nil || len(decoded) == 0 || (upstreamError != nil && !bytes.Equal(upstreamError, []byte("null"))) {
 			return out, &ConnectionError{502, "invalid_response", "The model service returned an invalid inference response."}
 		}
 		if c.Protocol == modelpreset.Responses && decoded["output"] == nil || c.Protocol == modelpreset.AnthropicMessages && decoded["content"] == nil || (c.Protocol == "" || c.Protocol == modelpreset.ChatCompletions) && decoded["choices"] == nil {
