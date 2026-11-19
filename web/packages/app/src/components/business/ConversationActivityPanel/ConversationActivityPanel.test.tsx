@@ -1,11 +1,13 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { fetchMessagesRequest } from "@/api/im";
+import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import { createTranslator } from "@/shared/i18n";
 import { ConversationActivityPanel } from "./ConversationActivityPanel";
 
 vi.mock("@/api/im", () => ({ fetchMessagesRequest: vi.fn(async () => []) }));
-vi.mock("@/shared/realtime/imEvents", () => ({ subscribeIMEvents: () => () => undefined }));
+vi.mock("@/shared/realtime/imEvents", () => ({ subscribeIMEvents: vi.fn(() => vi.fn()) }));
 
 describe("member activity selection", () => {
   it("opens the chosen member and reapplies an explicit choice after manual filtering", async () => {
@@ -126,4 +128,31 @@ describe("collaboration activity turns", () => {
     expect(screen.queryByRole("textbox", { name: "Search triggers, tools or output" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Developer · Turn 1" })).not.toBeInTheDocument();
   });
+});
+
+it("pauses a hidden activity tab and reconciles thread replies when returning to the selected turn", async () => {
+  const user = userEvent.setup();
+  const props = turnPanelProps();
+  const fetch = vi.mocked(fetchMessagesRequest).mockClear();
+  const subscribe = vi.mocked(subscribeIMEvents).mockClear();
+  const view = render(<ConversationActivityPanel {...props} />);
+  await user.click(await screen.findByRole("button", { name: "Developer · Turn 1" }));
+  await user.click(screen.getByRole("button", { name: "Expand all" }));
+  const unsubscribe = subscribe.mock.results[0].value;
+  view.rerender(<ConversationActivityPanel {...props} active={false} />);
+  expect(unsubscribe).toHaveBeenCalledOnce();
+  view.rerender(
+    <ConversationActivityPanel
+      {...props}
+      active={false}
+      conversation={{ ...props.conversation, messages: [...props.conversation.messages] }}
+    />,
+  );
+  expect(fetch).toHaveBeenCalledTimes(1);
+  view.rerender(<ConversationActivityPanel {...props} />);
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  expect(fetch).toHaveBeenLastCalledWith("room", { includeThreadReplies: true });
+  expect(subscribe).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole("heading", { name: "Developer · Turn 1" })).toBeVisible();
+  expect(screen.getByText("dev-turn-output-49")).toBeVisible();
 });

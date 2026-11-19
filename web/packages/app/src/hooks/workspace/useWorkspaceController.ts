@@ -11,7 +11,7 @@ import { bindWorkspaceHub, saveMCPServerAndSelect } from "./bindings/hub";
 import { useModelProviderCreation } from "./useModelProviderCreation";
 import type { WorkspaceController } from "./workspaceControllerContract";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
-import { settingsDialogSearch } from "@/models/workspaceDialogs";
+import { openWorkspaceDialog, settingsDialogSearch } from "@/models/workspaceDialogs";
 import { useTaskEntry } from "./useTaskEntry";
 import { useCloudAgents } from "./useCloudAgents";
 import { useCloudAgentAvatarMetadata } from "./useCloudAgentAvatarMetadata";
@@ -61,6 +61,7 @@ import type { TurnNotificationMode } from "@/models/turnNotifications";
 export function useWorkspaceController(): WorkspaceController {
   const location = useLocation();
   const navigate = useNavigate();
+  const workspaceDialogOpen = Boolean(openWorkspaceDialog(location.search));
   const locale = useWorkspaceUiStore((state) => state.locale);
   const setLocale = useWorkspaceUiStore((state) => state.setLocale);
   const theme = useWorkspaceUiStore((state) => state.theme);
@@ -347,6 +348,7 @@ export function useWorkspaceController(): WorkspaceController {
     cloudAvatarMetadata,
     addedCloudAgentIDs: cloud.addedIDs,
     autoSelectFallbackConversation: location.pathname !== "/" && location.pathname !== "/new",
+    workspaceDialogOpen,
     messageListActive: location.pathname !== "/" && location.pathname !== "/new",
     agents,
     authBusyProvider: agent.cliproxyAuthBusy,
@@ -431,6 +433,7 @@ export function useWorkspaceController(): WorkspaceController {
     hasObservedWorkLease: participantWork.hasObservedWorkLease,
     stopWorkingTurn: participantWork.stopWorkingTurn,
     workingParticipantsForRoom: participantWork.workingParticipantsForRoom,
+    workspaceDialogOpen,
     messageListActive: floatingChatOpen,
     navigatePane: ignoreFloatingChatNavigation,
     onMessageAction: agent.handleMessageAction,
@@ -467,19 +470,6 @@ export function useWorkspaceController(): WorkspaceController {
     },
     [closeConversationAgentDetail, closeThreadPanel, conversationProfileDetailAgentID],
   );
-  useWorkspaceRealtime({
-    agents,
-    onAgentTurnNotificationEvent: handleTurnNotificationEvent,
-    onConversationEvent: conversation.handleRealtimeEvent,
-    onFloatingConversationEvent: floatingConversation.handleRealtimeEvent,
-    onParticipantWorkEvent: participantWork.handleRealtimeEvent,
-    onRefreshAgentState: agent.refreshAgentState,
-    onUpgradeStatusChange: upgrade.handleUpgradeStatusChange,
-    refreshWorkspaceAgents,
-    refreshWorkspaceBootstrap,
-    setBootstrapData,
-    usersById: conversation.usersById,
-  });
   const profilePreview = useProfilePreviewController({
     agentItems: agent.agentItems,
     cloudAgentOnline: conversation.cloudAgentOnline,
@@ -844,6 +834,23 @@ export function useWorkspaceController(): WorkspaceController {
     isWorking: (id) =>
       participantWork.workingParticipantsForRoom(id).length > 0 ||
       hasPendingCloudTask(rooms.find((room) => room.id === id)),
+  });
+
+  useWorkspaceRealtime({
+    agents,
+    onAgentTurnNotificationEvent: handleTurnNotificationEvent,
+    onConversationEvent(event) {
+      conversation.handleRealtimeEvent(event);
+      taskEntry.onHistoryEvent(event);
+    },
+    onFloatingConversationEvent: floatingConversation.handleRealtimeEvent,
+    onParticipantWorkEvent: participantWork.handleRealtimeEvent,
+    onRefreshAgentState: agent.refreshAgentState,
+    onUpgradeStatusChange: upgrade.handleUpgradeStatusChange,
+    refreshWorkspaceAgents,
+    refreshWorkspaceBootstrap,
+    setBootstrapData,
+    usersById: conversation.usersById,
   });
 
   if (!displayData) {

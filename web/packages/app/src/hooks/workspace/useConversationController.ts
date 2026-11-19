@@ -440,6 +440,7 @@ export function useConversationController({
   messageActionBusy,
   messageActionFeedback,
   messageListActive = true,
+  workspaceDialogOpen = false,
   stopWorkingTurn,
   workingParticipantsForRoom,
 }: UseConversationControllerArgs) {
@@ -618,7 +619,7 @@ export function useConversationController({
     selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
   const selectedConversationID = selectedConversation?.id ?? "";
   const invalidateMessageSync = useConversationMessageSync(
-    messageListActive ? selectedConversationID : "",
+    messageListActive && !workspaceDialogOpen ? selectedConversationID : "",
     setBootstrapData,
     selectedConversation,
   );
@@ -2016,6 +2017,7 @@ export function useConversationController({
             }
           : null,
       conversation: selectedConversation,
+      activityActive: messageListActive && !workspaceDialogOpen,
       visibleMessages,
       currentUserID: data?.current_user_id,
       usersById,

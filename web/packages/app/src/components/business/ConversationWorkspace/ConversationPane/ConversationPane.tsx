@@ -222,6 +222,7 @@ function RoomTaskConversation(props: ConversationPaneProps) {
 }
 function ConversationPaneContent({
   conversation,
+  activityActive = true,
   visibleMessages,
   currentUserID = "",
   usersById,
@@ -365,11 +366,17 @@ function ConversationPaneContent({
     t,
   });
   const activityAgents = useMemo(() => conversationActivityAgents(conversation, agents), [agents, conversation]);
-  const activityEntries = useMemo(
-    () =>
-      conversationActivityEntries(conversation.messages, activityAgents, conversation.members, usersById, autonomous),
-    [activityAgents, autonomous, conversation.members, conversation.messages, usersById],
-  );
+  const showWorkingActivity = activityActive && workingParticipants.length > 0;
+  const activityEntries = useMemo(() => {
+    if (!showWorkingActivity) return [];
+    return conversationActivityEntries(
+      conversation.messages,
+      activityAgents,
+      conversation.members,
+      usersById,
+      autonomous,
+    );
+  }, [showWorkingActivity, activityAgents, autonomous, conversation.members, conversation.messages, usersById]);
   const workingParticipantsWithActivity = useMemo(
     () => conversationWorkingParticipantsWithActivity(workingParticipants, activityAgents, activityEntries),
     [activityAgents, activityEntries, workingParticipants],
@@ -775,6 +782,7 @@ function ConversationPaneContent({
         activeThreadRootID={activeThreadRootID}
         threadPanel={threadPanel}
         roomTasksPanel={taskPanel}
+        activityActive={activityActive}
         suspended={Boolean(memberPanelProps)}
         onThreadSelect={(rootID) => {
           if (onRestoreThread) {
