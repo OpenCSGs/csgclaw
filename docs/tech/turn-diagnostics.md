@@ -153,7 +153,7 @@ Zero write or sync counts are valid for unchanged files, transient progress and 
 A record without measured operations is marked missing rather than presented as zero-cost persistence.
 Lock-hold and persistence durations are inclusive of their child work and must not be added together as disjoint wall-clock durations.
 Queue observations and execution-admission load counts describe concurrency without including unrelated conversation content.
-Instrumentation preserves the existing lock ownership, synchronous writes, atomic replacement, file permissions, message publication order and unchanged-file optimization.
+Instrumentation preserves lock ownership, synchronous durability, file permissions, message publication order and unchanged-file optimization. Exact JSONL extensions record `im.append`; atomic snapshot replacements record `im.rename`.
 
 ## Runtime process evidence
 

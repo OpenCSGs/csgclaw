@@ -129,6 +129,7 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	proc.mu.Lock()
 	contextExceeded, compactionFailed := turn.contextExceeded, turn.compactionFailed
 	interactionErr := turn.interactionError
+	nativeError, nativeStopReason := turn.nativeError, turn.nativeStopReason
 	output := turn.output.String()
 	presentedFiles := append([]presentedFile(nil), turn.presentedFiles...)
 	proc.mu.Unlock()
@@ -158,6 +159,15 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 		return result
 	}
 	stopReason := strings.ToLower(strings.TrimSpace(response.StopReason))
+	if nativeError != nil {
+		if contextErr != nil {
+			nativeError = contextErr
+		}
+		return contract.TurnResult{Status: contract.TurnFailed, Output: output, Dispatched: dispatched, Error: nativeError}
+	}
+	if nativeStopReason == "max-tokens" {
+		stopReason = "max_tokens"
+	}
 	switch stopReason {
 	case "end_turn", "max_tokens":
 		files, fileErr := authorizePresentedFiles(ctx, c.runtimeID, proc.workspace, presentedFiles)

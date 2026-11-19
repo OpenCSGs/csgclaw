@@ -49,6 +49,17 @@ var contextCatalog = []struct {
 }
 var modelSeparators = regexp.MustCompile(`[^a-z0-9]+`)
 
+// Publisher limits are fallbacks for gateways that omit deployment metadata.
+// DeepSeek's current Flash endpoint serves V4.1-Flash-1017. These are output
+// capacities, not a request budget or a guarantee about a private deployment.
+// Source: https://api-docs.deepseek.com/api/create-chat-completion/
+var outputCatalog = []struct {
+	aliases []string
+	tokens  int64
+}{
+	{[]string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4.1-flash", "deepseek-v4.1-flash-1017", "deepseek-v4-pro"}, 393216},
+}
+
 func normalizeModelName(s string) string {
 	return strings.Trim(modelSeparators.ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
@@ -72,6 +83,14 @@ func catalog(provider, _, model string) Metadata {
 			if len(alias) > longest && matchesModelAlias(name, alias) {
 				best = Metadata{ContextWindow: entry.tokens}
 				longest = len(alias)
+			}
+		}
+	}
+	for _, entry := range outputCatalog {
+		for _, raw := range entry.aliases {
+			if matchesModelAlias(name, normalizeModelName(raw)) {
+				best.MaxOutputTokens = entry.tokens
+				return best
 			}
 		}
 	}

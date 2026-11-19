@@ -179,6 +179,14 @@ func readSessionJSONLLines(r io.Reader) ([][]byte, error) {
 			if len(trimmed) > maxSessionReadLineBytes {
 				return nil, fmt.Errorf("im session line exceeds %d bytes", maxSessionReadLineBytes)
 			}
+			// An interrupted append may leave an unfinished last record. Legacy
+			// complete records without a trailing newline remain readable.
+			if err == io.EOF && !json.Valid(trimmed) {
+				var record json.RawMessage
+				if decodeErr := json.NewDecoder(bytes.NewReader(trimmed)).Decode(&record); errors.Is(decodeErr, io.ErrUnexpectedEOF) {
+					break
+				}
+			}
 			lines = append(lines, bytes.Clone(trimmed))
 		}
 		if err == io.EOF {
@@ -287,13 +295,79 @@ func saveMessagesJSONL(path, roomID string, messages []Message, operations ...*d
 		data.WriteByte('\n')
 	}
 
-	if err := writeFileIfChanged(path, data.Bytes(), 0o600, operations...); err != nil {
+	appended, err := appendSessionJSONL(path, data.Bytes(), operations...)
+	if err == nil && !appended {
+		err = writeFileIfChanged(path, data.Bytes(), 0o600, operations...)
+	}
+	if err != nil {
 		return fmt.Errorf("write im session: %w", err)
 	}
 	if err := cleanupRoomSessionBlobs(blobDir, keepBlobs); err != nil {
 		return err
 	}
 	return nil
+}
+
+// Append only an exact extension of the committed snapshot. Updates, deletions,
+// legacy encodings and externally changed files use atomic replacement instead.
+func appendSessionJSONL(path string, data []byte, operations ...*diagnostics.Operation) (bool, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || !persistedModeMatches(info.Mode(), 0o600) || info.Size() >= int64(len(data)) {
+		return false, nil
+	}
+	size := int(info.Size())
+	if size > 0 && data[size-1] != '\n' {
+		return false, nil
+	}
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND, 0)
+	if err != nil {
+		return false, nil
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) || opened.Size() != info.Size() || !opened.ModTime().Equal(info.ModTime()) {
+		return false, nil
+	}
+	operation := diagnostics.OperationArg(operations)
+	started := time.Now()
+	var buffer [32 * 1024]byte
+	matched, read := true, 0
+	// Recent-message updates usually differ at the end. Reject those before
+	// reading the rest of the history for the append-only fast path.
+	for remaining := size; remaining > 0; {
+		length := min(len(buffer), remaining)
+		offset := remaining - length
+		n, readErr := file.ReadAt(buffer[:length], int64(offset))
+		matched = readErr == nil && n == length && bytes.Equal(buffer[:n], data[offset:offset+n])
+		read += n
+		if !matched {
+			break
+		}
+		remaining = offset
+	}
+	operation.Observe("im.compare_read", time.Since(started), int64(read), 1)
+	current, err := file.Stat()
+	if !matched || err != nil || current.Size() != info.Size() || !current.ModTime().Equal(info.ModTime()) {
+		return false, nil
+	}
+	delta := data[size:]
+	started = time.Now()
+	written, writeErr := file.Write(delta)
+	operation.Observe("im.write", time.Since(started), int64(written), 1)
+	if writeErr == nil && written != len(delta) {
+		writeErr = io.ErrShortWrite
+	}
+	if writeErr == nil {
+		started = time.Now()
+		writeErr = file.Sync()
+		operation.Observe("im.fsync", time.Since(started), 0, 1)
+	}
+	if writeErr != nil {
+		// A retry must start from the last committed prefix after a short write.
+		return true, errors.Join(writeErr, file.Truncate(info.Size()), file.Sync())
+	}
+	operation.Observe("im.append", 0, int64(written), 1)
+	return true, file.Close()
 }
 
 func truncateSessionJSONL(path string, operations ...*diagnostics.Operation) error {

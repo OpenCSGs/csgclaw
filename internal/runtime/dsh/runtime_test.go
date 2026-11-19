@@ -178,8 +178,9 @@ func TestDSHProviderSettingsOutputBudget(t *testing.T) {
 		outputLimit   int64
 		want          int64
 	}{
-		{modelID: "deepseek-flash", contextWindow: 1_048_576, want: 8192},
-		{modelID: "deepseek-v4.1-flash", contextWindow: 1_000_000, want: 8192},
+		{modelID: "deepseek-flash", contextWindow: 1_048_576, want: 65_536},
+		{modelID: "deepseek-v4.1-flash", contextWindow: 1_000_000, want: 65_536},
+		{modelID: "deepseek-v4.1-flash-1017", contextWindow: 1_000_000, want: 65_536},
 		{modelID: "custom-model", contextWindow: 1_000_000, want: 8192},
 		{modelID: "custom-model", contextWindow: 16_384, want: 4096},
 		{modelID: "deepseek-flash", contextWindow: 1_048_576, outputLimit: 393_216, want: 65_536},
@@ -191,7 +192,7 @@ func TestDSHProviderSettingsOutputBudget(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/%d/%d", tc.modelID, tc.contextWindow, tc.outputLimit), func(t *testing.T) {
 			settings := dshProviderSettings(agentruntime.Profile{
 				ModelID:       tc.modelID,
-				ModelMetadata: modelcap.Resolved{ContextWindow: tc.contextWindow, MaxOutputTokens: tc.outputLimit},
+				ModelMetadata: modelcap.Resolve("api", "", tc.modelID, modelcap.Metadata{ContextWindow: tc.contextWindow, MaxOutputTokens: tc.outputLimit}, modelcap.Metadata{}),
 			})
 			got := settings["models"].([]map[string]any)[0]["maxTokens"]
 			if got != tc.want {

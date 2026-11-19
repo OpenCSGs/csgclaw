@@ -3,6 +3,7 @@ package im
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,6 +14,14 @@ import (
 func TestDiagnosticDeliveryMeasuresLockAndDurablePersistence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "im", "state.json")
 	state := Bootstrap{CurrentUserID: "admin", Users: []User{{ID: "admin", Name: "Admin", Role: "admin"}}, Rooms: []Room{{ID: "room", Members: []string{"admin"}}, {ID: "other", Members: []string{"admin"}}}}
+	for i := 0; i < 128; i++ {
+		state.Rooms[1].Messages = append(state.Rooms[1].Messages, Message{
+			ID:        fmt.Sprintf("history-%d", i),
+			SenderID:  "admin",
+			Content:   "Unrelated history",
+			CreatedAt: time.Now().UTC(),
+		})
+	}
 	if err := SaveBootstrap(path, state); err != nil {
 		t.Fatal(err)
 	}
@@ -40,13 +49,16 @@ func TestDiagnosticDeliveryMeasuresLockAndDurablePersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	metrics := record.Snapshot().Performance
-	for _, name := range []string{"im.lock_wait", "im.lock_hold", "im.snapshot", "im.serialize", "im.write", "im.fsync", "im.rename", "im.file_skipped"} {
+	for _, name := range []string{"im.lock_wait", "im.lock_hold", "im.snapshot", "im.serialize", "im.write", "im.fsync", "im.append", "im.file_skipped"} {
 		if metrics[name].Count == 0 {
 			t.Fatalf("missing actual metric %s: %+v", name, metrics)
 		}
 	}
-	if metrics["im.rooms_saved"].Items != 2 || metrics["im.write"].Bytes == 0 {
+	if metrics["im.rooms_saved"].Items != 1 || metrics["im.write"].Bytes == 0 {
 		t.Fatalf("wrong persistence counters: %+v", metrics)
+	}
+	if metrics["im.serialize"].Count > 4 {
+		t.Fatalf("delivery serialized unrelated history: %+v", metrics["im.serialize"])
 	}
 	if _, err := service.DeliverMessageContext(ctx, request); err != nil {
 		t.Fatal(err)
@@ -59,7 +71,7 @@ func TestDiagnosticDeliveryMeasuresLockAndDurablePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(restored.Rooms[0].Messages)+len(restored.Rooms[1].Messages) != 1 {
+	if len(restored.Rooms[0].Messages)+len(restored.Rooms[1].Messages) != 129 {
 		t.Fatal("persistence behavior changed")
 	}
 	var observed map[string]any

@@ -2399,7 +2399,7 @@ func (s *Service) DeliverMessageContext(ctx context.Context, req DeliverMessageR
 			room.Messages[replaceIndex] = message
 		}
 		s.rebuildThreadStatesLocked(room)
-		if err := s.saveMessageProjectionLocked(req.Transient, operation); err != nil {
+		if err := s.saveMessageProjectionLocked(*room, req.Transient, operation); err != nil {
 			return Message{}, err
 		}
 		presented := s.presentMessageLocked(*room, message, "")
@@ -2410,7 +2410,7 @@ func (s *Service) DeliverMessageContext(ctx context.Context, req DeliverMessageR
 	}
 	assignAutonomousSequence(room, &message)
 	room.Messages = append(room.Messages, message)
-	if err := s.saveMessageProjectionLocked(req.Transient, operation); err != nil {
+	if err := s.saveMessageProjectionLocked(*room, req.Transient, operation); err != nil {
 		return Message{}, err
 	}
 	presented := s.presentMessageLocked(*room, message, "")
@@ -2458,7 +2458,7 @@ func (s *Service) UpdateDeliveredMessageMetadataContext(ctx context.Context, roo
 				saveErr = saveRoomMessagesForState(s.statePath, *room, operation)
 			}
 		} else {
-			saveErr = s.saveMessageProjectionLocked(false, operation)
+			saveErr = s.saveMessageProjectionLocked(*room, false, operation)
 		}
 		if saveErr != nil {
 			if room.CloudAgent != nil {
@@ -3975,13 +3975,32 @@ func seedTime(hour, minute int) time.Time {
 	return time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
 }
 
-func (s *Service) saveMessageProjectionLocked(transient bool, operations ...*diagnostics.Operation) error {
+func (s *Service) saveMessageProjectionLocked(room Room, transient bool, operations ...*diagnostics.Operation) error {
 	operation := diagnostics.OperationArg(operations)
 	if transient {
 		operation.Attribute("persistence", "transient")
 		return nil
 	}
-	return s.saveLocked(operations...)
+	if s.statePath == "" {
+		operation.Attribute("persistence", "memory_only")
+		return nil
+	}
+	operation.Attribute("persistence", "disk")
+	defer operation.Measure("im.persist")()
+	operation.Observe("im.rooms_saved", 0, 0, 1)
+	// Progress in one room must not serialize and read every other room's history.
+	// Leave global attachment collection to full saves: another room's transient
+	// projection can omit attachments that its committed history still references.
+	if err := saveRoomMessagesForState(s.statePath, room, operations...); err != nil {
+		return err
+	}
+	if err := saveRoomThreadsForState(s.statePath, room, operations...); err != nil {
+		return err
+	}
+	snapshot := operation.Measure("im.snapshot")
+	state := s.bootstrapLocked()
+	snapshot()
+	return writePersistedBootstrap(s.statePath, persistedBootstrapFromState(state), operations...)
 }
 
 func sameRoomMembers(a, b []string) bool {

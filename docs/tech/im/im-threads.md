@@ -53,6 +53,12 @@ cleanly.
 Messages are still stored as JSONL. Thread fields are optional, so older message
 records remain readable.
 
+An exact extension of the saved JSONL snapshot appends and synchronizes only the
+new lines. Message updates and history cleanup atomically replace the snapshot.
+Loading preserves complete legacy records without a final newline and recovers
+the valid prefix after an incomplete final append. Malformed complete lines fail
+with a decoding error.
+
 Each room may also persist `threads`, a list of `ThreadState` records:
 
 - `root_message_id`: canonical root/thread ID.

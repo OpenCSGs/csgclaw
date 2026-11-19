@@ -41,6 +41,26 @@ func TestOutputLimitResolutionPreservesProviderLimitWithContextOverride(t *testi
 	}
 }
 
+func TestKnownOutputLimitsFallbackToPublisherCapacity(t *testing.T) {
+	for _, provider := range []string{"api", "csghub", "codex"} {
+		for _, model := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4.1-flash", "DeepSeek-V4.1-Flash-1017", "deepseek-ai/DeepSeek-V4.1-Flash-1017", "deepseek-v4-pro"} {
+			got := Resolve(provider, "https://gateway.example/v1", model, Metadata{}, Metadata{ContextWindow: 64000})
+			if got.MaxOutputTokens != 393216 || got.ContextWindow != 64000 {
+				t.Errorf("%s/%s: %+v", provider, model, got)
+			}
+			got = Resolve(provider, "https://gateway.example/v1", model, Metadata{MaxOutputTokens: 4096}, Metadata{})
+			if got.MaxOutputTokens != 4096 {
+				t.Errorf("provider output limit was overridden: %+v", got)
+			}
+		}
+	}
+	for _, model := range []string{"custom-model", "deepseek-v4.2-flash", "deepseek-v4.1-pro", "mydeepseek-flash", "deepseek-r1"} {
+		if got := Resolve("api", "", model, Metadata{}, Metadata{}); got.MaxOutputTokens != 0 {
+			t.Errorf("guessed output capacity for unknown model %s: %+v", model, got)
+		}
+	}
+}
+
 func TestMetadataValidation(t *testing.T) {
 	for _, m := range []Metadata{{ContextWindow: -1}, {ContextWindow: 1000000001}} {
 		if m.Validate() == nil {

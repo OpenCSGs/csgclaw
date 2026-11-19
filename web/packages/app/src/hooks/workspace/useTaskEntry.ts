@@ -19,16 +19,24 @@ export function useTaskEntry({ currentUserID, rooms, onUpdate, onMessage, onDele
   const client = useQueryClient();
   const [busyID, setBusyID] = useState("");
   const refreshTimer = useRef<number | null>(null);
+  const refreshRevision = useRef(0);
   useEffect(() => {
+    refreshRevision.current += 1;
     if (refreshTimer.current !== null) return;
-    refreshTimer.current = window.setTimeout(() => {
-      refreshTimer.current = null;
-      void client.invalidateQueries({ queryKey: ["task-conversations"] });
-    }, 500);
+    function refresh() {
+      const revision = refreshRevision.current;
+      // Finish the current request, then reconcile changes that arrived during it.
+      void client.invalidateQueries({ queryKey: ["task-conversations"] }, { cancelRefetch: false }).then(() => {
+        if (refreshTimer.current === null) return;
+        refreshTimer.current = revision === refreshRevision.current ? null : window.setTimeout(refresh, 500);
+      });
+    }
+    refreshTimer.current = window.setTimeout(refresh, 500);
   }, [client, rooms]);
   useEffect(
     () => () => {
       if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
+      refreshTimer.current = null;
     },
     [],
   );
