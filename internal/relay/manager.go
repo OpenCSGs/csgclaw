@@ -112,11 +112,46 @@ func (m *Manager) connectionReference() (string, error) {
 	if m.credentials == nil {
 		return m.manifest.ConnectionID, nil
 	}
-	cred, err := m.boundCredentials()
+	cred, err := m.credentials()
 	if err != nil {
 		return "", err
 	}
 	return m.connectionReferenceFor(cred), nil
+}
+
+// Consumer operations follow the current login, independently of publications.
+// Pin each request chain to that identity while allowing token refreshes.
+func (m *Manager) consumerConnection() (*Client, Community, string, error) {
+	if m.credentials == nil {
+		c, err := m.client(m.manifest.Endpoint, m.manifest.Token)
+		return c, m.community, m.manifest.ConnectionID, err
+	}
+	identity, err := m.credentials()
+	if err != nil {
+		return nil, nil, "", err
+	}
+	source := func() (SiteCredentials, error) {
+		current, err := m.credentials()
+		if err != nil {
+			return current, err
+		}
+		if current.Site != identity.Site || current.User != identity.User {
+			return SiteCredentials{}, ErrChatReference
+		}
+		return current, nil
+	}
+	c, err := NewClient(ResolveRelayProxy(identity.Site), identity.Token, nil)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	c.credentials = source
+	c.clientID = m.manifest.ClientID
+	community := m.community
+	if h, ok := community.(HubCommunity); ok {
+		h.Credentials = source
+		community = h
+	}
+	return c, community, m.connectionReferenceFor(identity), nil
 }
 func (m *Manager) connectionReferenceFor(cred SiteCredentials) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(m.manifest.ConnectionID+"\x00"+cred.Site+"\x00"+cred.User)))

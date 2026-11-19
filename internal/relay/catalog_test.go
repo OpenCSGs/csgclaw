@@ -95,6 +95,61 @@ func TestPublicationCatalogPersistsReferencesAndRedactsCredentials(t *testing.T)
 	}
 }
 
+func TestConsumerConnectionFollowsLoginWithoutChangingPublicationIdentity(t *testing.T) {
+	for _, switchSite := range []bool{false, true} {
+		t.Run(map[bool]string{false: "account", true: "site"}[switchSite], func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/v1/agent/instances":
+					writeTestJSON(w, 200, map[string]any{"data": []CommunityInstance{{ID: 1, Kind: "runtime", Source: "external", Type: "csgclaw", Relay: &RelayRegistration{AgentID: testRelayID}}}})
+				case "/api/v1/relay/v1/agents/" + testRelayID:
+					writeTestJSON(w, 200, Agent{ID: testRelayID, Status: "online", Capabilities: []string{CapabilityResourceRefs}})
+				default:
+					t.Errorf("unexpected request: %s", r.URL.Path)
+					w.WriteHeader(404)
+				}
+			})
+			first := httptest.NewServer(handler)
+			defer first.Close()
+			second := httptest.NewServer(handler)
+			defer second.Close()
+			identity := SiteCredentials{Site: first.URL, User: "original", Token: "test-token"}
+			source := func() (SiteCredentials, error) { return identity, nil }
+			m, err := NewManager(context.Background(), t.TempDir(), nil, WithCommunity(HubCommunity{Credentials: source}, source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer m.Close()
+			m.boundSite, m.boundUser = identity.Site, identity.User
+			oldReference, err := m.connectionReference()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if switchSite {
+				identity.Site = second.URL
+			} else {
+				identity.User = "another"
+			}
+			entries, err := m.DiscoverCatalog(context.Background(), nil)
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("catalog unavailable after login switch: %v %+v", err, entries)
+			}
+			if entries[0].ConnectionID == oldReference || entries[0].RelayURL != ResolveRelayProxy(identity.Site) {
+				t.Fatal("catalog did not follow current login")
+			}
+			if err := m.CheckResourceSupport(context.Background(), testRelayID, entries[0].ConnectionID); err != nil {
+				t.Fatalf("current login cannot invoke agent: %v", err)
+			}
+			if _, err := m.invocationClient(context.Background(), testRelayID, oldReference); err != ErrChatReference {
+				t.Fatalf("old login reference accepted: %v", err)
+			}
+			if _, err := m.boundCredentials(); err == nil {
+				t.Fatal("publication identity protection was removed")
+			}
+		})
+	}
+}
+
 func TestLegacyPublicationManifestGetsStableConnectionReference(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "publications.json")

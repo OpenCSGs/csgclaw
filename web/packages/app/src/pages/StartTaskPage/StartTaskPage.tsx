@@ -90,6 +90,7 @@ import {
   useComposerResourcePicker,
 } from "@/components/business/ConversationResourcePicker";
 import { ComposerAddMenu } from "@/components/business/ConversationPane/ComposerAddMenu";
+import { cloudResourceScope } from "@/models/cloudResourceScope";
 import {
   resourceMessageInput,
   resourceSegment,
@@ -216,7 +217,11 @@ function StartTaskForm({
         }),
       );
   }, [agents, selectedAgent, selectedTeam, selected, manager]);
-  const resourceAgentID = supportsTaskConfiguration(selectedAgent) ? selectedAgent?.id || undefined : undefined;
+  const resourceAgentID = selectedCloud
+    ? cloudResourceScope(selectedCloud.id, selectedCloud.connectionID)
+    : supportsTaskConfiguration(selectedAgent)
+      ? selectedAgent?.id || undefined
+      : undefined;
   const resourcePicker = useComposerResourcePicker({
     resourceAgentID,
     onPickResources: (items) => setResources((current) => uniqueResources([...current, ...items])),
@@ -273,7 +278,12 @@ function StartTaskForm({
   }
 
   function messageInput(prompt: string) {
-    if (selectedCloud) return { content: prompt.trim(), resource_refs: [] };
+    if (selectedCloud && !resources.length) return { content: prompt.trim(), resource_refs: [] };
+    if (selectedCloud)
+      return resourceMessageInput(
+        resources.map((resource) => resourceSegment(resource)),
+        prompt.trim(),
+      );
     const content = promptMentions.serialize(prompt).trim();
     return supportsTaskConfiguration(selectedAgent)
       ? resourceMessageInput(
@@ -870,7 +880,7 @@ function StartTaskForm({
                     }}
                   />
                   <ComposerAddMenu
-                    onOpenResourcePicker={selectedCloud ? undefined : resourcePicker.open}
+                    onOpenResourcePicker={resourcePicker.open}
                     disabled={busy}
                     t={t}
                     buttonClassName={`composer-add-button ${styles.addButton}`}

@@ -233,8 +233,8 @@
   gap: 4px;
   padding: 4px 10px 8px;
 }
-.cloudActions {
-  justify-content: flex-end;
+.cloudActions .addButton {
+  margin-right: auto;
 }
 .addButton {
   --composer-add-control-size: 36px;

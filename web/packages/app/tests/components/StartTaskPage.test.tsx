@@ -743,6 +743,38 @@ describe("collaboration directory selection", () => {
 });
 
 describe("cloud task targets", () => {
+  it("selects cloud resources and includes them in the first task message", async () => {
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify(cloudAgentFixture));
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([...cloudAgentFixture]);
+    vi.mocked(fetchConversationResourceBatch).mockResolvedValue({
+      items: [{ source: "mcp", id: "search", type: "connector", name: "Cloud Search", enabled: true, available: true }],
+      total: 1,
+      list_revision: "r",
+      has_more: false,
+    });
+    vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
+    const { open } = setup("/new?cloud=agt_demo_contract_reviewer", "");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "composerAddContent" }));
+    expect(screen.getByRole("button", { name: "composerResourceSkill" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "composerResourceKnowledge" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "composerResourceConnector" }));
+    await user.click(await screen.findByRole("option", { name: "Cloud Search" }));
+    expect(fetchConversationResourceBatch).toHaveBeenCalledWith(
+      expect.stringContaining("cloud-resource:"),
+      "connector",
+      "",
+      expect.objectContaining({ search: "" }),
+      expect.anything(),
+    );
+    await user.type(screen.getByRole("textbox", { name: "taskEntryPrompt" }), "Search contract");
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await user.click(await screen.findByRole("button", { name: "cloudPrivacyContinue" }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+    expect(sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "Search contract", resource_refs: [{ source: "mcp", id: "search" }] }),
+    );
+  });
   afterEach(() => {
     localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY);
     localStorage.removeItem(CLOUD_ATTACHMENT_CONSENT_STORAGE_KEY);
