@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/cliproxy"
@@ -111,6 +112,102 @@ func TestNativeResponsesPreservesAppSearchDefinitionsHistoryAndSSE(t *testing.T)
 	}
 	if got["model"] != "fixture-model" {
 		t.Fatalf("model routing was lost: %v", got["model"])
+	}
+}
+
+func TestResponsesModelNotFoundDoesNotTriggerFallback(t *testing.T) {
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Errorf("unexpected fallback request %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if calls.Add(1) == 1 {
+			w.Header().Set("X-Request-ID", "fixture-gateway-request")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"error":{"code":"model_not_found","message":"temporary upstream routing failure"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"id":"response-ok","status":"completed","output":[{"type":"function_call","call_id":"call-1","name":"inspect","arguments":"{}"}]}`)
+	}))
+	defer upstream.Close()
+	svc := appToolsResponseService(t, upstream.URL+"/v1")
+	request := []byte(`{"input":"hello","tools":[{"type":"function","name":"inspect","parameters":{"type":"object"}}]}`)
+	for _, tc := range []struct {
+		status int
+		body   string
+	}{
+		{http.StatusNotFound, `"code":"model_not_found"`},
+		{http.StatusOK, `"type":"function_call"`},
+	} {
+		response, err := svc.Responses(t.Context(), agent.ManagerUserID, request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		response.Body.Close()
+		if readErr != nil || response.StatusCode != tc.status || !strings.Contains(string(body), tc.body) {
+			t.Fatalf("expected %d with %s, got %d %s (%v)", tc.status, tc.body, response.StatusCode, body, readErr)
+		}
+		if tc.status == http.StatusNotFound && response.Header.Get("X-Request-ID") != "fixture-gateway-request" {
+			t.Fatal("missing upstream request ID on model error")
+		}
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("/responses called %d times, want 2", calls.Load())
+	}
+}
+
+func TestResponsesUnsupportedCacheExpiresBeforeToolRequest(t *testing.T) {
+	var responses atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Errorf("unexpected fallback request %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		if responses.Add(1) == 1 {
+			http.Error(w, "unsupported", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"call_id\":\"call-1\",\"name\":\"inspect\",\"arguments\":\"{}\"}}\n\n")
+	}))
+	defer upstream.Close()
+	baseURL := upstream.URL + "/v1"
+	svc := appToolsResponseService(t, baseURL)
+	request := []byte(`{"input":"hello","stream":true,"tools":[{"type":"function","name":"inspect","parameters":{"type":"object"}}]}`)
+	profile, err := svc.resolveProfile(t.Context(), agent.ManagerUserID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := responsesCapabilityKey(profile, baseURL)
+	for range 2 {
+		response, err := svc.Responses(t.Context(), agent.ManagerUserID, request)
+		if response != nil {
+			response.Body.Close()
+		}
+		if err == nil || !strings.Contains(err.Error(), "native Responses tool support") {
+			t.Fatalf("expected protected fallback, got %v", err)
+		}
+	}
+	if responses.Load() != 1 || !time.Now().Before(svc.responsesUnsupported[key]) {
+		t.Fatalf("expected one upstream probe and a live cache entry, got %d probes", responses.Load())
+	}
+	svc.responsesUnsupported[key] = time.Now().Add(-time.Second)
+	response, err := svc.Responses(t.Context(), agent.ManagerUserID, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != http.StatusOK || !strings.Contains(string(body), `"type":"function_call"`) {
+		t.Fatalf("expected recovered tool stream, got %d %s (%v)", response.StatusCode, body, err)
+	}
+	if responses.Load() != 2 || len(svc.responsesUnsupported) != 0 {
+		t.Fatalf("expected one recovery probe and no cached failure, got %d calls and %d entries", responses.Load(), len(svc.responsesUnsupported))
 	}
 }
 

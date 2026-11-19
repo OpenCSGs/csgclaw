@@ -34,7 +34,7 @@ type Service struct {
 	client                        *http.Client
 	openCSGCredentialRefreshMu    sync.Mutex
 	responsesCapabilityMu         sync.Mutex
-	responsesUnsupported          map[string]struct{}
+	responsesUnsupported          map[string]time.Time
 	responsesReasoningUnsupported map[string]struct{}
 }
 
@@ -88,7 +88,7 @@ func NewService(defaults config.ModelConfig, agents AgentProfileReader) *Service
 		defaults:                      defaults.Resolved(),
 		agents:                        agents,
 		client:                        &http.Client{},
-		responsesUnsupported:          make(map[string]struct{}),
+		responsesUnsupported:          make(map[string]time.Time),
 		responsesReasoningUnsupported: make(map[string]struct{}),
 	}
 }
@@ -420,11 +420,6 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 type responsesRequestSender func([]byte) (*http.Response, error)
 
 func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent.AgentProfile, payload map[string]any, baseURL, apiKey string, resp *http.Response, allowReasoningRetry bool, sendResponses responsesRequestSender) (*UpstreamResponse, error) {
-	if profile.Provider != agent.ProviderCodex && responsesAPIUnsupportedStatus(resp.StatusCode) {
-		_ = resp.Body.Close()
-		s.markResponsesAPIUnsupported(profile, baseURL)
-		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, true)
-	}
 	if responsesAPITransientFallbackStatus(profile, resp.StatusCode) && !responsesPayloadHasToolSemantics(payload) {
 		_ = resp.Body.Close()
 		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, true)
@@ -433,6 +428,10 @@ func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent
 		body, err := readAndCloseUpstreamBody(resp)
 		if err != nil {
 			return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("read upstream error response: %v", err)}
+		}
+		if profile.Provider != agent.ProviderCodex && responsesAPIUnsupported(resp.StatusCode, body) {
+			s.markResponsesAPIUnsupported(profile, baseURL)
+			return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, true)
 		}
 		if allowReasoningRetry && responsesReasoningInputUnsupportedError(resp.StatusCode, body) {
 			removed := stripResponsesInputReasoning(payload)
@@ -896,8 +895,9 @@ func OpenCSGBillingURL(profile agent.AgentProfile) string {
 	return baseURL + "/settings/billing"
 }
 
-func responsesAPIUnsupportedStatus(status int) bool {
-	return status == http.StatusNotFound || status == http.StatusMethodNotAllowed
+func responsesAPIUnsupported(status int, body []byte) bool {
+	return (status == http.StatusNotFound || status == http.StatusMethodNotAllowed) &&
+		!strings.EqualFold(modelprovider.UpstreamErrorCode(body), "model_not_found")
 }
 
 func responsesAPITransientFallbackStatus(profile agent.AgentProfile, status int) bool {
@@ -921,11 +921,17 @@ func responsesReasoningInputUnsupportedError(status int, body []byte) bool {
 		(strings.Contains(text, "unsupported_feature") || strings.Contains(text, "unsupported feature") || strings.Contains(text, "unsupported"))
 }
 
+const responsesUnsupportedTTL = time.Minute
+
 func (s *Service) responsesAPIUnsupportedCached(profile agent.AgentProfile, baseURL string) bool {
 	key := responsesCapabilityKey(profile, baseURL)
 	s.responsesCapabilityMu.Lock()
 	defer s.responsesCapabilityMu.Unlock()
-	_, ok := s.responsesUnsupported[key]
+	expiresAt, ok := s.responsesUnsupported[key]
+	if ok && !time.Now().Before(expiresAt) {
+		delete(s.responsesUnsupported, key)
+		return false
+	}
 	return ok
 }
 
@@ -933,10 +939,7 @@ func (s *Service) markResponsesAPIUnsupported(profile agent.AgentProfile, baseUR
 	key := responsesCapabilityKey(profile, baseURL)
 	s.responsesCapabilityMu.Lock()
 	defer s.responsesCapabilityMu.Unlock()
-	if s.responsesUnsupported == nil {
-		s.responsesUnsupported = make(map[string]struct{})
-	}
-	s.responsesUnsupported[key] = struct{}{}
+	s.responsesUnsupported[key] = time.Now().Add(responsesUnsupportedTTL)
 }
 
 func (s *Service) responsesReasoningInputUnsupportedCached(profile agent.AgentProfile, baseURL string) bool {
