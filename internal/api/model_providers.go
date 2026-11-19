@@ -266,9 +266,13 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg.Models = cfg.Models.Normalized()
 	existing := cfg.Models.Providers[id]
-	merged := providerConfigFromRequest(existing, req, true).Resolved()
-	result := appCheckModelProvider(r.Context(), providerCheckInput(id, merged, req.Connect))
-	if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed && !modelProviderTransportChanged(existing, merged) {
+	checkConfig := existing
+	// Built-in OpenCSG checks use the gateway from the signed-in account.
+	if id != agent.ModelProviderIDOpenCSG {
+		checkConfig = providerConfigFromRequest(existing, req, true).Resolved()
+	}
+	result := appCheckModelProvider(r.Context(), providerCheckInput(id, checkConfig, req.Connect))
+	if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed && !modelProviderTransportChanged(existing, checkConfig) {
 		cfg.Models = updated
 		if err := h.saveModelProvidersConfig(r.Context(), path, cfg); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
