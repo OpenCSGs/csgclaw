@@ -1914,6 +1914,22 @@ describe("useAgentController", () => {
     expect(result.current.controller.agentProfileModalProps?.bootstrapConfig).toBe(refreshedConfig);
   });
 
+  it("refreshes hub templates when opening the create-agent modal", async () => {
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-manager" },
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.controller.openCreateAgentModal();
+    });
+
+    expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
+  });
+
   it("opens immediately, loads configuration in parallel, and keeps edits made while requests are pending", async () => {
     let resolveConfig!: (value: RuntimeBootstrapConfig) => void;
     let resolveProviders!: (value: ModelProviderCatalog) => void;
