@@ -71,8 +71,10 @@ export function CreateModelProviderModal({
   const [protocol, setProtocol] = useState("");
   const [headers, setHeaders] = useState("");
   const [models, setModels] = useState("");
+  const [imageEndpoints, setImageEndpoints] = useState("");
   const [localError, setLocalError] = useState("");
   const preset = presets.find((item) => item.id === selected);
+  const isArkAPI = preset?.id === "volcengine";
   const defaultName = nextAvailableModelProviderDisplayName(modelProviders, preset?.name ?? "");
   const name = nameDraft ?? defaultName;
   const activeBrand = preset?.brand || brand;
@@ -97,6 +99,7 @@ export function CreateModelProviderModal({
     setProtocol("");
     setHeaders("");
     setModels("");
+    setImageEndpoints("");
     setLocalError("");
   };
   const selectService = (id: string) => {
@@ -107,7 +110,7 @@ export function CreateModelProviderModal({
   const close = () => {
     if (busy) return;
     if (
-      (apiKey || (nameDraft !== undefined && nameDraft !== defaultName) || headers || models) &&
+      (apiKey || (nameDraft !== undefined && nameDraft !== defaultName) || headers || models || imageEndpoints) &&
       !confirmWithFocusRecovery(t("modelProviderDiscardConfirm"))
     )
       return;
@@ -116,6 +119,11 @@ export function CreateModelProviderModal({
   function connect() {
     if (busy || !preset || !canConnect) return;
     setLocalError("");
+    const imageModels = isArkAPI ? parseModelProviderModelsText(imageEndpoints) : [];
+    if (imageModels.some((id) => !/^ep-\S+$/.test(id))) {
+      setLocalError(t("modelConnectArkImageEndpointInvalid"));
+      return;
+    }
     let customHeaders: Record<string, string> | undefined;
     try {
       if (headers.trim()) {
@@ -142,6 +150,7 @@ export function CreateModelProviderModal({
       display_name: name.trim(),
       headers: customHeaders,
       models: parseModelProviderModelsText(models),
+      ...(imageModels.length ? { image_models: imageModels } : {}),
       connect: true,
     });
   }
@@ -408,7 +417,10 @@ export function CreateModelProviderModal({
                       placeholder={'{"X-Project": "project-id"}'}
                     />
                   </Field>
-                  <Field label={t("modelProviderModels")} hint={t("modelConnectManualModels")}>
+                  <Field
+                    label={t(isArkAPI ? "modelConnectArkChatModels" : "modelProviderModels")}
+                    hint={t(isArkAPI ? "modelConnectArkChatModelsHint" : "modelConnectManualModels")}
+                  >
                     <TextArea
                       value={models}
                       disabled={busy}
@@ -416,6 +428,20 @@ export function CreateModelProviderModal({
                       placeholder="model-id"
                     />
                   </Field>
+                  {isArkAPI ? (
+                    <Field label={t("modelConnectArkImageEndpoints")} hint={t("modelConnectArkImageEndpointsHint")}>
+                      <TextArea
+                        value={imageEndpoints}
+                        disabled={busy}
+                        onChange={(event) => {
+                          setImageEndpoints(event.target.value);
+                          setLocalError("");
+                          onClearError?.();
+                        }}
+                        placeholder="ep-..."
+                      />
+                    </Field>
+                  ) : null}
                 </div>
               ) : null}
               {selected === "custom" ? (

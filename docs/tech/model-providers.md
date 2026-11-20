@@ -51,6 +51,10 @@ The response identifies `model_source` as `upstream`, `preset`, or `manual`.
 A documented model list describes candidates, not a guarantee of access to every model.
 Authentication, quota, permission, and network failures are shown separately and cannot be hidden by a preset model list.
 
+For Volcengine Ark API, enter private chat endpoints under **Chat model or endpoint ID** and private image endpoints under **Image generation endpoint ID** in Advanced settings.
+When `ep-` IDs are configured, the model list contains those endpoints.
+For image-only connections, the connection check uses the authenticated model directory, and image endpoint access is verified when generating an image.
+
 Credentials are persisted by the backend and are omitted from connection-directory responses.
 Provider errors shown during connection do not include raw upstream bodies or echoed secrets.
 Official logos ship locally, with provenance recorded in `web/packages/app/public/model-providers/SOURCES.md`.

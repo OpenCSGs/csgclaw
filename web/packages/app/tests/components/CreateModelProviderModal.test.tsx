@@ -90,6 +90,36 @@ it("groups services by brand and connects with a display name and Key", async ()
   );
 });
 
+it("connects an Ark image endpoint without treating it as a chat model", async () => {
+  const ark = {
+    ...presets[1],
+    id: "volcengine",
+    brand: "volcengine",
+    brand_name: "Volcengine Ark",
+    name: "Volcengine Ark API",
+    api_protocol: "responses",
+  } satisfies ModelServicePreset;
+  vi.mocked(fetchModelProviderPresets).mockResolvedValue({ presets: [ark] });
+  const onCreate = vi.fn();
+  render(
+    <CreateModelProviderModal busy={false} initialPreset="volcengine" onClose={vi.fn()} onCreate={onCreate} t={t} />,
+  );
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText(t("profileAPIKey")), "test-key");
+  await user.click(screen.getByRole("button", { name: /Advanced settings/ }));
+  const endpoint = screen.getByRole("textbox", { name: t("modelConnectArkImageEndpoints") });
+  await user.type(endpoint, "doubao-seedream");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(screen.getByRole("alert")).toHaveTextContent(t("modelConnectArkImageEndpointInvalid"));
+  expect(onCreate).not.toHaveBeenCalled();
+  await user.clear(endpoint);
+  await user.type(endpoint, "ep-seedream");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(onCreate).toHaveBeenCalledWith(
+    expect.objectContaining({ preset: "volcengine", models: [], image_models: ["ep-seedream"], connect: true }),
+  );
+});
+
 it("clears credentials and transport overrides when changing service", async () => {
   const { user, onCreate } = await setup();
   await user.type(screen.getByLabelText(t("profileAPIKey")), "api-key");

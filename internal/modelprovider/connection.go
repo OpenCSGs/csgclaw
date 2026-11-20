@@ -20,6 +20,7 @@ type ServiceConnection struct {
 	BaseURL, APIKey, Protocol, Preset string
 	Headers                           map[string]string
 	Models                            []string
+	ImageModels                       []string
 }
 
 type ServiceDirectory struct {
@@ -185,6 +186,22 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 		return ServiceDirectory{}, &ConnectionError{401, "invalid_api_key", "API Key is required."}
 	}
 	client := &http.Client{Timeout: 20 * time.Second}
+	isArk := c.Preset == "volcengine" || c.Preset == "volcengine-coding" || c.Preset == "volcengine-agent"
+	var endpoints ModelDiscoveryResult
+	if isArk {
+		endpoints.Models = arkEndpointIDs(c.Models)
+		endpoints.ImageModels = arkEndpointIDs(c.ImageModels)
+		for _, id := range endpoints.ImageModels {
+			if slices.Contains(endpoints.Models, id) {
+				return ServiceDirectory{}, &ConnectionError{400, "invalid_inference_request", "Use each Ark endpoint ID for only one model type."}
+			}
+		}
+	}
+	manual := ServiceDirectory{ModelDiscoveryResult: endpoints, Source: "manual"}
+	hasEndpoints := len(endpoints.Models) > 0 || len(endpoints.ImageModels) > 0
+	if verify && len(endpoints.Models) > 0 {
+		return manual, verifyArkConversationEndpoints(ctx, client, c, endpoints.Models)
+	}
 	directoryConnection := catalogConnection(c)
 	request, err := directoryConnection.Request(ctx, http.MethodGet, "/models", nil)
 	if err != nil {
@@ -201,12 +218,16 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 	}
 	out := ServiceDirectory{Source: "upstream"}
 	discovered := false
-	isArk := c.Preset == "volcengine" || c.Preset == "volcengine-coding" || c.Preset == "volcengine-agent"
 	protocolSupport := make(map[string]bool)
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		var list openAIModelsResponse
 		if json.Unmarshal(body, &list) != nil || list.Data == nil {
 			return out, &ConnectionError{502, "invalid_response", "The model service returned an invalid model list."}
+		}
+		// Listing proves key access. A manual image endpoint is checked when
+		// generating an image, since discovery cannot verify a private endpoint.
+		if hasEndpoints {
+			return manual, nil
 		}
 		complete := list
 		// Anthropic uses cursor pagination, so never silently truncate its model directory.
@@ -257,6 +278,11 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 
 	} else if resp.StatusCode != 404 && resp.StatusCode != 405 && resp.StatusCode != 501 {
 		return out, serviceError(resp.StatusCode, body, c.APIKey)
+	} else if hasEndpoints {
+		if len(endpoints.Models) > 0 {
+			return manual, verifyArkConversationEndpoints(ctx, client, c, endpoints.Models)
+		}
+		return manual, serviceError(resp.StatusCode, body, c.APIKey)
 	}
 	documented := documentedResponsesModels(c)
 	chatModels := out.Models[:0]
@@ -323,12 +349,6 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 		preferred = append(preferred, p.Models...)
 	}
 	if isArk {
-		// User-created endpoints are not returned by the public model directory.
-		for _, model := range c.Models {
-			if strings.HasPrefix(model, "ep-") && !slices.Contains(out.Models, model) {
-				out.Models = append(out.Models, model)
-			}
-		}
 		for _, model := range out.Models {
 			if protocolSupport[model] {
 				preferred = append(preferred, model)
@@ -374,6 +394,30 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 		return out, nil
 	}
 	return out, arkModelUnavailable()
+}
+
+func IsArkEndpointID(id string) bool {
+	return strings.HasPrefix(id, "ep-") && len(id) > len("ep-") && !strings.ContainsAny(id, " \t\r\n")
+}
+
+func arkEndpointIDs(models []string) []string {
+	var endpoints []string
+	for _, model := range models {
+		id := strings.TrimSpace(model)
+		if IsArkEndpointID(id) && !slices.Contains(endpoints, id) {
+			endpoints = append(endpoints, id)
+		}
+	}
+	return endpoints
+}
+
+func verifyArkConversationEndpoints(ctx context.Context, client *http.Client, c ServiceConnection, endpoints []string) error {
+	for _, endpoint := range endpoints {
+		if err := probeServiceModel(ctx, client, c, endpoint, true); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Ark returns the supported route names; an absent route in a populated

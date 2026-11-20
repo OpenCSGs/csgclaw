@@ -15,6 +15,7 @@ export type ModelProviderPayload = {
   api_key?: string;
   headers?: Record<string, unknown>;
   models?: string[];
+  image_models?: string[];
   reasoning_effort?: string;
 };
 

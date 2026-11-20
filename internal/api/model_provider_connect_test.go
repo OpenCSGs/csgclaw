@@ -1,8 +1,11 @@
 package api
 
 import (
+	"context"
+	"csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelpreset"
+	"csgclaw/internal/modelprovider"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -79,6 +82,63 @@ func TestModelProviderConnectIsAtomicAndPersistsProtocol(t *testing.T) {
 	}
 	if !names["Custom API"] || !names["Custom API 2"] || probes != 2 {
 		t.Fatalf("names=%v probes=%d", names, probes)
+	}
+}
+
+func TestArkImageEndpointConnectsAndPersistsForGeneration(t *testing.T) {
+	const endpoint = "ep-private-image"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer fixture-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v3/models":
+			fmt.Fprint(w, `{"data":[{"id":"doubao-chat","domain":"LLM"},{"id":"public-image","domain":"ImageGeneration"}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v3/images/generations":
+			var body struct{ Model, Prompt string }
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Model != endpoint || body.Prompt != "A blue square" {
+				t.Errorf("image generation payload = %+v, error = %v", body, err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			fmt.Fprint(w, `{"data":[{"b64_json":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3pkAAAAASUVORK5CYII="}]}`)
+		default:
+			t.Errorf("unexpected upstream request %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	writeMinimalAPIConfig(t, path)
+	h := newModelProviderTestHandler(t, path, nil)
+	create := fmt.Sprintf(`{"id":"ark-image","preset":"volcengine","base_url":%q,"api_key":"fixture-key","image_models":[%q],"connect":true}`, upstream.URL+"/api/v3", endpoint)
+	rec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers", strings.NewReader(create)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+	for _, verify := range []bool{true, false} {
+		rec = httptest.NewRecorder()
+		body := fmt.Sprintf(`{"connect":%t}`, verify)
+		h.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers/ark-image/check", strings.NewReader(body)))
+		var result agents.ModelProviderCheckResult
+		if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil || rec.Code != http.StatusOK ||
+			result.Status != "connected" || result.ModelSource != "manual" || len(result.Models) != 0 ||
+			len(result.ImageModels) != 1 || result.ImageModels[0] != endpoint {
+			t.Fatalf("check: %d %s (error %v)", rec.Code, rec.Body, err)
+		}
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := h.agentModels.(*agents.ModelConfiguration)
+	models.SetLLMConfig(cfg.Models)
+	ref := &modelprovider.ImageGenerationConfig{ProviderID: "ark-image", ModelID: endpoint}
+	image, err := models.GenerateImage(context.Background(), ref, "A blue square", modelprovider.ImageGenerationOptions{})
+	if err != nil || image.MediaType != "image/png" {
+		t.Fatalf("generate image with saved endpoint: media type=%q, error=%v", image.MediaType, err)
 	}
 }
 
