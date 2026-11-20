@@ -1006,7 +1006,10 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
     const success = await screen.findByRole("dialog", { name: "Published successfully" });
     const link = within(success).getByRole("link", { name: "View community template" });
-    expect(link).toHaveAttribute("href", "https://opencsg-stg.com/agentichub?view=resources&subview=template");
+    expect(link).toHaveAttribute(
+      "href",
+      "https://opencsg-stg.com/agentichub?view=resources&subview=template&scope=personal",
+    );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
@@ -1023,7 +1026,10 @@ describe("HubDetailPane", () => {
     });
     const success = await screen.findByRole("dialog", { name: "Published successfully" });
     const link = within(success).getByRole("link", { name: "View community template" });
-    expect(link).toHaveAttribute("href", "https://opencsg.com/agentichub?view=resources&subview=template");
+    expect(link).toHaveAttribute(
+      "href",
+      "https://opencsg.com/agentichub?view=resources&subview=template&scope=personal",
+    );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
@@ -1083,7 +1089,7 @@ describe("HubDetailPane", () => {
       if (!inlineTemplateDetail) await openTemplateDetail(userEvent.setup());
       expect(screen.getByRole("link", { name: "View community template" })).toHaveAttribute(
         "href",
-        "https://custom.example:8443/agentichub?view=resources&subview=template",
+        "https://custom.example:8443/agentichub?view=resources&subview=template&scope=personal",
       );
       expect(screen.getByRole("button", { name: "Publish V1 to community" })).toBeEnabled();
       expect(screen.getAllByText("Community version unconfirmed").length).toBeGreaterThan(0);
@@ -1293,7 +1299,7 @@ describe("HubDetailPane", () => {
     });
     expect(screen.getByRole("link", { name: "View community template" })).toHaveAttribute(
       "href",
-      "https://qa.opencsg.com/agentichub?view=resources&subview=template",
+      "https://qa.opencsg.com/agentichub?view=resources&subview=template&scope=personal",
     );
     expect(screen.getByRole("button", { name: "Publish V3 to community" })).toBeEnabled();
     expect(screen.getAllByText("Community version unconfirmed").length).toBeGreaterThan(0);

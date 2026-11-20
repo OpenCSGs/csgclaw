@@ -201,6 +201,15 @@ func NewAuthenticatedRemoteStore(baseURL, token, username string) *RemoteStore {
 var errInvalidRemoteTemplate = errors.New("invalid remote template")
 
 func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
+	return s.list(ctx, false)
+}
+
+// ListOfficialAndOwned skips unrelated repositories before loading their manifests.
+func (s *RemoteStore) ListOfficialAndOwned(ctx context.Context) ([]Template, error) {
+	return s.list(ctx, true)
+}
+
+func (s *RemoteStore) list(ctx context.Context, officialAndOwned bool) ([]Template, error) {
 	repositories := make([]remoteCodeRepository, 0)
 	seen := make(map[string]int)
 	agentTemplates, err := s.listAgentTemplates(ctx)
@@ -236,6 +245,13 @@ func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 		if err != nil {
 			slog.Warn("skip invalid remote hub template path", "path", repository.Path, "error", err)
 			continue
+		}
+		if officialAndOwned {
+			namespace := strings.SplitN(id, "/", 2)[0]
+			if !strings.EqualFold(namespace, officialTemplateNamespace) &&
+				(s.username == "" || !strings.EqualFold(namespace, s.username)) {
+				continue
+			}
 		}
 		item, err := s.getTemplate(ctx, id, repository)
 		if err != nil {

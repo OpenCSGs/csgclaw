@@ -509,6 +509,7 @@ describe("agent overview guidance and template loading", () => {
     try {
       render(<Page route="/agents?tab=templates&template=agentichub%2Fvisit-prep" />);
       expect(await screen.findByRole("button", { name: "Visit Prep" })).toBeVisible();
+      expect(fetch).toHaveBeenCalledWith("remote", true);
       expect(await screen.findByRole("region", { name: "Template detail" })).toHaveTextContent(remote.id!);
 
       catalog = [];
@@ -838,12 +839,14 @@ describe("agent overview list summaries", () => {
       }),
     );
     render(<Page username="alice" />);
-    expect(screen.getByRole("tab", { name: "智能体模板 5" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "智能体模板 4" })).toBeVisible();
     expect(screen.getByRole("button", { name: "官方 2" })).toHaveAttribute("aria-pressed", "true");
     await userEvent.setup().click(screen.getByRole("button", { name: "我的 2" }));
     expect(screen.getByRole("button", { name: /alice worker/ })).toBeVisible();
     expect(screen.getByRole("button", { name: "Local worker" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /Manager template/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /bob worker/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "智能体模板 4" })).toBeVisible();
   });
 
   it("does not claim zero templates while the initial request is pending", () => {

@@ -1875,7 +1875,11 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("scope") == "local" {
 			items, err = hubSvc.ListLocal(r.Context())
 		} else if r.URL.Query().Get("scope") == "remote" {
-			items, err = hubSvc.ListRemote(r.Context())
+			if r.URL.Query().Get("group") == "official-and-owned" {
+				items, err = hubSvc.ListRemoteOfficialAndOwned(r.Context())
+			} else {
+				items, err = hubSvc.ListRemote(r.Context())
+			}
 		} else {
 			items, err = hubSvc.List(r.Context())
 		}

@@ -137,7 +137,11 @@ export function AgentOverviewPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [listOpen]);
-  const templatesQuery = useWorkspaceHubTemplatesQuery({ enabled: templatesTab, refreshWhenVisible: true });
+  const templatesQuery = useWorkspaceHubTemplatesQuery({
+    enabled: templatesTab,
+    refreshWhenVisible: true,
+    officialAndOwned: true,
+  });
   const templates = useMemo(
     () => (templatesQuery.data ?? []).filter(isVisibleInHubTemplateList),
     [templatesQuery.data],
@@ -434,7 +438,8 @@ export function AgentOverviewPage() {
             {t("iaAgentsMineTab")} <small>{filterCounts.all}</small>
           </button>
           <button role="tab" aria-selected={templatesTab} onClick={() => selectTab("templates")}>
-            {t("iaAgentsMarketTab")} {templatesQuery.data !== undefined ? <small>{templates.length}</small> : null}
+            {t("iaAgentsMarketTab")}{" "}
+            {templatesQuery.data !== undefined ? <small>{filterCounts.official + filterCounts.personal}</small> : null}
           </button>
           <button role="tab" aria-selected={plazaTab} onClick={() => selectTab("plaza")}>
             {t("agentPlazaTitle")} <span className={styles.cloudTag}>{t("agentPlazaCloud")}</span>

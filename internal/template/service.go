@@ -102,20 +102,25 @@ func NewService(cfg config.HubConfig, factory StoreFactory, options ...ServiceOp
 }
 
 func (s *Service) List(ctx context.Context) ([]Template, error) {
-	return s.list(ctx, "")
+	return s.list(ctx, "", false)
 }
 
 // ListLocal returns disk-backed templates without waiting for community requests.
 func (s *Service) ListLocal(ctx context.Context) ([]Template, error) {
-	return s.list(ctx, "local")
+	return s.list(ctx, "local", false)
 }
 
 // ListRemote loads only community registries for background refreshes.
 func (s *Service) ListRemote(ctx context.Context) ([]Template, error) {
-	return s.list(ctx, "remote")
+	return s.list(ctx, "remote", false)
 }
 
-func (s *Service) list(ctx context.Context, scope string) ([]Template, error) {
+// ListRemoteOfficialAndOwned loads only the template groups used by the agent overview.
+func (s *Service) ListRemoteOfficialAndOwned(ctx context.Context) ([]Template, error) {
+	return s.list(ctx, "remote", true)
+}
+
+func (s *Service) list(ctx context.Context, scope string, officialAndOwned bool) ([]Template, error) {
 	var out []Template
 	var listErrs []error
 	for _, name := range s.order {
@@ -123,7 +128,15 @@ func (s *Service) list(ctx context.Context, scope string) ([]Template, error) {
 		if !ok || !isReadableKind(cfgStore.ref.Kind) || (scope == "local" && cfgStore.ref.Kind == RegistryKindRemote) || (scope == "remote" && cfgStore.ref.Kind != RegistryKindRemote) {
 			continue
 		}
-		items, err := cfgStore.store.List(ctx)
+		var items []Template
+		var err error
+		if filtered, ok := cfgStore.store.(interface {
+			ListOfficialAndOwned(context.Context) ([]Template, error)
+		}); ok && officialAndOwned {
+			items, err = filtered.ListOfficialAndOwned(ctx)
+		} else {
+			items, err = cfgStore.store.List(ctx)
+		}
 		if err != nil {
 			listErr := fmt.Errorf("list hub registry %q: %w", name, err)
 			listErrs = append(listErrs, listErr)

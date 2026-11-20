@@ -3,6 +3,7 @@ import type { Mock } from "vitest";
 import {
   deleteHubTemplateRequest,
   fetchHubTemplate,
+  fetchHubTemplates,
   fetchHubWorkspace,
   fetchHubWorkspaceFile,
   publishAgentTemplateRequest,
@@ -16,6 +17,16 @@ function mockFetch(): Mock<typeof fetch> {
 }
 
 describe("hub API", () => {
+  it.each([
+    ["remote", true, "?scope=remote&group=official-and-owned"],
+    ["remote", false, "?scope=remote"],
+    ["local", true, "?scope=local"],
+  ] as const)("requests the selected template list: %s/%s", async (scope, officialAndOwned, query) => {
+    const fetchMock = mockFetch();
+    await fetchHubTemplates(scope, officialAndOwned);
+    expect(fetchMock).toHaveBeenCalledWith(`api/v1/hub/templates${query}`, expect.any(Object));
+  });
+
   it("sends Chinese display names separately from the validated name", async () => {
     const fetchMock = mockFetch();
     await publishAgentTemplateRequest("agent-alice", "local", "ReviewBot_2", "", false, "代码审查助手");
