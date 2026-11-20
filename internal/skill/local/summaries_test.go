@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -44,6 +45,51 @@ func TestListSummariesMetadataIsolation(t *testing.T) {
 	}
 	if strings.Contains(fmt.Sprint(items), "outside-secret") {
 		t.Fatal("outside metadata leaked")
+	}
+}
+
+func TestGroupedSkillSummaries(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"review", "official/review", "user/review", "user/review/examples/inner", "samples/hidden"} {
+		mustWriteFile(t, filepath.Join(root, name, skillFileName), "---\ndescription: "+name+"\n---\n")
+	}
+	if err := os.Symlink(filepath.Join(root, "user", "review"), filepath.Join(root, "official", "linked")); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	items, err := ListSummaries(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, item := range items {
+		if item.Description != item.Name {
+			t.Fatalf("summary read from the wrong directory: %+v", item)
+		}
+		names = append(names, item.Name)
+	}
+	want := []string{"official/review", "review", "user/review"}
+	if !slices.Equal(names, want) {
+		t.Fatalf("names = %v, want %v", names, want)
+	}
+
+	q := resourcequery.Query{Mode: "cursor", Size: 1, Search: "review"}
+	for i, name := range want {
+		page, meta, err := ListSummariesPage(ctx, root, q, func(string) bool { return true })
+		if err != nil || meta.Total != len(want) || len(page) != 1 || page[0].Name != name || meta.HasMore != (i+1 < len(want)) {
+			t.Fatalf("cursor page %d = %+v, meta = %+v, err = %v", i, page, meta, err)
+		}
+		q.Cursor = meta.NextCursor
+	}
+}
+
+func TestSkillNamedAfterGroupKeepsItsOwnSummary(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "user", skillFileName), "# User")
+	mustWriteFile(t, filepath.Join(root, "user", "example", skillFileName), "# Example")
+	items, err := ListSummaries(context.Background(), root)
+	if err != nil || len(items) != 1 || items[0].Name != "user" {
+		t.Fatalf("summaries = %+v, err = %v", items, err)
 	}
 }
 

@@ -7,7 +7,9 @@ import (
 	skillinstall "csgclaw/internal/skill/installstate"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,7 +19,7 @@ import (
 const summaryReadConcurrency = 8
 const maxSkillMetadataBytes = 64 * 1024
 
-// ListSummaries reads only top-level Skill metadata. Invalid individual files
+// ListSummaries reads Skill metadata from the root and its user and official groups. Invalid individual files
 // remain visible with a path-free error; cancellation and root errors fail the read.
 func ListSummaries(ctx context.Context, root string) ([]SkillSummary, error) {
 	return listSummaries(ctx, root, readSkillSummary)
@@ -38,20 +40,9 @@ func listSummaries(ctx context.Context, root string, read func(context.Context, 
 		return nil, err
 	}
 	defer directory.Close()
-	file, err := directory.Open(".")
+	names, err := summaryDirectories(ctx, directory)
 	if err != nil {
 		return nil, err
-	}
-	entries, err := file.ReadDir(-1)
-	_ = file.Close()
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			names = append(names, entry.Name())
-		}
 	}
 	slices.Sort(names)
 	items := make([]SkillSummary, len(names))
@@ -108,30 +99,22 @@ func ListSummariesPage(ctx context.Context, root string, q resourcequery.Query, 
 		return nil, resourcequery.Metadata{}, err
 	}
 	defer directory.Close()
-	file, err := directory.Open(".")
+	dirs, err := summaryDirectories(ctx, directory)
 	if err != nil {
 		return nil, resourcequery.Metadata{}, err
 	}
-	entries, err := file.ReadDir(-1)
-	_ = file.Close()
-	if err != nil {
-		return nil, resourcequery.Metadata{}, err
-	}
-	candidates := make([]resourcequery.Entry, 0, len(entries))
-	for _, entry := range entries {
+	candidates := make([]resourcequery.Entry, 0, len(dirs))
+	for _, name := range dirs {
 		if err := ctx.Err(); err != nil {
 			return nil, resourcequery.Metadata{}, err
 		}
-		if !entry.IsDir() {
-			continue
-		}
 		// Match the full-list behavior: absent SKILL.md files are not resources;
 		// unreadable metadata remains visible with its existing error marker.
-		_, statErr := directory.Lstat(filepath.Join(entry.Name(), skillFileName))
+		_, statErr := directory.Lstat(filepath.Join(name, skillFileName))
 		if errors.Is(statErr, os.ErrNotExist) {
 			continue
 		}
-		candidates = append(candidates, resourcequery.Entry{Name: entry.Name(), Enabled: enabled(entry.Name())})
+		candidates = append(candidates, resourcequery.Entry{Name: name, Enabled: enabled(name)})
 	}
 	names, meta, err := resourcequery.Select(candidates, q, root)
 	if err != nil {
@@ -151,6 +134,47 @@ func ListSummariesPage(ctx context.Context, root string, q resourcequery.Query, 
 		items = append(items, item)
 	}
 	return items, meta, nil
+}
+
+// Grouped installations use their relative directory as the summary name so that
+// equal leaf names remain distinct in search results and pagination cursors.
+func summaryDirectories(ctx context.Context, root *os.Root) ([]string, error) {
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name != "user" && name != "official" {
+			names = append(names, name)
+			continue
+		}
+		if _, err := root.Lstat(filepath.Join(name, skillFileName)); !errors.Is(err, fs.ErrNotExist) {
+			// A top-level Skill can itself be named user or official.
+			names = append(names, name)
+			continue
+		}
+		children, err := fs.ReadDir(root.FS(), name)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, child := range children {
+			if child.IsDir() {
+				names = append(names, path.Join(name, child.Name()))
+			}
+		}
+	}
+	return names, nil
 }
 
 func readSkillSummary(ctx context.Context, root *os.Root, name string) (SkillSummary, bool) {
