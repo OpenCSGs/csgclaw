@@ -863,11 +863,13 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	ShutdownCLIProxy = func(context.Context) error { return nil }
 
 	called := false
+	managerReturned := make(chan struct{})
 	startCalled := make(chan struct{})
 	releaseStart := make(chan struct{})
 	startReturned := make(chan struct{})
 	startErrors := make(chan string, 6)
 	EnsureBootstrapManager = func(gotCtx context.Context, gotService *agent.Controller) error {
+		defer close(managerReturned)
 		if gotCtx != ctx {
 			startErrors <- fmt.Sprintf("EnsureBootstrapManager context = %v, want %v", gotCtx, ctx)
 		}
@@ -968,6 +970,11 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	case <-startReturned:
 	case <-time.After(time.Second):
 		t.Fatal("StartConfiguredAgents did not return after release")
+	}
+	select {
+	case <-managerReturned:
+	case <-time.After(time.Second):
+		t.Fatal("EnsureBootstrapManager did not return")
 	}
 	close(startErrors)
 	for msg := range startErrors {
@@ -1128,17 +1135,22 @@ func TestServeForegroundReportsListeningBeforeStartingAgents(t *testing.T) {
 	}
 }
 
-func TestServeForegroundEnsuresBootstrapManagerBeforeConfiguredAgents(t *testing.T) {
+func TestServeForegroundRestoresConfiguredAgentsDuringManagerStartup(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
 
-	calls := make(chan string, 2)
+	managerStarted := make(chan struct{})
+	workersStarted := make(chan struct{})
+	releaseStartup := make(chan struct{})
+	defer close(releaseStartup)
 	EnsureBootstrapManager = func(context.Context, *agent.Controller) error {
-		calls <- "manager"
+		close(managerStarted)
+		<-releaseStartup
 		return nil
 	}
 	StartConfiguredAgents = func(context.Context, *agent.Controller) error {
-		calls <- "configured-agents"
+		close(workersStarted)
+		<-releaseStartup
 		return nil
 	}
 	RunServer = func(opts server.Options) error {
@@ -1152,17 +1164,15 @@ func TestServeForegroundEnsuresBootstrapManagerBeforeConfiguredAgents(t *testing
 	if err := serveForeground(context.Background(), testContext(), config.Config{Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"}}, "json"); err != nil {
 		t.Fatalf("serveForeground() error = %v", err)
 	}
-	got := make([]string, 0, 2)
-	for len(got) < 2 {
-		select {
-		case call := <-calls:
-			got = append(got, call)
-		case <-time.After(time.Second):
-			t.Fatalf("startup calls = %v, want manager before configured-agents", got)
-		}
+	select {
+	case <-managerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("manager bootstrap did not start")
 	}
-	if want := []string{"manager", "configured-agents"}; fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("startup calls = %v, want %v", got, want)
+	select {
+	case <-workersStarted:
+	case <-time.After(time.Second):
+		t.Fatal("configured workers did not start while manager bootstrap was blocked")
 	}
 }
 

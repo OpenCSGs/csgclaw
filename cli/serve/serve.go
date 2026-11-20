@@ -883,6 +883,8 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 				} else if err := ensureBootstrapManager(ctx, svc); err != nil {
 					slog.Warn("bootstrap manager failed to start", "error", err)
 				}
+			}()
+			go func() {
 				if err := startConfiguredAgents(ctx, svc); err != nil {
 					slog.Warn("some configured agents failed to start", "error", err)
 				}
