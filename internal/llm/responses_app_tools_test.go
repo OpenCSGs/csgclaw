@@ -252,3 +252,39 @@ func TestCodexResponsesNotFoundDoesNotDowngradeOrPoisonCache(t *testing.T) {
 		t.Fatalf("cached false capability: %d calls", calls)
 	}
 }
+
+func TestMiMoResponsesKeepsAgentToolsWithoutHostedWebSearch(t *testing.T) {
+	for _, tc := range []struct {
+		url  string
+		want int
+	}{
+		{"https://api.xiaomimimo.com/v1", 2},
+		{"https://token-plan-sgp.xiaomimimo.com/v1", 2},
+		{"https://proxy.example.test/v1", 3},
+	} {
+		payload := map[string]any{"tools": []any{
+			map[string]any{"type": "web_search"},
+			map[string]any{"type": "custom", "name": "exec"},
+			map[string]any{"type": "function", "name": "clock"},
+		}}
+		applyResponsesProviderPayloadConstraints(payload, agent.AgentProfile{BaseURL: tc.url, ModelID: "mimo-v2.6-pro"})
+		if tools := payload["tools"].([]any); len(tools) != tc.want {
+			t.Errorf("%s: forwarded tools = %v", tc.url, tools)
+		}
+	}
+}
+
+func TestNativeGLMResponsesReturnsLogicalAuthenticationError(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"code":401,"msg":"invalid token","success":false}`)),
+	}
+	service := &Service{}
+	got, err := service.handleRemoteResponsesResult(context.Background(), agent.AgentProfile{Provider: agent.ProviderAPI},
+		nil, "https://open.bigmodel.cn/api/v1", "", resp, false, nil)
+	if err != nil || got == nil || got.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("logical authentication error returned %+v (%v)", got, err)
+	}
+	got.Body.Close()
+}

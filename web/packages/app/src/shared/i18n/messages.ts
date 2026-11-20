@@ -104,6 +104,10 @@ export const messages = {
     modelConnectErrorRate: "请求受限，请稍后重试或检查套餐用量。",
     modelConnectErrorNetwork: "无法连接模型服务，请检查区域和网络后重试。",
     modelConnectErrorModel: "模型或地址不可用，请检查服务、区域和模型 ID。",
+    modelConnectErrorProtocol: "这个服务地址不支持所选接口协议，请选择支持的协议或检查接口地址。",
+    modelConnectErrorInferenceRequest: "模型服务拒绝了连接检查，请检查协议和模型 ID。",
+    modelConnectErrorArkUnavailable: "请在火山方舟控制台开通模型，或在高级设置中填写已开通的推理接入点 ID。",
+    modelConnectErrorArkEndpoint: "此火山方舟账号需要推理接入点。请在高级设置中填写以 ep- 开头的接入点 ID。",
     modelConnectSourceUpstream: "由厂商接口获取",
     modelConnectSourcePreset: "官方文档预设，实际权限以账号为准",
     modelConnectSourceManual: "手动指定",
@@ -3676,6 +3680,13 @@ export const messages = {
     modelConnectErrorRate: "Requests are limited. Try later or check plan usage.",
     modelConnectErrorNetwork: "Cannot reach the model service. Check the region and network.",
     modelConnectErrorModel: "The model or endpoint is unavailable. Check the service, region, and model ID.",
+    modelConnectErrorProtocol:
+      "This endpoint does not support the selected API protocol. Select a supported protocol or check the URL.",
+    modelConnectErrorInferenceRequest: "The service rejected the connection check. Check the protocol and model ID.",
+    modelConnectErrorArkUnavailable:
+      "Activate a model in the Ark console or enter an enabled inference endpoint ID in Advanced settings.",
+    modelConnectErrorArkEndpoint:
+      "This Ark account requires an inference endpoint. Enter its ep- ID in Advanced settings.",
     modelConnectSourceUpstream: "Discovered from the provider",
     modelConnectSourcePreset: "Official documented models; access depends on your account",
     modelConnectSourceManual: "Manually specified",

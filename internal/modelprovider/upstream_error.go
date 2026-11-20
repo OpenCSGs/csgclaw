@@ -49,6 +49,20 @@ func UserFacingUpstreamError(err error) (status int, code, message string, ok bo
 	return status, code, FriendlyUpstreamErrorMessage(status, code), true
 }
 
+// ResponsesEndpointUnsupported distinguishes a missing route from an unavailable model.
+func ResponsesEndpointUnsupported(status int, body []byte) bool {
+	if status != http.StatusNotFound && status != http.StatusMethodNotAllowed && status != http.StatusNotImplemented {
+		return false
+	}
+	switch strings.ToLower(UpstreamErrorCode(body)) {
+	case "model_not_found", "modelnotfound", "model_not_supported", "modelnotopen", "invalidendpointormodel.notfound",
+		"invalidendpointormodel.modelidaccessdisabled", "deploymentnotfound", "cluster_not_found":
+		return false
+	default:
+		return true
+	}
+}
+
 // FallbackUpstreamErrorCode returns a stable OpenAI-style error code when an
 // upstream response omits error.code.
 func FallbackUpstreamErrorCode(status int) string {

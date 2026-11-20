@@ -332,3 +332,48 @@ it("closes a pristine prefilled form without asking to discard changes", async (
     confirm.mockRestore();
   }
 });
+
+it("changes an official endpoint with the protocol and disables unsupported regional options", async () => {
+  const testAPI = presets[1];
+  vi.mocked(fetchModelProviderPresets).mockResolvedValue({
+    presets: [
+      {
+        ...testAPI,
+        regions: [
+          {
+            ...testAPI.regions[0],
+            default_protocol: "responses",
+            protocol_urls: {
+              chat_completions: testAPI.regions[0].base_url,
+              responses: "https://cn.example.test/response/v1",
+            },
+          },
+          {
+            ...testAPI.regions[1],
+            protocol_urls: { chat_completions: testAPI.regions[1].base_url },
+          },
+        ],
+      },
+    ],
+  });
+  const { user, onCreate } = await setup();
+  const protocol = screen.getByRole("combobox", { name: "API protocol" });
+  expect(protocol).toHaveTextContent("OpenAI Responses");
+  expect(screen.getByRole("textbox", { name: t("profileBaseURL") })).toHaveValue("https://cn.example.test/response/v1");
+  await user.click(protocol);
+  await user.click(screen.getByRole("option", { name: "OpenAI Chat Completions" }));
+  expect(screen.getByRole("textbox", { name: t("profileBaseURL") })).toHaveValue(testAPI.regions[0].base_url);
+  await user.click(protocol);
+  await user.click(screen.getByRole("option", { name: "OpenAI Responses" }));
+  expect(screen.getByRole("textbox", { name: t("profileBaseURL") })).toHaveValue("https://cn.example.test/response/v1");
+  await user.type(screen.getByLabelText(t("profileAPIKey")), "test-key");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(onCreate).toHaveBeenCalledWith(
+    expect.objectContaining({ api_protocol: "responses", base_url: "https://cn.example.test/response/v1" }),
+  );
+
+  await user.click(screen.getByRole("combobox", { name: "Region" }));
+  await user.click(screen.getByRole("option", { name: "Global" }));
+  await user.click(protocol);
+  expect(screen.getByRole("option", { name: "OpenAI Responses" })).toHaveAttribute("aria-disabled", "true");
+});

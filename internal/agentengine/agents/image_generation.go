@@ -70,8 +70,13 @@ func (s *ModelConfiguration) ImageGenerationModes(ref *modelprovider.ImageGenera
 	if modelprovider.IsGPTImageModel(ref.ModelID) {
 		return modelcap.ImageGeneration{TextToImage: true, ImageToImage: true}
 	}
-	if slices.Contains(provider.ImageModels, ref.ModelID) {
-		return modelcap.ImageGeneration{TextToImage: true}
+	if slices.Contains(provider.ImageModels, ref.ModelID) || slices.Contains(provider.Models, ref.ModelID) {
+		if modes := modelprovider.KnownImageGenerationModes(ref.ModelID); modes != (modelcap.ImageGeneration{}) {
+			return modes
+		}
+		if slices.Contains(provider.ImageModels, ref.ModelID) {
+			return modelcap.ImageGeneration{TextToImage: true}
+		}
 	}
 	return modelcap.ImageGeneration{}
 }

@@ -20,13 +20,29 @@ type ReferenceImage struct {
 	Data []byte
 }
 
-func referenceImageMultipart(fields map[string]string, imageField string, images []ReferenceImage) ([]byte, string, error) {
+func referenceImageTypes(images []ReferenceImage) ([]string, error) {
 	var size int
+	types := make([]string, 0, len(images))
 	for _, image := range images {
 		if len(image.Data) == 0 || len(image.Data) > MaxReferenceImageBytes-size {
-			return nil, "", fmt.Errorf("reference images must be non-empty and total at most 32 MiB")
+			return nil, fmt.Errorf("reference images must be non-empty and total at most 32 MiB")
 		}
 		size += len(image.Data)
+		mediaType := http.DetectContentType(image.Data)
+		switch mediaType {
+		case "image/jpeg", "image/png", "image/webp":
+			types = append(types, mediaType)
+		default:
+			return nil, fmt.Errorf("reference images must be PNG, JPEG, or WebP")
+		}
+	}
+	return types, nil
+}
+
+func referenceImageMultipart(fields map[string]string, imageField string, images []ReferenceImage) ([]byte, string, error) {
+	types, err := referenceImageTypes(images)
+	if err != nil {
+		return nil, "", err
 	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -35,16 +51,10 @@ func referenceImageMultipart(fields map[string]string, imageField string, images
 			return nil, "", err
 		}
 	}
-	for _, image := range images {
-		mediaType := http.DetectContentType(image.Data)
-		switch mediaType {
-		case "image/jpeg", "image/png", "image/webp":
-		default:
-			return nil, "", fmt.Errorf("reference images must be PNG, JPEG, or WebP")
-		}
+	for i, image := range images {
 		header := make(textproto.MIMEHeader)
 		header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": imageField, "filename": image.Name}))
-		header.Set("Content-Type", mediaType)
+		header.Set("Content-Type", types[i])
 		part, err := writer.CreatePart(header)
 		if err != nil {
 			return nil, "", err

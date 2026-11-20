@@ -18,6 +18,11 @@ import {
 } from "@/components/ui";
 import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
 import {
+  modelProviderProtocolOptions,
+  modelProviderProtocolURL,
+  usesModelProviderPresetURL,
+} from "@/models/modelProviderPresets";
+import {
   modelProviderDisplayNameExists,
   nextAvailableModelProviderDisplayName,
   parseModelProviderModelsText,
@@ -74,9 +79,13 @@ export function CreateModelProviderModal({
   const region = preset?.regions.find((item) => item.id === regionID) ?? preset?.regions[0];
   const brandPresets = presets.filter((item) => item.brand === activeBrand);
   const brands = presets.filter((item, index) => presets.findIndex((other) => other.brand === item.brand) === index);
+  const selectedProtocol = protocol || region?.default_protocol || preset?.api_protocol || "";
+  const selectedURL = baseURL ?? modelProviderProtocolURL(region, selectedProtocol) ?? region?.base_url ?? "";
+  const protocolOptions = modelProviderProtocolOptions(region, selectedURL);
+  const protocolUnavailable = protocolOptions.some((option) => option.value === selectedProtocol && option.disabled);
   const duplicateName = Boolean(name.trim()) && modelProviderDisplayNameExists(modelProviders, name);
   const canConnect = Boolean(
-    preset && name.trim() && apiKey.trim() && (baseURL ?? region?.base_url ?? "").trim() && !duplicateName,
+    preset && name.trim() && apiKey.trim() && selectedURL.trim() && !duplicateName && !protocolUnavailable,
   );
   const cn = locale === "zh";
   const reset = () => {
@@ -127,9 +136,9 @@ export function CreateModelProviderModal({
     void onCreate({
       preset: preset.id,
       region: region?.id,
-      api_protocol: protocol || preset.api_protocol,
+      api_protocol: selectedProtocol,
       api_key: apiKey.trim(),
-      base_url: (baseURL ?? region?.base_url ?? "").trim(),
+      base_url: selectedURL.trim(),
       display_name: name.trim(),
       headers: customHeaders,
       models: parseModelProviderModelsText(models),
@@ -306,26 +315,27 @@ export function CreateModelProviderModal({
                 <Field
                   className={preset.regions.length > 1 ? styles.fullWidth : undefined}
                   label={t("modelConnectProtocol")}
+                  hint={protocolUnavailable ? t("modelConnectErrorProtocol") : undefined}
                   required
                 >
                   <Select
                     open={openSelect === "protocol"}
                     onOpenChange={(open) => setOpenSelect(open ? "protocol" : "")}
-                    value={protocol || preset.api_protocol}
+                    value={selectedProtocol}
                     disabled={busy}
-                    onValueChange={setProtocol}
-                    options={[
-                      { value: "responses", label: "OpenAI Responses" },
-                      { value: "chat_completions", label: "OpenAI Chat Completions" },
-                      { value: "anthropic_messages", label: "Anthropic Messages" },
-                    ]}
+                    onValueChange={(value) => {
+                      if (usesModelProviderPresetURL(region, selectedURL)) setBaseURL(undefined);
+                      setProtocol(value);
+                      onClearError?.();
+                    }}
+                    options={protocolOptions}
                     triggerProps={{ "aria-label": t("modelConnectProtocol") }}
                   />
                 </Field>
                 <Field className={styles.fullWidth} label={t("profileBaseURL")} required>
                   <TextInput
                     required
-                    value={baseURL ?? region?.base_url ?? ""}
+                    value={selectedURL}
                     disabled={busy}
                     onChange={(event) => setBaseURL(event.target.value)}
                   />

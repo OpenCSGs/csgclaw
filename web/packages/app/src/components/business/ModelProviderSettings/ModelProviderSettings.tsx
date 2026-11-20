@@ -1,5 +1,10 @@
 import modelProviderSettingsStyles from "./ModelProviderSettings.module.css";
 import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
+import {
+  modelProviderProtocolOptions,
+  modelProviderProtocolURL,
+  usesModelProviderPresetURL,
+} from "@/models/modelProviderPresets";
 import { DefaultModelSettings } from "./DefaultModelSettings";
 import directoryStyles from "./ProviderDirectory.module.css";
 import { ModelMetadataFields } from "./ModelMetadataFields";
@@ -114,6 +119,11 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const [deleteError, setDeleteError] = useState("");
   const [providerSearch, setProviderSearch] = useState("");
   const directory = useModelProviderPresets();
+  const providerPreset = directory.data?.presets.find((preset) => preset.id === provider?.preset);
+  const providerRegion =
+    providerPreset?.regions.find((region) => region.id === provider?.region) ?? providerPreset?.regions[0];
+  const protocolOptions = modelProviderProtocolOptions(providerRegion, draft.baseURL);
+  const protocolUnavailable = protocolOptions.some((option) => option.value === draft.apiProtocol && option.disabled);
   const [detailOpen, setDetailOpen] = useState(false);
   const isBuiltinCLI = provider?.id === "codex" || provider?.id === "claude_code";
   const isOpenCSG = provider?.id === MODEL_PROVIDER_IDS.OpenCSG;
@@ -307,6 +317,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         : modelProviderStatusLabel(effectiveStatus, provider, t);
 
   async function runCheck() {
+    if (protocolUnavailable) return;
     setCheckFeedback("");
     const result = await runCheckForDraft(draft.baseURL, draft.apiKey, { showError: true });
     if (result?.status === "connected") setCheckFeedback(t("modelContextChecked"));
@@ -320,7 +331,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   }
 
   async function saveProvider() {
-    if (!provider || (!provider.builtin && !draft.displayName.trim())) {
+    if (!provider || protocolUnavailable || (!provider.builtin && !draft.displayName.trim())) {
       return;
     }
     setBusy("save");
@@ -641,16 +652,22 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                           />
                         </Field>
                         {!provider.builtin ? (
-                          <Field label={t("modelConnectProtocol")}>
+                          <Field
+                            label={t("modelConnectProtocol")}
+                            hint={protocolUnavailable ? t("modelConnectErrorProtocol") : undefined}
+                          >
                             <Select
                               value={draft.apiProtocol}
-                              onValueChange={(apiProtocol) => setDraft((current) => ({ ...current, apiProtocol }))}
-                              options={[
-                                { value: "", label: "Auto" },
-                                { value: "responses", label: "OpenAI Responses" },
-                                { value: "chat_completions", label: "OpenAI Chat Completions" },
-                                { value: "anthropic_messages", label: "Anthropic Messages" },
-                              ]}
+                              onValueChange={(apiProtocol) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  apiProtocol,
+                                  baseURL: usesModelProviderPresetURL(providerRegion, current.baseURL)
+                                    ? (modelProviderProtocolURL(providerRegion, apiProtocol) ?? current.baseURL)
+                                    : current.baseURL,
+                                }))
+                              }
+                              options={[{ value: "", label: "Auto" }, ...protocolOptions]}
                               triggerProps={{ "aria-label": t("modelConnectProtocol") }}
                             />
                           </Field>
@@ -802,7 +819,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             <Button
               variant="secondaryGray"
               onClick={runCheck}
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || protocolUnavailable}
               loading={busy === "check"}
               loadingLabel={t("profileLoadingModels")}
             >
@@ -812,7 +829,12 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             <Button
               variant="primary"
               onClick={saveProvider}
-              disabled={Boolean(busy) || showOpenCSGSignIn || (!provider.builtin && !draft.displayName.trim())}
+              disabled={
+                Boolean(busy) ||
+                protocolUnavailable ||
+                showOpenCSGSignIn ||
+                (!provider.builtin && !draft.displayName.trim())
+              }
               loading={busy === "save"}
               loadingLabel={t("modelContextSaving")}
             >
