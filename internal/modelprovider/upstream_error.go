@@ -30,6 +30,14 @@ func (e *UpstreamRequestError) Unwrap() error {
 // UserFacingUpstreamError unwraps a provider request error and returns the safe
 // response fields that API handlers may expose.
 func UserFacingUpstreamError(err error) (status int, code, message string, ok bool) {
+	var connectionErr *ConnectionError
+	if errors.As(err, &connectionErr) {
+		status = connectionErr.Status
+		if status < 400 || status > 599 {
+			status = http.StatusBadGateway
+		}
+		return status, connectionErr.Code, connectionErr.Message, true
+	}
 	var statusErr *ResponsesAPIStatusError
 	if !errors.As(err, &statusErr) {
 		var requestErr *UpstreamRequestError

@@ -75,6 +75,38 @@ func TestServiceDiscoveryAndVerification(t *testing.T) {
 	}
 }
 
+func TestAnthropicMessagesRequestUsesProviderAuthentication(t *testing.T) {
+	for _, tc := range []struct {
+		baseURL string
+		bearer  bool
+	}{
+		{"https://dashscope.aliyuncs.com/apps/anthropic/v1", false},
+		{"https://api.deepseek.com/anthropic/v1", false},
+		{"https://open.bigmodel.cn/api/anthropic/v1", false},
+		{"https://api.anthropic.com/v1", false},
+		{"https://api.moonshot.cn/anthropic/v1", true},
+		{"https://api.xiaomimimo.com/anthropic/v1", true},
+		{"https://api.minimax.io/anthropic/v1", true},
+		{"https://ark.cn-beijing.volces.com/api/compatible/v1", true},
+	} {
+		t.Run(tc.baseURL, func(t *testing.T) {
+			connection := ServiceConnection{BaseURL: tc.baseURL, APIKey: "test-key", Protocol: modelpreset.AnthropicMessages}
+			req, err := connection.Request(context.Background(), http.MethodPost, "/messages", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantAuthorization, wantKey := "", "test-key"
+			if tc.bearer {
+				wantAuthorization, wantKey = "Bearer test-key", ""
+			}
+			if req.Header.Get("Authorization") != wantAuthorization || req.Header.Get("X-Api-Key") != wantKey ||
+				req.Header.Get("Anthropic-Version") != "2023-06-01" {
+				t.Error("unexpected authentication or Anthropic version headers")
+			}
+		})
+	}
+}
+
 func TestResponsesConnectionProbeValidatesNullableError(t *testing.T) {
 	for _, tc := range []struct {
 		name, body, wantError string

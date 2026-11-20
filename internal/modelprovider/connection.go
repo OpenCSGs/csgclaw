@@ -402,6 +402,14 @@ func arkModelUnavailable() *ConnectionError {
 	return &ConnectionError{http.StatusNotFound, "ark_model_unavailable", "Activate a model in the Ark console or add an enabled inference endpoint ID in Advanced settings."}
 }
 
+func CheckAnthropicMessagesAPI(ctx context.Context, baseURL, apiKey, modelID string, headers map[string]string) error {
+	if apiKey == "" {
+		return &ConnectionError{401, "invalid_api_key", "API Key is required."}
+	}
+	connection := ServiceConnection{BaseURL: baseURL, APIKey: apiKey, Protocol: modelpreset.AnthropicMessages, Headers: headers}
+	return probeServiceModel(ctx, &http.Client{Timeout: 10 * time.Second}, connection, modelID, false)
+}
+
 func probeServiceModel(ctx context.Context, client *http.Client, c ServiceConnection, probeModel string, ark bool) error {
 	path := "/chat/completions"
 	payload := map[string]any{"model": probeModel, "messages": []map[string]string{{"role": "user", "content": "Reply OK."}}, "max_tokens": 32}
