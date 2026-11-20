@@ -1104,3 +1104,72 @@ func assertQueryValue(t *testing.T, values *url.URL, key, want string) {
 		t.Fatalf("query %s = %q, want %q", key, got, want)
 	}
 }
+
+func TestListOfficialAndOwnedSkipsUnrelatedTemplateRequests(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		for _, username := range []string{"", "Alice"} {
+			t.Run(fmt.Sprintf("legacy=%t/user=%s", legacy, username), func(t *testing.T) {
+				var requests []string
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests = append(requests, r.URL.Path)
+					paths := []string{"bob/unavailable", "agentichub/official", "alice/personal"}
+					switch {
+					case r.URL.Path == "/api/v1/agent/templates":
+						if legacy {
+							http.NotFound(w, r)
+							return
+						}
+						items := make([]map[string]any, 0, len(paths))
+						for _, path := range paths {
+							items = append(items, map[string]any{"type": "csgclaw", "metadata": map[string]any{"repo_path": path}})
+						}
+						_ = json.NewEncoder(w).Encode(map[string]any{"total": len(items), "data": items})
+					case r.URL.Path == "/api/v1/organization/agentichub/codes":
+						items := make([]map[string]any, 0, len(paths))
+						for _, path := range paths {
+							items = append(items, map[string]any{"path": path, "default_branch": "main"})
+						}
+						_ = json.NewEncoder(w).Encode(map[string]any{"data": items})
+					case strings.HasPrefix(r.URL.Path, "/api/v1/codes/agentichub/official"),
+						strings.HasPrefix(r.URL.Path, "/api/v1/codes/alice/personal"):
+						if strings.HasSuffix(r.URL.Path, "/blob/agent.toml") {
+							writeRemoteBlob(t, w, "agent.toml", []byte(remoteTestManifest))
+						} else {
+							_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"default_branch": "main"}})
+						}
+					default:
+						http.Error(w, "unrelated repository must not be read", http.StatusInternalServerError)
+					}
+				}))
+				t.Cleanup(srv.Close)
+				svc, err := NewService(config.HubConfig{Registries: []config.HubRegistryConfig{
+					{Name: "official", Kind: RegistryKindRemote, URL: srv.URL, Enabled: true},
+				}}, func(cfg config.HubRegistryConfig) (Store, error) {
+					if cfg.Kind == RegistryKindRemote {
+						return NewAuthenticatedRemoteStore(srv.URL, "test-token", username), nil
+					}
+					return stubStore{}, nil
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				items, err := svc.ListRemoteOfficialAndOwned(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := 1
+				if username != "" {
+					want++
+				}
+				if len(items) != want || items[0].ID != "agentichub/official" {
+					t.Fatalf("items = %+v, want official and %d total templates", items, want)
+				}
+				for _, path := range requests {
+					if strings.Contains(path, "bob/") || (username == "" && strings.Contains(path, "alice/")) {
+						t.Fatalf("unexpected detail request: %s", path)
+					}
+				}
+			})
+		}
+	}
+}

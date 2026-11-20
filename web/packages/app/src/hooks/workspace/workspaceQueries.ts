@@ -280,22 +280,25 @@ export function useWorkspaceRuntimeImagesQuery(): UseQueryResult<string[]> {
 }
 
 export function useWorkspaceHubTemplatesQuery(
-  options: { enabled?: boolean; refreshWhenVisible?: boolean } = {},
+  options: { enabled?: boolean; refreshWhenVisible?: boolean; officialAndOwned?: boolean } = {},
 ): UseQueryResult<HubTemplate[]> {
   const queryClient = useQueryClient();
   const refreshWhenVisible = options.enabled !== false && options.refreshWhenVisible === true;
+  const queryKey = options.officialAndOwned
+    ? [...workspaceQueryKeys.hubTemplates(), "official-and-owned"]
+    : workspaceQueryKeys.hubTemplates();
   const query = useQuery<HubTemplate[]>({
-    queryKey: workspaceQueryKeys.hubTemplates(),
+    queryKey,
     queryFn: async () => {
       const local = await fetchHubTemplates("local");
       const items = Array.isArray(local) ? local : [];
       // Publish disk-backed templates immediately while community reads continue.
-      queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) => [
+      queryClient.setQueryData<HubTemplate[]>(queryKey, (current) => [
         ...items,
         ...(current || []).filter((item) => item.source?.kind === "remote"),
       ]);
-      const payload = await fetchHubTemplates("remote");
-      const current = queryClient.getQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates()) || items;
+      const payload = await fetchHubTemplates("remote", options.officialAndOwned === true);
+      const current = queryClient.getQueryData<HubTemplate[]>(queryKey) || items;
       return [...current.filter((item) => item.source?.kind !== "remote"), ...(Array.isArray(payload) ? payload : [])];
     },
     staleTime: refreshWhenVisible ? 0 : 30_000,

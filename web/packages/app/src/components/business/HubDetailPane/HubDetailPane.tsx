@@ -843,7 +843,7 @@ export function HubDetailPane({
     skillDeleteBusy = false,
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
-  const templatesURL = agenticHubTemplatesURL(agenticHubSiteURL);
+  const templatesURL = agenticHubTemplatesURL(agenticHubSiteURL, "personal");
   const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate);
   const templateReview = hubTemplateReviewState(selectedTemplate);
 

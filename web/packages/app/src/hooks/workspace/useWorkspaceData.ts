@@ -75,6 +75,7 @@ export function useWorkspaceData() {
       queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) =>
         typeof value === "function" ? value(current ?? []) : value,
       );
+      void queryClient.invalidateQueries({ queryKey: [...workspaceQueryKeys.hubTemplates(), "official-and-owned"] });
     },
     [queryClient],
   );

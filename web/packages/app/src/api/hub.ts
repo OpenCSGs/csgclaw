@@ -19,8 +19,9 @@ type PublishAgentTemplatePayload = {
   include_memory?: boolean;
 };
 
-export function fetchHubTemplates(scope?: "local" | "remote"): Promise<HubTemplate[]> {
-  return get<HubTemplate[]>(scope ? `${HUB_TEMPLATES_PATH}?scope=${scope}` : HUB_TEMPLATES_PATH);
+export function fetchHubTemplates(scope?: "local" | "remote", officialAndOwned = false): Promise<HubTemplate[]> {
+  const group = scope === "remote" && officialAndOwned ? "&group=official-and-owned" : "";
+  return get<HubTemplate[]>(scope ? `${HUB_TEMPLATES_PATH}?scope=${scope}${group}` : HUB_TEMPLATES_PATH);
 }
 
 export function fetchHubTemplate(templateID: string): Promise<HubTemplate> {
