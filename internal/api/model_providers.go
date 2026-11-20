@@ -143,10 +143,6 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	if err := resolveModelProviderRequest(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 	if err := validateModelOverrides(req.ModelOverrides); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request_error", "message": err.Error()}})
 		return
@@ -163,6 +159,10 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 	existing, exists := cfg.Models.Providers[id]
 	if !exists && !agent.IsBuiltinModelProviderID(id) {
 		http.Error(w, fmt.Sprintf("model provider %q not found", id), http.StatusNotFound)
+		return
+	}
+	if err := resolveSavedModelProviderRequest(&req, existing); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if agent.IsBuiltinModelProviderID(id) {
@@ -255,10 +255,6 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := resolveModelProviderRequest(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 	cfg, path, err := h.loadBootstrapConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -269,6 +265,10 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 	checkConfig := existing
 	// Built-in OpenCSG checks use the gateway from the signed-in account.
 	if id != agent.ModelProviderIDOpenCSG {
+		if err := resolveSavedModelProviderRequest(&req, existing); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		checkConfig = providerConfigFromRequest(existing, req, true).Resolved()
 	}
 	result := appCheckModelProvider(r.Context(), providerCheckInput(id, checkConfig, req.Connect))
@@ -484,15 +484,44 @@ func resolveModelProviderRequest(req *modelProviderRequest) error {
 	if !ok {
 		return fmt.Errorf("region %q is unavailable for %s", req.Region, p.Name)
 	}
-	// A preset supplied without transport fields uses the official service defaults.
 	req.Region = region.ID
-	if req.BaseURL == "" {
-		req.BaseURL = region.BaseURL
-	}
+	usesPresetURL := strings.TrimSpace(req.BaseURL) == "" || region.MatchesBaseURL(req.BaseURL)
 	if req.APIProtocol == "" {
 		req.APIProtocol = p.Protocol
+		if usesPresetURL {
+			req.APIProtocol = region.DefaultProtocol
+		}
+	}
+	if usesPresetURL {
+		if p.ID == "custom" {
+			return nil
+		}
+		baseURL, ok := region.ProtocolURLs[req.APIProtocol]
+		if !ok {
+			return fmt.Errorf("protocol %q is unavailable for %s in %s", req.APIProtocol, p.Name, region.Name)
+		}
+		req.BaseURL = baseURL
 	}
 	return nil
+}
+
+func resolveSavedModelProviderRequest(req *modelProviderRequest, existing config.ProviderConfig) error {
+	if req.Preset != "" {
+		return resolveModelProviderRequest(req)
+	}
+	if req.APIProtocol == "" {
+		return nil
+	}
+	if existing.Preset != "" {
+		req.Preset = existing.Preset
+		if req.Region == "" {
+			req.Region = existing.Region
+		}
+		if req.BaseURL == "" {
+			req.BaseURL = existing.BaseURL
+		}
+	}
+	return resolveModelProviderRequest(req)
 }
 
 func providerCheckInput(id string, p config.ProviderConfig, verify bool) agent.ModelProviderCheckInput {

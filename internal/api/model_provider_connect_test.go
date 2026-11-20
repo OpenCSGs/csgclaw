@@ -153,3 +153,83 @@ func TestModelProviderPresetsAndInvalidRequests(t *testing.T) {
 		}
 	}
 }
+
+func TestModelProviderPresetsResolveEveryDocumentedProtocol(t *testing.T) {
+	for _, preset := range modelpreset.Catalog() {
+		for _, region := range preset.Regions {
+			if len(region.ProtocolURLs) > 0 {
+				expected := modelpreset.ChatCompletions
+				if region.ProtocolURLs[modelpreset.Responses] != "" {
+					expected = modelpreset.Responses
+				} else if region.ProtocolURLs[modelpreset.ChatCompletions] == "" {
+					expected = modelpreset.AnthropicMessages
+				}
+				req := modelProviderRequest{Preset: preset.ID, Region: region.ID}
+				if err := resolveModelProviderRequest(&req); err != nil || req.APIProtocol != expected || req.BaseURL != region.ProtocolURLs[expected] {
+					t.Fatalf("%s/%s default = %s %s (%v)", preset.ID, region.ID, req.APIProtocol, req.BaseURL, err)
+				}
+			}
+			for protocol, want := range region.ProtocolURLs {
+				t.Run(preset.ID+"/"+region.ID+"/"+protocol, func(t *testing.T) {
+					req := modelProviderRequest{Preset: preset.ID, Region: region.ID, APIProtocol: protocol, BaseURL: region.BaseURL}
+					if err := resolveModelProviderRequest(&req); err != nil || req.BaseURL != want {
+						t.Fatalf("resolved base = %q, want %q, error = %v", req.BaseURL, want, err)
+					}
+				})
+			}
+		}
+	}
+	for _, req := range []modelProviderRequest{
+		{Preset: "claude-api", APIProtocol: modelpreset.Responses},
+		{Preset: "zhipu", Region: "global", APIProtocol: modelpreset.Responses},
+	} {
+		if err := resolveModelProviderRequest(&req); err == nil {
+			t.Fatalf("accepted unverified protocol for %s/%s", req.Preset, req.Region)
+		}
+	}
+}
+
+func TestGLMCodingPlanDefaultsToRegionalResponses(t *testing.T) {
+	for _, tc := range []struct{ region, host string }{
+		{"cn", "https://open.bigmodel.cn"},
+		{"global", "https://api.z.ai"},
+	} {
+		t.Run(tc.region, func(t *testing.T) {
+			create := modelProviderRequest{Preset: "zhipu-coding", Region: tc.region}
+			if err := resolveModelProviderRequest(&create); err != nil ||
+				create.APIProtocol != modelpreset.Responses || create.BaseURL != tc.host+"/api/v1" {
+				t.Fatalf("new provider = %+v (%v)", create, err)
+			}
+			chatURL := tc.host + "/api/coding/paas/v4"
+			chat := modelProviderRequest{Preset: create.Preset, Region: create.Region, APIProtocol: modelpreset.ChatCompletions, BaseURL: create.BaseURL}
+			if err := resolveModelProviderRequest(&chat); err != nil || chat.BaseURL != chatURL {
+				t.Fatalf("manual Chat selection = %+v (%v)", chat, err)
+			}
+			saved := providerConfigFromRequest(config.ProviderConfig{}, chat, false)
+			edit := modelProviderRequest{DisplayName: "Renamed Coding Plan"}
+			if err := resolveSavedModelProviderRequest(&edit, saved); err != nil {
+				t.Fatal(err)
+			}
+			updated := providerConfigFromRequest(saved, edit, true)
+			if updated.APIProtocol != modelpreset.ChatCompletions || updated.BaseURL != chatURL {
+				t.Fatalf("renaming changed saved transport to %s %s", updated.APIProtocol, updated.BaseURL)
+			}
+		})
+	}
+}
+
+func TestGLMResponseSwitchChangesOfficialAddressAndPreservesCustomGateway(t *testing.T) {
+	draft := modelProviderRequest{Preset: "zhipu", Region: "cn", BaseURL: "https://gateway.example.test/v1"}
+	if err := resolveModelProviderRequest(&draft); err != nil || draft.APIProtocol != modelpreset.ChatCompletions {
+		t.Fatalf("custom gateway default = %q (%v)", draft.APIProtocol, err)
+	}
+	saved := config.ProviderConfig{Preset: "zhipu", Region: "cn", BaseURL: "https://open.bigmodel.cn/api/paas/v4", APIProtocol: modelpreset.ChatCompletions}
+	req := modelProviderRequest{APIProtocol: modelpreset.Responses}
+	if err := resolveSavedModelProviderRequest(&req, saved); err != nil || req.BaseURL != "https://open.bigmodel.cn/api/v1" {
+		t.Fatalf("resolved request = %+v, error = %v", req, err)
+	}
+	req = modelProviderRequest{APIProtocol: modelpreset.Responses, BaseURL: "https://gateway.example.test/v1"}
+	if err := resolveSavedModelProviderRequest(&req, saved); err != nil || req.BaseURL != "https://gateway.example.test/v1" {
+		t.Fatalf("resolved request = %+v, error = %v", req, err)
+	}
+}

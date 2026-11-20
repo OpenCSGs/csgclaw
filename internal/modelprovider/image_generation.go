@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -46,11 +45,28 @@ func IsGPTImageModel(model string) bool {
 // IsImageGenerationModel recognizes image generators whose context settings do
 // not govern the image generation endpoint. Provider-declared models also apply.
 func IsImageGenerationModel(model string) bool {
+	return KnownImageGenerationModes(model) != (modelcap.ImageGeneration{})
+}
+
+// KnownImageGenerationModes covers model IDs from directories that omit task metadata.
+func KnownImageGenerationModes(model string) modelcap.ImageGeneration {
 	name := strings.ToLower(strings.TrimSpace(model))
 	if index := strings.LastIndex(name, "/"); index >= 0 {
 		name = name[index+1:]
 	}
-	return IsGPTImageModel(name) || name == "qwen-image" || strings.HasPrefix(name, "qwen-image-") || strings.HasPrefix(name, "doubao-seedream-") || name == "gemini-2.5-flash-image" || name == "gemini-3.1-flash-image" || name == "gemini-3-pro-image"
+	switch {
+	case strings.HasPrefix(name, "qwen-image-edit"), name == "wan2.6-image":
+		return modelcap.ImageGeneration{ImageToImage: true}
+	case IsGPTImageModel(name), strings.HasPrefix(name, "qwen-image-2.0"), strings.HasPrefix(name, "qwen-image-3.0"),
+		name == "wan2.7-image", name == "wan2.7-image-pro", strings.HasPrefix(name, "doubao-seedream-"), name == "minimax-h3-image", name == "minimax-h3-image-highspeed",
+		name == "gemini-2.5-flash-image", name == "gemini-3.1-flash-image", name == "gemini-3-pro-image":
+		return modelcap.ImageGeneration{TextToImage: true, ImageToImage: true}
+	case name == "qwen-image", strings.HasPrefix(name, "qwen-image-"), name == "z-image-turbo", name == "wan2.6-t2i",
+		name == "glm-image", name == "cogview-4", name == "cogview-4-250304", name == "cogview-3-flash":
+		return modelcap.ImageGeneration{TextToImage: true}
+	default:
+		return modelcap.ImageGeneration{}
+	}
 }
 
 const MaxGeneratedImageBytes = 32 << 20
@@ -114,42 +130,16 @@ func GenerateImage(ctx context.Context, client *http.Client, baseURL, key string
 
 func GenerateImageWithOptions(ctx context.Context, client *http.Client, baseURL, key string, headers map[string]string, model, prompt string, options ImageGenerationOptions, references ...ReferenceImage) (GeneratedImage, error) {
 	var result GeneratedImage
-	fields := map[string]string{"model": model, "prompt": prompt}
-	if size := strings.TrimSpace(options.Size); size != "" {
-		fields["size"] = size
+	if len(references) > MaxImageEditReferences {
+		return result, fmt.Errorf("image edits support up to %d reference images", MaxImageEditReferences)
 	}
-	if resolution := strings.TrimSpace(options.Resolution); resolution != "" {
-		fields["resolution"] = resolution
-	}
-	endpoint, contentType := "/images/generations", "application/json"
-	var body []byte
-	var err error
-	if len(references) == 0 {
-		params := map[string]any{"n": 1}
-		for name, value := range fields {
-			params[name] = value
-		}
-		if IsGPTImageModel(model) {
-			params["output_format"] = "png"
-		} else {
-			params["response_format"] = "b64_json"
-		}
-		body, err = json.Marshal(params)
-	} else {
-		if len(references) > MaxImageEditReferences {
-			return result, fmt.Errorf("image edits support up to %d reference images", MaxImageEditReferences)
-		}
-		endpoint = "/images/edits"
-		field := "image"
-		if len(references) > 1 {
-			field = "image[]"
-		}
-		body, contentType, err = referenceImageMultipart(fields, field, references)
-	}
+	mode := imageAPIForURL(baseURL)
+	imageURL, contentType, body, err := buildImageRequest(baseURL, mode, model, prompt, options, references)
+
 	if err != nil {
 		return result, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, imageURL, bytes.NewReader(body))
 	if err != nil {
 		return result, fmt.Errorf("invalid image provider URL")
 	}
@@ -186,25 +176,19 @@ func GenerateImageWithOptions(ctx context.Context, client *http.Client, baseURL,
 	if len(data) > (MaxGeneratedImageBytes*4/3)+65536 {
 		return result, &ImageGenerationError{HTTPStatus: response.StatusCode, Code: "upstream_response_invalid", Message: "The image service response exceeds the supported size limit."}
 	}
-	var payload struct {
-		Data []struct {
-			B64 string `json:"b64_json"`
-			URL string `json:"url"`
-		} `json:"data"`
-	}
-	decodeErr := json.Unmarshal(data, &payload)
-	if decodeErr == nil && len(payload.Data) == 0 {
+	images, decodeErr := decodeImageResults(mode, data)
+	if decodeErr == nil && len(images) == 0 {
 		if _, hasError := UpstreamError(data); hasError {
 			return result, imageResponseError(response, data, key, headers)
 		}
 	}
-	if decodeErr != nil || len(payload.Data) != 1 || (payload.Data[0].B64 == "" && payload.Data[0].URL == "") {
+	if decodeErr != nil || len(images) != 1 || (images[0].B64 == "" && images[0].URL == "") {
 		return result, &ImageGenerationError{HTTPStatus: response.StatusCode, Code: "upstream_response_invalid", Message: "The image service did not return base64 image data or an image URL."}
 	}
-	if payload.Data[0].B64 != "" {
-		result.Data, err = base64.StdEncoding.DecodeString(payload.Data[0].B64)
+	if images[0].B64 != "" {
+		result.Data, err = base64.StdEncoding.DecodeString(images[0].B64)
 	} else {
-		result.Data, err = downloadGeneratedImage(ctx, payload.Data[0].URL, baseURL)
+		result.Data, err = downloadGeneratedImage(ctx, images[0].URL, baseURL)
 		if err != nil {
 			return result, err
 		}

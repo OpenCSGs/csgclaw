@@ -61,6 +61,10 @@ export function useModelProviderCreation({
           timeout: "modelConnectErrorNetwork",
           network_error: "modelConnectErrorNetwork",
           model_not_found: "modelConnectErrorModel",
+          unsupported_protocol: "modelConnectErrorProtocol",
+          invalid_inference_request: "modelConnectErrorInferenceRequest",
+          ark_model_unavailable: "modelConnectErrorArkUnavailable",
+          ark_endpoint_required: "modelConnectErrorArkEndpoint",
           models_required: "modelConnectManualModels",
         } as const
       )[code as "invalid_api_key"];
