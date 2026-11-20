@@ -152,13 +152,9 @@ func summaryDirectories(ctx context.Context, root *os.Root) ([]string, error) {
 			continue
 		}
 		name := entry.Name()
+		// A source directory can also contain a previously installed top-level Skill.
+		names = append(names, name)
 		if name != "user" && name != "official" {
-			names = append(names, name)
-			continue
-		}
-		if _, err := root.Lstat(filepath.Join(name, skillFileName)); !errors.Is(err, fs.ErrNotExist) {
-			// A top-level Skill can itself be named user or official.
-			names = append(names, name)
 			continue
 		}
 		children, err := fs.ReadDir(root.FS(), name)

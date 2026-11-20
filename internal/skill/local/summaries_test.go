@@ -83,12 +83,12 @@ func TestGroupedSkillSummaries(t *testing.T) {
 	}
 }
 
-func TestSkillNamedAfterGroupKeepsItsOwnSummary(t *testing.T) {
+func TestSkillNamedAfterGroupCoexistsWithGroupedSkills(t *testing.T) {
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "user", skillFileName), "# User")
-	mustWriteFile(t, filepath.Join(root, "user", "example", skillFileName), "# Example")
+	mustWriteFile(t, filepath.Join(root, "user", "review", skillFileName), "# Review")
 	items, err := ListSummaries(context.Background(), root)
-	if err != nil || len(items) != 1 || items[0].Name != "user" {
+	if err != nil || len(items) != 2 || items[0].Name != "user" || items[1].Name != "user/review" {
 		t.Fatalf("summaries = %+v, err = %v", items, err)
 	}
 }
