@@ -112,6 +112,7 @@ type ModelProviderCheckInput struct {
 	APIKey      string
 	Headers     map[string]string
 	Models      []string
+	ImageModels []string
 }
 
 type ModelProviderCheckFunc func(context.Context, ModelProviderCheckInput) ModelProviderCheckResult
@@ -431,7 +432,10 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		baseURL := strings.TrimRight(strings.TrimSpace(input.BaseURL), "/")
 		apiKey := strings.TrimSpace(input.APIKey)
 		if input.Preset != "" || input.APIProtocol != "" {
-			checked, checkErr := modelprovider.CheckService(ctx, modelprovider.ServiceConnection{BaseURL: baseURL, APIKey: apiKey, Protocol: input.APIProtocol, Preset: input.Preset, Headers: input.Headers, Models: input.Models}, input.Verify)
+			checked, checkErr := modelprovider.CheckService(ctx, modelprovider.ServiceConnection{
+				BaseURL: baseURL, APIKey: apiKey, Protocol: input.APIProtocol, Preset: input.Preset,
+				Headers: input.Headers, Models: input.Models, ImageModels: input.ImageModels,
+			}, input.Verify)
 			result.ResolvedBaseURL = baseURL
 			result.Models = checked.Models
 			result.ImageModels = checked.ImageModels
@@ -494,6 +498,7 @@ func RefreshModelProviderCatalog(ctx context.Context, llm config.LLMConfig, chec
 			APIKey:      existing.APIKey,
 			Headers:     existing.Headers,
 			Models:      existing.Models,
+			ImageModels: existing.ImageModels,
 		})
 		if result.ID == "" {
 			result.ID = id

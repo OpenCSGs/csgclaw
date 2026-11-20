@@ -248,10 +248,16 @@ func TestArkConnectionUsesEnabledTextModels(t *testing.T) {
 	}
 
 	probed = nil
-	conn.Models = []string{"ep-private"}
+	conn.Models = []string{"ep-private", "working-model"}
 	out, err = CheckService(context.Background(), conn, true)
-	if err != nil || !reflect.DeepEqual(probed, []string{"ep-private"}) || out.Models[0] != "ep-private" {
+	if err != nil || !reflect.DeepEqual(probed, []string{"ep-private"}) ||
+		!reflect.DeepEqual(out.Models, probed) || len(out.ImageModels) != 0 || out.Source != "manual" {
 		t.Fatalf("manual endpoint: models=%v probed=%v error=%v", out.Models, probed, err)
+	}
+	probed = nil
+	out, err = CheckService(context.Background(), conn, false)
+	if err != nil || len(probed) != 0 || !reflect.DeepEqual(out.Models, []string{"ep-private"}) || len(out.ImageModels) != 0 {
+		t.Fatalf("manual endpoint after refresh: directory=%+v probed=%v error=%v", out, probed, err)
 	}
 }
 

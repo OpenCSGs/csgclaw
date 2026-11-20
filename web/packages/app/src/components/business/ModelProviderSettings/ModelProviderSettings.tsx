@@ -171,7 +171,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
           message: result.message || result.status,
           status: result.status,
         });
-        if (result.base_url || result.models?.length) {
+        if (result.base_url || result.status === "connected") {
           setDraft((current) => {
             if (
               current.baseURL.trim() !== baseURL.trim() ||
@@ -182,7 +182,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             return {
               ...current,
               baseURL: result.base_url || current.baseURL,
-              modelsText: result.models?.length ? result.models.join("\n") : current.modelsText,
+              modelsText: result.status === "connected" ? (result.models ?? []).join("\n") : current.modelsText,
             };
           });
         }
@@ -469,7 +469,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                 ? t("csghubNotSignedIn")
                 : modelProviderStatusLabel(itemStatus, item, t);
               const active = (!embedded || detailOpen) && item.id === provider.id;
-              const itemModelCount = item.models.length;
+              const itemModelCount = mergeModelProviderModelIDs(item.models, item.imageModels, item.videoModels).length;
               const itemMetaParts = [
                 itemModelCount ? t("modelProviderModelCount", { count: itemModelCount }) : t("modelProviderNoModels"),
               ].filter(Boolean);

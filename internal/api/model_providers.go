@@ -8,12 +8,14 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"slices"
 	"strings"
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelpreset"
+	"csgclaw/internal/modelprovider"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -31,6 +33,7 @@ type modelProviderRequest struct {
 	APIKey          string                       `json:"api_key,omitempty"`
 	Headers         map[string]string            `json:"headers,omitempty"`
 	Models          []string                     `json:"models,omitempty"`
+	ImageModels     []string                     `json:"image_models,omitempty"`
 	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
 }
 
@@ -272,7 +275,8 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 		checkConfig = providerConfigFromRequest(existing, req, true).Resolved()
 	}
 	result := appCheckModelProvider(r.Context(), providerCheckInput(id, checkConfig, req.Connect))
-	if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed && !modelProviderTransportChanged(existing, checkConfig) {
+	if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed &&
+		!modelProviderTransportChanged(existing, checkConfig) && slices.Equal(existing.ImageModels, checkConfig.ImageModels) {
 		cfg.Models = updated
 		if err := h.saveModelProvidersConfig(r.Context(), path, cfg); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -339,6 +343,9 @@ func providerConfigFromRequest(existing config.ProviderConfig, req modelProvider
 	}
 	if req.Models != nil {
 		out.Models = append([]string(nil), req.Models...)
+	}
+	if req.ImageModels != nil {
+		out.ImageModels = append([]string(nil), req.ImageModels...)
 	}
 	if strings.TrimSpace(req.ReasoningEffort) != "" {
 		out.ReasoningEffort = strings.TrimSpace(req.ReasoningEffort)
@@ -473,6 +480,9 @@ func resolveModelProviderRequest(req *modelProviderRequest) error {
 	if !modelpreset.ValidProtocol(req.APIProtocol) {
 		return fmt.Errorf("invalid api_protocol")
 	}
+	if err := validateArkImageEndpoints(req.Preset, req.ImageModels); err != nil {
+		return err
+	}
 	if req.Preset == "" {
 		return nil
 	}
@@ -510,7 +520,7 @@ func resolveSavedModelProviderRequest(req *modelProviderRequest, existing config
 		return resolveModelProviderRequest(req)
 	}
 	if req.APIProtocol == "" {
-		return nil
+		return validateArkImageEndpoints(existing.Preset, req.ImageModels)
 	}
 	if existing.Preset != "" {
 		req.Preset = existing.Preset
@@ -524,6 +534,24 @@ func resolveSavedModelProviderRequest(req *modelProviderRequest, existing config
 	return resolveModelProviderRequest(req)
 }
 
+func validateArkImageEndpoints(preset string, models []string) error {
+	if len(models) == 0 {
+		return nil
+	}
+	if preset != "volcengine" {
+		return fmt.Errorf("manual image endpoints require the Volcano Ark API preset")
+	}
+	for _, id := range models {
+		if !modelprovider.IsArkEndpointID(strings.TrimSpace(id)) {
+			return fmt.Errorf("image endpoint IDs must start with ep-")
+		}
+	}
+	return nil
+}
+
 func providerCheckInput(id string, p config.ProviderConfig, verify bool) agent.ModelProviderCheckInput {
-	return agent.ModelProviderCheckInput{ID: id, BaseURL: p.BaseURL, APIKey: p.APIKey, Headers: p.Headers, Models: p.Models, Preset: p.Preset, Region: p.Region, APIProtocol: p.APIProtocol, Verify: verify}
+	return agent.ModelProviderCheckInput{
+		ID: id, BaseURL: p.BaseURL, APIKey: p.APIKey, Headers: p.Headers, Models: p.Models, ImageModels: p.ImageModels,
+		Preset: p.Preset, Region: p.Region, APIProtocol: p.APIProtocol, Verify: verify,
+	}
 }
