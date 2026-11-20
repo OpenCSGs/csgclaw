@@ -2,10 +2,15 @@ package codex
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
+	"csgclaw/internal/modelpreset"
 	"csgclaw/internal/modelprovider"
 	agentruntime "csgclaw/internal/runtime"
 )
@@ -136,6 +141,82 @@ func TestValidateConfigRejectsProviderWithoutUsableResponsesOrChatEndpoint(t *te
 	})
 	if !errors.Is(err, modelprovider.ErrResponsesAPIUnsupported) {
 		t.Fatalf("ValidateConfig() error = %v, want unsupported provider rejection", err)
+	}
+}
+
+func TestValidateConfigChecksSelectedModelProtocol(t *testing.T) {
+	var messagesCalls, chatCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Model string `json:"model"`
+		}
+		if r.Method != http.MethodPost || json.NewDecoder(r.Body).Decode(&body) != nil || body.Model != "qwen3.8-flash" {
+			t.Errorf("unexpected probe request: %s %s, model %q", r.Method, r.URL.Path, body.Model)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/responses":
+			_, _ = w.Write([]byte(`{"object":"response","status":"completed"}`))
+		case "/v1/chat/completions":
+			if r.Header.Get("Authorization") != "Bearer test-key" || r.Header.Get("X-Test-Header") != "custom" {
+				t.Error("missing Chat Completions probe headers")
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			chatCalls.Add(1)
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"OK"}}]}`))
+		case "/v1/messages":
+			if r.Header.Get("X-Api-Key") != "test-key" || r.Header.Get("Anthropic-Version") != "2023-06-01" || r.Header.Get("X-Test-Header") != "custom" {
+				t.Error("missing Messages probe headers")
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if messagesCalls.Add(1) == 1 {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write([]byte(`{"type":"message","content":[{"type":"text","text":"OK"}]}`))
+		default:
+			t.Errorf("unexpected probe path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+
+	rt := &Runtime{}
+	config := agentruntime.RuntimeConfigSnapshot{Profile: agentruntime.RuntimeProfileConfig{
+		Provider:    "api",
+		BaseURL:     upstream.URL + "/v1",
+		APIKey:      "test-key",
+		ModelID:     "qwen3.8-flash",
+		APIProtocol: modelpreset.Responses,
+		Headers:     map[string]string{"X-Test-Header": "custom"},
+	}}
+	ctx := context.Background()
+	if err := rt.ValidateConfig(ctx, config); err != nil {
+		t.Fatalf("validate Responses: %v", err)
+	}
+	config.Profile.APIProtocol = modelpreset.AnthropicMessages
+	err := rt.ValidateConfig(ctx, config)
+	status, code, _, ok := modelprovider.UserFacingUpstreamError(err)
+	if !ok || status != http.StatusNotFound || code != "model_not_found" {
+		t.Fatalf("validate unavailable Messages model: %v (status %d, code %q)", err, status, code)
+	}
+	for i := 0; i < 2; i++ {
+		if err := rt.ValidateConfig(ctx, config); err != nil {
+			t.Fatalf("validate Messages: %v", err)
+		}
+	}
+	if calls := messagesCalls.Load(); calls != 2 {
+		t.Fatalf("Messages requests = %d, want a failed probe and one successful retry", calls)
+	}
+	config.Profile.APIProtocol = modelpreset.ChatCompletions
+	if err := rt.ValidateConfig(ctx, config); err != nil {
+		t.Fatalf("validate Chat Completions: %v", err)
+	}
+	if calls := chatCalls.Load(); calls != 1 {
+		t.Fatalf("Chat Completions requests = %d, want 1", calls)
 	}
 }
 

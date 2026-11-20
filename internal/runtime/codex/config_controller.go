@@ -14,6 +14,7 @@ import (
 
 	"csgclaw/internal/auth"
 	"csgclaw/internal/mcpschema"
+	"csgclaw/internal/modelpreset"
 	"csgclaw/internal/modelprovider"
 	agentruntime "csgclaw/internal/runtime"
 )
@@ -28,20 +29,20 @@ var openCSGCredentialsForResponsesProbe = func(ctx context.Context) (string, str
 	return store.EnsureAIGatewayCredentials(ctx, &http.Client{})
 }
 
-type responsesProbeCache struct {
+type modelProbeCache struct {
 	mu      sync.Mutex
 	results map[string]struct{}
 }
 
-var codexResponsesProbeCache = responsesProbeCache{results: make(map[string]struct{})}
+var codexModelProbeCache = modelProbeCache{results: make(map[string]struct{})}
 
 func TestOnlySetResponsesAPIProbe(probe func(context.Context, string, string, string, map[string]string) error) func() {
 	previous := checkResponsesAPIForProvider
 	checkResponsesAPIForProvider = probe
-	codexResponsesProbeCache.clear()
+	codexModelProbeCache.clear()
 	return func() {
 		checkResponsesAPIForProvider = previous
-		codexResponsesProbeCache.clear()
+		codexModelProbeCache.clear()
 	}
 }
 
@@ -52,15 +53,15 @@ func (r *Runtime) ValidateConfig(ctx context.Context, current agentruntime.Runti
 	if current.SkipModelAvailabilityCheck {
 		return nil
 	}
-	target, ok, err := responsesProbeTarget(ctx, current.Profile)
+	target, ok, err := modelProbeTarget(ctx, current.Profile)
 	if err != nil {
-		return fmt.Errorf("validate Codex provider Responses API: %w", err)
+		return fmt.Errorf("validate Codex model provider: %w", err)
 	}
 	if !ok {
 		return nil
 	}
-	if err := codexResponsesProbeCache.validate(ctx, target); err != nil {
-		return fmt.Errorf("validate Codex provider Responses API at %s for model %s: %w", target.baseURL, target.modelID, err)
+	if err := codexModelProbeCache.validate(ctx, target); err != nil {
+		return fmt.Errorf("validate Codex provider at %s for model %s: %w", target.baseURL, target.modelID, err)
 	}
 	return nil
 }
@@ -213,29 +214,30 @@ func (r *Runtime) ListMCPServers(_ context.Context, h agentruntime.Handle, _ age
 	return agentruntime.MCPServersSnapshot{Servers: config}, nil
 }
 
-type responsesProbeTargetConfig struct {
+type modelProbeTargetConfig struct {
 	provider string
+	protocol string
 	baseURL  string
 	apiKey   string
 	modelID  string
 	headers  map[string]string
 }
 
-func responsesProbeTarget(ctx context.Context, profile agentruntime.RuntimeProfileConfig) (responsesProbeTargetConfig, bool, error) {
+func modelProbeTarget(ctx context.Context, profile agentruntime.RuntimeProfileConfig) (modelProbeTargetConfig, bool, error) {
 	provider := strings.ToLower(strings.TrimSpace(profile.Provider))
 	switch provider {
 	case "codex", "claude_code", "claude-code":
-		return responsesProbeTargetConfig{}, false, nil
+		return modelProbeTargetConfig{}, false, nil
 	}
 	if provider == "csghub" || provider == "opencsg" {
 		baseURL, apiKey, ok, err := openCSGCredentialsForResponsesProbe(ctx)
 		if err != nil {
-			return responsesProbeTargetConfig{}, false, fmt.Errorf("resolve OpenCSG credentials: %w", err)
+			return modelProbeTargetConfig{}, false, fmt.Errorf("resolve OpenCSG credentials: %w", err)
 		}
 		if !ok {
-			return responsesProbeTargetConfig{}, false, fmt.Errorf("OpenCSG sign-in is required")
+			return modelProbeTargetConfig{}, false, fmt.Errorf("OpenCSG sign-in is required")
 		}
-		return responsesProbeTargetConfig{
+		return modelProbeTargetConfig{
 			provider: provider,
 			baseURL:  strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 			apiKey:   strings.TrimSpace(apiKey),
@@ -245,10 +247,11 @@ func responsesProbeTarget(ctx context.Context, profile agentruntime.RuntimeProfi
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(profile.BaseURL), "/")
 	if baseURL == "" {
-		return responsesProbeTargetConfig{}, false, fmt.Errorf("provider base_url is required")
+		return modelProbeTargetConfig{}, false, fmt.Errorf("provider base_url is required")
 	}
-	return responsesProbeTargetConfig{
+	return modelProbeTargetConfig{
 		provider: provider,
+		protocol: profile.APIProtocol,
 		baseURL:  baseURL,
 		apiKey:   strings.TrimSpace(profile.APIKey),
 		modelID:  strings.TrimSpace(profile.ModelID),
@@ -256,8 +259,8 @@ func responsesProbeTarget(ctx context.Context, profile agentruntime.RuntimeProfi
 	}, true, nil
 }
 
-func (c *responsesProbeCache) validate(ctx context.Context, target responsesProbeTargetConfig) error {
-	key := responsesProbeCacheKey(target)
+func (c *modelProbeCache) validate(ctx context.Context, target modelProbeTargetConfig) error {
+	key := modelProbeCacheKey(target)
 	c.mu.Lock()
 	if c.results == nil {
 		c.results = make(map[string]struct{})
@@ -268,7 +271,14 @@ func (c *responsesProbeCache) validate(ctx context.Context, target responsesProb
 	}
 	c.mu.Unlock()
 
-	err := checkResponsesAPIForProvider(ctx, target.baseURL, target.apiKey, target.modelID, target.headers)
+	probe := checkResponsesAPIForProvider
+	switch target.protocol {
+	case modelpreset.AnthropicMessages:
+		probe = modelprovider.CheckAnthropicMessagesAPI
+	case modelpreset.ChatCompletions:
+		probe = modelprovider.CheckChatCompletionsAPI
+	}
+	err := probe(ctx, target.baseURL, target.apiKey, target.modelID, target.headers)
 
 	if err == nil {
 		c.mu.Lock()
@@ -278,14 +288,14 @@ func (c *responsesProbeCache) validate(ctx context.Context, target responsesProb
 	return err
 }
 
-func (c *responsesProbeCache) clear() {
+func (c *modelProbeCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.results = make(map[string]struct{})
 }
 
-func responsesProbeCacheKey(target responsesProbeTargetConfig) string {
-	return strings.TrimSpace(target.provider) + "\x00" + strings.TrimRight(strings.TrimSpace(target.baseURL), "/") + "\x00" + strings.TrimSpace(target.modelID)
+func modelProbeCacheKey(target modelProbeTargetConfig) string {
+	return target.provider + "\x00" + target.protocol + "\x00" + target.baseURL + "\x00" + target.modelID
 }
 
 func normalizeHeaders(values map[string]string) map[string]string {
