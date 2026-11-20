@@ -34,9 +34,13 @@ const protocolOptions = [
   { value: "anthropic_messages", label: "Anthropic Messages" },
 ] as const;
 
+function normalizeModelProviderURL(url: string) {
+  return url.trim().replace(/\/+$/, "").toLowerCase();
+}
+
 export function usesModelProviderPresetURL(region: ModelProviderRegion | undefined, baseURL: string) {
   if (!region?.protocol_urls) return false;
-  const normalized = baseURL.trim().replace(/\/+$/, "").toLowerCase();
+  const normalized = normalizeModelProviderURL(baseURL);
   return (
     !normalized ||
     [region.base_url, ...Object.values(region.protocol_urls)].some((url) => url?.toLowerCase() === normalized)
@@ -50,4 +54,25 @@ export function modelProviderProtocolOptions(region: ModelProviderRegion | undef
 
 export function modelProviderProtocolURL(region: ModelProviderRegion | undefined, protocol: string) {
   return region?.protocol_urls?.[protocol as ModelAPIProtocol];
+}
+
+export function resolveModelProviderProtocol(
+  protocol: string | undefined,
+  region: ModelProviderRegion | undefined,
+  baseURL: string,
+): ModelAPIProtocol | undefined {
+  const selected = protocolOptions.find((option) => option.value === protocol);
+  if (selected) return selected.value;
+  const normalized = normalizeModelProviderURL(baseURL);
+  if (!normalized || !region?.protocol_urls) return;
+
+  // An old configuration may omit the protocol. Infer it only from a known
+  // address, using the regional default when protocols share that address.
+  const matching = protocolOptions.filter(
+    ({ value }) => normalizeModelProviderURL(region.protocol_urls?.[value] ?? "") === normalized,
+  );
+  return (
+    matching.find(({ value }) => value === region.default_protocol)?.value ??
+    (matching.length === 1 ? matching[0].value : undefined)
+  );
 }
