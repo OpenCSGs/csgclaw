@@ -20,6 +20,14 @@ func TestCloudEndpointIsBoundToTrustedGatewayAndSandbox(t *testing.T) {
 		endpoint, gateway, sandbox string
 		valid                      bool
 	}{
+		{"https://opencsg.com/aigateway/v1/sandboxes/instance", "https://ai.space.opencsg.com/v1", "instance", true},
+		{"https://ai.space.opencsg.com/v1/sandboxes/instance", "https://opencsg.com/aigateway/v1/", "instance", true},
+		{"https://opencsg.com/aigateway/v1/sandboxes/other", "https://ai.space.opencsg.com/v1", "instance", false},
+		{"https://opencsg.com/v1/sandboxes/instance", "https://ai.space.opencsg.com/v1", "instance", false},
+		{"http://opencsg.com/aigateway/v1/sandboxes/instance", "https://ai.space.opencsg.com/v1", "instance", false},
+		{"https://opencsg.com.evil.test/aigateway/v1/sandboxes/instance", "https://ai.space.opencsg.com/v1", "instance", false},
+		{"https://opencsg.com/aigateway/v1/sandboxes/instance", "https://gateway.test/v1", "instance", false},
+		{"https://opencsg.com/aigateway/v1/sandboxes/instance?token=x", "https://ai.space.opencsg.com/v1", "instance", false},
 		{"https://gateway.test/v1/sandboxes/instance", "https://gateway.test/v1", "instance", true},
 		{"https://gateway.test/v1/sandboxes/allocation", "https://gateway.test/v1", "", true},
 		{"https://other.test/v1/sandboxes/instance", "https://gateway.test/v1", "instance", false},
@@ -31,9 +39,12 @@ func TestCloudEndpointIsBoundToTrustedGatewayAndSandbox(t *testing.T) {
 		{"https://gateway.test/v1/sandboxes/..", "https://gateway.test/v1", "", false},
 		{"http://gateway.test/v1/sandboxes/instance", "https://gateway.test/v1", "instance", false},
 	} {
-		_, err := validatedCloudEndpoint(tc.endpoint, tc.gateway, tc.sandbox)
+		endpoint, err := validatedCloudEndpoint(tc.endpoint, tc.gateway, tc.sandbox)
 		if (err == nil) != tc.valid {
 			t.Errorf("endpoint %q valid=%v err=%v", tc.endpoint, tc.valid, err)
+		}
+		if tc.valid && endpoint != tc.endpoint {
+			t.Errorf("endpoint = %q, want original URL %q", endpoint, tc.endpoint)
 		}
 	}
 }
