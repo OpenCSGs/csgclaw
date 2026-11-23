@@ -17,11 +17,21 @@ type History = {
   loaded: boolean;
   cleared?: boolean;
   loading: boolean;
+  loadingOlder: boolean;
   error: unknown;
 };
 
 function emptyHistory(roomID: string): History {
-  return { roomID, messages: [], before: "", tail: [], loaded: false, loading: false, error: null };
+  return {
+    roomID,
+    messages: [],
+    before: "",
+    tail: [],
+    loaded: false,
+    loading: false,
+    loadingOlder: false,
+    error: null,
+  };
 }
 
 export function useActivityHistory(roomID: string, active: boolean) {
@@ -65,7 +75,7 @@ export function useActivityHistory(roomID: string, active: boolean) {
       const controller = new AbortController();
       request = controller;
       duringRequest.clear();
-      commit({ ...start, loading: true, error: null });
+      commit({ ...start, loading: true, loadingOlder: older, error: null });
       const options = { limit: activityHistoryPageSize, signal: controller.signal };
 
       try {
@@ -115,10 +125,11 @@ export function useActivityHistory(roomID: string, active: boolean) {
           loaded: true,
           cleared: start.cleared || reset,
           loading: false,
+          loadingOlder: false,
           error: null,
         });
       } catch (error) {
-        if (!controller.signal.aborted) commit({ ...current.current, loading: false, error });
+        if (!controller.signal.aborted) commit({ ...current.current, loading: false, loadingOlder: false, error });
       } finally {
         if (request === controller) {
           request = null;

@@ -66,7 +66,7 @@ import {
   type ConversationActivityTone,
 } from "./conversationActivity";
 import styles from "./ConversationActivityPanel.module.css";
-import { ActivityPagination, LoadEarlierActivity } from "./ActivityPagination";
+import { ActivityHistoryContinuation, ActivityPagination } from "./ActivityPagination";
 import { activityHistoryPageSize, useActivityHistory } from "./useActivityHistory";
 import { useActivityPage } from "./useActivityPage";
 
@@ -142,6 +142,9 @@ function ActivityPanel({
 }: ConversationActivityPanelProps) {
   const history = useActivityHistory(conversation.id, active);
   const { loading, refresh } = history;
+  const earlier = history.before
+    ? { cursor: history.before, load: history.loadOlder, loading: history.loadingOlder }
+    : undefined;
   const loadError = history.error ? errorMessage(history.error, t("agentActivityLoadFailed")) : "";
   const { turnID, requestID } = actorSelection ?? {};
   const target = useMemo(
@@ -455,8 +458,9 @@ function ActivityPanel({
           initialEntryID={initialEntryID}
           loading={loading}
           loadError={loadError}
+          active={active}
           onRefresh={refresh}
-          onLoadEarlier={history.before ? history.loadOlder : undefined}
+          earlier={earlier}
           onShowEvents={() => setShowEvents(true)}
           onCitationSelect={onCitationSelect}
           renderEntry={(entry, expandAll, selected) => (
@@ -619,7 +623,17 @@ function ActivityPanel({
                 {loadError}
               </div>
             ) : null}
-            {history.before ? <div className={styles.empty}>{t("activityPartialHistory")}</div> : null}
+            {earlier && sortMode === "chronological" && page.index === 0 ? (
+              <ActivityHistoryContinuation
+                earlier={earlier}
+                active={active}
+                busy={loading}
+                failed={Boolean(loadError)}
+                edge="start"
+                scrollRef={bodyRef}
+                t={t}
+              />
+            ) : null}
             {loading && entries.length === 0 ? <div className={styles.empty}>{t("agentActivityLoading")}</div> : null}
             {!loading && !loadError && entries.length === 0 ? (
               <div className={styles.empty}>{t("agentActivityEmpty")}</div>
@@ -653,13 +667,25 @@ function ActivityPanel({
             ) : null}
             <ActivityPagination
               {...page}
+              active={active}
+              scrollRef={bodyRef}
               t={t}
               onChange={(index) => {
                 if (bodyRef.current) bodyRef.current.scrollTop = 0;
                 page.onChange(index);
               }}
             />
-            {history.before ? <LoadEarlierActivity loading={loading} onLoad={history.loadOlder} t={t} /> : null}
+            {earlier && sortMode === "newest_first" && page.index + 1 >= page.count ? (
+              <ActivityHistoryContinuation
+                earlier={earlier}
+                active={active}
+                busy={loading}
+                failed={Boolean(loadError)}
+                edge="end"
+                scrollRef={bodyRef}
+                t={t}
+              />
+            ) : null}
           </div>
         </>
       )}

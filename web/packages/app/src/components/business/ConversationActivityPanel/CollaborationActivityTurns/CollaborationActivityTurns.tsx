@@ -17,7 +17,7 @@ import {
 } from "@/models/conversations";
 import { progressDuration } from "@/models/turnProgress";
 import { isAutonomousCoordinationTool } from "@/models/agentActivity";
-import { ActivityPagination, LoadEarlierActivity } from "../ActivityPagination";
+import { ActivityHistoryContinuation, ActivityPagination, type EarlierActivity } from "../ActivityPagination";
 import { useActivityPage } from "../useActivityPage";
 import {
   activityEntryHasMessage,
@@ -50,8 +50,9 @@ type Props = {
   initialEntryID?: string | null;
   loading: boolean;
   loadError: string;
+  active: boolean;
   onRefresh: () => void;
-  onLoadEarlier?: () => void;
+  earlier?: EarlierActivity;
   onShowEvents: () => void;
   onCitationSelect?: CitationSelectHandler;
   renderEntry: (entry: ConversationActivityEntry, expandAll: boolean, selected: boolean) => ReactNode;
@@ -69,8 +70,9 @@ export function CollaborationActivityTurns({
   initialEntryID,
   loading,
   loadError,
+  active,
   onRefresh,
-  onLoadEarlier,
+  earlier,
   onShowEvents,
   onCitationSelect,
   renderEntry,
@@ -275,6 +277,8 @@ export function CollaborationActivityTurns({
           </div>
           <ActivityPagination
             {...detailPage}
+            active={active}
+            scrollRef={detailBody}
             t={t}
             onChange={(index) => {
               if (detailBody.current) detailBody.current.scrollTop = 0;
@@ -282,7 +286,6 @@ export function CollaborationActivityTurns({
               detailPage.onChange(index);
             }}
           />
-          {onLoadEarlier ? <LoadEarlierActivity loading={loading} onLoad={onLoadEarlier} t={t} /> : null}
           {!selectedEntries.length ? <p className={styles.empty}>{t("collaborationTurnQuiet")}</p> : null}
         </div>
       </div>
@@ -352,7 +355,17 @@ export function CollaborationActivityTurns({
             {loadError}
           </p>
         ) : null}
-        {onLoadEarlier ? <p className={styles.notice}>{t("activityPartialHistory")}</p> : null}
+        {earlier && !newest && page.index === 0 ? (
+          <ActivityHistoryContinuation
+            earlier={earlier}
+            active={active}
+            busy={loading}
+            failed={Boolean(loadError)}
+            edge="start"
+            scrollRef={turnList}
+            t={t}
+          />
+        ) : null}
         {page.items.map((row) => (
           <Button
             key={row.turn.key}
@@ -402,13 +415,25 @@ export function CollaborationActivityTurns({
         ) : null}
         <ActivityPagination
           {...page}
+          active={active}
+          scrollRef={turnList}
           t={t}
           onChange={(index) => {
             if (turnList.current) turnList.current.scrollTop = 0;
             page.onChange(index);
           }}
         />
-        {onLoadEarlier ? <LoadEarlierActivity loading={loading} onLoad={onLoadEarlier} t={t} /> : null}
+        {earlier && newest && page.index + 1 >= page.count ? (
+          <ActivityHistoryContinuation
+            earlier={earlier}
+            active={active}
+            busy={loading}
+            failed={Boolean(loadError)}
+            edge="end"
+            scrollRef={turnList}
+            t={t}
+          />
+        ) : null}
       </div>
     </div>
   );
