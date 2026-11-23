@@ -85,9 +85,9 @@ sequenceDiagram
 
 ## Worker 自助安装（Codex 和 DSH）
 
-在 worker 内执行 `csgclaw-cli skill install <slug> --registry opencsg` 会安装并启用技能；显式重装使用 `--force`。skills.sh 或 GitHub 技能由内置 `skill-installer` 的 `scripts/install-skills-sh.mjs` 在临时项目下载，再用 `skill import <目录>` 安装、`skill enable <安装名>` 启用。普通宿主机 CLI 或指定其他目标目录的 registry 安装仍只写文件。
+在 worker 内执行 `csgclaw-cli --output json skill install <slug> --registry opencsg` 只安装文件；显式重装使用 `--force`。skills.sh/GitHub 由 `skill-installer` 内置脚本在临时项目下载，再用 `skill import` 安装。两条路径都返回实际安装名 `Slug`，不需要 shell 持有 worker 的服务端凭据。
 
-`POST /api/v1/agents/{id}/skills/{name}/ensure-enabled` 只接受目标 worker 自己的凭据。成功返回 `204`，表示启用状态与磁盘已同步，不表示当前会话已加载。磁盘同步不会启动、停止或重启 worker。即使状态已经启用，也会刷新重装后的文件。生命周期操作占用时返回 `409`，可重试 `skill enable`，不需要重新下载。Server 应先于 CLI 和内置技能升级；客户端不会退回调用 UI 的启用开关。
+安装或重装到当前 worker 后，Agent 按 `skill-installer/SKILL.md` 调用内置 `csgclaw` MCP 工具 `skill_ensure_enabled({"name":"<Slug>"})`。服务端从已认证的 MCP 连接确定目标 worker；工具不接受 Agent ID 或目录。`disk_synced: true` 表示启用配置与磁盘已同步，不表示当前会话已加载。原先已启用的技能也会同步最新文件，全程不重启 worker。若启用失败，只重试 MCP 调用；普通终端安装或导出到其他目录不会触发 MCP。已有 Web/Portal 管理开关保持原行为。
 
 ## Codex
 

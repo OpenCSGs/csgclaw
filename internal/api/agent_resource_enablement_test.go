@@ -18,28 +18,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type resourceEnablementRuntime struct{ snapshotMCPServersRuntime }
 
-func TestWorkerEnableRequiresMatchingAgentCredential(t *testing.T) {
-	h, alice, bob, token, _ := newAppPlatformAuthFixture(t)
-	for _, test := range []struct {
-		id, credential string
-		status         int
-	}{
-		{alice.ID, "", http.StatusForbidden},
-		{bob.ID, token, http.StatusForbidden},
-		{alice.ID, token, http.StatusNotFound},
-	} {
-		rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+test.id+"/skills/missing/ensure-enabled", "", test.credential, nil)
-		if rec.Code != test.status || (rec.Code == http.StatusNotFound && !strings.Contains(rec.Body.String(), "skill_not_found")) {
-			t.Errorf("status=%d body=%s want %d", rec.Code, rec.Body, test.status)
-		}
-	}
-}
-
-func TestWorkerEnableProjectsReinstallToNativeRuntime(t *testing.T) {
+func TestWorkerSkillMCPProjectsReinstallToNativeRuntime(t *testing.T) {
 	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindDSH} {
 		t.Run(kind, func(t *testing.T) {
 			item := completeWorkerAgent("agent-native-skill", "native")
@@ -60,13 +45,40 @@ func TestWorkerEnableProjectsReinstallToNativeRuntime(t *testing.T) {
 				t.Fatal(err)
 			}
 			h := &Handler{svc: controller, agentEngine: agentengine.New(controller), agentRuntime: controller}
+			if err := h.EnableConnectors(filepath.Join(t.TempDir(), "apps.json")); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = h.CloseConnectors() })
+			routes := h.Routes()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				r.Header.Set("Authorization", "Bearer "+profile.Env["CSGCLAW_ACCESS_TOKEN"])
+				routes.ServeHTTP(w, r)
+			}))
+			t.Cleanup(server.Close)
+			client := mcp.NewClient(&mcp.Implementation{Name: "worker-skills-test", Version: "1"}, nil)
+			session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+				Endpoint: server.URL + "/api/v1/agents/" + item.ID + "/mcp", DisableStandaloneSSE: true,
+			}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = session.Close() })
+			denyTaskTool(t, session, "skill_ensure_enabled", map[string]any{"name": "demo", "agent_id": "other"})
+			for _, invalid := range []string{"", "../demo", "not-installed"} {
+				denyTaskTool(t, session, "skill_ensure_enabled", map[string]any{"name": invalid})
+			}
 			for _, contents := range []string{"first", "updated"} {
 				if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(contents), 0644); err != nil {
 					t.Fatal(err)
 				}
-				rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+item.ID+"/skills/demo/ensure-enabled", "", profile.Env["CSGCLAW_ACCESS_TOKEN"], nil)
-				if rec.Code != http.StatusNoContent {
-					t.Fatalf("enable: %d %s", rec.Code, rec.Body.String())
+				var result struct {
+					Name       string
+					Enabled    bool
+					DiskSynced bool `json:"disk_synced"`
+				}
+				callTaskTool(t, session, "skill_ensure_enabled", map[string]any{"name": "demo"}, &result)
+				if result.Name != "demo" || !result.Enabled || !result.DiskSynced {
+					t.Fatalf("unexpected MCP result: %+v", result)
 				}
 				home := filepath.Dir(layout.SkillsRoot)
 				if kind == agent.RuntimeKindDSH {

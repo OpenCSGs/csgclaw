@@ -44,10 +44,5 @@ func (c cmd) runInstall(ctx context.Context, run *command.Context, args []string
 		}
 		return err
 	}
-	if root, ok := workerSkillsRoot(); ok && sameDirectory(root, skillsRoot) {
-		if err := enableWorkerSkill(ctx, run, globals, result.Slug); err != nil {
-			return fmt.Errorf("installed to %s but enable failed: %w; retry: csgclaw-cli skill enable %s", result.SkillsDir, err, result.Slug)
-		}
-	}
 	return renderInstallResult(globals.Output, run.Stdout, result)
 }

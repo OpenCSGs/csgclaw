@@ -5,16 +5,13 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
-	"csgclaw/internal/agentengine/lifecycle"
 	"csgclaw/internal/mcpschema"
-	skilllocal "csgclaw/internal/skill/local"
 	skill "csgclaw/internal/skill/state"
 )
 
@@ -35,38 +32,6 @@ type agentResourceEnabledResponse struct {
 
 func (h *Handler) handleAgentSkillEnabled(w http.ResponseWriter, r *http.Request) {
 	h.handleAgentResourceEnabled(w, r, true)
-}
-
-func (h *Handler) handleWorkerSkillEnsureEnabled(w http.ResponseWriter, r *http.Request) {
-	id := pathValue(r, "id")
-	if !h.authorizesAgentToken(id, r.Header.Get("Authorization")) {
-		writeCodedAPIError(w, http.StatusForbidden, "agent_access_denied", "Current worker credential required")
-		return
-	}
-	if h.agentEngine == nil {
-		writeCodedAPIError(w, http.StatusServiceUnavailable, "agent_unavailable", "Agent service is unavailable")
-		return
-	}
-	name := pathValue(r, "name")
-	if name == "" {
-		writeCodedAPIError(w, http.StatusBadRequest, "invalid_skill", "Installed skill name required")
-		return
-	}
-	_, err := h.agentEngine.Agents().Update(r.Context(), id, agentengine.AgentUpdateRequest{EnsureEnabledSkill: name})
-	switch {
-	case err == nil:
-		w.WriteHeader(http.StatusNoContent)
-	case errors.Is(err, os.ErrNotExist):
-		writeCodedAPIError(w, http.StatusNotFound, "skill_not_found", "Skill is not installed")
-	case errors.Is(err, agent.ErrAgentSkillInvalid), errors.Is(err, skilllocal.ErrSkillInvalid):
-		writeCodedAPIError(w, http.StatusBadRequest, "invalid_skill", "Invalid installed skill")
-	case errors.Is(err, agent.ErrSkillEnablementUnsupported):
-		writeCodedAPIError(w, http.StatusUnprocessableEntity, "runtime_capability_unsupported", err.Error())
-	case errors.Is(err, lifecycle.ErrMutationInProgress):
-		writeCodedAPIError(w, http.StatusConflict, "agent_busy", err.Error())
-	default:
-		writeCodedAPIError(w, http.StatusInternalServerError, "skill_sync_failed", err.Error())
-	}
 }
 
 func (h *Handler) handleAgentMCPServerEnabled(w http.ResponseWriter, r *http.Request) {

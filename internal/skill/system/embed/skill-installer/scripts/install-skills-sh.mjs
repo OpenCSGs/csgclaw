@@ -42,14 +42,9 @@ function install() {
       throw new Error('Expected exactly one installed skill in the temporary project');
     }
     const installedName = installed[0].name;
-    const importArgs = ['skill', 'import', join(root, installedName)];
+    const importArgs = ['--output', 'json', 'skill', 'import', join(root, installedName)];
     if (values.force) importArgs.push('--force');
     execFileSync(cli, importArgs, { stdio: 'inherit' });
-    try {
-      execFileSync(cli, ['skill', 'enable', installedName], { stdio: 'inherit' });
-    } catch {
-      throw new Error(`Installed ${installedName}, but enable failed. Retry: csgclaw-cli skill enable ${installedName}`);
-    }
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

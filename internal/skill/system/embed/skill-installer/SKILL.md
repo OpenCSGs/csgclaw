@@ -21,7 +21,7 @@ Slugs are **case-sensitive**. Copy exact `SLUG` and `REGISTRY` from search outpu
 | `search <query>` | Search opencsg first; clawhub if empty (`--limit`) |
 | `get <slug>` | Show one skill (`--registry`, `--version`) |
 | `versions <slug>` | List published versions (`--registry`, `--limit`) |
-| `install <slug>` | Install and enable the registry skill in this worker |
+| `install <slug>` | Download and install the registry skill files in this worker |
 
 ## Search and inspect
 
@@ -35,25 +35,29 @@ Flags may appear before or after the query/slug (for example `skill search gitla
 
 ## Install from OpenCSG or ClawHub
 
-Use the registry command directly. The worker's install directory is `$DSH_HOME/skills` or `$CODEX_HOME/skills`. An explicit `--skills-dir` or `CSGCLAW_SKILLS_DIR` pointing elsewhere is a files-only install.
+Use the registry command directly. Read `Slug` (the installed directory name) and `SkillsDir` from the JSON result. The worker's install directory is `$DSH_HOME/skills` or `$CODEX_HOME/skills`. An explicit destination elsewhere is a files-only export: do not enable a same-named worker skill for it.
 
 ```bash
-csgclaw-cli skill install AIWizards--gitlab-fullstack-pro --registry opencsg
-csgclaw-cli skill install AIWizards--gitlab-fullstack-pro --registry opencsg --version 1.0.0
-csgclaw-cli skill install my-skill --force
+csgclaw-cli --output json skill install AIWizards--gitlab-fullstack-pro --registry opencsg
+csgclaw-cli --output json skill install AIWizards--gitlab-fullstack-pro --registry opencsg --version 1.0.0
+csgclaw-cli --output json skill install my-skill --force
 ```
 
 ## Install from skills.sh or GitHub
 
-For a skills.sh page, GitHub repository or `npx skills add` request, run the bundled script **relative to this SKILL.md**, not the project's current directory. If the repository contains several skills, select the requested one; ask for its name if ambiguous.
+For a skills.sh page, GitHub repository or npx skill installation request, use the bundled script **relative to this SKILL.md**, not the project's current directory. Keep the requested source; do not substitute a ClawHub search. If asked to pick any skill from skills.sh, you can use the example below. For ambiguous requests about a specific skill, ask for its name.
 
 ```sh
 node "<directory containing this SKILL.md>/scripts/install-skills-sh.mjs" vercel-labs/agent-skills --skill web-design-guidelines
 ```
 
-The helper accepts `https://skills.sh/<owner>/<repo>/<skill>` directly. It uses Node.js (22.20+), npx and Git, downloads in a temporary project, imports the complete skill into this worker, and calls `csgclaw-cli skill enable` on both Codex and DSH. Do not install globally, write to `.agents/skills` in the user's project, or copy files into `skill-view` yourself.
+The helper accepts `https://skills.sh/<owner>/<repo>/<skill>` directly. It uses Node.js (22.20+), npx and Git, downloads in a temporary project and imports the complete skill into this worker. Use `Slug` from the final import result. Do not install globally, write to `.agents/skills` in the user's project, or copy files into `skill-view` yourself.
 
-Both fresh installs and reinstalls enable the skill on disk. If enable fails **after** installation, retry `csgclaw-cli skill enable <installed-name>` without downloading again. Do not restart the worker or promise that an existing session has reloaded the skill.
+## Enable after either install path (Codex and DSH)
+
+After **each successful worker install or reinstall**, call the **`csgclaw` MCP tool `skill_ensure_enabled`** once with `{"name":"<Slug from install result>"}`. This is an agent tool call, not a shell command. Do not call it if installation failed.
+
+Only report “installed and enabled” after the tool returns `disk_synced: true`. If the tool is unavailable or fails, report “installed, not synced”; retry only the MCP call, without downloading again. Do not restart the worker or claim that the current session has reloaded the skill.
 
 ## Manager vs worker
 

@@ -47,8 +47,6 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		return c.runInstall(ctx, run, args[1:], globals)
 	case "import":
 		return c.runImport(run, args[1:], globals)
-	case "enable":
-		return c.runEnable(ctx, run, args[1:], globals)
 	default:
 		c.usage(run)
 		return fmt.Errorf("unknown skill subcommand %q", args[0])
@@ -62,7 +60,6 @@ func (c cmd) usage(run *command.Context) {
 		"versions <slug>    List published versions (--registry, --limit)",
 		"install <slug>     Install into local workspace/skills (--registry, --version)",
 		"import <directory> Import a local skill into this worker (--force to replace)",
-		"enable <name>      Ensure this worker's installed skill is enabled on disk",
 	})
 }
 

@@ -93,7 +93,6 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Post("/skills:batchAdd", h.handleAgentSkillsBatchAdd)
 				r.Delete("/skills/{name}", h.handleAgentSkillDelete)
 				r.Put("/skills/{name}/enabled", h.handleAgentSkillEnabled)
-				r.Post("/skills/{name}/ensure-enabled", h.handleWorkerSkillEnsureEnabled)
 				r.Put("/mcp-servers/{name}/enabled", h.handleAgentMCPServerEnabled)
 				r.Get("/mcp-servers", h.handleAgentMCPServersByID)
 				r.Post("/mcp-servers:batchAdd", h.handleBatchAddAgentMCPServers)
