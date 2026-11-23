@@ -60,6 +60,9 @@ type AgentUpdateRequest struct {
 	ResourceVersion string    `json:"resource_version,omitempty"`
 	// ReplaceSkills refreshes and enables the named skills from the global catalog.
 	ReplaceSkills []string `json:"replace_skills,omitempty"`
+	// EnsureEnabledSkill is a worker self-update of one installed skill.
+	// It reconciles files without draining the caller's own turn.
+	EnsureEnabledSkill string `json:"-"`
 }
 
 type AgentRecreateOptions struct {

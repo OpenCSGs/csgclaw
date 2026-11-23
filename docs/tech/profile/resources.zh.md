@@ -83,6 +83,12 @@ sequenceDiagram
 
 配置修改沿用持久化的 `EnvRestartRequired`。配置写入或启动失败时保留目标状态与重试标记，页面展示错误和重试按钮；重试提交相同目标状态，继续应用配置。一次请求内的 Skill 与 MCP 修改统一由 controller 安排重启，保留 Agent 目录与会话记录。
 
+## Worker 自助安装（Codex 和 DSH）
+
+在 worker 内执行 `csgclaw-cli skill install <slug> --registry opencsg` 会安装并启用技能；显式重装使用 `--force`。skills.sh 或 GitHub 技能由内置 `skill-installer` 的 `scripts/install-skills-sh.mjs` 在临时项目下载，再用 `skill import <目录>` 安装、`skill enable <安装名>` 启用。普通宿主机 CLI 或指定其他目标目录的 registry 安装仍只写文件。
+
+`POST /api/v1/agents/{id}/skills/{name}/ensure-enabled` 只接受目标 worker 自己的凭据。成功返回 `204`，表示启用状态与磁盘已同步，不表示当前会话已加载。磁盘同步不会启动、停止或重启 worker。即使状态已经启用，也会刷新重装后的文件。生命周期操作占用时返回 `409`，可重试 `skill enable`，不需要重新下载。Server 应先于 CLI 和内置技能升级；客户端不会退回调用 UI 的启用开关。
+
 ## Codex
 
 Skill 禁用配置写入 Agent 独立的 `.codex/home/config.toml`，使用带管理标记的 `[[skills.config]]` 段，`path` 指向对应 Skill 的 `SKILL.md` 文件，`enabled = false`。启用时移除该禁用项。配置重新生成时保留管理段。MCP 使用已有 `[mcp_servers.<name>]` 配置及原生 `enabled` 字段。

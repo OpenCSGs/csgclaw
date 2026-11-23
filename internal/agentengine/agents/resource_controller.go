@@ -255,6 +255,12 @@ func (f *Controller) List(ctx context.Context, options contract.AgentListOptions
 }
 
 func (f *Controller) Update(ctx context.Context, agentID string, request contract.AgentUpdateRequest) (contract.Agent, error) {
+	if request.EnsureEnabledSkill != "" {
+		if err := f.ensureSkillEnabled(ctx, agentID, request.EnsureEnabledSkill); err != nil {
+			return contract.Agent{}, err
+		}
+		return f.Get(ctx, agentID, contract.AgentGetOptions{})
+	}
 	ctx = withIdentityActor(ctx, request.ActorID)
 	item, err := f.updateDesired(ctx, agentID, request.ResourceVersion, updateOptionsFor(request), func(current contract.AgentSpec) (contract.AgentSpec, error) {
 		return mergeAgentUpdate(current, request), nil

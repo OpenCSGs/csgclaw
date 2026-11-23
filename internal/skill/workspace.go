@@ -16,10 +16,8 @@ func ResolveSkillsRoot(override string) (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("CSGCLAW_SKILLS_DIR")); dir != "" {
 		return filepath.Clean(dir), nil
 	}
-	for _, key := range []string{"DSH_HOME", "CODEX_HOME"} {
-		if home := strings.TrimSpace(os.Getenv(key)); home != "" {
-			return filepath.Join(home, "skills"), nil
-		}
+	if root := RuntimeSkillsRoot(); root != "" {
+		return root, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -30,4 +28,15 @@ func ResolveSkillsRoot(override string) (string, error) {
 		return "", fmt.Errorf("create skills directory %q: %w", root, err)
 	}
 	return root, nil
+}
+
+// RuntimeSkillsRoot identifies the runtime-owned directory independently of
+// CLI overrides, which can point at a completely unrelated workspace.
+func RuntimeSkillsRoot() string {
+	for _, key := range []string{"DSH_HOME", "CODEX_HOME"} {
+		if home := strings.TrimSpace(os.Getenv(key)); home != "" {
+			return filepath.Join(home, "skills")
+		}
+	}
+	return ""
 }

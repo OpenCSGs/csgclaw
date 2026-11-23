@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/config"
 	"csgclaw/internal/knowledgebase"
 	agentruntime "csgclaw/internal/runtime"
@@ -20,6 +21,69 @@ import (
 )
 
 type resourceEnablementRuntime struct{ snapshotMCPServersRuntime }
+
+func TestWorkerEnableRequiresMatchingAgentCredential(t *testing.T) {
+	h, alice, bob, token, _ := newAppPlatformAuthFixture(t)
+	for _, test := range []struct {
+		id, credential string
+		status         int
+	}{
+		{alice.ID, "", http.StatusForbidden},
+		{bob.ID, token, http.StatusForbidden},
+		{alice.ID, token, http.StatusNotFound},
+	} {
+		rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+test.id+"/skills/missing/ensure-enabled", "", test.credential, nil)
+		if rec.Code != test.status || (rec.Code == http.StatusNotFound && !strings.Contains(rec.Body.String(), "skill_not_found")) {
+			t.Errorf("status=%d body=%s want %d", rec.Code, rec.Body, test.status)
+		}
+	}
+}
+
+func TestWorkerEnableProjectsReinstallToNativeRuntime(t *testing.T) {
+	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindDSH} {
+		t.Run(kind, func(t *testing.T) {
+			item := completeWorkerAgent("agent-native-skill", "native")
+			item.RuntimeKind, item.RuntimeName = kind, kind
+			item.SkillStates = map[string]skill.State{"demo": {Enabled: false}, "other": {Enabled: false}}
+			controller := mustNewSeededServiceWithOptions(t, []agent.Agent{item}, runtimewiring.WithDSHRuntime(), runtimewiring.WithCodexRuntime())
+			t.Cleanup(func() { _ = controller.Close() })
+			layout, err := controller.AgentLayout(item.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			profile, err := controller.RuntimeHost().ResolveRuntimeProfile(agentruntime.Handle{RuntimeID: item.RuntimeID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(layout.SkillsRoot, "demo")
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			h := &Handler{svc: controller, agentEngine: agentengine.New(controller), agentRuntime: controller}
+			for _, contents := range []string{"first", "updated"} {
+				if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(contents), 0644); err != nil {
+					t.Fatal(err)
+				}
+				rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+item.ID+"/skills/demo/ensure-enabled", "", profile.Env["CSGCLAW_ACCESS_TOKEN"], nil)
+				if rec.Code != http.StatusNoContent {
+					t.Fatalf("enable: %d %s", rec.Code, rec.Body.String())
+				}
+				home := filepath.Dir(layout.SkillsRoot)
+				if kind == agent.RuntimeKindDSH {
+					data, err := os.ReadFile(filepath.Join(filepath.Dir(home), "skill-view", "skills", "demo", "SKILL.md"))
+					if err != nil || string(data) != contents {
+						t.Fatalf("DSH projected %q: %v", data, err)
+					}
+				} else {
+					data, err := os.ReadFile(filepath.Join(home, "config.toml"))
+					if err != nil || !strings.Contains(string(data), "other") || strings.Contains(string(data), "demo") {
+						t.Fatalf("Codex enablement not applied: %v", err)
+					}
+				}
+			}
+		})
+	}
+}
 
 func (*resourceEnablementRuntime) ReconcileSkills(context.Context, agentruntime.Handle, map[string]skill.State) error {
 	return nil

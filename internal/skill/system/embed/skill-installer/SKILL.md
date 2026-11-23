@@ -1,13 +1,13 @@
 ---
 name: skill-installer
-description: Search, inspect, and install ClawHub-compatible skills with csgclaw-cli skill. Use when the user asks to find skills on opencsg or clawhub.ai, list versions, or install into this sandbox workspace/skills directory.
+description: Find registry skills and install or reinstall skills in the current CSGClaw worker. Handles OpenCSG, ClawHub, skills.sh pages, GitHub skill repositories and npx skills add requests.
 ---
 
 # Skill Installer (`csgclaw-cli skill`)
 
 Use this skill for **all** registry skill search and install work.
 
-Run commands via `exec` inside the current agent container.
+Run commands inside the target worker. Install only the requested skill; use `--force` only for an explicitly requested reinstall.
 
 ## Registries
 
@@ -21,7 +21,7 @@ Slugs are **case-sensitive**. Copy exact `SLUG` and `REGISTRY` from search outpu
 | `search <query>` | Search opencsg first; clawhub if empty (`--limit`) |
 | `get <slug>` | Show one skill (`--registry`, `--version`) |
 | `versions <slug>` | List published versions (`--registry`, `--limit`) |
-| `install <slug>` | Install into **this** sandbox `workspace/skills/<slug>/` |
+| `install <slug>` | Install and enable the registry skill in this worker |
 
 ## Search and inspect
 
@@ -33,9 +33,9 @@ csgclaw-cli skill versions AIWizards--gitlab-fullstack-pro --registry opencsg
 
 Flags may appear before or after the query/slug (for example `skill search gitlab --limit 10`).
 
-## Install (this sandbox)
+## Install from OpenCSG or ClawHub
 
-Use `CSGCLAW_SKILLS_DIR` when set, otherwise `${CODEX_HOME:-$HOME/.codex}/skills`.
+Use the registry command directly. The worker's install directory is `$DSH_HOME/skills` or `$CODEX_HOME/skills`. An explicit `--skills-dir` or `CSGCLAW_SKILLS_DIR` pointing elsewhere is a files-only install.
 
 ```bash
 csgclaw-cli skill install AIWizards--gitlab-fullstack-pro --registry opencsg
@@ -43,12 +43,22 @@ csgclaw-cli skill install AIWizards--gitlab-fullstack-pro --registry opencsg --v
 csgclaw-cli skill install my-skill --force
 ```
 
-Use `--skills-dir` only when the workspace layout is non-standard.
+## Install from skills.sh or GitHub
+
+For a skills.sh page, GitHub repository or `npx skills add` request, run the bundled script **relative to this SKILL.md**, not the project's current directory. If the repository contains several skills, select the requested one; ask for its name if ambiguous.
+
+```sh
+node "<directory containing this SKILL.md>/scripts/install-skills-sh.mjs" vercel-labs/agent-skills --skill web-design-guidelines
+```
+
+The helper accepts `https://skills.sh/<owner>/<repo>/<skill>` directly. It uses Node.js (22.20+), npx and Git, downloads in a temporary project, imports the complete skill into this worker, and calls `csgclaw-cli skill enable` on both Codex and DSH. Do not install globally, write to `.agents/skills` in the user's project, or copy files into `skill-view` yourself.
+
+Both fresh installs and reinstalls enable the skill on disk. If enable fails **after** installation, retry `csgclaw-cli skill enable <installed-name>` without downloading again. Do not restart the worker or promise that an existing session has reloaded the skill.
 
 ## Manager vs worker
 
 - **Manager** may use this skill for `search`, `get`, and `versions` only.
-- To install a skill for **another** agent, use the active conversation's task or message workflow. Ask that worker to run `csgclaw-cli skill install` in its own runtime using this skill.
+- To install a skill for **another** agent, use the active conversation's task or message workflow. Ask that worker to follow the appropriate install flow above.
 - Never install into another agent's filesystem from the manager sandbox.
 
 ## Operating rules
