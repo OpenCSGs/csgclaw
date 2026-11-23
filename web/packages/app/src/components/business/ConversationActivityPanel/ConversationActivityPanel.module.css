@@ -58,6 +58,16 @@
   min-width: 0;
 }
 
+.pageActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-block: 8px;
+  font: var(--text-xs-normal);
+}
+
 .headerActions {
   display: flex;
   flex-wrap: wrap;

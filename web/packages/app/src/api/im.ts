@@ -167,6 +167,23 @@ export function fetchMessagesRequest(roomID: string, options: FetchMessagesOptio
   return get(`api/v1/messages?${params.toString()}`);
 }
 
+type MessagePage = {
+  messages: IMMessage[];
+  anchor?: IMMessage;
+  has_more: boolean;
+  cursor_missing?: boolean;
+};
+
+export function fetchMessagePageRequest(
+  roomID: string,
+  { limit, before, after, signal }: { limit: number; before?: string; after?: string; signal: AbortSignal },
+): Promise<MessagePage> {
+  const params = new URLSearchParams({ room_id: roomID, limit: String(limit), include_thread_replies: "true" });
+  if (before) params.set("before", before);
+  if (after) params.set("after", after);
+  return get(`api/v1/messages?${params.toString()}`, { signal });
+}
+
 export function startThreadRequest(roomID: string, payload: StartThreadPayload): Promise<ThreadView> {
   return post(`api/v1/rooms/${encodeURIComponent(roomID)}/threads`, payload);
 }

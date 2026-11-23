@@ -64,6 +64,10 @@ func (s *Service) ListMessagesWithOptions(roomID string, opts im.ListMessagesOpt
 	return s.im.ListMessagesWithOptions(roomID, opts)
 }
 
+func (s *Service) ListMessagePage(roomID string, opts im.MessagePageOptions) (im.MessagePage, error) {
+	return s.im.ListMessagePage(roomID, opts)
+}
+
 func (s *Service) SendMessage(req apitypes.CreateMessageRequest) (im.Message, error) {
 	message, _, err := s.SendMessageOnce(req)
 	return message, err

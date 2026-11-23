@@ -16,8 +16,13 @@ import {
   type UsersById,
 } from "@/models/conversations";
 import { progressDuration } from "@/models/turnProgress";
+import { isAutonomousCoordinationTool } from "@/models/agentActivity";
+import { ActivityPagination, LoadEarlierActivity } from "../ActivityPagination";
+import { useActivityPage } from "../useActivityPage";
 import {
+  activityEntryHasMessage,
   conversationActivityEntries,
+  isFailedActivityTool,
   type ConversationActivityAgent,
   type ConversationActivityEntry,
 } from "../conversationActivity";
@@ -26,7 +31,8 @@ import styles from "./CollaborationActivityTurns.module.css";
 type Selection = { agentID?: string; turnID?: string; requestID?: string };
 type Row = {
   turn: CollaborationTurn;
-  entries: ConversationActivityEntry[];
+  agent: ConversationActivityAgent;
+  entries?: ConversationActivityEntry[];
   name: string;
   agentID: string;
   toolCount: number;
@@ -45,6 +51,7 @@ type Props = {
   loading: boolean;
   loadError: string;
   onRefresh: () => void;
+  onLoadEarlier?: () => void;
   onShowEvents: () => void;
   onCitationSelect?: CitationSelectHandler;
   renderEntry: (entry: ConversationActivityEntry, expandAll: boolean, selected: boolean) => ReactNode;
@@ -63,6 +70,7 @@ export function CollaborationActivityTurns({
   loading,
   loadError,
   onRefresh,
+  onLoadEarlier,
   onShowEvents,
   onCitationSelect,
   renderEntry,
@@ -76,6 +84,8 @@ export function CollaborationActivityTurns({
   const appliedTarget = useRef<unknown>(null);
   const cards = useRef(new Map<string, HTMLButtonElement>());
   const detailHeading = useRef<HTMLHeadingElement>(null);
+  const detailBody = useRef<HTMLDivElement>(null);
+  const turnList = useRef<HTMLDivElement>(null);
   const rows = useMemo<Row[]>(
     () =>
       turns.map((turn) => {
@@ -86,9 +96,26 @@ export function CollaborationActivityTurns({
           name: userDisplayName(turn.senderID, usersById),
           identities: [turn.senderID],
         };
+        // A projected turn can contain thousands of tools in one message.
+        // Its list row needs counts; build detail rows only for the open turn.
+        if (
+          turn.progress &&
+          turn.messages.length === 1 &&
+          !(turn.messages[0]?.metadata?.csgclaw as { runtime_error?: boolean } | undefined)?.runtime_error
+        ) {
+          let toolCount = 0;
+          let errorCount = 0;
+          for (const { tool } of turn.progress.items) {
+            if (!tool || (autonomous && isAutonomousCoordinationTool(tool.name))) continue;
+            toolCount++;
+            if (isFailedActivityTool(tool)) errorCount++;
+          }
+          return { turn, agent, name: agent.name, agentID: agent.id, toolCount, errorCount };
+        }
         const entries = conversationActivityEntries(turn.messages, [agent], [], usersById, autonomous);
         return {
           turn,
+          agent,
           entries,
           name: agent.name,
           agentID: agent.id,
@@ -116,6 +143,20 @@ export function CollaborationActivityTurns({
   );
   const displayed = newest ? [...filtered].reverse() : filtered;
   const selected = rows.find((row) => row.turn.key === selectedKey);
+  const selectedEntries = useMemo(
+    () =>
+      selected
+        ? (selected.entries ??
+          conversationActivityEntries(selected.turn.messages, [selected.agent], [], usersById, autonomous))
+        : [],
+    [selected, usersById, autonomous],
+  );
+  const page = useActivityPage(displayed, JSON.stringify([actor, query, status, newest]));
+  const detailPage = useActivityPage(
+    selectedEntries,
+    JSON.stringify([selectedKey, initialEntryID]),
+    initialEntryID ? selectedEntries.findIndex((entry) => entry.id === initialEntryID) : -1,
+  );
 
   useEffect(() => {
     setActor(selection?.agentID || "");
@@ -132,7 +173,9 @@ export function CollaborationActivityTurns({
         (!selection?.agentID || localIdentitiesMatch(selection.agentID, row.agentID)) &&
         (row.turn.id === selection?.turnID ||
           (selection?.requestID && row.turn.sourceID === selection.requestID) ||
-          row.entries.some((entry) => entry.id === initialEntryID)),
+          (initialEntryID &&
+            (row.entries?.some((entry) => entry.id === initialEntryID) ||
+              row.turn.messages.some((message) => activityEntryHasMessage(initialEntryID, message.id))))),
     );
     if (match) {
       setSelectedKey(match.turn.key);
@@ -168,7 +211,7 @@ export function CollaborationActivityTurns({
             onClick={onRefresh}
           />
         </div>
-        <div className={styles.detailBody}>
+        <div className={styles.detailBody} ref={detailBody}>
           <div className={styles.detailHeading}>
             <h3 ref={detailHeading} tabIndex={-1}>
               {selected.name} <span>· {t("collaborationTurnNumber", { count: selected.turn.index })}</span>
@@ -210,7 +253,13 @@ export function CollaborationActivityTurns({
           <div className={styles.recordHeading}>
             <strong>{t("collaborationTurnSequence")}</strong>
             <Button size="sm" variant="linkGray" onClick={() => setExpandAll(!expandAll)}>
-              {t(expandAll ? "collaborationTurnCollapse" : "collaborationTurnExpand")}
+              {t(
+                expandAll
+                  ? "collaborationTurnCollapse"
+                  : detailPage.count > 1
+                    ? "activityExpandPage"
+                    : "collaborationTurnExpand",
+              )}
             </Button>
           </div>
           {selected.turn.progress?.items.some((item) => item.tool?.truncated) ? (
@@ -222,9 +271,19 @@ export function CollaborationActivityTurns({
             <p className={styles.notice}>{t("collaborationTurnHistoricalSummary")}</p>
           ) : null}
           <div role="list" aria-label={t("collaborationTurnSequence")} className={styles.records}>
-            {selected.entries.map((entry) => renderEntry(entry, expandAll, entry.id === initialEntryID))}
+            {detailPage.items.map((entry) => renderEntry(entry, expandAll, entry.id === initialEntryID))}
           </div>
-          {!selected.entries.length ? <p className={styles.empty}>{t("collaborationTurnQuiet")}</p> : null}
+          <ActivityPagination
+            {...detailPage}
+            t={t}
+            onChange={(index) => {
+              if (detailBody.current) detailBody.current.scrollTop = 0;
+              setExpandAll(false);
+              detailPage.onChange(index);
+            }}
+          />
+          {onLoadEarlier ? <LoadEarlierActivity loading={loading} onLoad={onLoadEarlier} t={t} /> : null}
+          {!selectedEntries.length ? <p className={styles.empty}>{t("collaborationTurnQuiet")}</p> : null}
         </div>
       </div>
     );
@@ -287,13 +346,14 @@ export function CollaborationActivityTurns({
           />
         </div>
       </div>
-      <div className={styles.turnList}>
+      <div className={styles.turnList} ref={turnList}>
         {loadError ? (
           <p role="alert" className={styles.error}>
             {loadError}
           </p>
         ) : null}
-        {displayed.map((row) => (
+        {onLoadEarlier ? <p className={styles.notice}>{t("activityPartialHistory")}</p> : null}
+        {page.items.map((row) => (
           <Button
             key={row.turn.key}
             ref={(node) => {
@@ -331,7 +391,7 @@ export function CollaborationActivityTurns({
             </span>
           </Button>
         ))}
-        {!displayed.length ? (
+        {!loadError && !displayed.length ? (
           <p className={styles.empty}>{t(loading ? "agentActivityLoading" : "agentActivityNoFilteredResults")}</p>
         ) : null}
         {unassignedCount ? (
@@ -340,6 +400,15 @@ export function CollaborationActivityTurns({
             <ChevronRight size={13} />
           </Button>
         ) : null}
+        <ActivityPagination
+          {...page}
+          t={t}
+          onChange={(index) => {
+            if (turnList.current) turnList.current.scrollTop = 0;
+            page.onChange(index);
+          }}
+        />
+        {onLoadEarlier ? <LoadEarlierActivity loading={loading} onLoad={onLoadEarlier} t={t} /> : null}
       </div>
     </div>
   );
