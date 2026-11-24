@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +17,8 @@ import (
 type videoGenerator func(context.Context, *modelprovider.VideoGenerationConfig, string, modelprovider.VideoGenerationOptions) (modelprovider.GeneratedVideo, error)
 
 var videoDeliveryRetryInterval = time.Second
+
+const videoSubmissionStatusWindow = 30 * time.Second
 
 // RecoverVideoGeneration resumes a persisted asynchronous video job without
 // entering normal conversation admission. The caller owns the delivery
@@ -42,9 +46,68 @@ func (c *conversations) RecoverVideoGeneration(ctx context.Context, request Turn
 	return TurnResult{Status: TurnSucceeded, Dispatched: true}
 }
 
-func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *modelprovider.VideoGenerationConfig, input []InputPart) contract.VideoGenerationHandler {
+func (c *conversations) prepareVideoTool(ctx context.Context, sink EventSink, ref *modelprovider.VideoGenerationConfig) (context.Context, string) {
+	support, supported := sink.(interface{ SupportsVideoGeneration() bool })
+	if ref == nil || !supported || !support.SupportsVideoGeneration() {
+		return contract.WithVideoGenerationPreflight(ctx, func(options modelprovider.VideoGenerationOptions) (modelprovider.VideoGenerationOptions, error) {
+			return options, fmt.Errorf("video generation is unavailable in this conversation")
+		}), ""
+	}
+
+	capabilities, err := c.engine.videoCapabilities(ctx, ref, false)
+	ctx = contract.WithVideoGenerationPreflight(ctx, func(options modelprovider.VideoGenerationOptions) (modelprovider.VideoGenerationOptions, error) {
+		if err != nil {
+			return options, err
+		}
+		current, err := c.engine.videoCapabilities(ctx, ref, true)
+		if err != nil {
+			return options, err
+		}
+		return modelprovider.ResolveVideoGenerationOptions(options, current)
+	})
+	if err != nil {
+		return ctx, "The configured video model is unavailable for this turn."
+	}
+	defaults, _ := modelprovider.ResolveVideoGenerationOptions(modelprovider.VideoGenerationOptions{}, capabilities)
+	return ctx, fmt.Sprintf(
+		"Current video tool model: %q. Supported size values: %q. Supported seconds values: %v. An empty list means the provider did not advertise values for that parameter. Leave unspecified parameters omitted. Defaults when advertised: size=%q, seconds=%d (zero means unspecified). If an explicit value is unsupported, follow the video tool recovery instructions for interactive confirmation or selection.",
+		ref.ModelID, capabilities.Sizes, capabilities.Seconds, defaults.Size, defaults.Seconds,
+	)
+}
+
+func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *modelprovider.VideoGenerationConfig, input []InputPart, inherited *contract.VideoGenerationRetry) (contract.VideoGenerationHandler, contract.VideoRetryPreflight) {
 	var mu sync.Mutex
-	tasks := map[string]struct{}{}
+	type submission struct {
+		done chan struct{}
+		err  error
+	}
+	tasks := map[string]*submission{}
+	rejected := map[string]contract.VideoGenerationRetry{}
+	if inherited != nil && ref != nil && inherited.Model == *ref {
+		rejected[inherited.AttemptID] = *inherited
+	}
+	wait := func(ctx context.Context, result *submission) error {
+		select {
+		case <-result.done:
+			return result.err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	validateRetry := func(prompt string, options modelprovider.VideoGenerationOptions, indices []int) (contract.VideoGenerationRetry, error) {
+		previous, ok := rejected[options.RetryOf]
+		if !ok || previous.Prompt != strings.TrimSpace(prompt) || !slices.Equal(previous.Indices, indices) ||
+			(previous.Size == options.Size && previous.Seconds == options.Seconds) {
+			return contract.VideoGenerationRetry{}, fmt.Errorf("retry_of must identify a rejected attempt for the same prompt and references with revised parameters")
+		}
+		return previous, nil
+	}
+	checkRetry := func(prompt string, options modelprovider.VideoGenerationOptions, indices ...int) error {
+		mu.Lock()
+		defer mu.Unlock()
+		_, err := validateRetry(prompt, options, indices)
+		return err
+	}
 	return func(ctx context.Context, id, prompt string, options modelprovider.VideoGenerationOptions, indices ...int) error {
 		capability, ok := sink.(interface{ SupportsVideoGeneration() bool })
 		if !ok || !capability.SupportsVideoGeneration() {
@@ -55,34 +118,100 @@ func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *mode
 			return fmt.Errorf("invalid video prompt")
 		}
 		mu.Lock()
-		if _, ok := tasks[id]; ok {
+		if result := tasks[id]; result != nil {
 			mu.Unlock()
-			return nil
+			return wait(ctx, result)
 		}
-		references, _, err := loadReferenceImages(ctx, input, indices, 1)
-		if err != nil {
-			mu.Unlock()
-			return err
+		attempt := contract.VideoGenerationRetry{
+			AttemptID: id, CardID: id, Prompt: prompt, Size: options.Size,
+			Seconds: options.Seconds, Indices: slices.Clone(indices),
 		}
-		var reference *modelprovider.ReferenceImage
-		if len(references) > 0 {
-			reference = &references[0]
+		if ref != nil {
+			attempt.Model = *ref
 		}
-		tasks[id] = struct{}{}
+		if options.RetryOf != "" {
+			previous, err := validateRetry(prompt, options, indices)
+			if err != nil {
+				mu.Unlock()
+				return err
+			}
+			attempt.CardID = previous.CardID
+			attempt.Reference = previous.Reference
+			delete(rejected, options.RetryOf)
+		} else {
+			references, _, err := loadReferenceImages(ctx, input, indices, 1)
+			if err != nil {
+				mu.Unlock()
+				return err
+			}
+			if len(references) > 0 {
+				attempt.Reference = &references[0]
+			}
+		}
+		result := &submission{done: make(chan struct{})}
+		tasks[id] = result
 		mu.Unlock()
 
-		task := contract.VideoGenerationTask{StartedAt: time.Now().UTC().Format(time.RFC3339Nano), ID: id, Prompt: prompt, Model: modelprovider.CloneVideoGeneration(ref), Options: options}
-		// Video providers commonly take longer than Codex's dynamic-tool request
-		// window. Detach the generation from the turn so the tool can acknowledge
-		// submission immediately and the terminal event can arrive later.
+		task := contract.VideoGenerationTask{StartedAt: time.Now().UTC().Format(time.RFC3339Nano), ID: attempt.CardID, Prompt: prompt, Model: modelprovider.CloneVideoGeneration(ref), Options: options}
+		if attempt.CardID != id {
+			// Each upstream attempt needs a new idempotency key even when its
+			// progress replaces the previous attempt on the same card.
+			task.RequestID = id
+		}
+		polledFailure := false
+		var statusWindow *time.Timer
+		var once sync.Once
+		finish := func(err error) {
+			once.Do(func() {
+				var upstream *modelprovider.VideoGenerationError
+				if errors.As(err, &upstream) && (polledFailure || (statusWindow == nil && (upstream.HTTPStatus == http.StatusBadRequest || upstream.HTTPStatus == http.StatusUnprocessableEntity))) {
+					mu.Lock()
+					rejected[id] = attempt
+					mu.Unlock()
+					err = &contract.VideoRetryError{AttemptID: id, Err: err}
+				}
+				result.err = err
+				close(result.done)
+			})
+		}
+		task.Options.Progress = func(progress modelprovider.VideoGenerationProgress) {
+			if progress.ID != "" && statusWindow == nil {
+				// A queued job can still reject input. Give it a bounded window
+				// to report that rejection while the Agent can act on it.
+				statusWindow = time.AfterFunc(videoSubmissionStatusWindow, func() { finish(nil) })
+			}
+			if progress.Status == "failed" {
+				polledFailure = true
+			}
+			if progress.StatusChecked {
+				finish(nil)
+			}
+		}
+		// Keep polling and delivery independent of the turn once the tool has
+		// received the first upstream status or a submission failure.
 		backgroundCtx := context.WithoutCancel(ctx)
 		go func() {
-			if err := c.generateVideo(backgroundCtx, turn, sink, task, reference); err != nil {
+			err := c.generateVideo(backgroundCtx, turn, sink, task, attempt.Reference)
+			if statusWindow != nil {
+				statusWindow.Stop()
+			}
+			finish(err)
+			var upstream *modelprovider.VideoGenerationError
+			if err != nil && result.err == nil && polledFailure && errors.As(err, &upstream) {
+				feedback := contract.VideoGenerationFeedback{Retry: attempt, Code: upstream.Code, Message: upstream.Message}
+				feedbackCtx, cancel := context.WithTimeout(backgroundCtx, 10*time.Second)
+				defer cancel()
+				event := TurnEvent{Kind: TurnEventOutputItem, Output: &OutputItem{Kind: contract.OutputItemVideoFeedback, Payload: feedback}}
+				if emitErr := emitTurnEvent(feedbackCtx, sink, event); emitErr != nil {
+					slog.Warn("deliver video generation feedback", "video_task_id", task.ID, "error", emitErr)
+				}
+			}
+			if err != nil {
 				slog.Error("background video generation failed", "agent_id", c.agentID, "turn_id", turn.request.ID, "video_task_id", task.ID, "error", err)
 			}
 		}()
-		return nil
-	}
+		return wait(ctx, result)
+	}, checkRetry
 }
 
 func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sink EventSink, task contract.VideoGenerationTask, reference *modelprovider.ReferenceImage) error {
@@ -96,6 +225,8 @@ func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sin
 	if task.StartedAt == "" {
 		task.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
+	onProgress := task.Options.Progress
+	task.Options.Progress = nil
 	task.EndedAt = ""
 	emit := func() error {
 		switch task.State {
@@ -142,7 +273,10 @@ func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sin
 		videoCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 		options := task.Options
 		options.Reference = reference
-		options.RequestID = task.ID
+		options.RequestID = task.RequestID
+		if options.RequestID == "" {
+			options.RequestID = task.ID
+		}
 		options.ResumeID = task.UpstreamID
 		options.Progress = func(progress modelprovider.VideoGenerationProgress) {
 			if progress.Status == "submitting" && task.ModelStartedAt == "" {
@@ -150,6 +284,9 @@ func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sin
 			}
 			if progress.Status == "completed" && task.ModelCompletedAt == "" {
 				task.ModelCompletedAt = progress.UpdatedAt.UTC().Format(time.RFC3339Nano)
+			}
+			if onProgress != nil {
+				onProgress(progress)
 			}
 			previousStatus := task.UpstreamStatus
 			previousPoll, _ := time.Parse(time.RFC3339, task.LastPolledAt)

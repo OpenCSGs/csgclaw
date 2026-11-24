@@ -42,6 +42,7 @@ type Engine struct {
 	generateImage        imageGenerator
 	imageGenerationModes func(*modelprovider.ImageGenerationConfig) modelcap.ImageGeneration
 	generateVideo        videoGenerator
+	videoCapabilities    func(context.Context, *modelprovider.VideoGenerationConfig, bool) (modelcap.VideoGeneration, error)
 	agents               AgentInterface
 	runtimes             conversationRuntimeResolver
 	files                *FileStore
@@ -166,6 +167,8 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 			return failedResult(ErrorAgentUnavailable, "agent is archived")
 		}
 	}
+	videoRetry := request.VideoRetry
+	request.VideoRetry = nil
 	identity := conversationIdentity{agentID: c.agentID, key: request.ConversationKey}
 	if replay, existing, preflightResult := c.engine.preflightTurn(identity, request); replay != nil {
 		return replayCompleted(ctx, sink, *replay)
@@ -295,7 +298,13 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 				modes := c.engine.imageGenerationModes(imageModel)
 				runtimeRequest.ImageToolGuidance = fmt.Sprintf("Current image tool capabilities: text-to-image=%t, reference-image editing=%t. If the requested operation is unavailable, explain the limitation and ask the user to configure a compatible image model.", modes.TextToImage, modes.ImageToImage)
 			}
-			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, c.videoHandler(turn, sink, selected.Spec.Model.VideoGeneration, runtimeRequest.Input))
+			videoModel := selected.Spec.Model.VideoGeneration
+			videoHandler, videoRetryPreflight := c.videoHandler(turn, sink, videoModel, runtimeRequest.Input, videoRetry)
+			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, videoHandler)
+			turn.ctx = contract.WithVideoRetryPreflight(turn.ctx, videoRetryPreflight)
+			if c.engine.videoCapabilities != nil {
+				turn.ctx, runtimeRequest.VideoToolGuidance = c.prepareVideoTool(turn.ctx, sink, videoModel)
+			}
 		}
 	}
 	if err := c.engine.interactions.BeginTurn(c.agentID, request); err != nil {

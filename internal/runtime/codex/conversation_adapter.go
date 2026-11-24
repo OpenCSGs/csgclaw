@@ -67,6 +67,9 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	if request.ImageToolGuidance != "" {
 		blocks = append([]PromptContentBlock{TextBlock(request.ImageToolGuidance)}, blocks...)
 	}
+	if request.VideoToolGuidance != "" {
+		blocks = append([]PromptContentBlock{TextBlock(request.VideoToolGuidance)}, blocks...)
+	}
 	if memory := contract.MemoryReference(request.RuntimeMemory); memory != "" {
 		blocks = append([]PromptContentBlock{TextBlock(memory)}, blocks...)
 	}

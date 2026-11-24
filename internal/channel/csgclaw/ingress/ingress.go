@@ -284,6 +284,9 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 	if w.stopped {
 		return queuedEvent{}, false, fmt.Errorf("binding worker is stopped")
 	}
+	if event.ContinuationOf != "" && w.latest[string(conversationKey)] != event.ContinuationOf {
+		return queuedEvent{}, false, nil
+	}
 	if w.seen.Has(key) {
 		return queuedEvent{}, false, nil
 	}
@@ -338,7 +341,12 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 func (w *Worker) isCurrentGeneration(item queuedEvent) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.generation[item.conversationKey] == item.generation
+	return w.isCurrentLocked(item)
+}
+
+func (w *Worker) isCurrentLocked(item queuedEvent) bool {
+	return w.generation[item.conversationKey] == item.generation &&
+		(item.event.ContinuationOf == "" || w.latest[string(item.conversationKey)] == item.dedupeKey)
 }
 
 func (w *Worker) discardQueued(key string) {
@@ -375,7 +383,7 @@ func (w *Worker) finishProcessing(key string) {
 func (w *Worker) setActive(item queuedEvent, turn activeEvent) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.generation[item.conversationKey] != item.generation {
+	if !w.isCurrentLocked(item) {
 		return false
 	}
 	if w.active[item.conversationKey] == nil {
