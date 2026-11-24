@@ -19,7 +19,10 @@ func (s *ModelConfiguration) GenerateVideo(ctx context.Context, ref *modelprovid
 	}
 	client := videoHTTPClient(30*time.Minute, profile.Headers, options.Reference != nil)
 	if !options.ParametersConfirmed {
-		capabilities := s.videoCapabilities(ctx, ref, provider, profile, baseURL, key)
+		capabilities := provider.VideoMetadata[ref.ModelID]
+		if len(capabilities.Sizes) == 0 && len(capabilities.Seconds) == 0 {
+			capabilities = s.refreshVideoCapabilities(ctx, ref, capabilities, profile, baseURL, key)
+		}
 		options, err = modelprovider.ResolveVideoGenerationOptions(options, capabilities)
 		if err != nil {
 			return modelprovider.GeneratedVideo{}, err
@@ -41,7 +44,7 @@ func (s *ModelConfiguration) VideoGenerationCapabilities(ctx context.Context, re
 	if err != nil {
 		return modelcap.VideoGeneration{}, err
 	}
-	return s.videoCapabilities(ctx, ref, provider, profile, baseURL, key), nil
+	return s.refreshVideoCapabilities(ctx, ref, provider.VideoMetadata[ref.ModelID], profile, baseURL, key), nil
 }
 
 func (s *ModelConfiguration) videoCatalogEntry(ref *modelprovider.VideoGenerationConfig) (config.ProviderConfig, error) {
@@ -79,12 +82,7 @@ func (s *ModelConfiguration) videoProvider(ctx context.Context, ref *modelprovid
 	return provider, profile, baseURL, key, nil
 }
 
-func (s *ModelConfiguration) videoCapabilities(ctx context.Context, ref *modelprovider.VideoGenerationConfig, provider config.ProviderConfig, profile AgentProfile, baseURL, key string) modelcap.VideoGeneration {
-	capabilities := provider.VideoMetadata[ref.ModelID]
-	if len(capabilities.Sizes) > 0 || len(capabilities.Seconds) > 0 {
-		return capabilities
-	}
-	// Older persisted catalogs may contain the model without its capabilities.
+func (s *ModelConfiguration) refreshVideoCapabilities(ctx context.Context, ref *modelprovider.VideoGenerationConfig, cached modelcap.VideoGeneration, profile AgentProfile, baseURL, key string) modelcap.VideoGeneration {
 	client := videoHTTPClient(5*time.Second, profile.Headers, false)
 	var directory modelprovider.ModelDiscoveryResult
 	var err error
@@ -93,10 +91,10 @@ func (s *ModelConfiguration) videoCapabilities(ctx context.Context, ref *modelpr
 	} else {
 		directory, err = modelprovider.ListOpenAIModelDirectoryWithClient(ctx, client, baseURL, key, profile.Headers)
 	}
-	if err == nil {
-		return directory.VideoMetadata[ref.ModelID]
+	if current, ok := directory.VideoMetadata[ref.ModelID]; err == nil && ok {
+		return current
 	}
-	return capabilities
+	return cached
 }
 
 func videoHTTPClient(timeout time.Duration, headers map[string]string, reference bool) *http.Client {

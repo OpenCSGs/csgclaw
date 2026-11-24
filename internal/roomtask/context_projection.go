@@ -25,6 +25,7 @@ type TurnContextRequest struct {
 	ParticipantID  string
 	SourceID       string
 	TaskID         string
+	VideoFeedback  bool // Internal continuation of the source turn.
 }
 
 type TurnContextProvider func(TurnContextRequest) (PrivateTurnContext, error)

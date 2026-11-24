@@ -1373,7 +1373,7 @@ func (m *appServerManager) confirmMediaGeneration(ctx context.Context, runtimeID
 		question += "\n\n" + details
 	}
 	question += "\n\n" + copy.revisionHint
-	decision, err := m.deps.UserInput.Request(context.Background(), PendingUserInputRequest{
+	decision, err := m.deps.UserInput.Request(ctx, PendingUserInputRequest{
 		Execution: activity.ExecutionRef{
 			RuntimeKind: agentruntime.KindCodex,
 			RuntimeID:   runtimeID,

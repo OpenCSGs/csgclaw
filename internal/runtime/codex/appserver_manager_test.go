@@ -4494,7 +4494,9 @@ func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 
 func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testing.T) {
 	called := 0
-	ctx := contract.WithVideoGenerationHandler(context.Background(), func(context.Context, string, string, modelprovider.VideoGenerationOptions, ...int) error {
+	turnCtx, cancelTurn := context.WithCancel(context.Background())
+	defer cancelTurn()
+	ctx := contract.WithVideoGenerationHandler(turnCtx, func(context.Context, string, string, modelprovider.VideoGenerationOptions, ...int) error {
 		called++
 		return nil
 	})
@@ -4539,9 +4541,7 @@ func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testi
 	if !ok || len(question.Questions) != 1 || !strings.Contains(question.Questions[0].Question, "Size: 480P") || !strings.Contains(question.Questions[0].Question, "Duration: 4 seconds") || !strings.Contains(question.Questions[0].Question, "Reference images: 1") {
 		t.Fatalf("confirmation question = %#v", question)
 	}
-	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{mediaGenerationConfirmationTextFor("en", "video").cancel}}}}}); err != nil {
-		t.Fatalf("cancel generation: %v", err)
-	}
+	cancelTurn()
 	select {
 	case response := <-result:
 		if response["success"] != false {
@@ -4549,6 +4549,9 @@ func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testi
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("video generation did not stop after cancellation")
+	}
+	if snapshot, ok := broker.Get(requestID); !ok || snapshot.Status != activity.UserInputStatusCanceled {
+		t.Fatalf("confirmation after turn cancellation = %#v", snapshot)
 	}
 	if called != 0 {
 		t.Fatalf("video provider invoked after cancellation: %d", called)

@@ -281,7 +281,15 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	}
 	var current roomtask.PrivateTurnContext
 	if a.roomContext != nil {
-		current, err = a.roomContext(roomtask.TurnContextRequest{ConversationID: string(turn.ConversationKey), RoomID: event.RoomID, ParticipantID: binding.ParticipantID, SourceID: event.MessageID, TaskID: event.TaskID})
+		request := roomtask.TurnContextRequest{
+			ConversationID: string(turn.ConversationKey), RoomID: event.RoomID,
+			ParticipantID: binding.ParticipantID, SourceID: event.MessageID, TaskID: event.TaskID,
+		}
+		if event.VideoRetry != nil && event.ContinuationOf != "" {
+			request.SourceID = event.ContinuationOf
+			request.VideoFeedback = true
+		}
+		current, err = a.roomContext(request)
 		if err != nil {
 			if a.room != nil {
 				if room, ok := a.room(turn.RoomID); ok && room.IsAutonomous() {

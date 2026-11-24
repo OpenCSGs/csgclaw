@@ -298,7 +298,7 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 	}
 	if event.NotificationOnly && w.notifications[conversationKey] != "" {
 		w.seen.Add(key)
-		w.latest[string(conversationKey)] = w.notifications[conversationKey]
+		w.setLatestSourceLocked(conversationKey, w.notifications[conversationKey])
 		w.signalUnreadLocked(conversationKey)
 		w.signalRelatedUnreadLocked(event)
 		return queuedEvent{}, false, nil
@@ -329,12 +329,23 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 			w.signalUnreadLocked(conversationKey)
 			w.signalRelatedUnreadLocked(event)
 		}
-		w.latest[string(conversationKey)] = key
+		if event.ContinuationOf == "" {
+			w.setLatestSourceLocked(conversationKey, key)
+		}
 		return item, true, nil
 	default:
 		item.diagnostic.Failure("queue_full", "queue", "The channel queue is full")
 		item.diagnostic.Finish("failed")
 		return queuedEvent{}, false, fmt.Errorf("binding worker queue is full")
+	}
+}
+
+func (w *Worker) setLatestSourceLocked(key agentengine.ConversationKey, source string) {
+	w.latest[string(key)] = source
+	for _, turn := range w.active[key] {
+		if turn.event.ContinuationOf != "" && turn.event.ContinuationOf != source {
+			turn.cancel()
+		}
 	}
 }
 
@@ -346,7 +357,7 @@ func (w *Worker) isCurrentGeneration(item queuedEvent) bool {
 
 func (w *Worker) isCurrentLocked(item queuedEvent) bool {
 	return w.generation[item.conversationKey] == item.generation &&
-		(item.event.ContinuationOf == "" || w.latest[string(item.conversationKey)] == item.dedupeKey)
+		(item.event.ContinuationOf == "" || w.latest[string(item.conversationKey)] == item.event.ContinuationOf)
 }
 
 func (w *Worker) discardQueued(key string) {

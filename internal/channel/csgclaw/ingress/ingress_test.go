@@ -123,10 +123,22 @@ func TestVideoContinuationOnlyRunsWhileItsSourceIsCurrent(t *testing.T) {
 	if err != nil || !accepted {
 		t.Fatalf("fresh continuation: accepted=%t err=%v", accepted, err)
 	}
+	second, accepted, err := w.acceptAndEnqueue(channel.Event{RoomID: "r", MessageID: "feedback-2", Text: "another failure", ContinuationOf: "original"})
+	if err != nil || !accepted || !w.isCurrentGeneration(second) || !w.IsCurrent(second.conversationKey, "original") {
+		t.Fatalf("sibling continuation: accepted=%t err=%v", accepted, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if !w.setActive(continuation, activeEvent{cancel: cancel}) {
+		t.Fatal("fresh continuation could not start")
+	}
 	if _, accepted, err := w.acceptAndEnqueue(channel.Event{RoomID: "r", MessageID: "newer", Text: "second"}); err != nil || !accepted {
 		t.Fatalf("newer message: accepted=%t err=%v", accepted, err)
 	}
-	if w.setActive(continuation, activeEvent{}) {
+	if ctx.Err() != context.Canceled {
+		t.Fatal("newer request did not cancel the active continuation")
+	}
+	if w.setActive(second, activeEvent{}) {
 		t.Fatal("queued continuation started after a newer user request")
 	}
 	if _, accepted, err := w.acceptAndEnqueue(channel.Event{RoomID: "r", MessageID: "late-feedback", Text: "failure", ContinuationOf: "original"}); err != nil || accepted {

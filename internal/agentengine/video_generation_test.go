@@ -24,6 +24,9 @@ func TestVideoToolGuidanceAndPreflightUseSelectedModelCapabilities(t *testing.T)
 			if *selected != *ref {
 				t.Fatalf("selected model = %#v, want %#v", selected, ref)
 			}
+			if refresh {
+				return modelcap.VideoGeneration{Sizes: []string{"480P"}, Seconds: []int{8}}, nil
+			}
 			return modelcap.VideoGeneration{Sizes: []string{"480P", "720P"}, Seconds: []int{4, 5, 6}}, nil
 		},
 	}}
@@ -47,7 +50,11 @@ func TestVideoToolGuidanceAndPreflightUseSelectedModelCapabilities(t *testing.T)
 	if _, err := contract.PrepareVideoGeneration(ctx, modelprovider.VideoGenerationOptions{Size: "1080P"}); err == nil {
 		t.Fatal("unsupported size accepted")
 	}
-	if !slices.Equal(refreshCalls, []bool{false, true, true, true}) {
+	options, err = contract.PrepareVideoGeneration(ctx, modelprovider.VideoGenerationOptions{Seconds: 8, RetryOf: "rejected"})
+	if err != nil || options.Seconds != 8 {
+		t.Fatalf("revised options = %#v, err = %v", options, err)
+	}
+	if !slices.Equal(refreshCalls, []bool{false, false, false, false, true}) {
 		t.Fatalf("capability lookups = %v", refreshCalls)
 	}
 }

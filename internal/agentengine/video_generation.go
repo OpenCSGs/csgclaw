@@ -59,7 +59,8 @@ func (c *conversations) prepareVideoTool(ctx context.Context, sink EventSink, re
 		if err != nil {
 			return options, err
 		}
-		current, err := c.engine.videoCapabilities(ctx, ref, true)
+		refresh := options.RetryOf != "" || (len(capabilities.Sizes) == 0 && len(capabilities.Seconds) == 0)
+		current, err := c.engine.videoCapabilities(ctx, ref, refresh)
 		if err != nil {
 			return options, err
 		}
@@ -118,6 +119,10 @@ func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *mode
 			return fmt.Errorf("invalid video prompt")
 		}
 		mu.Lock()
+		if err := ctx.Err(); err != nil {
+			mu.Unlock()
+			return err
+		}
 		if result := tasks[id]; result != nil {
 			mu.Unlock()
 			return wait(ctx, result)

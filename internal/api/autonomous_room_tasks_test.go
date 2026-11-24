@@ -11,6 +11,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/roomtask"
 	"csgclaw/internal/taskcore"
 	"csgclaw/internal/worklease"
 )
@@ -215,5 +216,20 @@ func TestAutonomousTaskToolsRecordIndependentPartsAndStayInScope(t *testing.T) {
 	h.Routes().ServeHTTP(out, httptest.NewRequest(http.MethodGet, "/api/v1/rooms/"+room.ID+"/tasks", nil))
 	if out.Code != http.StatusOK {
 		t.Fatalf("room view: %d %s", out.Code, out.Body.String())
+	}
+}
+
+func TestAutonomousVideoFeedbackDoesNotAdmitUnreadNotification(t *testing.T) {
+	h := newAppTaskTestHandler(t)
+	room, source := createAutonomousTaskFixture(t, h)
+	request := roomtask.TurnContextRequest{RoomID: room.ID, ParticipantID: "pt-dev", SourceID: source.ID, VideoFeedback: true}
+	feedback, err := h.roomExecutionContext(request)
+	if err != nil || feedback.Skip || feedback.Role != roomtask.TurnRoleAutonomous || feedback.Notification != nil {
+		t.Fatalf("video feedback context: %+v, %v", feedback, err)
+	}
+	request.VideoFeedback = false
+	ordinary, err := h.roomExecutionContext(request)
+	if err != nil || ordinary.Skip || ordinary.Notification == nil {
+		t.Fatalf("ordinary notification context after feedback: %+v, %v", ordinary, err)
 	}
 }
