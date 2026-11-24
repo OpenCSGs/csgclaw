@@ -212,6 +212,44 @@ test("Tab and Shift+Tab leave a portalled picker and skip hidden fields in its d
   expect(screen.getByRole("dialog", { name: "Configure" })).toBeInTheDocument();
 });
 
+test("Tab reaches footer actions before leaving a portalled picker", async () => {
+  const user = userEvent.setup();
+  render(
+    <DialogRoot defaultOpen>
+      <DialogContent aria-describedby={undefined}>
+        <DialogTitle>Configure</DialogTitle>
+        <Combobox
+          triggerProps={{ "aria-label": "Model" }}
+          options={options}
+          searchPlaceholder="Search models"
+          tabIntoFooter
+          footer={
+            <>
+              <button disabled>Unavailable action</button>
+              <button>Add provider</button>
+              <button>Retry connection</button>
+            </>
+          }
+        />
+        <button>Next field</button>
+      </DialogContent>
+    </DialogRoot>,
+  );
+
+  await user.click(screen.getByRole("combobox", { name: "Model" }));
+  const search = screen.getByRole("combobox", { name: "Search models" });
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Add provider" })).toHaveFocus();
+  await user.tab({ shift: true });
+  expect(search).toHaveFocus();
+  await user.tab();
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Retry connection" })).toHaveFocus();
+  await user.tab();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Next field" })).toHaveFocus());
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});
+
 test("a controlled saved value stays visible while async options load and then becomes selectable", async () => {
   const user = userEvent.setup();
   const changed = vi.fn();

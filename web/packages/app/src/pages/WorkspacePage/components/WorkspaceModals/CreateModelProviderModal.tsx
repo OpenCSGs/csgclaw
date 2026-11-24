@@ -56,6 +56,7 @@ export function CreateModelProviderModal({
   onCreate,
   t,
 }: CreateModelProviderModalProps) {
+  const [opener] = useState(() => document.activeElement);
   const directory = useModelProviderPresets();
   const presets = directory.data?.presets ?? [];
   const [selected, setSelected] = useState(initialPreset);
@@ -164,6 +165,10 @@ export function CreateModelProviderModal({
       <DialogContent
         scrollBody
         className={styles.dialog}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")) opener.focus();
+        }}
         onEscapeKeyDown={(event) => {
           // Keep a fast Escape in a newly opened Select from dismissing its parent dialog.
           if (openSelect) {

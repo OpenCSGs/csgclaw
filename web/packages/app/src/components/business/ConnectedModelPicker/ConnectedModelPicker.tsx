@@ -1,12 +1,18 @@
 import type { ComboboxOption } from "csgclaw-ui";
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Button, Combobox } from "@/components/ui";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
-import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
-import { checkModelProvider } from "@/api/modelProviders";
 import { errorMessage } from "@/api/client";
+import { checkModelProvider } from "@/api/modelProviders";
+import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
 import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
-import { isOpenCSGAutoModel, type ModelProviderSelectOption } from "@/models/modelProviders";
+import { localizeAPIError } from "@/shared/i18n";
+import {
+  isOpenCSGAutoModel,
+  modelProviderMessageLabel,
+  type ModelProvider,
+  type ModelProviderSelectOption,
+} from "@/models/modelProviders";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./ConnectedModelPicker.module.css";
 
@@ -33,18 +39,32 @@ export function ConnectedModelPicker({
   showConnectionActions?: boolean;
   selectionLabel?: "model" | "full";
   placeholder?: string;
-  footer?: import("react").ReactNode;
+  footer?: React.ReactNode;
   followDefault?: boolean;
   onChoose: (providerID: string, modelID: string) => void | Promise<void>;
   onFollowDefault?: () => void | Promise<void>;
   t: TranslateFn;
 }) {
   const controller = useOptionalWorkspaceControllerContext();
+  const addProvider =
+    showConnectionActions && controller?.ready ? controller.sidebarProps.onCreateModelProvider : undefined;
+  const failed = showConnectionActions
+    ? (controller?.modelProviders?.providers ?? []).filter(
+        (provider) => provider.status === "failed" && !provider.builtin,
+      )
+    : [];
+  const [panel, setPanel] = useState<"add" | "retry" | null>(null);
+  const hasConnectionActions = Boolean(addProvider || failed.length || panel === "retry");
+  const [retrying, setRetrying] = useState("");
+  const [checkFeedback, setCheckFeedback] = useState<{ providerID: string; message: string; failed: boolean } | null>(
+    null,
+  );
+  const retryToggle = useRef<HTMLButtonElement>(null);
+  const activeRetryButton = useRef<HTMLButtonElement | null>(null);
+  const panelID = useId();
+  const directory = useModelProviderPresets(Boolean(addProvider && panel === "add"));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [retrying, setRetrying] = useState("");
-  const [showConnect, setShowConnect] = useState(false);
-  const directory = useModelProviderPresets(showConnectionActions && showConnect);
   const encode = (p: string, m: string) => JSON.stringify([p, m]);
   const detail = (provider: ModelProviderSelectOption) =>
     provider.serviceName && provider.serviceName !== provider.displayName
@@ -87,8 +107,6 @@ export function ConnectedModelPicker({
       disabled: false,
     });
   const selected = followDefault || !modelID ? "" : encode(providerID, modelID);
-  const connected = controller?.modelProviders?.providers ?? [];
-  const failed = connected.filter((p) => p.status === "failed" && !p.builtin);
   async function choose(value: string) {
     setSaving(true);
     setError("");
@@ -104,13 +122,41 @@ export function ConnectedModelPicker({
       setSaving(false);
     }
   }
+  async function retry(provider: ModelProvider) {
+    setRetrying(provider.id);
+    setCheckFeedback(null);
+    try {
+      const result = await checkModelProvider(provider.id, { connect: true });
+      const connected = result.status === "connected";
+      setCheckFeedback({
+        providerID: provider.id,
+        message: connected
+          ? t("modelProviderConnected")
+          : modelProviderMessageLabel(result, t) || t("modelProviderCheckFailed"),
+        failed: !connected,
+      });
+      if (connected && activeRetryButton.current === document.activeElement) {
+        retryToggle.current?.focus();
+      }
+      await controller?.refreshWorkspaceModelProviders();
+    } catch (cause) {
+      setCheckFeedback({
+        providerID: provider.id,
+        message: localizeAPIError(cause, t, t("modelProviderCheckFailed")),
+        failed: true,
+      });
+    } finally {
+      setRetrying("");
+    }
+  }
+
   return (
     <div className={styles.root}>
       <Combobox
         value={selected}
         options={options}
         onValueChange={(value) => void choose(value)}
-        disabled={disabled || saving}
+        disabled={disabled || saving || (!options.length && !hasConnectionActions)}
         searchPlaceholder={t("modelProviderModelSearch")}
         emptyLabel={t("modelConnectNoMatch")}
         placeholder={placeholder ?? t(options.length ? "profileSelectModel" : "modelDefaultNone")}
@@ -131,83 +177,120 @@ export function ConnectedModelPicker({
         }
         size={compact ? "sm" : "md"}
         triggerClassName={compact ? styles.compact : undefined}
+        onOpenChange={(open) => {
+          if (!open) setPanel(null);
+        }}
+        tabIntoFooter
         footer={
-          <div className={styles.actions}>
-            {showConnectionActions && controller?.ready ? (
-              <Button
-                size="sm"
-                variant="tertiaryGray"
-                disabled={disabled || saving}
-                onClick={() => setShowConnect(!showConnect)}
-              >
-                {t("modelConnectAdd")}
-              </Button>
-            ) : null}
-            {showConnectionActions && showConnect && controller?.ready ? (
-              <div className={styles.services}>
-                {(directory.data?.presets ?? [])
-                  .filter((preset, index, all) => all.findIndex((p) => p.brand === preset.brand) === index)
-                  .map((preset) => (
-                    <Button
-                      key={preset.brand}
-                      size="sm"
-                      variant="secondaryGray"
-                      disabled={disabled || saving}
-                      onClick={() => {
-                        setShowConnect(false);
-                        void controller.sidebarProps.onCreateModelProvider?.({
-                          preset: preset.id,
-                          onConnected: (provider) => {
-                            if (provider.models[0]) void choose(encode(provider.id, provider.models[0]));
-                          },
-                        });
-                      }}
-                    >
-                      <img src={preset.avatar} alt="" />
-                      {preset.brand_name}
-                    </Button>
-                  ))}
-                {directory.isError ? (
-                  <Button size="sm" variant="secondaryGray" onClick={directory.refetch}>
-                    {t("retry")}
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {showConnectionActions
-              ? failed.map((provider) => (
-                  <div key={provider.id} className={styles.retry}>
-                    <span>{provider.display_name}</span>
-                    <Button
-                      variant="tertiaryGray"
-                      size="sm"
-                      disabled={disabled || Boolean(retrying)}
-                      onClick={async () => {
-                        setRetrying(provider.id);
-                        setError("");
-                        try {
-                          const result = await checkModelProvider(provider.id, { connect: true });
-                          if (result.status !== "connected") setError(result.message || t("modelProviderCheckFailed"));
-                          await controller?.refreshWorkspaceModelProviders();
-                        } catch (cause) {
-                          setError(errorMessage(cause, t("modelProviderCheckFailed")));
-                        } finally {
-                          setRetrying("");
-                        }
-                      }}
-                    >
-                      {t("modelConnectRetry")}
-                    </Button>
+          hasConnectionActions || footer ? (
+            <>
+              {hasConnectionActions ? (
+                <div className={styles.actions}>
+                  <div className={styles.shortcuts}>
+                    {addProvider ? (
+                      <Button
+                        size="sm"
+                        variant="tertiaryGray"
+                        aria-expanded={panel === "add"}
+                        aria-controls={panel === "add" ? panelID : undefined}
+                        onClick={() => setPanel(panel === "add" ? null : "add")}
+                      >
+                        {t("modelConnectAdd")}
+                      </Button>
+                    ) : null}
+                    {failed.length > 0 || panel === "retry" ? (
+                      <Button
+                        ref={retryToggle}
+                        size="sm"
+                        variant="tertiaryGray"
+                        aria-expanded={panel === "retry"}
+                        aria-controls={panel === "retry" ? panelID : undefined}
+                        onClick={() => setPanel(panel === "retry" ? null : "retry")}
+                      >
+                        {t("modelConnectRetryFailed", { count: failed.length })}
+                      </Button>
+                    ) : null}
                   </div>
-                ))
-              : null}
-            {showConnectionActions && error ? (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
-            ) : null}
-            {footer}
-          </div>
+                  {panel === "add" && addProvider ? (
+                    <div id={panelID} className={styles.panel}>
+                      <div className={styles.services}>
+                        {(directory.data?.presets ?? [])
+                          .filter((preset, index, all) => all.findIndex((p) => p.brand === preset.brand) === index)
+                          .map((preset) => (
+                            <Button
+                              key={preset.brand}
+                              size="sm"
+                              variant="secondaryGray"
+                              className={styles.service}
+                              title={preset.brand_name}
+                              aria-haspopup="dialog"
+                              onClick={() => {
+                                void addProvider({
+                                  preset: preset.id,
+                                  onConnected: (provider) => {
+                                    const model = provider.models.find(
+                                      (id) =>
+                                        !provider.imageModels?.includes(id) && !provider.videoModels?.includes(id),
+                                    );
+                                    if (model) void choose(encode(provider.id, model));
+                                  },
+                                });
+                              }}
+                            >
+                              <img src={preset.avatar} alt="" />
+                              <span className={styles.serviceName}>{preset.brand_name}</span>
+                            </Button>
+                          ))}
+                        {directory.isPending ? <span role="status">{t("loading")}</span> : null}
+                        {directory.isError ? (
+                          <Button size="sm" variant="secondaryGray" onClick={() => void directory.refetch()}>
+                            {t("retry")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                  {panel === "retry" ? (
+                    <div id={panelID} className={styles.panel}>
+                      {failed.map((provider) => (
+                        <div key={provider.id} className={styles.connection}>
+                          <div className={styles.retry}>
+                            <span className={styles.providerName}>{provider.display_name}</span>
+                            <Button
+                              size="sm"
+                              variant="tertiaryGray"
+                              aria-busy={retrying === provider.id}
+                              aria-disabled={retrying === provider.id}
+                              disabled={Boolean(retrying) && retrying !== provider.id}
+                              aria-label={t("modelConnectRetryProvider", { name: provider.display_name })}
+                              onClick={(event) => {
+                                if (retrying) return;
+                                activeRetryButton.current = event.currentTarget;
+                                void retry(provider);
+                              }}
+                            >
+                              {t(retrying === provider.id ? "loading" : "modelConnectRetry")}
+                            </Button>
+                          </div>
+                          {checkFeedback?.failed && checkFeedback.providerID === provider.id ? (
+                            <p className={styles.error} role="alert">
+                              {checkFeedback.message}
+                            </p>
+                          ) : null}
+                        </div>
+                      ))}
+                      {checkFeedback && !checkFeedback.failed ? (
+                        <p className={styles.feedback} role="status">
+                          {checkFeedback.message}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {footer}
+            </>
+          ) : undefined
         }
         triggerProps={{ "aria-label": t(compact ? "iaModelTitle" : "profileModel") }}
       />

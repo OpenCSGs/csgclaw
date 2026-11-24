@@ -4,53 +4,83 @@
   gap: 6px;
   min-width: 0;
 }
-.services {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-height: 180px;
-  overflow-y: auto;
-}
-.services img {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-}
-.retry {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--panel-soft);
-  color: var(--muted);
-  font: var(--text-xs-normal);
-}
-.retry > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .error {
   color: var(--danger);
   font: var(--text-xs-normal);
   margin: 0;
 }
 
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-top: 1px solid var(--line);
-}
 .compact {
   max-width: 260px;
   border: 0;
   background: transparent;
   box-shadow: none;
   font-size: 12px;
+}
+
+.actions {
+  border-top: 1px solid var(--line);
+}
+
+.shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+}
+
+.panel {
+  max-height: min(9rem, calc(var(--radix-popover-content-available-height, 320px) * 0.35));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-1) var(--space-2);
+}
+
+.services {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 6.75rem), 1fr));
+  gap: var(--space-1);
+}
+
+.services .service {
+  justify-content: flex-start;
+  min-width: 0;
+  padding-inline: var(--space-2);
+}
+
+.service img {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.serviceName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.connection + .connection {
+  border-top: 1px solid var(--line);
+}
+
+.retry {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+.providerName,
+.feedback {
+  color: var(--text);
+  font: var(--text-xs-normal);
+  overflow-wrap: anywhere;
+}
+
+.feedback {
+  margin: var(--space-1) 0;
 }

@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, KeyboardEvent, ReactNode } from "react";
 import {
   PopoverContent,
   PopoverRoot,
@@ -25,7 +25,7 @@ import {
   useFieldControlProps,
 } from "../FormControls/fieldContext.js";
 import { classNames, legacyClassName } from "../../lib/classNames.js";
-import { nextFocusTarget } from "./focus.js";
+import { nextFocusTarget, tabTargets } from "./focus.js";
 
 export type ComboboxOption = {
   value: string;
@@ -41,6 +41,7 @@ export type ComboboxOption = {
 export type ComboboxProps = {
   options: readonly ComboboxOption[];
   footer?: ReactNode;
+  tabIntoFooter?: boolean;
   value?: string;
   defaultValue?: string;
   onValueChange?: (value: string) => void;
@@ -79,6 +80,7 @@ function searchText(option: ComboboxOption): string {
 export function Combobox({
   options,
   footer,
+  tabIntoFooter = false,
   value,
   defaultValue = "",
   onValueChange,
@@ -114,6 +116,7 @@ export function Combobox({
   }, []);
   const inputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
   const composing = useRef(false);
   const restoreFocus = useRef(true);
   const tabTarget = useRef<HTMLElement | null>(null);
@@ -168,6 +171,15 @@ export function Combobox({
       tabTarget.current = null;
     }
     onOpenChange?.(next);
+  }
+
+  function leaveWithTab(event: KeyboardEvent<HTMLElement>) {
+    restoreFocus.current = false;
+    tabTarget.current = triggerRef.current
+      ? nextFocusTarget(triggerRef.current, contentRef.current, event.shiftKey)
+      : null;
+    if (tabTarget.current) event.preventDefault();
+    changeOpen(false);
   }
 
   function commit(option: ComboboxOption) {
@@ -380,16 +392,15 @@ export function Combobox({
                   );
                   if (option) commit(option);
                 } else if (event.key === "Tab") {
-                  restoreFocus.current = false;
-                  tabTarget.current = triggerRef.current
-                    ? nextFocusTarget(
-                        triggerRef.current,
-                        contentRef.current,
-                        event.shiftKey,
-                      )
-                    : null;
-                  if (tabTarget.current) event.preventDefault();
-                  changeOpen(false);
+                  const first = !event.shiftKey && footerRef.current
+                    ? tabTargets(footerRef.current)[0]
+                    : undefined;
+                  if (first) {
+                    event.preventDefault();
+                    first.focus();
+                  } else {
+                    leaveWithTab(event);
+                  }
                 }
               }}
             />
@@ -483,7 +494,27 @@ export function Combobox({
             </div>
           )}
         </div>
-        {footer}
+        {footer && tabIntoFooter ? (
+          <div
+            className={styles["csg-combobox-footer"]}
+            ref={footerRef}
+            onKeyDownCapture={(event) => {
+              // Route boundary keys before the popover's focus scope can wrap focus.
+              if (event.defaultPrevented || event.key !== "Tab") return;
+              const controls = tabTargets(event.currentTarget);
+              if (event.shiftKey && event.target === controls[0]) {
+                event.stopPropagation();
+                event.preventDefault();
+                inputRef.current?.focus();
+              } else if (!event.shiftKey && event.target === controls.at(-1)) {
+                event.stopPropagation();
+                leaveWithTab(event);
+              }
+            }}
+          >
+            {footer}
+          </div>
+        ) : footer}
       </PopoverContent>
     </PopoverRoot>
   );
