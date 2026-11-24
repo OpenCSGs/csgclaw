@@ -1078,7 +1078,8 @@ export function useConversationController({
     if (!data) {
       return;
     }
-    if (!autoSelectFallbackConversation) {
+    // An explicit route is reconciled by the workspace after a confirmed 404.
+    if (!autoSelectFallbackConversation || (activePane.type === WorkspacePaneTypes.conversation && activePane.id)) {
       return;
     }
     const preferredFallbackID = String(preferredFallbackConversationId || "").trim();

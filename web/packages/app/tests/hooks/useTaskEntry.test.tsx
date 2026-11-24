@@ -164,6 +164,24 @@ it.each([
     removed: false,
   },
   {
+    outcome: "a gateway timeout masks a successful deletion",
+    deleteError: { status: 504, message: "Gateway Timeout" },
+    probe: "missing",
+    removed: true,
+  },
+  {
+    outcome: "the room still exists after a gateway timeout",
+    deleteError: { status: 504, message: "Gateway Timeout" },
+    probe: "present",
+    removed: false,
+  },
+  {
+    outcome: "the server explicitly rejects deletion",
+    deleteError: { status: 409, message: "Room has active work" },
+    probe: "skip",
+    removed: false,
+  },
+  {
     outcome: "the probe is unavailable",
     deleteError: new TypeError("Connection lost"),
     probe: "unavailable",

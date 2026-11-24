@@ -99,7 +99,9 @@ export function useTaskEntry({ currentUserID, rooms, onUpdate, onMessage, onDele
         await deleteRoomRequest(id);
       } catch (error) {
         if (apiErrorCode(error) !== "room_not_found") {
-          if (!(error instanceof TypeError)) throw error;
+          const status = error && typeof error === "object" && "status" in error ? error.status : undefined;
+          const ambiguousGatewayResponse = status === 502 || status === 503 || status === 504;
+          if (!(error instanceof TypeError) && !ambiguousGatewayResponse) throw error;
           const roomMissing = await fetchMessagesRequest(id).then(
             () => false,
             (cause: unknown) => apiErrorCode(cause) === "room_not_found",
