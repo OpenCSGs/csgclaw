@@ -111,7 +111,7 @@ export function FilesTab({
     return (
       <Tooltip content={t("chatFileReference")}>
         <Button
-          className="chat-file-reference"
+          className={chatSidePanelStyles["chat-file-reference"]}
           size="sm"
           variant="tertiaryGray"
           iconOnly
@@ -138,10 +138,10 @@ export function FilesTab({
           }
           title={reference.label}
         >
-          <span className="chat-file-glyph">
+          <span className={chatSidePanelStyles["chat-file-glyph"]}>
             <FileTypeIcon name={name} mediaType={mediaType} />
           </span>
-          <span className="chat-file-name">{name}</span>
+          <span className={chatSidePanelStyles["chat-file-name"]}>{name}</span>
           <small>{formatAttachmentSize(size)}</small>
         </button>
         {referenceButton(name, reference)}
@@ -298,10 +298,10 @@ export function FilesTab({
                     type="button"
                     onClick={() => changeDirectory(entry.path)}
                   >
-                    <span className="chat-file-glyph">
+                    <span className={chatSidePanelStyles["chat-file-glyph"]}>
                       <FileTypeIcon isFolder />
                     </span>
-                    <span className="chat-file-name">{entry.name}</span>
+                    <span className={chatSidePanelStyles["chat-file-name"]}>{entry.name}</span>
                   </button>
                   {referenceButton(entry.name ?? entry.path, {
                     source: "workspace",

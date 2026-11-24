@@ -314,7 +314,7 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Files" }));
     const panel = screen.getByRole("complementary");
     const actions = panel.querySelector(`.${testChatSidePanelStyles["chat-side-leading-actions"]}`);
-    expect(actions?.nextElementSibling).toHaveClass("chat-side-tabs");
+    expect(actions?.nextElementSibling).toHaveClass(testChatSidePanelStyles["chat-side-tabs"]);
     expect(actions?.querySelectorAll("button")[0]).toHaveAttribute("aria-label", "New tab");
     expect(actions?.querySelectorAll("button")[1]).toHaveAttribute("aria-label", "Close all tabs");
     await user.click(within(panel).getByRole("button", { name: "Close all tabs" }));
@@ -631,9 +631,9 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Files" }));
     const panel = screen.getByRole("complementary");
     await user.click(within(panel).getByRole("button", { name: "Maximize sidebar" }));
-    expect(panel).toHaveClass("is-maximized");
+    expect(panel).toHaveAttribute("data-layout", "maximized");
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(panel).not.toHaveClass("is-maximized");
+    expect(panel).not.toHaveAttribute("data-layout", "maximized");
     expect(panel).toBeVisible();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(panel).not.toBeVisible();

@@ -38,3 +38,28 @@
   background: var(--panel);
   color: var(--text);
 }
+
+.chat-panel:has(> :global(.chat-header)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.chat-panel > :global(.chat-header) {
+  min-width: 0;
+  container: chat-tools-layout / inline-size;
+}
+
+.chat-panel:has(> [data-chat-side-panel]:not([hidden])) {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.chat-panel:has(> [data-chat-side-panel]:not([hidden]))
+  > :is(:global(.chat-header), :global(.conversation-message-area), :global(.composer)) {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.chat-panel:has(> [data-chat-side-panel][data-layout="overlay"]:not([hidden])),
+.chat-panel:has(> [data-chat-side-panel][data-layout="maximized"]:not([hidden])) {
+  grid-template-columns: minmax(0, 1fr);
+}

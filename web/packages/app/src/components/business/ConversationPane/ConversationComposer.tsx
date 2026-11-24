@@ -1,3 +1,4 @@
+import composerTokenStyles from "./ComposerTokens.module.css";
 import { useComposerCompact } from "@/shared/layout/useComposerCompact";
 import conversationSendButtonStyles from "./ConversationSendButton.module.css";
 import conversationComposerStyles from "./ConversationComposer.module.css";
@@ -291,7 +292,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           ) : null}
           <div
             ref={editorRef}
-            className={`composer-editor ${conversationComposerStyles["composer-editor"]} ${interactionDisabled ? "disabled" : ""}`}
+            className={`${composerTokenStyles.editor} composer-editor ${conversationComposerStyles["composer-editor"]} ${interactionDisabled ? "disabled" : ""}`}
             contentEditable={interactionDisabled ? "false" : "true"}
             tabIndex={interactionDisabled ? -1 : 0}
             suppressContentEditableWarning={true}

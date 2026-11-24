@@ -224,7 +224,7 @@ export function ChatSidePanel({
       siblings.forEach((node) => (node.inert = true));
       if (!panelRef.current?.contains(document.activeElement))
         panelRef.current
-          ?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"], .chat-side-layout-actions button')
+          ?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"], [data-chat-side-actions] button')
           ?.focus({ preventScroll: true });
     }
     const handle = (event: KeyboardEvent) => {
@@ -262,7 +262,7 @@ export function ChatSidePanel({
     if (tab.kind === "thread") onThreadClose?.();
     requestAnimationFrame(() =>
       panelRef.current
-        ?.querySelector<HTMLButtonElement>('.chat-side-tabs [aria-selected="true"], .chat-side-welcome button')
+        ?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"], [data-chat-tool-picker] button')
         ?.focus({ preventScroll: true }),
     );
   }
@@ -338,7 +338,10 @@ export function ChatSidePanel({
     <aside
       ref={panelRef}
       hidden={!visible}
-      className={`chat-side-panel${overlay ? " is-overlay" : ""}${maximized ? " is-maximized" : ""}${resizing ? " is-resizing" : ""}`}
+      className={chatSidePanelStyles["chat-side-panel"]}
+      data-chat-side-panel
+      data-layout={maximized ? "maximized" : overlay ? "overlay" : "split"}
+      data-resizing={resizing}
       style={{ "--chat-side-width": `${actualWidth}px` } as CSSProperties}
       aria-label={t("chatSidePanel")}
     >
@@ -392,7 +395,6 @@ export function ChatSidePanel({
         <div className={chatSidePanelStyles["chat-side-leading-actions"]}>
           <Tooltip content={t("chatSideNew")} contentProps={{ side: "bottom" }}>
             <Button
-              className="chat-side-new"
               iconOnly
               size="sm"
               variant="tertiaryGray"
@@ -416,7 +418,7 @@ export function ChatSidePanel({
           </Tooltip>
         </div>
         <div
-          className="chat-side-tabs"
+          className={chatSidePanelStyles["chat-side-tabs"]}
           role="tablist"
           aria-label={t("chatSideTabs")}
           onKeyDown={(event) => {
@@ -444,7 +446,8 @@ export function ChatSidePanel({
             const Icon = iconFor(tab);
             return (
               <div
-                className={`${chatSidePanelStyles["chat-side-tab"]}${tab.id === state.activeID ? " is-active" : ""}`}
+                className={chatSidePanelStyles["chat-side-tab"]}
+                data-active={tab.id === state.activeID}
                 key={tab.id}
               >
                 <Tooltip content={labelFor(tab)} contentProps={{ side: "bottom" }}>
@@ -484,7 +487,7 @@ export function ChatSidePanel({
             );
           })}
         </div>
-        <div className="chat-side-layout-actions">
+        <div className={chatSidePanelStyles["chat-side-layout-actions"]} data-chat-side-actions>
           <Tooltip content={t(maximized ? "chatSideRestore" : "chatSideMaximize")} contentProps={{ side: "bottom" }}>
             <Button
               iconOnly
@@ -635,12 +638,12 @@ function WelcomeTab({
   kinds: readonly ChatToolKind[];
 }) {
   return (
-    <div className="chat-side-welcome">
+    <div className={chatSidePanelStyles["chat-side-welcome"]} data-chat-tool-picker>
       {kinds.map((kind) => {
         const Icon =
           kind === "files" ? FolderIcon : kind === "browser" ? Globe : kind === "tasks" ? ListTodo : Activity;
         return (
-          <button key={kind} className={`chat-side-welcome-${kind}`} type="button" onClick={() => onSelect(kind)}>
+          <button key={kind} data-tool-kind={kind} type="button" onClick={() => onSelect(kind)}>
             <span className={chatSidePanelStyles["chat-side-welcome-icon"]}>
               <Icon size={18} />
             </span>

@@ -1111,7 +1111,11 @@ function StartTaskForm({
           });
         }}
         onReference={(reference) => {
-          if (pageRef.current?.querySelector(".chat-side-panel:is(.is-overlay, .is-maximized)")) {
+          if (
+            pageRef.current?.querySelector(
+              '[data-chat-side-panel]:is([data-layout="overlay"], [data-layout="maximized"])',
+            )
+          ) {
             sidePanel.patch({ open: false });
             requestAnimationFrame(() => editorRef.current?.focus({ preventScroll: true }));
           }

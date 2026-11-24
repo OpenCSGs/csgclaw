@@ -84,10 +84,10 @@
   border-color: var(--workspace-divider-color);
   border-left-color: transparent;
 }
-.frame .content :global(.chat-side-panel) {
+.frame .content [data-chat-side-panel] {
   border-left-color: var(--workspace-divider-color);
 }
 /* Native views do not inherit DOM clipping, so keep their bounds inside the curve. */
-.content :global(.chat-browser-native) {
+.content [data-native-browser] {
   margin: 0 var(--desktop-workspace-inset) var(--desktop-workspace-inset) 0;
 }
