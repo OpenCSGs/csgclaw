@@ -59,6 +59,7 @@ export function ConnectedModelPicker({
   const [checkFeedback, setCheckFeedback] = useState<{ providerID: string; message: string; failed: boolean } | null>(
     null,
   );
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const retryToggle = useRef<HTMLButtonElement>(null);
   const activeRetryButton = useRef<HTMLButtonElement | null>(null);
   const panelID = useId();
@@ -181,6 +182,7 @@ export function ConnectedModelPicker({
           if (!open) setPanel(null);
         }}
         tabIntoFooter
+        triggerRef={triggerRef}
         footer={
           hasConnectionActions || footer ? (
             <>
@@ -227,6 +229,7 @@ export function ConnectedModelPicker({
                               onClick={() => {
                                 void addProvider({
                                   preset: preset.id,
+                                  focusFallback: triggerRef.current,
                                   onConnected: (provider) => {
                                     const model = provider.models.find(
                                       (id) =>
@@ -269,7 +272,7 @@ export function ConnectedModelPicker({
                                 void retry(provider);
                               }}
                             >
-                              {t(retrying === provider.id ? "loading" : "modelConnectRetry")}
+                              {t(retrying === provider.id ? "modelConnectChecking" : "modelConnectRetry")}
                             </Button>
                           </div>
                           {checkFeedback?.failed && checkFeedback.providerID === provider.id ? (

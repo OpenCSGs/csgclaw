@@ -38,6 +38,7 @@ export type CreateModelProviderModalProps = {
   error?: string;
   locale?: LocaleCode;
   initialPreset?: string;
+  focusFallback?: HTMLElement | null;
   modelProviders?: ModelProviderCatalog | null;
   onClearError?: () => void;
   onClose: () => void;
@@ -50,6 +51,7 @@ export function CreateModelProviderModal({
   error = "",
   locale = "en",
   initialPreset = "",
+  focusFallback,
   modelProviders = null,
   onClose,
   onClearError,
@@ -167,7 +169,11 @@ export function CreateModelProviderModal({
         className={styles.dialog}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          if (opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")) opener.focus();
+          const target =
+            opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")
+              ? opener
+              : focusFallback;
+          if (target?.isConnected && !target.matches(":disabled")) target.focus();
         }}
         onEscapeKeyDown={(event) => {
           // Keep a fast Escape in a newly opened Select from dismissing its parent dialog.

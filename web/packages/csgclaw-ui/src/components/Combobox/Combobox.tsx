@@ -11,7 +11,12 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ButtonHTMLAttributes, KeyboardEvent, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  KeyboardEvent,
+  ReactNode,
+  RefObject,
+} from "react";
 import {
   PopoverContent,
   PopoverRoot,
@@ -59,6 +64,7 @@ export type ComboboxProps = {
   loadingLabel?: ReactNode;
   size?: "sm" | "md";
   triggerClassName?: string;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
   triggerTooltip?: ReactNode;
   triggerProps?: Omit<
     ButtonHTMLAttributes<HTMLButtonElement>,
@@ -98,6 +104,7 @@ export function Combobox({
   loadingLabel,
   size = "md",
   triggerClassName,
+  triggerRef: providedTriggerRef,
   triggerProps = {},
   triggerTooltip,
   contentClassName,
@@ -108,12 +115,13 @@ export function Combobox({
   const [query, setQuery] = useState("");
   const [lockedSide, setLockedSide] = useState<"top" | "bottom" | null>(null);
   const [highlightedValue, setHighlightedValue] = useState<string | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const internalTriggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = providedTriggerRef ?? internalTriggerRef;
   const [inDialog, setInDialog] = useState(false);
   const attachTrigger = useCallback((node: HTMLButtonElement | null) => {
     triggerRef.current = node;
     if (node) setInDialog(Boolean(node.closest('[role="dialog"]')));
-  }, []);
+  }, [triggerRef]);
   const inputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
@@ -373,6 +381,24 @@ export function Combobox({
               onCompositionEnd={() => {
                 composing.current = false;
               }}
+              onKeyDownCapture={(event) => {
+                if (
+                  event.key !== "Tab" ||
+                  event.shiftKey ||
+                  composing.current ||
+                  event.nativeEvent.isComposing ||
+                  event.keyCode === 229 ||
+                  !footerRef.current
+                ) {
+                  return;
+                }
+                const first = tabTargets(footerRef.current)[0];
+                if (!first) return;
+                // Handle this before the popover's focus scope checks the last control.
+                event.stopPropagation();
+                event.preventDefault();
+                first.focus();
+              }}
               onKeyDown={(event) => {
                 if (
                   composing.current ||
@@ -392,15 +418,7 @@ export function Combobox({
                   );
                   if (option) commit(option);
                 } else if (event.key === "Tab") {
-                  const first = !event.shiftKey && footerRef.current
-                    ? tabTargets(footerRef.current)[0]
-                    : undefined;
-                  if (first) {
-                    event.preventDefault();
-                    first.focus();
-                  } else {
-                    leaveWithTab(event);
-                  }
+                  leaveWithTab(event);
                 }
               }}
             />
