@@ -164,12 +164,12 @@
 }
 .compact .avatar {
   order: 5;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
 }
 .compact .avatar img {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
 }
 .compact .titleLine {
   justify-content: space-between;
@@ -392,4 +392,124 @@
   max-width: min(360px, calc(100vw - 24px));
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* A single mounted list owns pagination and filtering in both sidebar states. */
+.searchBar[hidden] {
+  display: none;
+}
+.collapsed {
+  gap: 0;
+}
+.railControls {
+  display: grid;
+  justify-items: center;
+  gap: var(--rail-gap, 8px);
+  padding: 8px 0;
+  flex-shrink: 0;
+}
+.railControls button {
+  display: grid;
+  place-items: center;
+  width: var(--rail-control-size, 44px);
+  height: var(--rail-control-size, 44px);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.railControls button:hover {
+  background: var(--panel-soft);
+}
+.railControls button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.collapsed .list {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--rail-pitch, 52px) - 32px);
+  padding: 10px 0 12px 4px;
+  scrollbar-gutter: stable;
+}
+.collapsed .list::-webkit-scrollbar {
+  width: 4px;
+}
+.collapsed .list::-webkit-scrollbar-track,
+.collapsed .list::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.collapsed .list.pointerOver::-webkit-scrollbar-thumb,
+.collapsed .list:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  border-radius: 4px;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .collapsed .list {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .collapsed .list.pointerOver,
+  .collapsed .list:focus-within {
+    scrollbar-color: var(--muted) transparent;
+  }
+}
+.collapsed .row {
+  min-height: 32px;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  border-radius: 50%;
+}
+.collapsed .open {
+  min-height: 32px;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  gap: 0;
+}
+.collapsed .active .open {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.collapsed .open:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.collapsed .text,
+.collapsed .actions,
+.collapsed .timestamp,
+.collapsed .pinnedIndicator,
+.collapsed .workingDot {
+  display: none;
+}
+.collapsed .list > button {
+  flex-shrink: 0;
+  width: 40px;
+  min-width: 0;
+  padding-inline: 2px;
+  white-space: normal;
+}
+.collapsed .list > p {
+  font: var(--text-xs-normal);
+  overflow-wrap: anywhere;
+  margin-inline: 4px;
+}
+
+.railFilter {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--primary);
+  border-radius: 50%;
+  background: var(--control-selected-background);
+  color: var(--primary);
 }

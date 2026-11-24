@@ -1,3 +1,4 @@
+import { useComposerCompact } from "@/shared/layout/useComposerCompact";
 import conversationSendButtonStyles from "./ConversationSendButton.module.css";
 import conversationComposerStyles from "./ConversationComposer.module.css";
 import workingTurnStyles from "./WorkingTurn.module.css";
@@ -166,6 +167,9 @@ export const ConversationComposer = memo(function ConversationComposer({
     fileMentions.sync();
   };
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const composerBoxRef = useRef<HTMLDivElement>(null);
+  const composerRowRef = useRef<HTMLDivElement>(null);
+  useComposerCompact(composerBoxRef, composerRowRef);
   const composerHelpId = useId();
   const isSending = sendStatus === "sending";
   const interactionDisabled = composerDisabled || isSending;
@@ -246,6 +250,7 @@ export const ConversationComposer = memo(function ConversationComposer({
         />
       ) : null}
       <div
+        ref={composerBoxRef}
         className={`composer-box ${conversationComposerStyles["composer-box"]}`}
         onDragOver={(event) => {
           if (!dataTransferHasFiles(event.dataTransfer)) {
@@ -347,6 +352,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           </div>
         ) : null}
         <div
+          ref={composerRowRef}
           className={
             textOnly
               ? `${conversationComposerStyles["composer-toolbar"]} ${conversationComposerStyles["composer-toolbar-text-only"]}`

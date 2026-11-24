@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clampChatSideWidth,
   closeChatSideTab,
   replaceChatSideTab,
   initialChatSideState,
@@ -186,4 +187,13 @@ describe("file references", () => {
     ])
       expect(normalizeBrowserURL(url)).toBeNull();
   });
+});
+
+it.each([
+  [496, 1000, 496],
+  [800, 900, 560],
+  [496, 640, 300],
+  [496, 560, 300],
+])("keeps a usable split at panel width %s and container width %s", (panel, container, expected) => {
+  expect(clampChatSideWidth(panel, container)).toBe(expected);
 });

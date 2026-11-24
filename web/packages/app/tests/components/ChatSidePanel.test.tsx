@@ -1,3 +1,4 @@
+import { subscribeSidebarAutoCollapse } from "@/shared/layout/sidebarAutoCollapse";
 import testChatSidePanelStyles from "@/components/business/ChatSidePanel/ChatSidePanel.module.css";
 import { useEffect, useRef } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -662,4 +663,25 @@ it("opens the Agent's live browser in its chat and closes the shared session wit
   await waitFor(() => expect(closeBrowserSession).toHaveBeenCalledWith(conversation.id, "shared-browser"));
   expect(screen.queryByRole("region", { name: "Agent browser" })).not.toBeInTheDocument();
   vi.mocked(fetchBrowserSessions).mockResolvedValue([]);
+});
+
+it("requests navigation space when keyboard resizing reaches the conversation minimum", async () => {
+  const original = HTMLElement.prototype.getBoundingClientRect;
+  const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("chat-panel") ? new DOMRect(0, 0, 1000, 800) : original.call(this);
+  });
+  const collapse = vi.fn();
+  const unsubscribe = subscribeSidebarAutoCollapse(collapse);
+  try {
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    fireEvent.click(screen.getByRole("button", { name: "Browser" }));
+    const resize = await screen.findByRole("separator", { name: "Resize sidebar" });
+    for (let i = 0; i < 8; i++) fireEvent.keyDown(resize, { key: "ArrowLeft" });
+    expect(collapse).toHaveBeenCalled();
+  } finally {
+    unsubscribe();
+    measure.mockRestore();
+  }
 });

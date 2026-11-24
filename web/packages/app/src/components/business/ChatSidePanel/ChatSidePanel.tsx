@@ -1,3 +1,4 @@
+import { requestSidebarAutoCollapse } from "@/shared/layout/sidebarAutoCollapse";
 import chatSidePanelStyles from "./ChatSidePanel.module.css";
 import { createUUID } from "@/shared/lib/uuid";
 import { WorkspacePathActions } from "./WorkspacePathActions";
@@ -25,7 +26,14 @@ import { ConversationActivityPanel } from "@/components/business/ConversationAct
 import { CitationSources } from "@/components/business/MessageContent";
 import { attachmentCapability, filePreviewItem, transcriptRoomFiles } from "@/api/chatFiles";
 import { useRoomFileReader } from "./useRoomFileReader";
-import { clampChatSideWidth, closeChatSideTab, type ChatSideTab } from "@/models/chatSidePanel";
+import {
+  CHAT_SIDE_MIN_WIDTH,
+  CHAT_CONVERSATION_MIN_WIDTH,
+  CHAT_OVERLAY_CONTAINER_WIDTH,
+  clampChatSideWidth,
+  closeChatSideTab,
+  type ChatSideTab,
+} from "@/models/chatSidePanel";
 import { parseCitationDocument } from "@/models/citations";
 import { usesCollaborationTranscript } from "@/models/collaborationTranscript";
 import type { AttachmentPreviewItem } from "@/models/attachments";
@@ -146,7 +154,7 @@ export function ChatSidePanel({
     });
   }, [browsers.data, roomID, patch]);
   const visible = state.open && !suspended;
-  const overlay = containerWidth < 680;
+  const overlay = containerWidth > 0 && containerWidth < CHAT_OVERLAY_CONTAINER_WIDTH;
   useEffect(() => {
     setMaximized(false);
   }, [roomID]);
@@ -154,6 +162,24 @@ export function ChatSidePanel({
     if (!controller.state.open) setMaximized(false);
   }, [controller.state.open]);
   const actualWidth = clampChatSideWidth(width, containerWidth);
+  const autoCollapseArmed = useRef(true);
+  const requestRoom = (nextWidth: number) => {
+    if (autoCollapseArmed.current && containerWidth > 0 && containerWidth - nextWidth <= CHAT_CONVERSATION_MIN_WIDTH) {
+      autoCollapseArmed.current = false;
+      requestSidebarAutoCollapse();
+    }
+  };
+  useEffect(() => {
+    if (!visible) autoCollapseArmed.current = true;
+    else if (
+      autoCollapseArmed.current &&
+      containerWidth > 0 &&
+      containerWidth - actualWidth <= CHAT_CONVERSATION_MIN_WIDTH
+    ) {
+      autoCollapseArmed.current = false;
+      requestSidebarAutoCollapse();
+    }
+  }, [visible, containerWidth, actualWidth]);
   const active = state.tabs.find((tab) => tab.id === state.activeID);
   useEffect(() => {
     if (visible)
@@ -323,18 +349,22 @@ export function ChatSidePanel({
           tabIndex={0}
           aria-label={t("chatSideResize")}
           aria-orientation="vertical"
-          aria-valuemin={320}
-          aria-valuemax={Math.max(320, containerWidth - 360)}
+          aria-valuemin={CHAT_SIDE_MIN_WIDTH}
+          aria-valuemax={Math.max(CHAT_SIDE_MIN_WIDTH, containerWidth - CHAT_CONVERSATION_MIN_WIDTH)}
           aria-valuenow={actualWidth}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
+            autoCollapseArmed.current = true;
             drag.current = { pointerID: event.pointerId, x: event.clientX, width: actualWidth };
             event.currentTarget.setPointerCapture(event.pointerId);
             setResizing(true);
           }}
           onPointerMove={(event) => {
-            if (drag.current?.pointerID === event.pointerId)
-              setWidth(clampChatSideWidth(drag.current.width + drag.current.x - event.clientX, containerWidth));
+            if (drag.current?.pointerID === event.pointerId) {
+              const next = clampChatSideWidth(drag.current.width + drag.current.x - event.clientX, containerWidth);
+              setWidth(next);
+              requestRoom(next);
+            }
           }}
           onPointerUp={() => {
             drag.current = null;
@@ -346,15 +376,15 @@ export function ChatSidePanel({
             setResizing(false);
           }}
           onKeyDown={(event) => {
-            if (["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) {
-              event.preventDefault();
-              persistWidth(
-                clampChatSideWidth(
-                  event.key === "Home" ? DEFAULT_PANEL_WIDTH : actualWidth + (event.key === "ArrowLeft" ? 24 : -24),
-                  containerWidth,
-                ),
-              );
-            }
+            if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
+            event.preventDefault();
+            const next = clampChatSideWidth(
+              event.key === "Home" ? DEFAULT_PANEL_WIDTH : actualWidth + (event.key === "ArrowLeft" ? 24 : -24),
+              containerWidth,
+            );
+            autoCollapseArmed.current = true;
+            persistWidth(next);
+            requestRoom(next);
           }}
         />
       ) : null}

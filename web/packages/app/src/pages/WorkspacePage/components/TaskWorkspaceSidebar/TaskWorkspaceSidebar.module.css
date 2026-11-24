@@ -122,6 +122,9 @@
 }
 
 .collapsed {
+  --rail-control-size: 44px;
+  --rail-gap: 8px;
+  --rail-pitch: 52px;
   width: var(--workspace-primary-sidebar-collapsed-width);
 }
 
@@ -164,7 +167,7 @@
 .collapsed nav {
   justify-items: center;
   padding: 0 0 16px;
-  gap: 8px;
+  gap: var(--rail-gap);
 }
 
 .collapsed nav button {
@@ -180,6 +183,16 @@
   margin-bottom: 0;
 }
 
+.collapsed .history {
+  --task-conversation-inline-padding: 0px;
+  padding: 0;
+}
 .collapsed footer {
   padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.collapsed footer > * {
+  margin-inline: auto;
 }

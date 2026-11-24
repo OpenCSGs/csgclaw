@@ -12,7 +12,7 @@
 }
 .chat-panel:has(> .chat-side-panel:not([hidden])) {
   position: relative;
-  grid-template-columns: minmax(360px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 .chat-panel:has(> .chat-side-panel:not([hidden])) > :is(.chat-header, .conversation-message-area, .composer) {
   grid-column: 1;
