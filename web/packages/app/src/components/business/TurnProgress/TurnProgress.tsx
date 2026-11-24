@@ -1,8 +1,8 @@
-import { ToolOutput } from "@/components/business/ToolOutput";
 import { imEventsConnected, subscribeIMConnection } from "@/shared/realtime/imEvents";
 import { memo, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown, ChevronRight, Clock3 } from "lucide-react";
+import { ToolOutput } from "@/components/business/ToolOutput";
 import { Button } from "@/components/ui";
 import { progressActive, progressDuration, progressGroups, toolGroupLabel, terminalTool } from "@/models/turnProgress";
 import type { ProgressGroup, ProgressTool, TurnProgress as Progress } from "@/models/turnProgress";
@@ -304,6 +304,10 @@ function GroupToolIcon({ items }: { items: ProgressGroup["items"] }) {
 
 const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool; number: number; t: TranslateFn }) {
   const [open, setOpen] = useState(false);
+  const toggleLabels = { expand: t("messageLongExpand"), collapse: t("messageLongCollapse") };
+  const input = tool.command || tool.input;
+  const inputLabel = t(tool.command ? "progressCommand" : "progressInput");
+  const outputLabel = t("progressOutput");
   const id = useId();
   const failed = ["failed", "error", "declined"].includes(tool.status);
   const label = t(`progressToolStatus_${tool.status}`);
@@ -319,6 +323,7 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
         aria-expanded={open}
         aria-controls={id}
         aria-label={t("progressToolDetails", { number, command: preview, status })}
+        data-scroll-anchor-toggle
         onClick={() => {
           setOpen(!open);
         }}
@@ -335,16 +340,16 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
       </Button>
       {open ? (
         <div id={id} className={styles.toolDetails}>
-          {tool.command || tool.input ? (
+          {input ? (
             <div className={styles.detailSection}>
-              <span className={styles.detailLabel}>{t(tool.command ? "progressCommand" : "progressInput")}</span>
-              <pre>{tool.command || tool.input}</pre>
+              <span className={styles.detailLabel}>{inputLabel}</span>
+              <ToolOutput label={inputLabel} text={input} toggleLabels={toggleLabels} />
             </div>
           ) : null}
           <div className={styles.detailSection}>
-            <span className={styles.detailLabel}>{t("progressOutput")}</span>
+            <span className={styles.detailLabel}>{outputLabel}</span>
             {tool.output ? (
-              <ToolOutput label={t("progressOutput")} text={tool.output} />
+              <ToolOutput label={outputLabel} text={tool.output} toggleLabels={toggleLabels} />
             ) : (
               <p className={styles.emptyOutput}>
                 {t(terminalTool(tool.status) ? "progressNoOutput" : "progressWaitingOutput")}

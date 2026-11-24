@@ -234,6 +234,7 @@ const MessageListContent = memo(function MessageListContent({
           const turnVideos = message.id ? videosByTurn.get(message.id) || [] : [];
           const isVideoGeneration = Boolean(message.metadata?.video_generation);
           const memorySource = memory.sourceFor(message);
+          const progressControls = renderTurnControls?.(message);
           return (
             <Fragment key={message.id || `message-${index}`}>
               {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
@@ -272,6 +273,7 @@ const MessageListContent = memo(function MessageListContent({
                         </small>
                       )}
                     </span>
+                    {progressControls?.messageMeta}
                     <MessageTimestamp parts={timestampParts} />
                   </div>
                   {(message.content || messageResources(message.metadata).length > 0) &&
@@ -284,7 +286,7 @@ const MessageListContent = memo(function MessageListContent({
                         message={message}
                         allowLegacyToolFormat={Boolean(messageAgent)}
                         showTurnProgress={!collaboration}
-                        progressControls={renderTurnControls?.(message)}
+                        progressControls={progressControls}
                         videoMessages={turnVideos}
                         actionBusy={messageActionBusy}
                         actionFeedback={messageActionFeedback}

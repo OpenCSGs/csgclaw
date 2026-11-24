@@ -37,6 +37,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -127,6 +128,17 @@ type noOpChannelBindingReconciler struct{}
 
 func (noOpChannelBindingReconciler) RefreshAgentChannel(context.Context, agent.Agent, string) error {
 	return nil
+}
+
+func TestHealthzReportsServerTime(t *testing.T) {
+	before := time.Now().UnixMilli()
+	rec := httptest.NewRecorder()
+	(&Handler{}).handleHealthz(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	serverTime, err := strconv.ParseInt(rec.Header().Get("X-CSGClaw-Server-Time-Ms"), 10, 64)
+	if rec.Code != http.StatusOK || rec.Body.String() != "ok" || err != nil ||
+		serverTime < before || serverTime > time.Now().UnixMilli() {
+		t.Fatalf("health status=%d body=%q server time=%d error=%v", rec.Code, rec.Body.String(), serverTime, err)
+	}
 }
 
 func TestWriteAgentOperationErrorSanitizesWrappedUpstreamError(t *testing.T) {

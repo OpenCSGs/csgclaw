@@ -6,6 +6,7 @@ export const PARTICIPANT_WORK_CLOSED_RETENTION_MS = 70_000;
 
 export type ActiveParticipantWorkLease = ParticipantWorkUpdate & {
   expiresAt: number;
+  outputRateExpiresAt?: number;
 };
 
 export type ClosedParticipantWorkLease = {
@@ -27,7 +28,7 @@ export type ParticipantWorkAction =
   | { participantIDs: string[]; type: "participantLifecycle" }
   | { memberParticipantIDs?: string[]; roomID: string; type: "roomLifecycle" }
   | { type: "reset" }
-  | { now: number; type: "workEvent"; work: ParticipantWorkUpdate };
+  | { now: number; receivedAt?: number; serverNow?: number; type: "workEvent"; work: ParticipantWorkUpdate };
 
 export function createParticipantWorkState(): ParticipantWorkState {
   return {
@@ -51,7 +52,7 @@ export function participantWorkReducer(
     case "roomLifecycle":
       return updateRoomLifecycle(state, action.roomID, action.memberParticipantIDs);
     case "workEvent":
-      return applyWorkEvent(state, action.work, action.now);
+      return applyWorkEvent(state, action.work, action.now, action.receivedAt, action.serverNow);
   }
 }
 
@@ -104,7 +105,13 @@ export function nextParticipantWorkDeadline(state: ParticipantWorkState): number
   return next;
 }
 
-function applyWorkEvent(current: ParticipantWorkState, work: ParticipantWorkUpdate, now: number): ParticipantWorkState {
+function applyWorkEvent(
+  current: ParticipantWorkState,
+  work: ParticipantWorkUpdate,
+  now: number,
+  receivedAt?: number,
+  serverNow = now,
+): ParticipantWorkState {
   const normalized = normalizeWorkEvent(work);
   if (!normalized || !Number.isFinite(now)) {
     return current;
@@ -129,7 +136,11 @@ function applyWorkEvent(current: ParticipantWorkState, work: ParticipantWorkUpda
   }
 
   if (normalized.state === "working") {
-    const expiresAt = Date.parse(normalized.expires_at);
+    const serverTime = normalized.server_time_ms;
+    const hasServerTime = typeof serverTime === "number" && Number.isSafeInteger(serverTime) && serverTime > 0;
+    // An event timestamp gives a lower bound, even if it was delayed in transit.
+    const effectiveServerNow = hasServerTime ? Math.max(serverTime, serverNow) : serverNow;
+    const expiresAt = Date.parse(normalized.expires_at) + now - effectiveServerNow;
     if (expiresAt <= now) {
       return closeLease(
         state,
@@ -140,10 +151,22 @@ function applyWorkEvent(current: ParticipantWorkState, work: ParticipantWorkUpda
         now,
       );
     }
+    const sampledAt = normalized.status?.output_rate_sampled_at;
+    let outputRateExpiresAt: number | undefined;
+    if (hasServerTime && sampledAt !== undefined && receivedAt !== undefined) {
+      const remaining = 2500 - Math.max(0, effectiveServerNow - sampledAt);
+      if (remaining > 0) {
+        outputRateExpiresAt = receivedAt + remaining;
+        if (sampledAt === active?.status?.output_rate_sampled_at && active.outputRateExpiresAt !== undefined) {
+          outputRateExpiresAt = Math.min(outputRateExpiresAt, active.outputRateExpiresAt);
+        }
+      }
+    }
     const activeByRoom = cloneActiveWithLease(state.activeByRoom, normalized.room_id, normalized.participant_id);
     activeByRoom[normalized.room_id][normalized.participant_id][normalized.lease_id] = {
       ...normalized,
       expiresAt,
+      outputRateExpiresAt,
     };
     const closedByLease = { ...state.closedByLease };
     delete closedByLease[key];
@@ -352,23 +375,27 @@ function normalizeParticipantWorkStatus(
     return undefined;
   }
   const stage = normalizeParticipantWorkStage(status.stage, status.phase);
-  if (status.phase === "working") {
-    return {
-      phase: "working",
-      sequence,
-      stage,
-      context_usage_epoch: status.context_usage_epoch ?? 0,
-      context_usage: normalizeContextUsage(status.context_usage),
-    };
-  }
-  if (!status.thinking) {
-    return {
-      phase: "thinking",
-      sequence,
-      stage,
-      context_usage_epoch: status.context_usage_epoch ?? 0,
-      context_usage: normalizeContextUsage(status.context_usage),
-    };
+  const rate = status.output_tokens_per_second;
+  const sampledAt = status.output_rate_sampled_at;
+  const hasRate =
+    (stage === "generating_reply" || stage === "thinking") &&
+    typeof rate === "number" &&
+    Number.isFinite(rate) &&
+    rate > 0 &&
+    rate <= 10000 &&
+    typeof sampledAt === "number" &&
+    Number.isSafeInteger(sampledAt) &&
+    sampledAt > 0;
+  const common = {
+    sequence,
+    stage,
+    output_tokens_per_second: hasRate ? rate : undefined,
+    output_rate_sampled_at: hasRate ? sampledAt : undefined,
+    context_usage_epoch: status.context_usage_epoch ?? 0,
+    context_usage: normalizeContextUsage(status.context_usage),
+  };
+  if (status.phase === "working" || !status.thinking) {
+    return { ...common, phase: status.phase };
   }
   if (
     status.thinking.format !== "plain_text" ||
@@ -378,11 +405,8 @@ function normalizeParticipantWorkStatus(
     return undefined;
   }
   return {
+    ...common,
     phase: "thinking",
-    context_usage_epoch: status.context_usage_epoch ?? 0,
-    context_usage: normalizeContextUsage(status.context_usage),
-    sequence,
-    stage,
     thinking: {
       format: "plain_text",
       text: status.thinking.text,

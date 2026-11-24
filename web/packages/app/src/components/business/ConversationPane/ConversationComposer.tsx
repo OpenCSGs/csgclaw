@@ -470,6 +470,7 @@ function ComposerWorkingIndicator({
             key={participant.leaseID || participant.id || participant.name}
             participant={participant}
             hideContextUsage={hideContextUsage}
+            showOutputRate
             t={t}
             onAction={onAction}
             onStop={onStop}

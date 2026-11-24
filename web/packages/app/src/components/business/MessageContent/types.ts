@@ -53,7 +53,7 @@ export type ActionCardPayload = StructuredMessagePayload & {
 
 export type ParsedStructuredMessage = StructuredMessagePayload | ActionCardPayload;
 
-export type ProgressControlSlots = { header?: ReactNode; footer?: ReactNode };
+export type ProgressControlSlots = { header?: ReactNode; footer?: ReactNode; messageMeta?: ReactNode };
 
 export type MessageContentProps = {
   allowLegacyToolFormat?: boolean;

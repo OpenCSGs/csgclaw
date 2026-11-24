@@ -303,7 +303,9 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 	case activity.RuntimeEventThoughtDelta:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventThoughtDelta, Thought: event.Text})
 	case activity.RuntimeEventReasoningStarted, activity.RuntimeEventReasoningSummary, activity.RuntimeEventReasoningCompleted:
-		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, ItemID: event.MessageID, Activity: &contract.ActivityUpdate{
+		payload, _ := event.Payload.(map[string]any)
+		snapshot, _ := payload["text_snapshot"].(bool)
+		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, ItemID: event.MessageID, TextSnapshot: snapshot, Activity: &contract.ActivityUpdate{
 			Kind: string(event.Kind), Payload: event.Text,
 		}})
 	case activity.RuntimeEventToolCallStart:

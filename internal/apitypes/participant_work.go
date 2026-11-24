@@ -62,24 +62,29 @@ type ParticipantThinkingStatus struct {
 }
 
 type ParticipantWorkStatus struct {
-	ContextUsageEpoch uint64                     `json:"context_usage_epoch,omitempty"`
-	ContextUsage      *modelcap.ContextUsage     `json:"context_usage,omitempty"`
-	Sequence          uint64                     `json:"sequence"`
-	Phase             string                     `json:"phase"`
-	Stage             string                     `json:"stage,omitempty"`
-	Thinking          *ParticipantThinkingStatus `json:"thinking,omitempty"`
+	OutputTokensPerSecond float64                    `json:"output_tokens_per_second,omitempty"`
+	OutputRateSampledAt   int64                      `json:"output_rate_sampled_at,omitempty"`
+	ContextUsageEpoch     uint64                     `json:"context_usage_epoch,omitempty"`
+	ContextUsage          *modelcap.ContextUsage     `json:"context_usage,omitempty"`
+	Sequence              uint64                     `json:"sequence"`
+	Phase                 string                     `json:"phase"`
+	Stage                 string                     `json:"stage,omitempty"`
+	Thinking              *ParticipantThinkingStatus `json:"thinking,omitempty"`
 }
 
 type ParticipantWorkStatusPatchRequest struct {
-	ContextUsage *modelcap.ContextUsage     `json:"context_usage,omitempty"`
-	Capabilities []string                   `json:"capabilities"`
-	Sequence     uint64                     `json:"sequence"`
-	Phase        string                     `json:"phase"`
-	Stage        string                     `json:"stage,omitempty"`
-	Thinking     *ParticipantThinkingStatus `json:"thinking,omitempty"`
+	OutputTokensPerSecond float64                    `json:"output_tokens_per_second,omitempty"`
+	OutputRateSampledAt   int64                      `json:"output_rate_sampled_at,omitempty"`
+	ContextUsage          *modelcap.ContextUsage     `json:"context_usage,omitempty"`
+	Capabilities          []string                   `json:"capabilities"`
+	Sequence              uint64                     `json:"sequence"`
+	Phase                 string                     `json:"phase"`
+	Stage                 string                     `json:"stage,omitempty"`
+	Thinking              *ParticipantThinkingStatus `json:"thinking,omitempty"`
 }
 
 type ParticipantWorkUpdate struct {
+	ServerTimeMS    int64                  `json:"server_time_ms,omitempty"`
 	RegistryEpoch   string                 `json:"registry_epoch"`
 	LeaseID         string                 `json:"lease_id"`
 	ParticipantID   string                 `json:"participant_id"`

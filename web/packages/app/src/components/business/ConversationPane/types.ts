@@ -49,6 +49,8 @@ export type ComposerSendStatus = "failed" | "idle" | "sending";
 export type ConversationWorkingAction = (typeof ConversationWorkingActions)[keyof typeof ConversationWorkingActions];
 
 export type ConversationWorkingParticipant = {
+  outputTokensPerSecond?: number;
+  outputRateExpiresAt?: number;
   contextUsage?: ContextUsage;
   contextUsageEpoch?: number;
   showContextUsage?: boolean;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
-import { stopParticipantWorkRequest } from "@/api/im";
+import { fetchParticipantWorkServerClock, stopParticipantWorkRequest } from "@/api/im";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import { agentRuntimeKind, type AgentLike } from "@/models/agents";
 import {
@@ -9,7 +9,7 @@ import {
   localIdentitiesMatch,
   resolveUserByLocalIdentity,
 } from "@/models/conversations";
-import type { IMServerEvent, IMUser } from "@/models/conversations";
+import type { IMServerEvent, IMUser, ParticipantWorkUpdate } from "@/models/conversations";
 import {
   activeParticipantWorkForRoom,
   createParticipantWorkState,
@@ -34,6 +34,9 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
   const [stopRequests, setStopRequests] = useState<Record<string, { error?: string; state: "sending" | "accepted" }>>(
     {},
   );
+  const serverClock = useRef<Awaited<ReturnType<typeof fetchParticipantWorkServerClock>>>(undefined);
+  const awaitingInitialClock = useRef(true);
+  const pendingWork = useRef(new Map<string, ParticipantWorkUpdate>());
   const observedLeaseIdentitiesRef = useRef(new Set<string>());
   const usersById = useMemo(() => buildUsersById(users), [users]);
 
@@ -51,43 +54,113 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
     return () => window.clearTimeout(timer);
   }, [state]);
 
-  const handleRealtimeEvent = useCallback((event: IMServerEvent) => {
-    if (event?.type === "participant.work.updated" && event.work) {
-      [event.work.participant_id, event.work.user_id].forEach((value) => {
-        const id = String(value || "").trim();
-        if (id) {
-          observedLeaseIdentitiesRef.current.add(id);
-        }
-      });
-      dispatch({ now: Date.now(), type: "workEvent", work: event.work });
-      return;
-    }
-    if ((event?.type === "participant.updated" || event?.type === "participant.deleted") && event.participant) {
-      const participantIDs = [
-        event.participant.id,
-        event.participant.channel_user_ref,
-        event.participant.user_id,
-      ].filter((value): value is string => Boolean(value));
-      participantIDs.forEach((id) => observedLeaseIdentitiesRef.current.delete(id));
-      // Profile/status updates may reset legacy detection, but do not end an
-      // authoritative work lease or discard its stop control.
-      if (event.type === "participant.deleted") {
-        dispatch({ participantIDs, type: "participantLifecycle" });
-      }
-      return;
-    }
-    if (event?.type === "room.deleted") {
-      dispatch({ roomID: String(event.room_id || event.room?.id || ""), type: "roomLifecycle" });
-      return;
-    }
-    if (event?.type === "room.members_removed" && event.room?.id && Array.isArray(event.room.members)) {
-      dispatch({
-        memberParticipantIDs: event.room.members,
-        roomID: event.room.id,
-        type: "roomLifecycle",
-      });
-    }
+  const applyWork = useCallback((work: ParticipantWorkUpdate) => {
+    const receivedAt = performance.now();
+    const clock = serverClock.current;
+    dispatch({
+      now: Date.now(),
+      receivedAt,
+      serverNow: clock ? clock.serverTime + receivedAt - clock.measuredAt : undefined,
+      type: "workEvent",
+      work,
+    });
   }, []);
+
+  useEffect(() => {
+    const pending = pendingWork.current;
+    let active = true;
+    let request: AbortController | undefined;
+    let timeout: number | undefined;
+    const refresh = async () => {
+      const controller = new AbortController();
+      request = controller;
+      timeout = window.setTimeout(() => controller.abort(), 3000);
+      try {
+        const measurement = await fetchParticipantWorkServerClock(controller.signal);
+        if (active && measurement) serverClock.current = measurement;
+      } catch {
+        // Keep the last independent measurement across transient request failures.
+      } finally {
+        window.clearTimeout(timeout);
+        if (active && awaitingInitialClock.current) {
+          awaitingInitialClock.current = false;
+          pending.forEach(applyWork);
+          pending.clear();
+        }
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.clearTimeout(timeout);
+      request?.abort();
+    };
+  }, [applyWork]);
+
+  const handleRealtimeEvent = useCallback(
+    (event: IMServerEvent) => {
+      if (event?.type === "participant.work.updated" && event.work) {
+        [event.work.participant_id, event.work.user_id].forEach((value) => {
+          const id = String(value || "").trim();
+          if (id) {
+            observedLeaseIdentitiesRef.current.add(id);
+          }
+        });
+        const work = event.work;
+        const pending = pendingWork.current;
+        const key = JSON.stringify([work.registry_epoch, work.lease_id]);
+        const previous = pending.get(key);
+        if (awaitingInitialClock.current && (work.server_time_ms || previous)) {
+          if (!previous || work.revision > previous.revision) {
+            pending.delete(key);
+            pending.set(key, work);
+          }
+        } else {
+          applyWork(work);
+        }
+        return;
+      }
+      if ((event?.type === "participant.updated" || event?.type === "participant.deleted") && event.participant) {
+        const participantIDs = [
+          event.participant.id,
+          event.participant.channel_user_ref,
+          event.participant.user_id,
+        ].filter((value): value is string => Boolean(value));
+        participantIDs.forEach((id) => observedLeaseIdentitiesRef.current.delete(id));
+        // Profile/status updates may reset legacy detection, but do not end an
+        // authoritative work lease or discard its stop control.
+        if (event.type === "participant.deleted") {
+          pendingWork.current.forEach((work, key) => {
+            if (participantIDs.some((id) => localIdentitiesMatch(id, work.participant_id))) {
+              pendingWork.current.delete(key);
+            }
+          });
+          dispatch({ participantIDs, type: "participantLifecycle" });
+        }
+        return;
+      }
+      if (event?.type === "room.deleted") {
+        const roomID = String(event.room_id || event.room?.id || "");
+        pendingWork.current.forEach((work, key) => {
+          if (work.room_id === roomID) pendingWork.current.delete(key);
+        });
+        dispatch({ roomID, type: "roomLifecycle" });
+        return;
+      }
+      if (event?.type === "room.members_removed" && event.room?.id && Array.isArray(event.room.members)) {
+        const { id: roomID, members } = event.room;
+        pendingWork.current.forEach((work, key) => {
+          if (work.room_id === roomID && !members.some((id) => localIdentitiesMatch(id, work.participant_id))) {
+            pendingWork.current.delete(key);
+          }
+        });
+        dispatch({ memberParticipantIDs: members, roomID, type: "roomLifecycle" });
+      }
+    },
+    [applyWork],
+  );
 
   const hasObservedWorkLease = useCallback((participantID: string | null | undefined): boolean => {
     const id = String(participantID || "").trim();
@@ -160,6 +233,8 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
           const stopRequest = stopRequests[lease.lease_id];
           const thinking = lease.status?.phase === "thinking" ? (lease.status.thinking?.text ?? "") : undefined;
           result.push({
+            outputTokensPerSecond: lease.status?.output_tokens_per_second,
+            outputRateExpiresAt: lease.outputRateExpiresAt,
             contextUsage: lease.status?.context_usage,
             contextUsageEpoch: lease.status?.context_usage_epoch,
             showContextUsage:

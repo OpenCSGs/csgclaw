@@ -1,9 +1,11 @@
+import { parseTurnProgress } from "@/models/turnProgress";
 import { conversationCompacting } from "@/models/contextCompaction";
 import { conversationMemoryAgent } from "@/components/business/ConversationPane/useConversationMemory";
 import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
 import { CollaborationStatus } from "@/components/business/ConversationPane/CollaborationStatus";
 import { usesCollaborationTranscript } from "@/models/collaborationTranscript";
 import { localIdentitiesMatch } from "@/models/conversations";
+import { OutputTokenRate } from "@/components/business/ConversationPane/OutputTokenRate";
 import { PendingTurnReplies } from "./PendingTurnReplies";
 import { TaskConversationControls } from "../TaskConversationControls/TaskConversationControls";
 import { WorkingTurnControls } from "@/components/business/ConversationPane/WorkingTurnControls";
@@ -406,7 +408,12 @@ function ConversationPaneContent({
       if (represented) moved.add(represented);
       const participant = workingParticipantForProgress(message, conversation.id, workingParticipantsWithActivity);
       if (!message.id || !participant) continue;
-      if (participant.showContextUsage || participant.contextUsage || (participant.canStop && onStopWorkingTurn)) {
+      if (
+        participant.outputTokensPerSecond ||
+        participant.showContextUsage ||
+        participant.contextUsage ||
+        (participant.canStop && onStopWorkingTurn)
+      ) {
         byMessage.set(message.id, participant);
       }
     }
@@ -450,6 +457,14 @@ function ConversationPaneContent({
       const participant = messageControls.byMessage.get(message.id || "");
       return participant
         ? {
+            messageMeta: (
+              <OutputTokenRate
+                key={participant.leaseID}
+                rate={parseTurnProgress(message)?.status === "running" ? participant.outputTokensPerSecond : undefined}
+                expiresAt={participant.outputRateExpiresAt}
+                t={t}
+              />
+            ),
             header: (
               <>
                 <WorkingTurnControls

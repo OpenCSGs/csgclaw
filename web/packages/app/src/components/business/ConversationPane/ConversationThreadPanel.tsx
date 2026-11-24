@@ -752,6 +752,7 @@ function ThreadMessage({
       <div className="thread-message-main">
         <div className={`message-meta ${messageLayoutStyles["message-meta"]}`}>
           <span className={`message-author ${messageLayoutStyles["message-author"]}`}>{name}</span>
+          {progressControls?.messageMeta}
           <MessageTimestamp parts={timestampParts} />
         </div>
         {(message.content || messageResources(message.metadata).length > 0) &&

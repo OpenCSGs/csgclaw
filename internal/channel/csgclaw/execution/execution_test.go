@@ -257,7 +257,7 @@ func TestAdapterRunBuildsRuntimeNeutralTurn(t *testing.T) {
 	}
 	if engine.request.Admission != agentengine.AdmissionWait ||
 		engine.request.Continuation != agentengine.ContinuationCreateOrResume ||
-		engine.request.Interaction != agentengine.InteractionResolve {
+		engine.request.Interaction != agentengine.InteractionResolve || !engine.request.StreamReasoningSummary {
 		t.Fatalf("turn policies = %+v", engine.request)
 	}
 	if len(engine.request.Input) != 3 {

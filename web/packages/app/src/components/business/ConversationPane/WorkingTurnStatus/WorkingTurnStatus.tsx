@@ -1,5 +1,6 @@
 import workingTurnStyles from "@/components/business/ConversationPane/WorkingTurn.module.css";
 import { ChevronRight } from "lucide-react";
+import { OutputTokenRate } from "../OutputTokenRate";
 import { WorkingTurnControls } from "../WorkingTurnControls";
 import type { TranslateFn } from "@/models/conversations";
 import {
@@ -13,6 +14,7 @@ import styles from "./WorkingTurnStatus.module.css";
 export function WorkingTurnStatus({
   hideContextUsage,
   showName = true,
+  showOutputRate = false,
   participant,
   t,
   onAction,
@@ -21,6 +23,7 @@ export function WorkingTurnStatus({
   participant: ConversationWorkingParticipant;
   hideContextUsage?: boolean;
   showName?: boolean;
+  showOutputRate?: boolean;
   t: TranslateFn;
   onAction?: (participant?: ConversationWorkingParticipant) => void;
   onStop?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
@@ -81,6 +84,9 @@ export function WorkingTurnStatus({
             {content}
           </div>
         )}
+        {showOutputRate ? (
+          <OutputTokenRate rate={participant.outputTokensPerSecond} expiresAt={participant.outputRateExpiresAt} t={t} />
+        ) : null}
         <WorkingTurnControls participant={participant} t={t} onStop={onStop} hideContextUsage={hideContextUsage} />
         {participant.contextUsage?.compacting || thinkingLatestLine ? (
           <span className="composer-thinking-latest">

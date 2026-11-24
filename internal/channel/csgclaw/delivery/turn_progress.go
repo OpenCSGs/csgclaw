@@ -168,6 +168,12 @@ func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent
 			}
 			p.snapshot.Usage = usage
 			immediate = true
+		} else if event.Activity != nil && event.Activity.Kind == string(activity.RuntimeEventReasoningSummary) {
+			text, _ := event.Activity.Payload.(string)
+			if text == "" {
+				return nil
+			}
+			p.appendText(event.ItemID, "reasoning", text)
 		} else if event.Activity != nil && (event.Activity.Kind == string(activity.RuntimeEventActionDecision) || event.Activity.Kind == string(activity.RuntimeEventUserInputResolved)) {
 			p.snapshot.Status = "running"
 			immediate = true
