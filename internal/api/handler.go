@@ -2605,7 +2605,7 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 		}
 		defer releaseRoomDeletion()
 		if err := h.withAutonomousRoomMutation(id, func() error { return channel.DeleteRoom(id) }); err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if errors.Is(err, im.ErrRoomNotFound) {
 				writeCodedAPIError(w, http.StatusNotFound, "room_not_found", im.ErrRoomNotFound.Error())
 				return
 			}

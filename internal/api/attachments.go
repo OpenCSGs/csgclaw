@@ -155,17 +155,14 @@ func (h *Handler) handleAttachmentByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	serveAttachment(w, r, file, true)
+	serveAttachment(w, r, file)
 }
 
-func serveAttachment(w http.ResponseWriter, r *http.Request, file im.AttachmentFile, immutable bool) {
+func serveAttachment(w http.ResponseWriter, r *http.Request, file im.AttachmentFile) {
 	workspaceFile := file.IsWorkspaceFile()
-	switch {
-	case workspaceFile:
+	if workspaceFile {
 		w.Header().Set("Cache-Control", "private, no-store")
-	case immutable:
-		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
-	default:
+	} else {
 		w.Header().Set("Cache-Control", "no-store")
 	}
 	source, err := file.Open()

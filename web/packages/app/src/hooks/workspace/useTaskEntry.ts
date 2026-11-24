@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { createRoomRequest, deleteRoomRequest } from "@/api/im";
+import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { apiErrorCode } from "@/api/client";
+import { createRoomRequest, deleteRoomRequest, fetchMessagesRequest } from "@/api/im";
 import type { CreateRoomPayload } from "@/api/im";
-import { updateConversationMetadata, type ConversationMetadataPatch } from "@/api/taskConversations";
+import {
+  updateConversationMetadata,
+  type ConversationMetadataPatch,
+  type TaskConversationPage,
+} from "@/api/taskConversations";
 import { parseTurnProgress, progressActive } from "@/models/turnProgress";
 import { taskListChange, type RefreshScope } from "@/models/taskConversations";
 import { isThreadReply, type IMConversation, type IMMessage, type IMServerEvent } from "@/models/conversations";
@@ -65,7 +70,7 @@ export function useTaskEntry({ currentUserID, rooms, onUpdate, onMessage, onDele
   );
 
   function onHistoryEvent(event: IMServerEvent) {
-    if (event.type === "connection.open") scheduleRefresh("all");
+    if (event.type === "connection.open" || event.type === "room.deleted") scheduleRefresh("all");
     // Thread replies are absent from bootstrap.rooms' main transcript.
     if (event.type !== "message.created" || !isThreadReply(event.message)) return;
     const progress = parseTurnProgress(event.message);
@@ -90,9 +95,34 @@ export function useTaskEntry({ currentUserID, rooms, onUpdate, onMessage, onDele
   async function remove(id: string) {
     setBusyID(id);
     try {
-      await deleteRoomRequest(id);
+      try {
+        await deleteRoomRequest(id);
+      } catch (error) {
+        if (apiErrorCode(error) !== "room_not_found") {
+          if (!(error instanceof TypeError)) throw error;
+          const roomMissing = await fetchMessagesRequest(id).then(
+            () => false,
+            (cause: unknown) => apiErrorCode(cause) === "room_not_found",
+          );
+          if (!roomMissing) throw error;
+        }
+      }
+
+      const historyQueries = { queryKey: ["task-conversations"] };
+      await client.cancelQueries(historyQueries);
+      client.setQueriesData<InfiniteData<TaskConversationPage>>(historyQueries, (data) => {
+        if (!data?.pages.some((page) => page.rooms.some((room) => room.id === id))) return data;
+        return {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            rooms: page.rooms.filter((room) => room.id !== id),
+            total: Math.max(0, page.total - 1),
+          })),
+        };
+      });
       onDelete(id);
-      await client.invalidateQueries({ queryKey: ["task-conversations"] });
+      void client.invalidateQueries(historyQueries);
     } finally {
       setBusyID("");
     }

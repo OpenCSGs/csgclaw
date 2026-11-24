@@ -147,3 +147,33 @@ func TestDeleteRoomAttachmentPreservesMessagesOtherIDsAndSavedCopies(t *testing.
 		t.Fatalf("cross-room delete=%v", err)
 	}
 }
+
+func TestDeletedRoomAttachmentIsUnavailableWhenCleanupFails(t *testing.T) {
+	service, room := newAttachmentTestService(t)
+	message, err := service.DeliverMessage(DeliverMessageRequest{
+		RoomID: room.ID, SenderID: AdminUserID, MessageID: "room-file",
+		AttachmentSources: []AttachmentSource{sessionAttachmentSource("room.txt", "shared")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := message.Attachments[0].ID
+	if _, err := service.AttachmentFile(id); err != nil {
+		t.Fatal(err)
+	}
+	// A file at the cache directory path blocks asset collection before it
+	// removes the attachment object or blob.
+	cachePath := filepath.Join(filepath.Dir(service.statePath), assetsDirName, "open")
+	if err := os.WriteFile(cachePath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.DeleteRoom(room.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(roomAttachmentStore(service.statePath).objectPath(id)); err != nil {
+		t.Fatalf("expected attachment object to survive failed cleanup: %v", err)
+	}
+	if _, err := service.AttachmentFile(id); !errors.Is(err, errAttachmentNotFound) {
+		t.Fatalf("AttachmentFile() error = %v, want attachment not found", err)
+	}
+}

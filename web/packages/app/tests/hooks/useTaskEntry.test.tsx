@@ -1,4 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
+import { deleteRoomRequest, fetchMessagesRequest } from "@/api/im";
 import { fetchTaskConversations } from "@/api/taskConversations";
 import { useTaskConversationPages } from "@/hooks/workspace/useTaskConversationPages";
 import { useTaskEntry } from "@/hooks/workspace/useTaskEntry";
@@ -6,6 +7,7 @@ import { taskConversationPreview } from "@/models/taskConversations";
 import type { IMConversation } from "@/models/conversations";
 import { createQueryWrapper } from "../helpers/queryClient";
 
+vi.mock("@/api/im", () => ({ deleteRoomRequest: vi.fn(), fetchMessagesRequest: vi.fn() }));
 vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
 
 it("finishes a slow history refresh while collaboration progress keeps arriving", async () => {
@@ -140,4 +142,63 @@ it("updates the live preview without reloading ordinary pages and reconciles sea
     queries.client.clear();
     vi.useRealTimers();
   }
+});
+
+it.each([
+  {
+    outcome: "delete reports the room missing",
+    deleteError: { status: 404, code: "room_not_found" },
+    probe: "skip",
+    removed: true,
+  },
+  {
+    outcome: "transcript confirms the room is missing",
+    deleteError: new TypeError("Connection lost"),
+    probe: "missing",
+    removed: true,
+  },
+  {
+    outcome: "transcript confirms the room exists",
+    deleteError: new TypeError("Connection lost"),
+    probe: "present",
+    removed: false,
+  },
+  {
+    outcome: "the probe is unavailable",
+    deleteError: new TypeError("Connection lost"),
+    probe: "unavailable",
+    removed: false,
+  },
+])("reconciles deletion when $outcome", async ({ deleteError, probe, removed }) => {
+  vi.mocked(deleteRoomRequest).mockRejectedValueOnce(deleteError);
+  const messages = vi.mocked(fetchMessagesRequest).mockReset();
+  if (probe === "missing") messages.mockRejectedValueOnce({ status: 404, code: "room_not_found" });
+  if (probe === "present") messages.mockResolvedValueOnce([]);
+  if (probe === "unavailable") messages.mockRejectedValueOnce(new TypeError("Still offline"));
+
+  const onDelete = vi.fn();
+  const { wrapper } = createQueryWrapper();
+  const { result } = renderHook(
+    () =>
+      useTaskEntry({
+        currentUserID: "user-admin",
+        rooms: [],
+        onUpdate: vi.fn(),
+        onMessage: vi.fn(),
+        onDelete,
+        onOpen: vi.fn(),
+        isWorking: () => false,
+      }),
+    { wrapper },
+  );
+
+  await act(async () => {
+    const deletion = result.current.remove("room-1");
+    if (removed) await expect(deletion).resolves.toBeUndefined();
+    else await expect(deletion).rejects.toBe(deleteError);
+  });
+  if (probe === "skip") expect(messages).not.toHaveBeenCalled();
+  else expect(messages).toHaveBeenCalledWith("room-1");
+  expect(onDelete.mock.calls).toEqual(removed ? [["room-1"]] : []);
+  expect(result.current.busyID).toBe("");
 });

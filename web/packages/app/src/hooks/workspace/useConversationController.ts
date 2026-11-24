@@ -484,6 +484,8 @@ export function useConversationController({
   const [inviteUserIDs, setInviteUserIDs] = useState<string[]>([]);
   const [inviteBusy, setInviteBusy] = useState(false);
   const memberMutationRef = useRef(false);
+  const activePaneTypeRef = useRef(activePane.type);
+  activePaneTypeRef.current = activePane.type;
   const activeRoomIDRef = useRef(activeConversationId);
   activeRoomIDRef.current = activeConversationId;
   const [submitError, setSubmitError] = useState("");
@@ -1626,7 +1628,7 @@ export function useConversationController({
     setThreadAttachmentDraftsByKey((current) => clearAttachmentDraftsForConversation(current, roomID));
     setComposerError("", roomID);
     setSubmitError("");
-    if (activeConversationId === roomID) {
+    if (activePaneTypeRef.current === activePane.type && activeRoomIDRef.current === roomID) {
       const nextID = remainingRooms[0]?.id ?? "";
       if (nextID) {
         selectConversation(nextID, { replace: true });

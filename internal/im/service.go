@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -450,11 +451,30 @@ func SaveBootstrap(path string, state Bootstrap, operations ...*diagnostics.Oper
 		return err
 	}
 
-	persisted, err := savePersistedBootstrap(path, state, operations...)
+	if err := migrateLegacySessionAttachments(path); err != nil {
+		return err
+	}
+	persisted := persistedBootstrapFromState(state)
+	rooms, err := savePersistedRooms(path, state.Rooms, operations...)
 	if err != nil {
 		return err
 	}
-	return writePersistedBootstrap(path, persisted, operations...)
+	persisted.Rooms = rooms
+	if err := writePersistedBootstrap(path, persisted, operations...); err != nil {
+		return err
+	}
+
+	// Once the index is committed, a cleanup failure cannot roll back the
+	// state change. Subsequent full saves retry cleaning unreferenced files.
+	defer operation.Measure("im.cleanup")()
+	if err := errors.Join(
+		cleanupSessionFiles(path, rooms),
+		cleanupThreadFiles(path, rooms),
+		collectUnreferencedAssets(path, state.Rooms),
+	); err != nil {
+		slog.Warn("IM state committed with incomplete file cleanup", "error", err)
+	}
+	return nil
 }
 
 func ensureBootstrapDirs(path string) error {
@@ -639,29 +659,6 @@ func loadThreadContextFile(statePath, roomID, rootMessageID string) (persistedTh
 		stored.RootMessageID = rootMessageID
 	}
 	return stored, true, nil
-}
-
-func savePersistedBootstrap(statePath string, state Bootstrap, operations ...*diagnostics.Operation) (persistedBootstrap, error) {
-	operation := diagnostics.OperationArg(operations)
-	persisted := persistedBootstrapFromState(state)
-
-	rooms, err := savePersistedRooms(statePath, state.Rooms, operations...)
-	if err != nil {
-		return persistedBootstrap{}, err
-	}
-	persisted.Rooms = rooms
-
-	defer operation.Measure("im.cleanup")()
-	if err := cleanupSessionFiles(statePath, rooms); err != nil {
-		return persistedBootstrap{}, err
-	}
-	if err := cleanupThreadFiles(statePath, rooms); err != nil {
-		return persistedBootstrap{}, err
-	}
-	if err := cleanupAssetFilesForState(statePath, state.Rooms); err != nil {
-		return persistedBootstrap{}, err
-	}
-	return persisted, nil
 }
 
 func persistedBootstrapFromState(state Bootstrap) persistedBootstrap {
