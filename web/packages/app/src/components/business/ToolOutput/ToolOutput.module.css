@@ -23,3 +23,30 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.output[data-expandable] {
+  max-block-size: 200px;
+  padding: 0;
+  background: transparent;
+}
+
+.output[data-expanded] {
+  max-block-size: none;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  text-decoration: underline;
+}

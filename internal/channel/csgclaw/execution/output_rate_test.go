@@ -60,13 +60,20 @@ func TestOutputRateReachesWorkStatusAndClearsOnTool(t *testing.T) {
 	}
 }
 
-func TestOutputRateMeterEstimatesQwenVisibleOutput(t *testing.T) {
-	var meter outputRateMeter
-	meter.setModel("qwen3.7-plus")
-	start := time.Unix(100, 0)
-	meter.observe(start, "磁盘")
-	if !meter.observe(start.Add(100*time.Millisecond), "空间充足") || meter.rate <= 0 {
-		t.Fatalf("Qwen rate = %v", meter.rate)
+func TestOutputRateMeterEstimatesBuiltInModels(t *testing.T) {
+	for _, model := range []string{
+		"gpt-5.5", "gpt-6.1-sol", "glm-5.3", "mimo-v2.6-flash",
+		"deepseek-v4-pro", "qwen3.7-plus", "OpenCSG/Qwen3.7-Plus",
+	} {
+		t.Run(model, func(t *testing.T) {
+			var meter outputRateMeter
+			meter.setModel(model)
+			start := time.Unix(100, 0)
+			if !meter.observe(start, "磁盘") ||
+				!meter.observe(start.Add(100*time.Millisecond), "空间充足") || meter.rate <= 0 {
+				t.Fatalf("rate = %v", meter.rate)
+			}
+		})
 	}
 }
 

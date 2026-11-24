@@ -698,6 +698,7 @@ func (r *Registry) removeSubjectLocked(roomID, participantID, leaseID string) {
 
 func (r *Registry) updateFor(lease activeLease, state, reason string) apitypes.ParticipantWorkUpdate {
 	update := apitypes.ParticipantWorkUpdate{
+		ServerTimeMS:    r.now().UnixMilli(),
 		RegistryEpoch:   r.epoch,
 		LeaseID:         lease.leaseID,
 		ParticipantID:   lease.participantID,

@@ -2,14 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./OutputTokenRate.module.css";
 
-const sampleLifetime = 2500;
 const animationDuration = 420;
 
-export function OutputTokenRate({ rate, sampledAt, t }: { rate?: number; sampledAt?: number; t: TranslateFn }) {
+export function OutputTokenRate({ rate, expiresAt, t }: { rate?: number; expiresAt?: number; t: TranslateFn }) {
   const current = useRef<number | undefined>(undefined);
   const [display, setDisplay] = useState<number>();
   useEffect(() => {
-    const remaining = sampledAt ? sampledAt + sampleLifetime - Date.now() : 0;
+    const remaining = expiresAt ? expiresAt - performance.now() : 0;
     if (!rate || remaining <= 0) {
       current.current = undefined;
       setDisplay(undefined);
@@ -41,7 +40,7 @@ export function OutputTokenRate({ rate, sampledAt, t }: { rate?: number; sampled
       window.cancelAnimationFrame(frame);
       window.clearTimeout(expires);
     };
-  }, [rate, sampledAt]);
+  }, [rate, expiresAt]);
 
   if (!rate || display === undefined) return null;
   const rounded = Math.max(1, Math.round(display));
@@ -50,7 +49,7 @@ export function OutputTokenRate({ rate, sampledAt, t }: { rate?: number; sampled
   return (
     <span className={styles.rate} data-tier={tier} title={accessibleLabel} aria-label={accessibleLabel}>
       <span className={styles.pulse} aria-hidden="true" />
-      <span aria-hidden="true">{rounded}</span>
+      <span aria-hidden="true">≈{rounded}</span>
       <span className={styles.unit} aria-hidden="true">
         t/s
       </span>

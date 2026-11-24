@@ -35,14 +35,22 @@ func (m *outputRateMeter) setModel(model string) {
 	}
 	m.reset()
 	m.model = model
-	if strings.HasPrefix(model, "qwen") {
-		// The Qwen provider sends settlement usage. Use a multilingual tokenizer
-		// for the live estimate when the provider's vocabulary is unavailable.
-		m.codec, _ = tokenizer.Get(tokenizer.O200kBase)
-	} else if strings.HasPrefix(model, "gpt-5.") || strings.HasPrefix(model, "gpt-5-") {
-		m.codec, _ = tokenizer.Get(tokenizer.O200kBase)
-	} else {
-		m.codec, _ = tokenizer.ForModel(tokenizer.Model(model))
+	modelName := model[strings.LastIndex(model, "/")+1:]
+	m.codec, _ = tokenizer.ForModel(tokenizer.Model(modelName))
+	if m.codec != nil {
+		return
+	}
+	// Use a multilingual vocabulary for live estimates when the model's
+	// native tokenizer is unavailable.
+	for _, family := range []string{
+		"gpt-5.", "gpt-5-", "gpt-6.", "gpt-6-", "qwen", "glm-", "glm5",
+		"mimo-", "deepseek-", "kimi-", "k3", "minimax-", "doubao-", "ark-code-",
+		"claude-", "gemini-",
+	} {
+		if strings.HasPrefix(modelName, family) {
+			m.codec, _ = tokenizer.Get(tokenizer.O200kBase)
+			break
+		}
 	}
 }
 

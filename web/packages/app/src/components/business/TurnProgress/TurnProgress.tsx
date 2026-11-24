@@ -2,6 +2,7 @@ import { imEventsConnected, subscribeIMConnection } from "@/shared/realtime/imEv
 import { memo, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown, ChevronRight, Clock3 } from "lucide-react";
+import { ToolOutput } from "@/components/business/ToolOutput";
 import { Button } from "@/components/ui";
 import { progressActive, progressDuration, progressGroups, toolGroupLabel, terminalTool } from "@/models/turnProgress";
 import type { ProgressGroup, ProgressTool, TurnProgress as Progress } from "@/models/turnProgress";
@@ -303,8 +304,10 @@ function GroupToolIcon({ items }: { items: ProgressGroup["items"] }) {
 
 const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool; number: number; t: TranslateFn }) {
   const [open, setOpen] = useState(false);
-  /** 输出够长时默认只露 200px，给一个「展开全部」，否则整轮对话会被一次 `cat` 顶走。 */
-  const [outputExpanded, setOutputExpanded] = useState(false);
+  const toggleLabels = { expand: t("messageLongExpand"), collapse: t("messageLongCollapse") };
+  const input = tool.command || tool.input;
+  const inputLabel = t(tool.command ? "progressCommand" : "progressInput");
+  const outputLabel = t("progressOutput");
   const id = useId();
   const failed = ["failed", "error", "declined"].includes(tool.status);
   const label = t(`progressToolStatus_${tool.status}`);
@@ -337,28 +340,16 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
       </Button>
       {open ? (
         <div id={id} className={styles.toolDetails}>
-          {tool.command || tool.input ? (
+          {input ? (
             <div className={styles.detailSection}>
-              <span className={styles.detailLabel}>{t(tool.command ? "progressCommand" : "progressInput")}</span>
-              <pre>{tool.command || tool.input}</pre>
+              <span className={styles.detailLabel}>{inputLabel}</span>
+              <ToolOutput label={inputLabel} text={input} toggleLabels={toggleLabels} />
             </div>
           ) : null}
           <div className={styles.detailSection}>
-            <span className={styles.detailLabel}>{t("progressOutput")}</span>
+            <span className={styles.detailLabel}>{outputLabel}</span>
             {tool.output ? (
-              <>
-                <pre className={outputExpanded ? styles.outputExpanded : undefined}>{tool.output}</pre>
-                {longToolOutput(tool.output) ? (
-                  <button
-                    type="button"
-                    className={styles.outputToggle}
-                    aria-expanded={outputExpanded}
-                    onClick={() => setOutputExpanded((value) => !value)}
-                  >
-                    {outputExpanded ? t("messageLongCollapse") : t("messageLongExpand")}
-                  </button>
-                ) : null}
-              </>
+              <ToolOutput label={outputLabel} text={tool.output} toggleLabels={toggleLabels} />
             ) : (
               <p className={styles.emptyOutput}>
                 {t(terminalTool(tool.status) ? "progressNoOutput" : "progressWaitingOutput")}
@@ -383,11 +374,6 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
     </li>
   );
 });
-
-/** 超过约 12 行或 800 字符就认为“长”，此时才需要展开按钮。 */
-function longToolOutput(output: string): boolean {
-  return output.length > 800 || output.split("\n").length > 12;
-}
 
 function toolIcon(action: string) {
   switch (action) {

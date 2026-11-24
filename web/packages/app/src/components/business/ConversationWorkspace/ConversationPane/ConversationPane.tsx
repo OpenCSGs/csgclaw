@@ -461,7 +461,7 @@ function ConversationPaneContent({
               <OutputTokenRate
                 key={participant.leaseID}
                 rate={parseTurnProgress(message)?.status === "running" ? participant.outputTokensPerSecond : undefined}
-                sampledAt={participant.outputRateSampledAt}
+                expiresAt={participant.outputRateExpiresAt}
                 t={t}
               />
             ),

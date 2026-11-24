@@ -54,7 +54,7 @@ export function PendingTurnReplies({
             <span className={`message-author ${messageLayoutStyles["message-author"]}`}>{participant.name}</span>
             <OutputTokenRate
               rate={participant.outputTokensPerSecond}
-              sampledAt={participant.outputRateSampledAt}
+              expiresAt={participant.outputRateExpiresAt}
               t={t}
             />
           </div>

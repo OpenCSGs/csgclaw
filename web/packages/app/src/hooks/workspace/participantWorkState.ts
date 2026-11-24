@@ -6,6 +6,7 @@ export const PARTICIPANT_WORK_CLOSED_RETENTION_MS = 70_000;
 
 export type ActiveParticipantWorkLease = ParticipantWorkUpdate & {
   expiresAt: number;
+  outputRateExpiresAt?: number;
 };
 
 export type ClosedParticipantWorkLease = {
@@ -27,7 +28,7 @@ export type ParticipantWorkAction =
   | { participantIDs: string[]; type: "participantLifecycle" }
   | { memberParticipantIDs?: string[]; roomID: string; type: "roomLifecycle" }
   | { type: "reset" }
-  | { now: number; type: "workEvent"; work: ParticipantWorkUpdate };
+  | { now: number; receivedAt?: number; type: "workEvent"; work: ParticipantWorkUpdate };
 
 export function createParticipantWorkState(): ParticipantWorkState {
   return {
@@ -51,7 +52,7 @@ export function participantWorkReducer(
     case "roomLifecycle":
       return updateRoomLifecycle(state, action.roomID, action.memberParticipantIDs);
     case "workEvent":
-      return applyWorkEvent(state, action.work, action.now);
+      return applyWorkEvent(state, action.work, action.now, action.receivedAt);
   }
 }
 
@@ -104,7 +105,12 @@ export function nextParticipantWorkDeadline(state: ParticipantWorkState): number
   return next;
 }
 
-function applyWorkEvent(current: ParticipantWorkState, work: ParticipantWorkUpdate, now: number): ParticipantWorkState {
+function applyWorkEvent(
+  current: ParticipantWorkState,
+  work: ParticipantWorkUpdate,
+  now: number,
+  receivedAt?: number,
+): ParticipantWorkState {
   const normalized = normalizeWorkEvent(work);
   if (!normalized || !Number.isFinite(now)) {
     return current;
@@ -129,7 +135,9 @@ function applyWorkEvent(current: ParticipantWorkState, work: ParticipantWorkUpda
   }
 
   if (normalized.state === "working") {
-    const expiresAt = Date.parse(normalized.expires_at);
+    const serverTime = normalized.server_time_ms;
+    const hasServerTime = typeof serverTime === "number" && Number.isSafeInteger(serverTime) && serverTime > 0;
+    const expiresAt = Date.parse(normalized.expires_at) + (hasServerTime ? now - serverTime : 0);
     if (expiresAt <= now) {
       return closeLease(
         state,
@@ -140,10 +148,22 @@ function applyWorkEvent(current: ParticipantWorkState, work: ParticipantWorkUpda
         now,
       );
     }
+    const sampledAt = normalized.status?.output_rate_sampled_at;
+    let outputRateExpiresAt: number | undefined;
+    if (hasServerTime && sampledAt !== undefined && receivedAt !== undefined) {
+      const remaining = 2500 - Math.max(0, serverTime - sampledAt);
+      if (remaining > 0) {
+        outputRateExpiresAt = receivedAt + remaining;
+        if (sampledAt === active?.status?.output_rate_sampled_at && active.outputRateExpiresAt !== undefined) {
+          outputRateExpiresAt = Math.min(outputRateExpiresAt, active.outputRateExpiresAt);
+        }
+      }
+    }
     const activeByRoom = cloneActiveWithLease(state.activeByRoom, normalized.room_id, normalized.participant_id);
     activeByRoom[normalized.room_id][normalized.participant_id][normalized.lease_id] = {
       ...normalized,
       expiresAt,
+      outputRateExpiresAt,
     };
     const closedByLease = { ...state.closedByLease };
     delete closedByLease[key];

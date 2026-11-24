@@ -141,7 +141,7 @@ const t: TranslateFn = (key, params = {}) => {
     composerTip: "Enter to send",
     directMessagesSection: "Direct Messages",
     inputPlaceholder: "Message",
-    tokenRateLabel: "Generating at {rate} tokens per second",
+    tokenRateLabel: "Estimated output rate: {rate} tokens per second",
     localIdentityFallback: "Local user",
     conversationWorkingEditing: "Editing",
     conversationWorkingGeneratingReply: "Generating reply",
@@ -598,12 +598,12 @@ describe("ConversationPane", () => {
           leaseID: "lease-pending",
           requestID: "request-pending",
           outputTokensPerSecond: 18,
-          outputRateSampledAt: Date.now(),
+          outputRateExpiresAt: performance.now() + 2500,
         },
       ],
     });
     expect(
-      screen.getByLabelText("Generating at 18 tokens per second").closest("[data-work-lease-id] .message-meta"),
+      screen.getByLabelText("Estimated output rate: 18 tokens per second").closest("[data-work-lease-id] .message-meta"),
     ).toBeInTheDocument();
   });
 
@@ -619,11 +619,11 @@ describe("ConversationPane", () => {
           threadRootID: "msg-root",
           workStage: "thinking",
           outputTokensPerSecond: 18,
-          outputRateSampledAt: Date.now(),
+          outputRateExpiresAt: performance.now() + 2500,
         },
       ],
     });
-    const rate = screen.getByLabelText("Generating at 18 tokens per second");
+    const rate = screen.getByLabelText("Estimated output rate: 18 tokens per second");
     expect(rate.closest(".composer-working")).toBeInTheDocument();
   });
 
@@ -639,7 +639,7 @@ describe("ConversationPane", () => {
         leaseID: "lease-pending",
         canStop: true,
         outputTokensPerSecond: 18,
-        outputRateSampledAt: Date.now(),
+        outputRateExpiresAt: performance.now() + 2500,
       };
       const { container } = renderThreadPane({
         workingParticipants: [participant],
@@ -670,11 +670,11 @@ describe("ConversationPane", () => {
       if (status === "running") {
         expect(stop?.closest(".composer-box")).toBeInTheDocument();
         expect(
-          screen.getByLabelText("Generating at 18 tokens per second").closest(".message-meta"),
+          screen.getByLabelText("Estimated output rate: 18 tokens per second").closest(".message-meta"),
         ).toBeInTheDocument();
       } else {
         expect(stop).not.toBeInTheDocument();
-        expect(screen.queryByLabelText("Generating at 18 tokens per second")).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Estimated output rate: 18 tokens per second")).not.toBeInTheDocument();
       }
     },
   );

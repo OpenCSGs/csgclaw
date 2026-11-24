@@ -72,6 +72,33 @@ describe("participantWorkReducer", () => {
     expect(status?.output_tokens_per_second).toBe(rate > 0 && rate <= 10000 ? rate : undefined);
   });
 
+  it.each([-5000, 5000])("uses server sample age with %s ms of browser clock skew", (skew) => {
+    const status: ParticipantWorkUpdate["status"] = {
+      phase: "working",
+      stage: "generating_reply",
+      sequence: 1,
+      output_tokens_per_second: 18,
+      output_rate_sampled_at: now,
+    };
+    const receipt = 100;
+    const fresh = participantWorkReducer(createParticipantWorkState(), {
+      now: now + skew,
+      receivedAt: receipt,
+      type: "workEvent",
+      work: work({ server_time_ms: now + 200, status }),
+    });
+    const stale = participantWorkReducer(createParticipantWorkState(), {
+      now: now + skew,
+      receivedAt: receipt,
+      type: "workEvent",
+      work: work({ server_time_ms: now + 2500, status }),
+    });
+    expect(workLeaseForRequest(fresh, "room-1", "pt-worker", "message-1")?.outputRateExpiresAt).toBe(2400);
+    const staleLease = workLeaseForRequest(stale, "room-1", "pt-worker", "message-1");
+    expect(staleLease).not.toBeNull();
+    expect(staleLease?.outputRateExpiresAt).toBeUndefined();
+  });
+
   it("keeps the rate in a thinking lease status", () => {
     const state = participantWorkReducer(createParticipantWorkState(), {
       now,

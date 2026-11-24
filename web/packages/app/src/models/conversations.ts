@@ -202,6 +202,7 @@ export type IMData = {
 export type ParticipantWorkStage = "preparing_reply" | "thinking" | "running_tool" | "generating_reply";
 
 export type ParticipantWorkUpdate = {
+  server_time_ms?: number;
   capabilities?: Array<"thinking_status_v1" | "turn_stop_v1" | "work_stage_v1"> | null;
   expires_at: string;
   kind: "agent_turn";

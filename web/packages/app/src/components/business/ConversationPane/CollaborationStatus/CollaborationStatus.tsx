@@ -135,7 +135,7 @@ function Member({
             {active && progress?.status !== "waiting" ? (
               <OutputTokenRate
                 rate={participant?.outputTokensPerSecond}
-                sampledAt={participant?.outputRateSampledAt}
+                expiresAt={participant?.outputRateExpiresAt}
                 t={t}
               />
             ) : null}

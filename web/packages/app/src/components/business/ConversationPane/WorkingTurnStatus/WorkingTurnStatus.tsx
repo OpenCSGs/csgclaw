@@ -85,7 +85,7 @@ export function WorkingTurnStatus({
           </div>
         )}
         {showOutputRate ? (
-          <OutputTokenRate rate={participant.outputTokensPerSecond} sampledAt={participant.outputRateSampledAt} t={t} />
+          <OutputTokenRate rate={participant.outputTokensPerSecond} expiresAt={participant.outputRateExpiresAt} t={t} />
         ) : null}
         <WorkingTurnControls participant={participant} t={t} onStop={onStop} hideContextUsage={hideContextUsage} />
         {participant.contextUsage?.compacting || thinkingLatestLine ? (

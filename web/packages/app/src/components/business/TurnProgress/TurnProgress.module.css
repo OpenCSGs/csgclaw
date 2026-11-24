@@ -245,31 +245,6 @@
   color: var(--muted);
 }
 
-/* 工具输出**默认限高**：`cat` 一个长文件、`ls -R` 一棵大树，展开就会把整轮对话顶走。
-   想细看可以点「展开全部」，或者直接在框里滚。
-
-   ⚠️ `overscroll-behavior` 必须是 `auto`（默认值），**不能写 `contain`**。
-      `contain` 会把滚到边界后的滚轮事件完全吃掉，于是「输出滚到底了、整页却没反应」，
-      手感上就是鼠标卡在那儿（用户 2026-11-08 反馈）。改成 `auto` 让它继续滚外层消息列表。 */
-.toolDetails pre {
-  max-height: 200px;
-  overflow: auto;
-  overscroll-behavior: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font:
-    12px/1.65 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace;
-  color: var(--text);
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-}
-
 .toolDetails small,
 .emptyOutput {
   margin: 0;
@@ -322,25 +297,4 @@
     transition: none;
     animation: none;
   }
-}
-
-.toolDetails pre.outputExpanded {
-  max-height: none;
-}
-
-.outputToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 6px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--primary);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.outputToggle:hover {
-  text-decoration: underline;
 }

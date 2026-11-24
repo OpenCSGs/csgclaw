@@ -84,6 +84,7 @@ type ParticipantWorkStatusPatchRequest struct {
 }
 
 type ParticipantWorkUpdate struct {
+	ServerTimeMS    int64                  `json:"server_time_ms,omitempty"`
 	RegistryEpoch   string                 `json:"registry_epoch"`
 	LeaseID         string                 `json:"lease_id"`
 	ParticipantID   string                 `json:"participant_id"`

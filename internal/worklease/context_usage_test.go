@@ -96,12 +96,15 @@ func TestWorkStatusExposesOutputRateUntilTheStageChanges(t *testing.T) {
 		OutputTokensPerSecond: 18, OutputRateSampledAt: now.UnixMilli(),
 		Capabilities: []string{apitypes.ParticipantWorkCapabilityStageV1},
 	}
-	if _, ok, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request); err != nil || !ok {
-		t.Fatalf("update status: accepted=%t, error=%v", ok, err)
+	update, ok, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request)
+	if err != nil || !ok || update.ServerTimeMS != now.UnixMilli() {
+		t.Fatalf("update status: accepted=%t, server time=%d, error=%v", ok, update.ServerTimeMS, err)
 	}
+	now = now.Add(3 * time.Second)
 	active := registry.ActiveWork(lease.RoomID)
-	if len(active) != 1 || active[0].Status.OutputTokensPerSecond != 18 || active[0].Status.OutputRateSampledAt != now.UnixMilli() {
-		t.Fatalf("snapshot lost rate: %+v", active)
+	if len(active) != 1 || active[0].ServerTimeMS != now.UnixMilli() ||
+		active[0].Status.OutputTokensPerSecond != 18 || active[0].Status.OutputRateSampledAt != request.OutputRateSampledAt {
+		t.Fatalf("snapshot must preserve the sample timestamp and report the current server time: %+v", active)
 	}
 	request.Sequence++
 	request.Phase = apitypes.ParticipantWorkPhaseThinking
