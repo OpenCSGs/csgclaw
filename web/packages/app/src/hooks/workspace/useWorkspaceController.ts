@@ -24,6 +24,8 @@ import { createTranslator } from "@/shared/i18n";
 import {
   resolveConversationUser,
   upsertUserInData,
+  upsertConversationInData,
+  type IMConversation,
   mergeRoomMetadataUpdateInData,
   appendMessageToData,
   removeConversationFromData,
@@ -833,6 +835,16 @@ export function useWorkspaceController(): WorkspaceController {
     },
     [navigate],
   );
+  const restoreRoutedConversation = useCallback(
+    (room: IMConversation) => {
+      const pane = activePaneRef.current;
+      if (pane.type !== WorkspacePaneTypes.conversation || pane.id !== room.id) return;
+      setBootstrapData((current) =>
+        current?.rooms.some((item) => item.id === room.id) ? current : upsertConversationInData(current, room),
+      );
+    },
+    [setBootstrapData],
+  );
   const routedRoomID = activePane.type === WorkspacePaneTypes.conversation ? activePane.id : undefined;
   useMissingConversationRoute(
     bootstrapQuery.isSuccess && routedRoomID && !rooms.some((room) => room.id === routedRoomID)
@@ -840,6 +852,7 @@ export function useWorkspaceController(): WorkspaceController {
       : undefined,
     bootstrapQuery.dataUpdatedAt,
     leaveDeletedConversation,
+    restoreRoutedConversation,
   );
 
   const taskEntry = useTaskEntry({
