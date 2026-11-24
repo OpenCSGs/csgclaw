@@ -12,6 +12,7 @@ import { ConversationPane } from "@/components/business/ConversationWorkspace/Co
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 import { CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
+import { fetchMessagePageRequest } from "@/api/im";
 import { agentToDraft } from "@/models/agents";
 import type { IMConversation, IMMessage, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import {
@@ -23,7 +24,11 @@ import {
 
 vi.mock("@/api/im", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/im")>();
-  return { ...actual, fetchMessagesRequest: vi.fn(async () => []) };
+  return {
+    ...actual,
+    fetchMessagesRequest: vi.fn(async () => []),
+    fetchMessagePageRequest: vi.fn(async () => ({ messages: [], has_more: false })),
+  };
 });
 
 vi.mock("@/shared/realtime/imEvents", async (importOriginal) => ({
@@ -262,6 +267,10 @@ function renderThreadPane({
     id: "msg-root",
     sender_id: "u-manager",
   };
+  vi.mocked(fetchMessagePageRequest).mockResolvedValue({
+    messages: [...(messages ?? [root]), ...(replies ?? [])],
+    has_more: false,
+  });
   const thread: ThreadView = {
     replies,
     room_id: "room-1",

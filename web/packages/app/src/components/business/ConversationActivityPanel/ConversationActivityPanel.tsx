@@ -140,21 +140,25 @@ function ActivityPanel({
   t,
   usersById,
 }: ConversationActivityPanelProps) {
-  const history = useActivityHistory(conversation.id, active);
+  const { turnID, requestID } = actorSelection ?? {};
+  const target = useMemo(
+    () => activityTargetMessages(conversation.messages, initialEntryID, turnID, requestID),
+    [conversation.messages, initialEntryID, turnID, requestID],
+  );
+  const targetKey = JSON.stringify(target.flatMap((message) => (message.id ? [message.id] : [])));
+  const history = useActivityHistory(conversation.id, active, targetKey);
   const { loading, refresh } = history;
   const earlier = history.before
     ? { cursor: history.before, load: history.loadOlder, loading: history.loadingOlder }
     : undefined;
   const loadError = history.error ? errorMessage(history.error, t("agentActivityLoadFailed")) : "";
-  const { turnID, requestID } = actorSelection ?? {};
-  const target = useMemo(
-    () => (history.cleared ? [] : activityTargetMessages(conversation.messages, initialEntryID, turnID, requestID)),
-    [history.cleared, conversation.messages, initialEntryID, turnID, requestID],
-  );
   const messages = useMemo(() => {
-    if (history.loaded && !target.length) return history.messages;
-    const recent = history.loaded ? [] : conversation.messages.slice(-activityHistoryPageSize);
-    return mergeConversationActivityMessages(recent, target, history.messages);
+    if (history.loaded) return history.messages;
+    return mergeConversationActivityMessages(
+      conversation.messages.slice(-activityHistoryPageSize),
+      target,
+      history.messages,
+    );
   }, [history.loaded, history.messages, conversation.messages, target]);
   const [sortMode, setSortMode] = useState<SortMode>("newest_first");
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => new Set());
@@ -215,6 +219,7 @@ function ActivityPanel({
     displayEntries,
     JSON.stringify([conversation.id, selectedActorID, [...selectedTypes], sortMode, initialEntryID]),
     initialEntryID ? displayEntries.findIndex((entry) => entry.id === initialEntryID) : -1,
+    sortMode === "chronological" ? (entry) => entry.id : undefined,
   );
 
   const scrollToEntry = useCallback((entryID: string) => {
@@ -631,6 +636,7 @@ function ActivityPanel({
                 failed={Boolean(loadError)}
                 edge="start"
                 scrollRef={bodyRef}
+                onBeforeLoad={page.keepFirst}
                 t={t}
               />
             ) : null}
@@ -667,8 +673,6 @@ function ActivityPanel({
             ) : null}
             <ActivityPagination
               {...page}
-              active={active}
-              scrollRef={bodyRef}
               t={t}
               onChange={(index) => {
                 if (bodyRef.current) bodyRef.current.scrollTop = 0;

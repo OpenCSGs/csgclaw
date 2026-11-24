@@ -17,16 +17,16 @@ func (h *Handler) writeMessagePage(w http.ResponseWriter, r *http.Request, chann
 		writeAPIError(w, fmt.Errorf("limit must be between 1 and %d", im.MaxMessagePageSize), http.StatusBadRequest)
 		return
 	}
-	before, after := strings.TrimSpace(query.Get("before")), strings.TrimSpace(query.Get("after"))
-	if before != "" && after != "" {
-		writeAPIError(w, fmt.Errorf("before and after are mutually exclusive"), http.StatusBadRequest)
+	refreshIDs := query["refresh_id"]
+	if len(refreshIDs) > im.MaxMessagePageSize {
+		writeAPIError(w, fmt.Errorf("at most %d refresh IDs are allowed", im.MaxMessagePageSize), http.StatusBadRequest)
 		return
 	}
 	rootID := query.Get("thread_root_id")
 	page, err := channel.ListMessagePage(roomID, im.MessagePageOptions{
-		Before:               before,
-		After:                after,
+		Before:               strings.TrimSpace(query.Get("before")),
 		Limit:                limit,
+		RefreshIDs:           refreshIDs,
 		ThreadRootID:         rootID,
 		IncludeThreadReplies: rootID != "" || parseBoolQuery(query.Get("include_thread_replies")),
 		PublicAutonomousOnly: appRequestAgentID(r) != "",

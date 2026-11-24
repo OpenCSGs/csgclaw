@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/im"
 )
 
-func TestMessagePagesBoundHistoryAndCatchUp(t *testing.T) {
+func TestMessagePagesBoundHistoryAndRefresh(t *testing.T) {
 	messages := make([]im.Message, 4146)
 	for index := range messages {
 		messages[index] = im.Message{ID: fmt.Sprintf("msg-%04d", index+1), SenderID: "u-admin", Content: "tool output"}
@@ -45,15 +46,21 @@ func TestMessagePagesBoundHistoryAndCatchUp(t *testing.T) {
 	if !older.HasMore || older.Messages[0].ID != "msg-3947" || older.Messages[99].ID != "msg-4046" {
 		t.Fatal("older page skipped or duplicated messages at the boundary")
 	}
-	forward := requestPage("&limit=100&after=msg-3900", 100)
-	if !forward.HasMore || forward.Anchor == nil || forward.Anchor.ID != "msg-3900" ||
-		forward.Messages[0].ID != "msg-3901" || forward.Messages[99].ID != "msg-4000" {
-		t.Fatal("catch-up page should return the anchor revision and the first 100 messages after it")
-	}
-	if empty := requestPage("&limit=100&after=msg-4146", 0); empty.HasMore || empty.Anchor == nil {
-		t.Fatal("an unchanged tail should return only the anchor revision")
-	}
 	if missing := requestPage("&limit=100&before=removed", 0); !missing.CursorMissing {
 		t.Fatal("a removed cursor must be reported explicitly")
+	}
+	refreshed := requestPage("&limit=100&refresh_id=msg-0001&refresh_id=msg-0001&refresh_id=msg-4146&refresh_id=removed", 100)
+	if len(refreshed.Refreshed) != 1 || refreshed.Refreshed[0].ID != "msg-0001" || !refreshed.HasMore {
+		t.Fatal("refresh IDs should return out-of-window snapshots without changing the page")
+	}
+	scoped := requestPage("&limit=100&thread_root_id=msg-0001&refresh_id=msg-0002", 1)
+	if len(scoped.Refreshed) != 0 {
+		t.Fatal("refresh IDs must respect the page's message scope")
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet,
+		"/api/v1/messages?room_id=room-1&limit=100"+strings.Repeat("&refresh_id=msg-0001", im.MaxMessagePageSize+1), nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("too many refresh IDs returned status %d", rec.Code)
 	}
 }

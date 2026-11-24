@@ -1,21 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchMessagePageRequest } from "@/api/im";
 import type { IMMessage } from "@/models/conversations";
-import { newerProgressMessage } from "@/models/turnProgress";
+import { newerProgressMessage, parseTurnProgress, progressActive } from "@/models/turnProgress";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import { mergeConversationActivityMessages } from "./conversationActivity";
 
 export const activityHistoryPageSize = 100;
-const refreshOverlap = 8;
+const maxRefreshIDs = 100;
 const liveBatchMs = 80;
 
 type History = {
   roomID: string;
   messages: IMMessage[];
   before: string;
-  tail: string[];
+  latest: IMMessage[];
   loaded: boolean;
-  cleared?: boolean;
   loading: boolean;
   loadingOlder: boolean;
   error: unknown;
@@ -26,7 +25,7 @@ function emptyHistory(roomID: string): History {
     roomID,
     messages: [],
     before: "",
-    tail: [],
+    latest: [],
     loaded: false,
     loading: false,
     loadingOlder: false,
@@ -34,7 +33,18 @@ function emptyHistory(roomID: string): History {
   };
 }
 
-export function useActivityHistory(roomID: string, active: boolean) {
+function refreshMessageIDs(targetIDs: string[], messages: IMMessage[]): string[] {
+  const ids = new Set(targetIDs.slice(0, maxRefreshIDs));
+  for (let index = messages.length - 1; index >= 0 && ids.size < maxRefreshIDs; index--) {
+    const message = messages[index];
+    if (!message.id) continue;
+    const progress = parseTurnProgress(message);
+    if (progress && progressActive(progress)) ids.add(message.id);
+  }
+  return [...ids];
+}
+
+export function useActivityHistory(roomID: string, active: boolean, targetKey: string) {
   const [history, setHistory] = useState(() => emptyHistory(roomID));
   const current = useRef(history);
   const actions = useRef<{ refresh(): void; loadOlder(): void } | null>(null);
@@ -70,6 +80,7 @@ export function useActivityHistory(roomID: string, active: boolean) {
         if (!older) refreshPending = true;
         return;
       }
+      flush();
       const start = current.current;
       if (older && !start.before) return;
       const controller = new AbortController();
@@ -80,50 +91,41 @@ export function useActivityHistory(roomID: string, active: boolean) {
 
       try {
         let before = older ? start.before : undefined;
-        let after = older ? undefined : start.tail[0];
-        let page = await fetchMessagePageRequest(roomID, { ...options, before, after });
-        let reset = Boolean(page.cursor_missing);
-        if (reset) {
+        const loadLatest = () =>
+          fetchMessagePageRequest(roomID, {
+            ...options,
+            refreshIDs: refreshMessageIDs(JSON.parse(targetKey) as string[], start.messages),
+          });
+        let page = await (before ? fetchMessagePageRequest(roomID, { ...options, before }) : loadLatest());
+        const missingCursor = page.cursor_missing;
+        if (missingCursor) {
           before = undefined;
-          after = undefined;
-          page = await fetchMessagePageRequest(roomID, options);
-        }
-        const fetched = page.anchor ? [page.anchor, ...page.messages] : [...page.messages];
-        let olderCursor = start.before;
-        if (!after) olderCursor = page.has_more ? page.messages[0]?.id || "" : "";
-
-        // SSE does not replay missed events. Catch up from the last HTTP page
-        // and reread a small tail for revisions of in-flight tool calls.
-        while (after && page.has_more) {
-          after = page.messages.at(-1)?.id;
-          if (!after) break;
-          page = await fetchMessagePageRequest(roomID, { ...options, after });
-          if (page.cursor_missing) {
-            page = await fetchMessagePageRequest(roomID, options);
-            fetched.splice(0, fetched.length, ...page.messages);
-            olderCursor = page.has_more ? page.messages[0]?.id || "" : "";
-            reset = true;
-            break;
-          }
-          fetched.push(...page.messages);
+          page = await loadLatest();
         }
         if (controller.signal.aborted) return;
-        let tail = reset ? [] : start.tail;
-        if (!before && fetched.length) {
-          tail = fetched.slice(-refreshOverlap).flatMap((message) => (message.id ? [message.id] : []));
-        }
-        flush();
-        const existing = reset ? [] : current.current.messages;
+        const first = page.messages[0];
+        // Final replies can move to the end of the transcript. Keep earlier
+        // pages only when the new window starts on an unchanged HTTP record.
+        const keepEarlier =
+          !missingCursor &&
+          (Boolean(before) ||
+            (page.has_more &&
+              first?.id &&
+              start.latest.some((message) => message.id === first.id && message.created_at === first.created_at)));
+        const existing = keepEarlier ? current.current.messages : [];
+        const fetched = [...page.messages, ...(page.refreshed ?? [])];
         const pending = [...duringRequest.values()];
+        clearTimeout(timer);
+        timer = undefined;
+        live.clear();
         commit({
           roomID,
           messages: before
             ? mergeConversationActivityMessages(fetched, existing, pending)
             : mergeConversationActivityMessages(existing, fetched, pending),
-          before: olderCursor,
-          tail,
+          before: !before && keepEarlier ? start.before : page.has_more ? first?.id || "" : "",
+          latest: before ? start.latest : page.messages,
           loaded: true,
-          cleared: start.cleared || reset,
           loading: false,
           loadingOlder: false,
           error: null,
@@ -153,7 +155,7 @@ export function useActivityHistory(roomID: string, active: boolean) {
         request = null;
         refreshPending = false;
         live.clear();
-        commit({ ...emptyHistory(roomID), loaded: true, cleared: true });
+        commit({ ...emptyHistory(roomID), loaded: true });
         void read();
         return;
       }
@@ -176,7 +178,7 @@ export function useActivityHistory(roomID: string, active: boolean) {
       unsubscribe();
       actions.current = null;
     };
-  }, [active, roomID]);
+  }, [active, roomID, targetKey]);
 
   return {
     ...(history.roomID === roomID ? history : emptyHistory(roomID)),

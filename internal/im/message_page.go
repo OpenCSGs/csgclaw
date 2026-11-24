@@ -9,8 +9,9 @@ import (
 const MaxMessagePageSize = 200
 
 type MessagePageOptions struct {
-	Before, After        string
+	Before               string
 	Limit                int
+	RefreshIDs           []string
 	ThreadRootID         string
 	IncludeThreadReplies bool
 	PublicAutonomousOnly bool
@@ -18,16 +19,16 @@ type MessagePageOptions struct {
 
 type MessagePage struct {
 	Messages      []Message `json:"messages"`
-	Anchor        *Message  `json:"anchor,omitempty"`
+	Refreshed     []Message `json:"refreshed,omitempty"`
 	HasMore       bool      `json:"has_more"`
 	CursorMissing bool      `json:"cursor_missing,omitempty"`
 }
 
 // ListMessagePage reads in transcript order. With no cursor it returns the
-// newest page; before and after are exclusive message IDs. HasMore refers to
-// the direction of the request. Only messages in the page are projected.
+// newest page. Before is an exclusive message ID. RefreshIDs selects extra
+// snapshots without affecting the page boundary.
 func (s *Service) ListMessagePage(roomID string, opts MessagePageOptions) (MessagePage, error) {
-	if opts.Limit < 1 || opts.Limit > MaxMessagePageSize || (opts.Before != "" && opts.After != "") {
+	if opts.Limit < 1 || opts.Limit > MaxMessagePageSize || len(opts.RefreshIDs) > MaxMessagePageSize {
 		return MessagePage{}, fmt.Errorf("invalid message page options")
 	}
 	s.mu.RLock()
@@ -55,46 +56,46 @@ func (s *Service) ListMessagePage(roomID string, opts MessagePageOptions) (Messa
 		}
 		return message
 	}
-	start, end := 0, len(room.Messages)
-	cursor := opts.Before
-	if opts.After != "" {
-		cursor = opts.After
-	}
-	if cursor != "" {
-		index := end - 1
-		for index >= 0 && room.Messages[index].ID != cursor {
-			index--
+	end := len(room.Messages)
+	if opts.Before != "" {
+		end--
+		for end >= 0 && room.Messages[end].ID != opts.Before {
+			end--
 		}
-		if index < 0 || !inScope(room.Messages[index]) {
+		if end < 0 || !inScope(room.Messages[end]) {
 			page.CursorMissing = true
 			return page, nil
 		}
-		if opts.After != "" {
-			start = index + 1
-			anchor := present(room.Messages[index])
-			page.Anchor = &anchor
-		} else {
-			end = index
-		}
 	}
-	collect := func(message Message) bool {
+	for i := end - 1; i >= 0; i-- {
+		message := room.Messages[i]
 		if !inScope(message) {
-			return true
+			continue
 		}
 		if len(page.Messages) == opts.Limit {
 			page.HasMore = true
-			return false
+			break
 		}
 		page.Messages = append(page.Messages, present(message))
-		return true
 	}
-	if opts.After != "" {
-		for i := start; i < end && collect(room.Messages[i]); i++ {
+	slices.Reverse(page.Messages)
+	if len(opts.RefreshIDs) > 0 {
+		wanted := make(map[string]struct{}, len(opts.RefreshIDs))
+		for _, id := range opts.RefreshIDs {
+			wanted[id] = struct{}{}
 		}
-	} else {
-		for i := end - 1; i >= start && collect(room.Messages[i]); i-- {
+		for _, message := range page.Messages {
+			delete(wanted, message.ID)
 		}
-		slices.Reverse(page.Messages)
+		for i := len(room.Messages) - 1; i >= 0 && len(wanted) > 0; i-- {
+			message := room.Messages[i]
+			if _, ok := wanted[message.ID]; ok {
+				delete(wanted, message.ID)
+				if inScope(message) {
+					page.Refreshed = append(page.Refreshed, present(message))
+				}
+			}
+		}
 	}
 	return page, nil
 }

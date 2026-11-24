@@ -153,7 +153,12 @@ export function CollaborationActivityTurns({
         : [],
     [selected, usersById, autonomous],
   );
-  const page = useActivityPage(displayed, JSON.stringify([actor, query, status, newest]));
+  const page = useActivityPage(
+    displayed,
+    JSON.stringify([actor, query, status, newest]),
+    -1,
+    newest ? undefined : (row) => row.turn.key,
+  );
   const detailPage = useActivityPage(
     selectedEntries,
     JSON.stringify([selectedKey, initialEntryID]),
@@ -277,8 +282,6 @@ export function CollaborationActivityTurns({
           </div>
           <ActivityPagination
             {...detailPage}
-            active={active}
-            scrollRef={detailBody}
             t={t}
             onChange={(index) => {
               if (detailBody.current) detailBody.current.scrollTop = 0;
@@ -363,6 +366,7 @@ export function CollaborationActivityTurns({
             failed={Boolean(loadError)}
             edge="start"
             scrollRef={turnList}
+            onBeforeLoad={page.keepFirst}
             t={t}
           />
         ) : null}
@@ -415,8 +419,6 @@ export function CollaborationActivityTurns({
         ) : null}
         <ActivityPagination
           {...page}
-          active={active}
-          scrollRef={turnList}
           t={t}
           onChange={(index) => {
             if (turnList.current) turnList.current.scrollTop = 0;

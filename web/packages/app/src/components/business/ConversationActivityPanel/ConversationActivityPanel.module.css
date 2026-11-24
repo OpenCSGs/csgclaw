@@ -68,10 +68,6 @@
   font: var(--text-xs-normal);
 }
 
-.activityBoundary {
-  min-height: 1px;
-}
-
 .headerActions {
   display: flex;
   flex-wrap: wrap;
