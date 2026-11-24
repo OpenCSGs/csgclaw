@@ -5,6 +5,9 @@ import { delimiter, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 function install() {
+  if (/^(1|true|t)$/i.test(process.env.CSGCLAW_DISABLE_PUBLIC_SKILLS || '')) {
+    throw new Error('Public skills.sh access is disabled; use the global library or your signed-in site.');
+  }
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: { skill: { type: 'string' }, force: { type: 'boolean' } },
@@ -34,7 +37,7 @@ function install() {
   }
   const cwd = mkdtempSync(join(tmpdir(), 'csgclaw-skills-'));
   try {
-    execFileSync(cmd, args, { cwd, stdio: 'inherit' });
+    execFileSync(cmd, args, { cwd, stdio: 'inherit', timeout: 120_000 });
     const cli = process.env.CSGCLAW_CLI || 'csgclaw-cli';
     const root = join(cwd, '.agents', 'skills');
     const installed = readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory());
@@ -42,7 +45,7 @@ function install() {
       throw new Error('Expected exactly one installed skill in the temporary project');
     }
     const installedName = installed[0].name;
-    const importArgs = ['--output', 'json', 'skill', 'import', join(root, installedName)];
+    const importArgs = ['--output', 'json', 'skill', 'import', join(root, installedName), '--source-url', `https://skills.sh/${repo}/${name}`];
     if (values.force) importArgs.push('--force');
     execFileSync(cli, importArgs, { stdio: 'inherit' });
   } finally {

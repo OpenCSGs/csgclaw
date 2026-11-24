@@ -22,6 +22,7 @@ func workerSkillsRoot() (string, bool) {
 func (c cmd) runImport(run *command.Context, args []string, globals command.GlobalOptions) error {
 	fs := run.NewFlagSet("skill import", run.Program+" skill import <directory> [--force]", "Install the contents of a skill directory into the current worker, without enabling it.")
 	force := fs.Bool("force", false, "replace an existing skill")
+	sourceURL := fs.String("source-url", "", "original skills.sh skill page")
 	if err := command.ParseFlexible(fs, args); err != nil {
 		return err
 	}
@@ -32,7 +33,7 @@ func (c cmd) runImport(run *command.Context, args []string, globals command.Glob
 	if !ok {
 		return fmt.Errorf("skill import requires a CSGClaw worker home")
 	}
-	result, err := skillapi.ImportDirectory(root, fs.Arg(0), *force)
+	result, err := skillapi.ImportDirectoryWithOrigin(root, fs.Arg(0), *sourceURL, *force)
 	if err != nil {
 		return err
 	}

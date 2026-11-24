@@ -255,6 +255,12 @@ func (f *Controller) List(ctx context.Context, options contract.AgentListOptions
 }
 
 func (f *Controller) Update(ctx context.Context, agentID string, request contract.AgentUpdateRequest) (contract.Agent, error) {
+	if install := request.CatalogInstall; install != nil {
+		if err := f.installWorkerCatalog(ctx, agentID, *install); err != nil {
+			return contract.Agent{}, err
+		}
+		return f.Get(ctx, agentID, contract.AgentGetOptions{})
+	}
 	if request.EnsureEnabledSkill != "" {
 		if err := f.ensureSkillEnabled(ctx, agentID, request.EnsureEnabledSkill); err != nil {
 			return contract.Agent{}, err

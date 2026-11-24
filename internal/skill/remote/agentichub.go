@@ -33,6 +33,8 @@ const (
 )
 
 var ErrAgenticHubSignInRequired = errors.New("OpenCSG sign-in is required")
+var ErrRateLimited = errors.New("skill catalog rate limited")
+var errCatalogNotFound = errors.New("skill catalog returned status 404")
 
 var ErrInvalidAgenticHubRequest = errors.New("invalid AgenticHub skill request")
 
@@ -189,6 +191,12 @@ func downloadAgenticHubSkillArchive(
 	if resp.StatusCode == http.StatusNotFound {
 		// Older Hub deployments expose only tree/blob endpoints.
 		return nil, false, nil
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, false, ErrAgenticHubSignInRequired
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, false, ErrRateLimited
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, agenticHubMaxArchiveBytes+1))
 	if err != nil {
@@ -395,6 +403,12 @@ func getAgenticHubJSONWithAccessToken(ctx context.Context, client *http.Client, 
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		return ErrAgenticHubSignInRequired
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return ErrRateLimited
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return errCatalogNotFound
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("AgenticHub request failed with status %d: %s", resp.StatusCode, truncateAgenticHubBody(body))

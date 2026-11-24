@@ -1,4 +1,4 @@
 interface:
   display_name: "Skill Installer"
-  short_description: "Install registry and skills.sh skills in this worker"
+  short_description: "Find, install and inspect existing worker skills"
   default_prompt: "Use $skill-installer to find, install and enable a skill in this CSGClaw worker."

@@ -44,7 +44,7 @@ func TestWorkerSkillMCPProjectsReinstallToNativeRuntime(t *testing.T) {
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				t.Fatal(err)
 			}
-			h := &Handler{svc: controller, agentEngine: agentengine.New(controller), agentRuntime: controller}
+			h := &Handler{svc: controller, workspace: controller.Workspace(), agentEngine: agentengine.New(controller), agentRuntime: controller}
 			if err := h.EnableConnectors(filepath.Join(t.TempDir(), "apps.json")); err != nil {
 				t.Fatal(err)
 			}
@@ -79,6 +79,11 @@ func TestWorkerSkillMCPProjectsReinstallToNativeRuntime(t *testing.T) {
 				callTaskTool(t, session, "skill_ensure_enabled", map[string]any{"name": "demo"}, &result)
 				if result.Name != "demo" || !result.Enabled || !result.DiskSynced {
 					t.Fatalf("unexpected MCP result: %+v", result)
+				}
+				var status agent.WorkerSkillStatus
+				callTaskTool(t, session, "skill_status", map[string]any{"name": "demo"}, &status)
+				if !status.Installed || !status.Enabled || status.DiskSync != "in_sync" {
+					t.Fatalf("unexpected post-install status: %+v", status)
 				}
 				home := filepath.Dir(layout.SkillsRoot)
 				if kind == agent.RuntimeKindDSH {

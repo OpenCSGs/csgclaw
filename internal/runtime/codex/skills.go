@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,10 +13,59 @@ import (
 
 	agentruntime "csgclaw/internal/runtime"
 	skill "csgclaw/internal/skill/state"
+	"csgclaw/internal/utils/filebrowse"
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 const skillConfigBegin = "# BEGIN CSGCLAW SKILL STATES"
 const skillConfigEnd = "# END CSGCLAW SKILL STATES"
+
+func (r *Runtime) SkillDiskSync(layout agentruntime.Layout, name string, enabled bool, options map[string]any) (string, error) {
+	opts, err := conversationRuntimeOptions(options)
+	if err != nil {
+		return "unknown", err
+	}
+	if opts.ExecutionMode == ExecutionModeReadOnly && enabled {
+		return "restricted", nil
+	}
+	var cfg struct {
+		Skills struct {
+			Config []struct {
+				Path    string
+				Enabled *bool
+			}
+		}
+	}
+	r.configMu.Lock()
+	defer r.configMu.Unlock()
+	f, err := filebrowse.OpenFile(filepath.Dir(layout.SkillsRoot), configFileName)
+	if err == nil {
+		defer f.Close()
+		const maxSize = 4 << 20
+		data, err := io.ReadAll(io.LimitReader(f, maxSize+1))
+		if err != nil {
+			return "unknown", err
+		}
+		if len(data) > maxSize {
+			return "unknown", fmt.Errorf("Codex configuration too large")
+		}
+		if err := toml.Unmarshal(data, &cfg); err != nil {
+			return "unknown", err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "unknown", err
+	}
+	actual := true
+	for _, s := range cfg.Skills.Config {
+		if filepath.Clean(s.Path) == filepath.Join(layout.SkillsRoot, name, "SKILL.md") && s.Enabled != nil && !*s.Enabled {
+			actual = false
+		}
+	}
+	if actual != enabled {
+		return "pending", nil
+	}
+	return "in_sync", nil
+}
 
 func (r *Runtime) ReconcileSkills(_ context.Context, h agentruntime.Handle, states map[string]skill.State) error {
 	ref, err := r.resolveAgent(h)

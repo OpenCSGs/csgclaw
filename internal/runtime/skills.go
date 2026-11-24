@@ -10,3 +10,9 @@ import (
 type SkillsReconciler interface {
 	ReconcileSkills(context.Context, Handle, map[string]skill.State) error
 }
+
+// SkillDiskInspector compares the runtime's on-disk configuration with the
+// desired setting without creating directories or refreshing the session.
+type SkillDiskInspector interface {
+	SkillDiskSync(Layout, string, bool, map[string]any) (string, error)
+}

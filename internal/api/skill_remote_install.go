@@ -138,7 +138,7 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	remotePath, ref, err := skillremote.NormalizeAgenticHubSkillRequest(req.RemotePath, req.Ref)
+	remotePath, _, err := skillremote.NormalizeAgenticHubSkillRequest(req.RemotePath, req.Ref)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -153,20 +153,10 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		writeRemoteSkillsHubError(w, err)
 		return
 	}
-	version, commit := "", ""
-	releases, releaseErr := skillremote.GetAgenticHubSkillReleases(r.Context(), baseURL, token, remotePath)
-	if releaseErr != nil && !strings.Contains(releaseErr.Error(), "status 404") {
+	version, commit, ref, releaseErr := skillremote.ResolveSkillRelease(r.Context(), baseURL, token, remotePath, req.Ref)
+	if releaseErr != nil {
 		http.Error(w, "skill release information is unavailable", http.StatusBadGateway)
 		return
-	}
-	if release, ok := releases.Latest(); ok && (req.Ref == "" || req.Ref == "main" || req.Ref == releases.DefaultBranch || req.Ref == release.Commit) {
-		version, commit, ref = release.Version, release.Commit, release.Commit
-	}
-	for _, release := range releases.Versions {
-		if release.Version == req.Ref || release.Commit == req.Ref {
-			version, commit, ref = release.Version, release.Commit, release.Commit
-			break
-		}
 	}
 	archive, err := skillremote.FetchAgenticHubSkillArchive(r.Context(), baseURL, token, remotePath, ref)
 	if err != nil {

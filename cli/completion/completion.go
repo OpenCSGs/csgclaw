@@ -338,7 +338,7 @@ func skillSpec() CommandSpec {
 			},
 			{Name: "get", Summary: "Show one ClawHub skill", Flags: []FlagSpec{{Name: "version", TakesValue: true}, {Name: "registry", TakesValue: true}}},
 			{Name: "versions", Summary: "List published skill versions", Flags: []FlagSpec{{Name: "limit", TakesValue: true}, {Name: "registry", TakesValue: true}}},
-			{Name: "import", Summary: "Import a skill directory into this worker", Flags: []FlagSpec{{Name: "force"}}},
+			{Name: "import", Summary: "Import a skill directory into this worker", Flags: []FlagSpec{{Name: "force"}, {Name: "source-url", TakesValue: true}}},
 			{
 				Name:    "install",
 				Summary: "Install a skill into the local workspace skills directory",

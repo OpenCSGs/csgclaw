@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"csgclaw/internal/skill/catalog"
 	"csgclaw/internal/skill/installstate"
 	"csgclaw/internal/skill/system"
 )
@@ -14,6 +15,13 @@ import (
 // ImportDirectory installs a downloaded skill as local, never as a Hub market
 // record. Its permissions and origin move together under the installation lock.
 func ImportDirectory(root, source string, force bool) (InstallResult, error) {
+	return ImportDirectoryWithOrigin(root, source, "", force)
+}
+
+func ImportDirectoryWithOrigin(root, source, publicURL string, force bool) (InstallResult, error) {
+	if publicURL != "" && !catalog.ValidPublicURL(publicURL) {
+		return InstallResult{}, fmt.Errorf("expected a skills.sh skill page")
+	}
 	source, err := filepath.Abs(source)
 	if err != nil {
 		return InstallResult{}, err
@@ -62,7 +70,7 @@ func ImportDirectory(root, source string, force bool) (InstallResult, error) {
 			return InstallRecord{}, err
 		}
 		digest, err := installstate.BundleSHA256(stage)
-		return InstallRecord{Source: installstate.SourceLocal, Slug: name, SHA256: digest}, err
+		return InstallRecord{Source: installstate.SourceLocal, SourceURL: publicURL, Slug: name, SHA256: digest}, err
 	})
 	if err != nil {
 		return InstallResult{}, err

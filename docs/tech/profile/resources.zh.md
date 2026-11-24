@@ -85,6 +85,10 @@ sequenceDiagram
 
 ## Worker 自助安装（Codex 和 DSH）
 
+安装已有技能先读 `skill-installer`；从零编写技能读 `skill-creator`。普通关键词用 `skill_search`：优先全局库，命中时不访问网络。未命中并行检索当前登录站点和 skills.sh，各来源独立报告登录、连接、超时、限流或禁用状态。`CSGCLAW_DISABLE_PUBLIC_SKILLS=true` 禁用 skills.sh 检索与下载，仍允许访问登录站点；离线时可直接安装全局库候选。显式指定来源时不自动换源。
+
+对选中的全局/站点候选调用 `skill_install_from_catalog`，原样传回 `source`、`key` 和站点候选的 `site`、`ref`。它只写本 worker 文件；站点凭据仅在 Server 使用。`replace:true` 用于明确重装。安装结果返回实际 `name`；读 `skill_status(name)` 可查询来源、已知版本、期望启用状态及磁盘是否同步，不触发修复或会话重载。
+
 在 worker 内执行 `csgclaw-cli --output json skill install <slug> --registry opencsg` 只安装文件；显式重装使用 `--force`。skills.sh/GitHub 由 `skill-installer` 内置脚本在临时项目下载，再用 `skill import` 安装。两条路径都返回实际安装名 `Slug`，不需要 shell 持有 worker 的服务端凭据。
 
 安装或重装到当前 worker 后，Agent 按 `skill-installer/SKILL.md` 调用内置 `csgclaw` MCP 工具 `skill_ensure_enabled({"name":"<Slug>"})`。服务端从已认证的 MCP 连接确定目标 worker；工具不接受 Agent ID 或目录。`disk_synced: true` 表示启用配置与磁盘已同步，不表示当前会话已加载。原先已启用的技能也会同步最新文件，全程不重启 worker。若启用失败，只重试 MCP 调用；普通终端安装或导出到其他目录不会触发 MCP。已有 Web/Portal 管理开关保持原行为。

@@ -1,11 +1,15 @@
 package agents
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+
+	"csgclaw/internal/agentengine/contract"
 
 	skillinstall "csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
@@ -18,6 +22,39 @@ type preparedSkillReplacement struct {
 	names      []string
 	origins    map[string]*skillinstall.Record
 	keepBackup bool
+	createOnly bool
+}
+
+func (s *Controller) installWorkerCatalog(ctx context.Context, id string, in contract.CatalogInstall) error {
+	name := in.Name
+	if clean, err := skilllocal.NormalizeName(name); err != nil || clean != name || !filepath.IsLocal(name) || strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
+		return ErrAgentSkillInvalid
+	}
+	id = canonicalAgentID(id)
+	return s.LifecycleCoordinator().TryUpdateFiles(ctx, id, func() error {
+		item, ok := s.agentSnapshot(id)
+		if !ok || item.ArchivedAt != nil {
+			return os.ErrNotExist
+		}
+		if item.Role != RoleWorker || !isHostRuntimeKind(item.RuntimeKind) {
+			return ErrSkillEnablementUnsupported
+		}
+		if in.Archive != nil {
+			root, err := s.agentSkillsRoot(id, item.RuntimeKind)
+			if err != nil {
+				return err
+			}
+			_, err = skilllocal.InstallArchiveWithOptions(root, name+".zip", in.Archive, skilllocal.InstallArchiveOptions{Origin: in.Origin, ExpectedName: name, Replace: in.Replace})
+			return err
+		}
+		p, err := s.prepareSkillReplacement(item, []string{name})
+		if err != nil {
+			return err
+		}
+		defer p.cleanup()
+		p.createOnly = !in.Replace
+		return p.apply()
+	})
 }
 
 func validateSkillReplacements(names, desired []string) error {
@@ -126,6 +163,9 @@ func (p *preparedSkillReplacement) apply() error {
 			target := filepath.Join(p.targetRoot, name)
 			entry := movedSkill{name: name}
 			if info, statErr := os.Lstat(target); statErr == nil {
+				if p.createOnly {
+					return fmt.Errorf("%w: %s", ErrAgentSkillAlreadyExists, name)
+				}
 				if info.Mode()&os.ModeSymlink != 0 {
 					return fmt.Errorf("%w: %s", ErrWorkspaceSymlinkDenied, name)
 				}

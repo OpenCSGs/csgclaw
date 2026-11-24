@@ -12,6 +12,35 @@ import (
 	skill "csgclaw/internal/skill/state"
 )
 
+func (r *Runtime) SkillDiskSync(layout agentruntime.Layout, name string, enabled bool, _ map[string]any) (string, error) {
+	view := filepath.Join(filepath.Dir(filepath.Dir(layout.SkillsRoot)), "skill-view", "skills", name)
+	fi, err := os.Lstat(view)
+	if errors.Is(err, os.ErrNotExist) {
+		if enabled {
+			return "pending", nil
+		}
+		return "in_sync", nil
+	}
+	if err != nil {
+		return "unknown", err
+	}
+	if !enabled || !fi.IsDir() {
+		return "pending", nil
+	}
+	want, err := skill.DirectoryDigest(filepath.Join(layout.SkillsRoot, name))
+	if err != nil {
+		return "unknown", err
+	}
+	got, err := skill.DirectoryDigest(view)
+	if err != nil {
+		return "unknown", err
+	}
+	if want != got {
+		return "pending", nil
+	}
+	return "in_sync", nil
+}
+
 func (r *Runtime) ReconcileSkills(_ context.Context, h agentruntime.Handle, states map[string]skill.State) error {
 	ref, err := r.deps.ResolveAgent(h)
 	if err != nil {

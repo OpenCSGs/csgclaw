@@ -395,11 +395,13 @@ func (h *Handler) registerAppPlatformTools(agentID string) {
 	h.registerAppRoomTools(agentID)
 	h.registerBrowserTools(agentID)
 	h.registerAppPlatformTaskTools(agentID)
+	h.registerSkillSearch(agentID)
 	if a.RuntimeKind == agent.RuntimeKindCodex {
 		h.registerAppFileTools(agentID)
 	}
 	if a.Role == agent.RoleWorker && (a.RuntimeKind == agent.RuntimeKindDSH || a.RuntimeKind == agent.RuntimeKindCodex) {
 		h.registerWorkerSkillTool(agentID)
+		h.registerWorkerCatalogTools(agentID)
 	}
 	if h.agentPlatformManager(agentID) {
 		h.registerAppWorkerTools(agentID)

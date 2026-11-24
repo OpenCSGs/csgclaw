@@ -468,6 +468,29 @@ func mergeMemoryUpdate(current agentengine.AgentSpec, request agentengine.AgentU
 }
 
 func (a *memoryAgents) Update(ctx context.Context, agentID string, request agentengine.AgentUpdateRequest) (agentengine.Agent, error) {
+	if in := request.CatalogInstall; in != nil {
+		err := a.client.lifecycle.TryUpdateFiles(ctx, agentID, func() error {
+			a.client.mu.Lock()
+			defer a.client.mu.Unlock()
+			item, ok := a.client.agents[agentID]
+			if !ok {
+				return os.ErrNotExist
+			}
+			if slices.Contains(item.Spec.Skills, in.Name) {
+				if !in.Replace {
+					return os.ErrExist
+				}
+			} else {
+				item.Spec.Skills = append(item.Spec.Skills, in.Name)
+			}
+			a.client.agents[agentID] = item
+			return nil
+		})
+		if err != nil {
+			return agentengine.Agent{}, err
+		}
+		return a.Get(ctx, agentID, agentengine.AgentGetOptions{})
+	}
 	if request.EnsureEnabledSkill != "" {
 		if err := a.ensureSkillEnabled(ctx, agentID, request.EnsureEnabledSkill); err != nil {
 			return agentengine.Agent{}, err

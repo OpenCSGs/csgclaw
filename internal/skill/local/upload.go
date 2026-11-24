@@ -91,7 +91,10 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 		return SkillSummary{}, err
 	}
 	apply := func() error {
-		if _, err := os.Stat(destDir); err == nil {
+		if info, err := os.Lstat(destDir); err == nil {
+			if !info.IsDir() {
+				return ErrSkillArchiveUnsafe
+			}
 			if !options.Replace {
 				return fmt.Errorf("%w: %s", ErrSkillAlreadyExists, summary.Name)
 			}

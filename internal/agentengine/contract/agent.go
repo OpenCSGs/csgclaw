@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/resourcequery"
+	"csgclaw/internal/skill/installstate"
 	skill "csgclaw/internal/skill/state"
 	"time"
 )
@@ -63,6 +64,16 @@ type AgentUpdateRequest struct {
 	// EnsureEnabledSkill is a worker self-update of one installed skill.
 	// It reconciles files without draining the caller's own turn.
 	EnsureEnabledSkill string `json:"-"`
+	// CatalogInstall is an authenticated files-only self-install, never decoded from HTTP.
+	CatalogInstall *CatalogInstall `json:"-"`
+}
+
+type CatalogInstall struct {
+	Name    string
+	Replace bool
+	// Nil selects the global library; otherwise the caller resolved the current site's archive.
+	Archive []byte
+	Origin  installstate.Record
 }
 
 type AgentRecreateOptions struct {

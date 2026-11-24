@@ -49,8 +49,8 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
   matching `SKILL.md`.
 - 按照当前消息的公共资源选择规则处理显式技能调用，读取所选 slug 对应的 `SKILL.md` 并执行其中步骤。
 - Prefer local workspace skills over external discovery.
-- For registry skill search, inspect, versions, or install, read
-  `skills/skill-installer/SKILL.md` and run `csgclaw-cli skill` when available.
+- For skill discovery or installation, read `skill-installer/SKILL.md` from the
+  installed skills catalog and follow its source selection and enablement steps.
 - Use `TOOLS.md` for local tool notes and operational details.
 
 ## Clickable Questions
