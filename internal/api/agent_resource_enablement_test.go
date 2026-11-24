@@ -25,8 +25,15 @@ import (
 type resourceEnablementRuntime struct{ snapshotMCPServersRuntime }
 
 func TestWorkerSkillMCPProjectsReinstallToNativeRuntime(t *testing.T) {
-	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindDSH} {
-		t.Run(kind, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, config string
+	}{
+		{"codex", agent.RuntimeKindCodex, "[[skills.config]]\npath = %q\nenabled = false # external demo rule\n"},
+		{"codex-inline", agent.RuntimeKindCodex, "[skills]\nconfig = [{path = %q, enabled = false}] # external demo rule\n"},
+		{"dsh", agent.RuntimeKindDSH, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			kind := tc.kind
 			item := completeWorkerAgent("agent-native-skill", "native")
 			item.RuntimeKind, item.RuntimeName = kind, kind
 			item.SkillStates = map[string]skill.State{"demo": {Enabled: false}, "other": {Enabled: false}}
@@ -47,7 +54,7 @@ func TestWorkerSkillMCPProjectsReinstallToNativeRuntime(t *testing.T) {
 			const externalComment = "# user's own skill configuration"
 			if kind == agent.RuntimeKindCodex {
 				p := filepath.Join(filepath.Dir(layout.SkillsRoot), "config.toml")
-				content := fmt.Sprintf("%s\n[[skills.config]]\nenabled = false # external demo rule\npath = %q\n", externalComment, filepath.Join(dir, "SKILL.md"))
+				content := externalComment + "\n" + fmt.Sprintf(tc.config, filepath.Join(dir, "SKILL.md"))
 				if err := os.WriteFile(p, []byte(content), 0600); err != nil {
 					t.Fatal(err)
 				}
@@ -101,7 +108,7 @@ func TestWorkerSkillMCPProjectsReinstallToNativeRuntime(t *testing.T) {
 					}
 				} else {
 					data, err := os.ReadFile(filepath.Join(home, "config.toml"))
-					if err != nil || !strings.Contains(string(data), "other") || !strings.Contains(string(data), externalComment) || !strings.Contains(string(data), "true # external demo rule") {
+					if err != nil || !strings.Contains(string(data), "other") || !strings.Contains(string(data), externalComment) || !strings.Contains(string(data), "# external demo rule") {
 						t.Fatalf("Codex enablement not applied: %v", err)
 					}
 				}

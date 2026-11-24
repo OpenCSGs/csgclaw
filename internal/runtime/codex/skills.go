@@ -20,6 +20,15 @@ import (
 const skillConfigBegin = "# BEGIN CSGCLAW SKILL STATES"
 const skillConfigEnd = "# END CSGCLAW SKILL STATES"
 
+type codexSkillConfig struct {
+	Skills struct {
+		Config []struct {
+			Path    string
+			Enabled *bool
+		}
+	}
+}
+
 func (r *Runtime) SkillDiskSync(layout agentruntime.Layout, name string, enabled bool, options map[string]any) (string, error) {
 	opts, err := conversationRuntimeOptions(options)
 	if err != nil {
@@ -28,14 +37,7 @@ func (r *Runtime) SkillDiskSync(layout agentruntime.Layout, name string, enabled
 	if opts.ExecutionMode == ExecutionModeReadOnly && enabled {
 		return "restricted", nil
 	}
-	var cfg struct {
-		Skills struct {
-			Config []struct {
-				Path    string
-				Enabled *bool
-			}
-		}
-	}
+	var cfg codexSkillConfig
 	r.configMu.Lock()
 	defer r.configMu.Unlock()
 	f, err := filebrowse.OpenFile(filepath.Dir(layout.SkillsRoot), configFileName)
@@ -113,33 +115,39 @@ func (r *Runtime) updateSkillConfig(home string, states map[string]skill.State, 
 	if err := r.mkdirAll(home, 0o700); err != nil {
 		return err
 	}
-	content := renderSkillStates(string(data), home, states)
+	target := ""
 	if enableName != "" {
-		content, err = enableSkillConfigEntries(content, filepath.Join(home, "skills", enableName, "SKILL.md"))
-		if err != nil {
-			return err
-		}
+		target = filepath.Join(home, "skills", enableName, "SKILL.md")
 	}
-	return r.writeFile(path, []byte(content), 0o600)
+	content, err := renderSkillStates(string(data), home, states, target)
+	if err != nil {
+		return err
+	}
+	// The syntax walker does not check duplicate keys or the type Codex reads.
+	if err := toml.Unmarshal([]byte(content), &codexSkillConfig{}); err != nil {
+		return fmt.Errorf("invalid Codex skill configuration: %w", err)
+	}
+	return r.writePrivateFile(path, []byte(content), 0o600)
 }
 
-func renderSkillStates(content, home string, states map[string]skill.State) string {
+func renderSkillStates(content, home string, states map[string]skill.State, target string) (string, error) {
 	content = stripManagedBlock(content, skillConfigBegin, skillConfigEnd)
-	names := make([]string, 0, len(states))
+	var paths []string
 	for name, state := range states {
 		if !state.Enabled {
-			names = append(names, name)
+			paths = append(paths, filepath.Join(home, "skills", name, "SKILL.md"))
 		}
 	}
-	sort.Strings(names)
-	if len(names) == 0 {
-		return content
+	sort.Strings(paths)
+	content, inline, err := editSkillConfigEntries(content, target, paths)
+	if err != nil || inline || len(paths) == 0 {
+		return content, err
 	}
 	var block strings.Builder
 	block.WriteString(strings.TrimRight(content, "\n") + "\n" + skillConfigBegin + "\n")
-	for _, name := range names {
-		fmt.Fprintf(&block, "[[skills.config]]\npath = %s\nenabled = false\n", strconv.Quote(filepath.Join(home, "skills", name, "SKILL.md")))
+	for _, path := range paths {
+		fmt.Fprintf(&block, "[[skills.config]]\npath = %s\nenabled = false\n", strconv.Quote(path))
 	}
 	block.WriteString(skillConfigEnd + "\n")
-	return block.String()
+	return block.String(), nil
 }

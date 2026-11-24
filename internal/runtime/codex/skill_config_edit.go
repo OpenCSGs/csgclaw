@@ -3,22 +3,28 @@ package codex
 import (
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2/unstable"
 )
 
-// Change only the literal false values belonging to this skill. Re-encoding
-// config.toml would discard comments and rewrite unrelated user settings.
-func enableSkillConfigEntries(content, target string) (string, error) {
+type skillConfigEdit struct {
+	start, end int
+	text       string
+}
+
+// Edit literals and managed entries without re-encoding comments and unrelated settings.
+func editSkillConfigEntries(content, target string, paths []string) (string, bool, error) {
 	type entry struct {
 		path     string
 		disabled unstable.Range
 	}
-	var edits []unstable.Range
+	var edits []skillConfigEdit
+	var hasInline bool
 	commit := func(e entry) {
-		if e.disabled.Length != 0 && filepath.Clean(e.path) == target {
-			edits = append(edits, e.disabled)
+		if target != "" && e.disabled.Length != 0 && filepath.Clean(e.path) == target {
+			edits = append(edits, skillConfigEdit{int(e.disabled.Offset), int(e.disabled.Offset + e.disabled.Length), "true"})
 		}
 	}
 	keys := func(n *unstable.Node) []string {
@@ -59,8 +65,12 @@ func enableSkillConfigEntries(content, target string) (string, error) {
 				}
 			}
 		case slices.Equal(k, configKey) && v.Kind == unstable.Array:
+			hasInline = true
+			slot := inlineSkillSlot(content, n)
+			alreadyDisabled := make(map[string]bool)
 			for it := v.Children(); it.Next(); {
-				if it.Node().Kind != unstable.InlineTable {
+				offset := int(it.Node().Raw.Offset)
+				if it.Node().Kind != unstable.InlineTable || (offset >= slot.start && offset < slot.end) {
 					continue
 				}
 				var e entry
@@ -70,10 +80,29 @@ func enableSkillConfigEntries(content, target string) (string, error) {
 					}
 				}
 				commit(e)
+				if e.disabled.Length != 0 {
+					alreadyDisabled[filepath.Clean(e.path)] = true
+				}
 			}
+			var entries []string
+			for _, path := range paths {
+				if !alreadyDisabled[path] {
+					entries = append(entries, "{ path = "+strconv.Quote(path)+", enabled = false }")
+				}
+			}
+			if len(entries) > 0 {
+				prefix := strings.TrimRight(content[:slot.start], " \t\r\n")
+				separator := ""
+				if !strings.HasSuffix(prefix, "[") && !strings.HasSuffix(prefix, ",") {
+					separator = ","
+				}
+				slot.text = "\n" + inlineSkillBegin + "\n" + separator + strings.Join(entries, ",\n") + "\n" + inlineSkillEnd + "\n"
+			}
+			edits = append(edits, slot)
 		}
 	}
 	var p unstable.Parser
+	p.KeepComments = true
 	p.Reset([]byte(content))
 	var table []string
 	var active *entry
@@ -98,22 +127,61 @@ func enableSkillConfigEntries(content, target string) (string, error) {
 		}
 	}
 	if err := p.Error(); err != nil {
-		return "", err
+		return "", false, err
 	}
 	if active != nil {
 		commit(*active)
 	}
 	if len(edits) == 0 {
-		return content, nil
+		return content, hasInline, nil
 	}
+	slices.SortStableFunc(edits, func(a, b skillConfigEdit) int { return a.start - b.start })
 	var out strings.Builder
 	start := 0
 	for _, edit := range edits {
-		offset := int(edit.Offset)
-		out.WriteString(content[start:offset])
-		out.WriteString("true")
-		start = offset + int(edit.Length)
+		out.WriteString(content[start:edit.start])
+		out.WriteString(edit.text)
+		start = edit.end
 	}
 	out.WriteString(content[start:])
-	return out.String(), nil
+	return out.String(), hasInline, nil
+}
+
+// Keep the generated portion inside the original array, ahead of any trailing
+// comments. Its separators belong to the block so removing it restores user text.
+const inlineSkillBegin = "# BEGIN CSGCLAW INLINE SKILL STATES"
+const inlineSkillEnd = "# END CSGCLAW INLINE SKILL STATES"
+
+func inlineSkillSlot(content string, kv *unstable.Node) skillConfigEdit {
+	closeBracket := int(kv.Raw.Offset+kv.Raw.Length) - 1
+	at, begin := closeBracket, -1
+	for it := kv.Value().Children(); it.Next(); {
+		n := it.Node()
+		if n.Kind != unstable.Comment {
+			at = closeBracket
+			continue
+		}
+		i := int(n.Raw.Offset)
+		if at == closeBracket {
+			at = i
+		}
+		switch string(n.Data) {
+		case inlineSkillBegin:
+			if i > 0 && content[i-1] == '\n' {
+				begin = i - 1
+				if begin > 0 && content[begin-1] == '\r' {
+					begin--
+				}
+			}
+		case inlineSkillEnd:
+			end := i + int(n.Raw.Length)
+			if end < len(content) && content[end] == '\r' {
+				end++
+			}
+			if begin >= 0 && end < len(content) && content[end] == '\n' {
+				return skillConfigEdit{start: begin, end: end + 1}
+			}
+		}
+	}
+	return skillConfigEdit{start: at, end: at}
 }

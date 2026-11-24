@@ -31,6 +31,10 @@ func TestSkillEnablementNativeCodexE2E(t *testing.T) {
 	if err := os.WriteFile(skillPath, []byte("---\nname: reviewer\ndescription: Review local code changes.\n---\nReview the supplied code.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// Codex itself must accept managed state alongside an existing inline rule.
+	if err := os.WriteFile(filepath.Join(home, configFileName), []byte("[skills]\nconfig = [{path = '/external/SKILL.md', enabled = false}]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	rt := New(Dependencies{})
 	t.Cleanup(func() { _ = rt.Close() })
 	for _, step := range []struct {
