@@ -19,6 +19,9 @@ func (h *Handler) roomSceneContext(room im.Room, request roomtask.TurnContextReq
 	if !member {
 		return roomtask.PrivateTurnContext{Skip: room.IsAutonomous()}, nil
 	}
+	if request.VideoFeedback && room.IsAutonomous() && room.AutonomousState != nil && room.AutonomousState.Paused {
+		return roomtask.PrivateTurnContext{Skip: true}, nil
+	}
 	var notification *apitypes.UnreadNotification
 	if room.IsAutonomous() && !request.VideoFeedback {
 		notice, admitted, err := h.im.AdmitAutonomousNotification(room.ID, request.SourceID, request.ParticipantID)

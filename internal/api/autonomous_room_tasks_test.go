@@ -233,3 +233,36 @@ func TestAutonomousVideoFeedbackDoesNotAdmitUnreadNotification(t *testing.T) {
 		t.Fatalf("ordinary notification context after feedback: %+v, %v", ordinary, err)
 	}
 }
+
+func TestAutonomousVideoFeedbackHonorsRoomPause(t *testing.T) {
+	h := newAppTaskTestHandler(t)
+	room, source := createAutonomousTaskFixture(t, h)
+	if err := h.im.PauseAutonomousRoom(room.ID, source.ID); err != nil {
+		t.Fatal(err)
+	}
+	request := roomtask.TurnContextRequest{RoomID: room.ID, ParticipantID: "pt-dev", SourceID: source.ID, VideoFeedback: true}
+	feedback, err := h.roomExecutionContext(request)
+	if err != nil || !feedback.Skip || feedback.Notification != nil {
+		t.Fatalf("video feedback after room pause: %+v, %v", feedback, err)
+	}
+	current, _ := h.im.Room(room.ID)
+	if current.AutonomousState == nil || !current.AutonomousState.Paused {
+		t.Fatal("video feedback changed the room pause state")
+	}
+
+	next, err := h.im.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "admin", Content: "New request"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.SourceID = next.ID
+	request.VideoFeedback = false
+	ordinary, err := h.roomExecutionContext(request)
+	if err != nil || ordinary.Skip || ordinary.Notification == nil {
+		t.Fatalf("new user message after room pause: %+v, %v", ordinary, err)
+	}
+	request.VideoFeedback = true
+	feedback, err = h.roomExecutionContext(request)
+	if err != nil || feedback.Skip || feedback.Role != roomtask.TurnRoleAutonomous || feedback.Notification != nil {
+		t.Fatalf("video feedback after room resume: %+v, %v", feedback, err)
+	}
+}
