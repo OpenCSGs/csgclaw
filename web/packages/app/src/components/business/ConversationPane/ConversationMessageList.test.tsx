@@ -28,6 +28,48 @@ function messageListProps(): ConversationMessageListProps {
 }
 
 describe("ConversationMessageList render isolation", () => {
+  it("keeps the video card after the confirmation when the agent reply moves", () => {
+    const props = messageListProps();
+    props.usersById.set("local", { id: "local", name: "Local user" });
+    props.currentUserID = "local";
+    const turn = { id: "turn", sender_id: "manager", content: "Preparing", created_at: "2026-10-12T08:00:00Z" };
+    const confirmation = {
+      id: "answer",
+      sender_id: "local",
+      content: "Confirm generation",
+      created_at: "2026-10-12T08:00:01Z",
+    };
+    const video = {
+      id: "video",
+      sender_id: "manager",
+      content: "Animate a kitten",
+      created_at: "2026-10-12T08:00:02Z",
+      metadata: { video_generation: { state: "generating" }, codex: { turn_message_id: "turn" } },
+    };
+    const messages = [turn, confirmation, video];
+    const { container, rerender } = render(
+      <ConversationMessageList
+        {...props}
+        conversation={{ ...props.conversation, messages }}
+        visibleMessages={messages}
+      />,
+    );
+    const messageIDs = () =>
+      Array.from(container.querySelectorAll("[data-message-id]"), (node) => node.getAttribute("data-message-id"));
+    expect(messageIDs()).toEqual(["turn", "answer", "video"]);
+    const cardMessage = container.querySelector('[data-message-id="video"]');
+    const finalMessages = [confirmation, video, { ...turn, content: "Submitted", created_at: "2026-10-12T08:00:03Z" }];
+    rerender(
+      <ConversationMessageList
+        {...props}
+        conversation={{ ...props.conversation, messages: finalMessages }}
+        visibleMessages={finalMessages}
+      />,
+    );
+    expect(messageIDs()).toEqual(["answer", "video", "turn"]);
+    expect(container.querySelector('[data-message-id="video"]')).toBe(cardMessage);
+  });
+
   it.each([
     [
       "agent_archived",
