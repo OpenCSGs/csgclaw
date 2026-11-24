@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Replace authorizes a same-origin reinstall. Confirmation is additionally
@@ -33,7 +36,29 @@ func (r Record) sameOrigin(other Record) bool {
 	if r.SourceKind() == SourceBuiltin {
 		return true
 	}
-	return r.SourceURL != "" && r.SourceURL == other.SourceURL && r.RemotePath == other.RemotePath
+	if r.SourceURL == "" || r.SourceURL != other.SourceURL {
+		return false
+	}
+	if r.RemotePath == other.RemotePath {
+		return true
+	}
+	// Older Hub installs recorded the full skill page, but not its repository
+	// key. Only fill that gap when the identical page corroborates the known key.
+	if r.SourceKind() != SourceMarket || (r.RemotePath != "" && other.RemotePath != "") {
+		return false
+	}
+	key := r.RemotePath
+	if key == "" {
+		key = other.RemotePath
+	}
+	owner, name, ok := strings.Cut(key, "/")
+	if !ok || !fs.ValidPath(key) || strings.Contains(name, "/") || strings.ContainsAny(key, `\%?#`) {
+		return false
+	}
+	u, err := url.Parse(r.SourceURL)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Hostname() != "" &&
+		u.User == nil && u.RawQuery == "" && !u.ForceQuery && u.Fragment == "" &&
+		strings.HasSuffix(u.EscapedPath(), "/skills/"+url.PathEscape(owner)+"/"+url.PathEscape(name))
 }
 
 func (r Record) originLabel() string {
@@ -63,7 +88,8 @@ func (w WorkerInstall) Commit(root, name, stage string, next *Record, apply func
 			return fmt.Errorf("invalid installed skill directory %q", name)
 		}
 		old := records[name]
-		if old.sameOrigin(*next) && w.Replace && w.Confirmation == "" {
+		sameOrigin := old.sameOrigin(*next)
+		if sameOrigin && w.Replace && w.Confirmation == "" {
 			return nil
 		}
 		current, err := os.OpenRoot(filepath.Join(root, name))
@@ -79,7 +105,7 @@ func (w WorkerInstall) Commit(root, name, stage string, next *Record, apply func
 		if err != nil {
 			return err
 		}
-		if !old.sameOrigin(*next) {
+		if !sameOrigin {
 			// The incoming record gets fresh timestamps on each registry download;
 			// bind its stable identity and the actual staged files instead.
 			data, err := json.Marshal([]any{name, old, actual, next.SourceKind(), next.SourceURL, next.RemotePath, next.Ref, next.Version, incoming})
