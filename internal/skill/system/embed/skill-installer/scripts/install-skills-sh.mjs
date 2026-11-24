@@ -1,8 +1,35 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { basename, delimiter, join } from 'node:path';
 import { parseArgs } from 'node:util';
+
+function download(repo, name, cwd) {
+  const args = ['add', repo, '--skill', name, '--agent', 'codex', '--copy', '-y'];
+  const options = { cwd, stdio: 'inherit', timeout: 120_000 };
+  const dirs = (process.env.PATH || '').split(delimiter).filter(Boolean);
+  if (process.platform === 'win32') {
+    // npm shims are batch files. Run their JS entrypoint with argv, not cmd.exe.
+    for (const dir of dirs) {
+      const exe = join(dir, 'skills.exe');
+      if (existsSync(exe)) return execFileSync(exe, args, options);
+      if (existsSync(join(dir, 'skills.cmd'))) {
+        const modules = basename(dir) === '.bin' ? join(dir, '..') : join(dir, 'node_modules');
+        return execFileSync(process.execPath, [join(modules, 'skills', 'bin', 'cli.mjs'), ...args], options);
+      }
+    }
+    const npx = dirs.map(dir => join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js')).find(path => existsSync(path));
+    if (!npx) throw new Error('Neither skills nor the npm npx entrypoint was found on PATH');
+    return execFileSync(process.execPath, [npx, '--yes', 'skills@1.9.0', ...args], options);
+  }
+  try {
+    return execFileSync('skills', args, options);
+  } catch (error) {
+    // A present CLI with a missing interpreter, or a failed add, is not a miss.
+    if (error.code !== 'ENOENT' || dirs.some(dir => existsSync(join(dir, 'skills')))) throw error;
+  }
+  return execFileSync('npx', ['--yes', 'skills@1.9.0', ...args], options);
+}
 
 function install() {
   if (/^(1|true|t)$/i.test(process.env.CSGCLAW_DISABLE_PUBLIC_SKILLS || '')) {
@@ -25,19 +52,9 @@ function install() {
   if (!process.env.CSGCLAW_CALLER_AGENT_ID || !(process.env.CODEX_HOME || process.env.DSH_HOME)) {
     throw new Error('Run this installer inside the target CSGClaw worker.');
   }
-  let cmd = 'npx';
-  const args = ['--yes', 'skills@1.9.0', 'add', repo, '--skill', name, '--agent', 'codex', '--copy', '-y'];
-  if (process.platform === 'win32') {
-    // Run npm's JS entrypoint rather than interpreting user arguments through cmd.exe.
-    const entry = (process.env.PATH || '').split(delimiter)
-      .map(dir => join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js')).find(path => existsSync(path));
-    if (!entry) throw new Error('npx-cli.js not found in the Node.js installation on PATH');
-    cmd = process.execPath;
-    args.unshift(entry);
-  }
   const cwd = mkdtempSync(join(tmpdir(), 'csgclaw-skills-'));
   try {
-    execFileSync(cmd, args, { cwd, stdio: 'inherit', timeout: 120_000 });
+    download(repo, name, cwd);
     const cli = process.env.CSGCLAW_CLI || 'csgclaw-cli';
     const root = join(cwd, '.agents', 'skills');
     const installed = readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory());

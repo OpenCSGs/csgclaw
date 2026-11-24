@@ -22,7 +22,7 @@ Use this workflow for catalog or registry skill search and installation. Do not 
 |---|---|
 | Global library | Call `skill_install_from_catalog` with the returned `source:"global"`, `key` and exact `selection` token. If the source changed, search again and review the new candidate; never retry by name alone. |
 | Signed-in CSGHub site | Call `skill_install_from_catalog` with `source:"site"` and the candidate's exact `key`, `site` and `ref` when present. If login/site changes, search again. |
-| skills.sh / GitHub | From this skill's directory run `node scripts/install-skills-sh.mjs <skills.sh-page-URL>` or `node scripts/install-skills-sh.mjs <owner/repo> --skill <name>`. Requires Node 22.20+, npx, Git and access to npm and the repository. The helper imports from a temporary project. |
+| skills.sh / GitHub | Run `node scripts/install-skills-sh.mjs <skills.sh-page-URL>` or `node scripts/install-skills-sh.mjs <owner/repo> --skill <name>` from this skill's directory. The helper uses `skills` on PATH; only when absent does it use `npx --yes skills@1.9.0`. A preinstalled CLI needs no npm download. Git and access to the selected repository are still needed. |
 | Explicit legacy OpenCSG/ClawHub **registry** slug | Use `csgclaw-cli --output json skill install <slug> --registry opencsg` or `--registry clawhub`. This is not the signed-in site's CSGHub repository market. |
 
 Catalog MCP returns `name`; CLI and the script's final import result return `Slug`. Use that actual name. A request to install/reinstall a same-origin disabled skill means the user wants it enabled: reuse a matching installation or replace for a reinstall, then enable it without asking again.
