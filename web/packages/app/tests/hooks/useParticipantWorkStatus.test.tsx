@@ -68,7 +68,7 @@ describe("useParticipantWorkStatus", () => {
     ]);
     expect(result.current.hasObservedWorkLease("pt-worker")).toBe(true);
     expect(result.current.hasObservedWorkLease("user-worker")).toBe(true);
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
 
     act(() =>
       result.current.handleRealtimeEvent(
@@ -107,7 +107,7 @@ describe("useParticipantWorkStatus", () => {
 
     act(() => vi.advanceTimersByTime(15_000));
     expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
 
     act(() =>
       result.current.handleRealtimeEvent({
@@ -117,6 +117,48 @@ describe("useParticipantWorkStatus", () => {
     );
     expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
     expect(result.current.hasObservedWorkLease("pt-worker")).toBe(false);
+  });
+
+  it("uses the independent HTTP clock for work events delayed in transit", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance", "setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    vi.setSystemTime(startedAt - 5000);
+    const fetchMock = vi.fn(
+      async () => new Response("ok", { headers: { "X-CSGClaw-Server-Time-Ms": String(startedAt) } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useParticipantWorkStatus({ agents: [], users: [] }));
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledWith("healthz", expect.objectContaining({ cache: "no-store" }));
+
+    const status = {
+      phase: "working",
+      stage: "generating_reply",
+      sequence: 1,
+      output_tokens_per_second: 18,
+      output_rate_sampled_at: startedAt,
+    } as const;
+    act(() => {
+      vi.advanceTimersByTime(5800);
+      result.current.handleRealtimeEvent(
+        workEvent({
+          server_time_ms: startedAt,
+          expires_at: new Date(startedAt + 5000).toISOString(),
+          status,
+        }),
+      );
+    });
+    expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
+
+    act(() =>
+      result.current.handleRealtimeEvent(
+        workEvent({
+          lease_id: "fresh-lease",
+          server_time_ms: startedAt + 5800,
+          status: { ...status, output_rate_sampled_at: startedAt + 5800 },
+        }),
+      ),
+    );
+    expect(result.current.workingParticipantsForRoom("room-1")[0]?.outputRateExpiresAt).toBe(8300);
   });
 
   it("does not display idle work updates", () => {

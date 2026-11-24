@@ -603,7 +603,9 @@ describe("ConversationPane", () => {
       ],
     });
     expect(
-      screen.getByLabelText("Estimated output rate: 18 tokens per second").closest("[data-work-lease-id] .message-meta"),
+      screen
+        .getByLabelText("Estimated output rate: 18 tokens per second")
+        .closest("[data-work-lease-id] .message-meta"),
     ).toBeInTheDocument();
   });
 

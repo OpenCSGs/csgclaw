@@ -85,18 +85,47 @@ describe("participantWorkReducer", () => {
       now: now + skew,
       receivedAt: receipt,
       type: "workEvent",
+      serverNow: now + 200,
       work: work({ server_time_ms: now + 200, status }),
     });
     const stale = participantWorkReducer(createParticipantWorkState(), {
       now: now + skew,
       receivedAt: receipt,
       type: "workEvent",
+      serverNow: now + 2500,
       work: work({ server_time_ms: now + 2500, status }),
     });
     expect(workLeaseForRequest(fresh, "room-1", "pt-worker", "message-1")?.outputRateExpiresAt).toBe(2400);
     const staleLease = workLeaseForRequest(stale, "room-1", "pt-worker", "message-1");
     expect(staleLease).not.toBeNull();
     expect(staleLease?.outputRateExpiresAt).toBeUndefined();
+  });
+
+  it.each([0, 5000])("accounts for transport delay with %s ms of clock skew", (skew) => {
+    const workUpdate = work({
+      server_time_ms: now,
+      expires_at: new Date(now + 5000).toISOString(),
+      status: {
+        phase: "working",
+        stage: "generating_reply",
+        sequence: 1,
+        output_tokens_per_second: 18,
+        output_rate_sampled_at: now,
+      },
+    });
+    const receive = (delay: number) =>
+      participantWorkReducer(createParticipantWorkState(), {
+        type: "workEvent",
+        now: now + skew + delay,
+        receivedAt: delay,
+        serverNow: skew ? now + delay : undefined,
+        work: workUpdate,
+      });
+
+    const active = workLeaseForRequest(receive(3000), "room-1", "pt-worker", "message-1");
+    expect(active?.expiresAt).toBe(now + skew + 5000);
+    expect(active?.outputRateExpiresAt).toBeUndefined();
+    expect(workLeaseForRequest(receive(5800), "room-1", "pt-worker", "message-1")).toBeNull();
   });
 
   it("keeps the rate in a thinking lease status", () => {

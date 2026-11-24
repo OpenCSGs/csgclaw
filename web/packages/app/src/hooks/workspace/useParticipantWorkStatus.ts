@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
-import { stopParticipantWorkRequest } from "@/api/im";
+import { fetchParticipantWorkServerClock, stopParticipantWorkRequest } from "@/api/im";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import { agentRuntimeKind, type AgentLike } from "@/models/agents";
 import {
@@ -34,6 +34,7 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
   const [stopRequests, setStopRequests] = useState<Record<string, { error?: string; state: "sending" | "accepted" }>>(
     {},
   );
+  const serverClock = useRef<Awaited<ReturnType<typeof fetchParticipantWorkServerClock>>>(undefined);
   const observedLeaseIdentitiesRef = useRef(new Set<string>());
   const usersById = useMemo(() => buildUsersById(users), [users]);
 
@@ -51,6 +52,24 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
     return () => window.clearTimeout(timer);
   }, [state]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = async () => {
+      try {
+        const measurement = await fetchParticipantWorkServerClock(controller.signal);
+        if (!controller.signal.aborted && measurement) serverClock.current = measurement;
+      } catch {
+        // Keep the last independent measurement across transient request failures.
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 60_000);
+    return () => {
+      window.clearInterval(timer);
+      controller.abort();
+    };
+  }, []);
+
   const handleRealtimeEvent = useCallback((event: IMServerEvent) => {
     if (event?.type === "participant.work.updated" && event.work) {
       [event.work.participant_id, event.work.user_id].forEach((value) => {
@@ -59,7 +78,15 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
           observedLeaseIdentitiesRef.current.add(id);
         }
       });
-      dispatch({ now: Date.now(), receivedAt: performance.now(), type: "workEvent", work: event.work });
+      const receivedAt = performance.now();
+      const clock = serverClock.current;
+      dispatch({
+        now: Date.now(),
+        receivedAt,
+        serverNow: clock ? clock.serverTime + receivedAt - clock.measuredAt : undefined,
+        type: "workEvent",
+        work: event.work,
+      });
       return;
     }
     if ((event?.type === "participant.updated" || event?.type === "participant.deleted") && event.participant) {

@@ -28,7 +28,7 @@ export type ParticipantWorkAction =
   | { participantIDs: string[]; type: "participantLifecycle" }
   | { memberParticipantIDs?: string[]; roomID: string; type: "roomLifecycle" }
   | { type: "reset" }
-  | { now: number; receivedAt?: number; type: "workEvent"; work: ParticipantWorkUpdate };
+  | { now: number; receivedAt?: number; serverNow?: number; type: "workEvent"; work: ParticipantWorkUpdate };
 
 export function createParticipantWorkState(): ParticipantWorkState {
   return {
@@ -52,7 +52,7 @@ export function participantWorkReducer(
     case "roomLifecycle":
       return updateRoomLifecycle(state, action.roomID, action.memberParticipantIDs);
     case "workEvent":
-      return applyWorkEvent(state, action.work, action.now, action.receivedAt);
+      return applyWorkEvent(state, action.work, action.now, action.receivedAt, action.serverNow);
   }
 }
 
@@ -110,6 +110,7 @@ function applyWorkEvent(
   work: ParticipantWorkUpdate,
   now: number,
   receivedAt?: number,
+  serverNow = now,
 ): ParticipantWorkState {
   const normalized = normalizeWorkEvent(work);
   if (!normalized || !Number.isFinite(now)) {
@@ -137,7 +138,9 @@ function applyWorkEvent(
   if (normalized.state === "working") {
     const serverTime = normalized.server_time_ms;
     const hasServerTime = typeof serverTime === "number" && Number.isSafeInteger(serverTime) && serverTime > 0;
-    const expiresAt = Date.parse(normalized.expires_at) + (hasServerTime ? now - serverTime : 0);
+    // An event timestamp gives a lower bound, even if it was delayed in transit.
+    const effectiveServerNow = hasServerTime ? Math.max(serverTime, serverNow) : serverNow;
+    const expiresAt = Date.parse(normalized.expires_at) + now - effectiveServerNow;
     if (expiresAt <= now) {
       return closeLease(
         state,
@@ -151,7 +154,7 @@ function applyWorkEvent(
     const sampledAt = normalized.status?.output_rate_sampled_at;
     let outputRateExpiresAt: number | undefined;
     if (hasServerTime && sampledAt !== undefined && receivedAt !== undefined) {
-      const remaining = 2500 - Math.max(0, serverTime - sampledAt);
+      const remaining = 2500 - Math.max(0, effectiveServerNow - sampledAt);
       if (remaining > 0) {
         outputRateExpiresAt = receivedAt + remaining;
         if (sampledAt === active?.status?.output_rate_sampled_at && active.outputRateExpiresAt !== undefined) {

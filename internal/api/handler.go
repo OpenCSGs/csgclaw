@@ -963,6 +963,7 @@ func (h *Handler) validServerCredential(authHeader string) bool {
 }
 
 func (h *Handler) handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("X-CSGClaw-Server-Time-Ms", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }
