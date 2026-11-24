@@ -9,10 +9,11 @@ Use this workflow for catalog or registry skill search and installation. Do not 
 
 ## 1. Find or inspect
 
-- For a general request, call the `csgclaw` MCP tool `skill_search` with `{"query":"<skill name or concise capability keywords>"}`. This checks the **CSGClaw global library** first, including built-ins and discovered skills. A local match needs no network. Without a match it searches the signed-in CSGHub site and skills.sh concurrently.
+- Start an install request with `csgclaw` MCP `skill_search`. For “帮我安装这个技能 team/demo”, use **`{"query":"team/demo"}` with no `source`**. A bare `namespace/name` does not identify GitHub, skills.sh, a legacy registry, or a particular CSGHub site.
+- Default order: **this worker's installed skills (including disabled) → CSGClaw global library → signed-in OpenCSG site → skills.sh**. Stop at the first match. For an `installed` result, directly call `skill_ensure_enabled` with `{"name":"<key>","selection":"<selection>"}` and report its result. Do not download or copy the skill again.
 - If the user names a specific source, pass `source: "global"`, `"site"` or `"skills_sh"`; only a local copy from that source may satisfy the search. For an exact skills.sh page, pass the full URL as `query` with `source:"skills_sh"`. A GitHub repository and known skill name can also be passed directly to the helper below. Never replace a specified source or version with a different one.
-- Preserve each candidate's `source`, `key`, `site`, `ref` and `url`. Show distinct choices for ambiguous matches; install only the selection, or pick one if explicitly asked to choose. If no match, try a short synonym or translated keyword.
-- Report source results independently: `ok` with no candidates means no match; `login_required` means sign in to the intended CSGHub site; `disabled`, `timeout`, `rate_limited`, `unsupported_source` and `unavailable` are not zero results. Keep usable candidates even if the other source failed. Do not request a user's token or bypass a network restriction.
+- Preserve each candidate's `source`, `key`, `selection`, `site`, `ref` and `url`. Show distinct choices for ambiguous matches. If an exact identifier returns no candidate, report the miss or ask for a link; do not invent a site, try the legacy CLI, or construct a GitHub clone command. Use synonyms only for capability/keyword searches.
+- Report source results accurately: `ok` with no candidates means no match; `login_required` means sign in to the intended CSGHub site; `disabled`, `timeout`, `rate_limited`, `unsupported_source` and `unavailable` are not zero results. Do not automatically switch to a public source on an error.
 - For “is it installed/enabled?” call **only** `skill_status({"name":"<installed-name>"})`. Report installed files, recorded source/version, desired enablement and disk sync. `pending` is not synced; `unknown` is not proof of sync. Don't change state to answer a question.
 
 ## 2. Install files in this worker

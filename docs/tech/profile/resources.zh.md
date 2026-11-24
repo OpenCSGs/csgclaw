@@ -85,7 +85,7 @@ sequenceDiagram
 
 ## Worker 自助安装（Codex 和 DSH）
 
-安装已有技能先读 `skill-installer`；从零编写技能读 `skill-creator`。普通关键词用 `skill_search`：优先全局库，命中时不访问网络。未命中并行检索当前登录站点和 skills.sh，各来源独立报告登录、连接、超时、限流或禁用状态。`CSGCLAW_DISABLE_PUBLIC_SKILLS=true` 禁用 skills.sh 检索与下载，仍允许访问登录站点；离线时可直接安装全局库候选。显式指定来源时不自动换源。
+安装已有技能先读 `skill-installer`；从零编写技能读 `skill-creator`。来源未指定（包括裸 `namespace/name`）时，`skill_search` 依次查当前 worker 已安装资源（含禁用）、全局库、当前登录的 OpenCSG 站点、skills.sh，首次命中即停止。对 `installed` 候选直接用 `key` 和 `selection` 调用启用工具，不下载。命名空间按安装来源匹配，不将同名或另一个仓库当作命中。网络错误或未登录不会被当成“无结果”而自动转向公网。`CSGCLAW_DISABLE_PUBLIC_SKILLS=true` 禁用 skills.sh 检索与下载。
 
 对选中的全局/站点候选调用 `skill_install_from_catalog`，原样传回 `source`、`key`，全局候选还须传 `selection`，站点候选传 `site`、`ref`。全局来源或技能包发生变化时需重新搜索。它只写本 worker 文件；站点凭据仅在 Server 使用。安装结果返回实际 `name`；读 `skill_status(name)` 可查询来源、已知版本、期望启用状态及磁盘是否同步，不触发修复或会话重载。
 

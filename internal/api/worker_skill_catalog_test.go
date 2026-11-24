@@ -49,7 +49,7 @@ func TestWorkerCatalogAcceptance(t *testing.T) {
 	}
 	const repo = "private/unique-catalog-probe"
 	loggedOut := search("unique-catalog-probe")
-	if loggedOut.Sources["site"] != "login_required" || loggedOut.Sources["skills_sh"] != "disabled" {
+	if loggedOut.Sources["site"] != "login_required" || loggedOut.Sources["skills_sh"] != "" {
 		t.Fatalf("signed out: %+v", loggedOut)
 	}
 	var calls atomic.Int32
@@ -77,7 +77,7 @@ func TestWorkerCatalogAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	global := search("skill-installer")
-	if len(global.Candidates) == 0 || global.Candidates[0].Key != "skill-installer" || len(global.Sources) != 1 || calls.Load() != 0 {
+	if len(global.Candidates) == 0 || global.Candidates[0].Key != "skill-installer" || global.Sources["installed"] != "ok" || global.Sources["site"] != "" || calls.Load() != 0 {
 		t.Fatalf("global first: %+v", global)
 	}
 	globalArgs := map[string]any{"source": "global", "key": "skill-installer"}
@@ -132,10 +132,14 @@ func TestWorkerCatalogAcceptance(t *testing.T) {
 	}
 
 	found := search("unique-catalog-probe")
-	if len(found.Candidates) != 1 || found.Sources["site"] != "ok" || found.Sources["skills_sh"] != "disabled" {
+	if len(found.Candidates) != 1 || found.Sources["site"] != "ok" || found.Sources["skills_sh"] != "" {
 		t.Fatalf("intranet only: %+v", found)
 	}
 	c := found.Candidates[0]
+	exact := search(repo)
+	if len(exact.Candidates) != 1 || exact.Candidates[0].Key != repo || exact.Candidates[0].Source != "site" || exact.Sources["skills_sh"] != "" {
+		t.Fatalf("exact site lookup: %+v", exact)
+	}
 	args := map[string]any{"source": c.Source, "key": c.Key, "ref": c.Ref, "site": "https://different.example"}
 	denyTaskTool(t, client, "skill_install_from_catalog", args)
 	args["site"] = c.Site
@@ -146,11 +150,42 @@ func TestWorkerCatalogAcceptance(t *testing.T) {
 	}
 	args["replace"] = true
 	callTaskTool(t, client, "skill_install_from_catalog", args, nil)
-	callTaskTool(t, client, "skill_ensure_enabled", map[string]any{"name": name}, nil)
+	// Historical installs only recorded the site's /skills/namespace/name URL.
+	// A disabled copy is absent from skill-view but must win without any network.
+	layout, _ := controller.AgentLayout(item.ID)
+	rec, err := installstate.Lookup(layout.SkillsRoot, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.RemotePath = ""
+	rec.SourceURL = "https://previous-site.example/skills/" + repo
+	if err := installstate.Update(layout.SkillsRoot, name, &rec, nil); err != nil {
+		t.Fatal(err)
+	}
+	before := calls.Load()
+	installed := search(repo)
+	if calls.Load() != before || len(installed.Sources) != 1 || len(installed.Candidates) != 1 || installed.Candidates[0].Source != "installed" || installed.Candidates[0].Key != name {
+		t.Fatalf("disabled install was missed: %+v", installed)
+	}
+	other := search("other/" + name)
+	if len(other.Candidates) != 0 || other.Sources["skills_sh"] != "disabled" {
+		t.Fatalf("matched wrong namespace or skipped fallback: %+v", other)
+	}
+	enableArgs := map[string]any{"name": name, "selection": installed.Candidates[0].Selection}
+	// A changed selection must remain disabled until a fresh lookup.
+	rec.Version = "2.1"
+	if err := installstate.Update(layout.SkillsRoot, name, &rec, nil); err != nil {
+		t.Fatal(err)
+	}
+	denyTaskTool(t, client, "skill_ensure_enabled", enableArgs)
+	if inspect(name).Enabled {
+		t.Fatal("enabled a stale selection")
+	}
+	enableArgs["selection"] = search(repo).Candidates[0].Selection
+	callTaskTool(t, client, "skill_ensure_enabled", enableArgs, nil)
 	if got := inspect(name); got.DiskSync != "in_sync" {
 		t.Fatalf("synced: %+v", got)
 	}
-	layout, _ := controller.AgentLayout(item.ID)
 	changed := filepath.Join(layout.SkillsRoot, name, "scripts/file.txt")
 	if err := os.WriteFile(changed, []byte("v2"), 0644); err != nil {
 		t.Fatal(err)
@@ -176,14 +211,16 @@ func TestWorkerCatalogAcceptance(t *testing.T) {
 	if err := installstate.Update(root, name, &origin, nil); err != nil {
 		t.Fatal(err)
 	}
-	choice := search(name).Candidates[0]
+	var globalOnly catalog.Result
+	callTaskTool(t, client, "skill_search", map[string]any{"query": name, "source": "global"}, &globalOnly)
+	choice := globalOnly.Candidates[0]
 	collision := map[string]any{"source": "global", "key": name, "selection": choice.Selection, "replace": true}
 	response, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "skill_install_from_catalog", Arguments: collision})
 	if err != nil {
 		t.Fatal(err)
 	}
 	details, ok := response.StructuredContent.(map[string]any)
-	if !response.IsError || !ok || details["installed_source"] != server.URL+"/portal/skills/"+repo || details["requested_source"] != origin.SourceURL {
+	if !response.IsError || !ok || details["installed_source"] != rec.SourceURL || details["requested_source"] != origin.SourceURL {
 		t.Fatalf("unexpected conflict: %+v", response)
 	}
 	if got := inspect(name); got.URL != details["installed_source"] {

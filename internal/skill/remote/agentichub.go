@@ -217,6 +217,43 @@ func downloadAgenticHubSkillArchive(
 	return body, true, nil
 }
 
+// An exact repository identity is not a keyword search. The catalog search
+// endpoint can legitimately return no matches for a complete namespace/name.
+func FindAgenticHubSkill(ctx context.Context, baseURL, token, key string) (AgenticHubSkillSummary, bool, error) {
+	parts := strings.Split(key, "/")
+	if len(parts) != 2 {
+		return AgenticHubSkillSummary{}, false, ErrInvalidAgenticHubRequest
+	}
+	if clean, err := cleanAgenticHubPath(key, false); err != nil || clean != key {
+		return AgenticHubSkillSummary{}, false, ErrInvalidAgenticHubRequest
+	}
+	endpoint, err := buildAgenticHubURL(baseURL, append([]string{"api", "v1", "skills"}, parts...), false, nil)
+	if err != nil {
+		return AgenticHubSkillSummary{}, false, err
+	}
+	var payload struct {
+		Data *agenticHubSkillRecord `json:"data"`
+	}
+	err = getAgenticHubJSONWithAccessToken(ctx, &http.Client{Timeout: agenticHubRequestTimeout}, endpoint, token, &payload)
+	if errors.Is(err, errCatalogNotFound) {
+		return AgenticHubSkillSummary{}, false, nil
+	}
+	if err != nil {
+		return AgenticHubSkillSummary{}, false, err
+	}
+	if payload.Data == nil {
+		return AgenticHubSkillSummary{}, false, fmt.Errorf("empty Hub skill detail")
+	}
+	if payload.Data.Path == "" {
+		payload.Data.Path = key
+	}
+	item, ok := agenticHubSkillSummaryFromRecord(*payload.Data)
+	if !ok || !strings.EqualFold(item.RemotePath, key) {
+		return AgenticHubSkillSummary{}, false, fmt.Errorf("unexpected Hub skill identity")
+	}
+	return item, true, nil
+}
+
 func ListAgenticHubSkills(ctx context.Context, baseURL, accessToken string, options AgenticHubSkillListOptions) (AgenticHubSkillList, error) {
 	page := options.Page
 	if page <= 0 {

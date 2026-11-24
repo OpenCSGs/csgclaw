@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/agentengine/contract"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
 	skill "csgclaw/internal/skill/state"
 	"errors"
@@ -20,7 +21,7 @@ type deferResourceRestartKey struct{}
 var ErrSkillEnablementUnsupported = errors.New("runtime does not support skill enablement")
 var ErrAgentResourceVersionConflict = &contract.TurnError{Code: contract.ErrorInvalidRequest, Message: "agent resource version is stale"}
 
-func (s *Controller) ensureSkillEnabled(ctx context.Context, id, name string) error {
+func (s *Controller) ensureSkillEnabled(ctx context.Context, id, name, selection string) error {
 	if clean, err := skilllocal.NormalizeName(name); err != nil || clean != name || strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
 		return ErrAgentSkillInvalid
 	}
@@ -59,7 +60,13 @@ func (s *Controller) ensureSkillEnabled(ctx context.Context, id, name string) er
 		if !ok {
 			return ErrSkillEnablementUnsupported
 		}
-		current, err := s.enableInstalledSkill(id, name)
+		var current Agent
+		enable := func() error { var e error; current, e = s.enableInstalledSkill(id, name); return e }
+		if selection != "" {
+			err = installstate.WithSelection(root, name, selection, enable)
+		} else {
+			err = enable()
+		}
 		if err != nil {
 			return err
 		}

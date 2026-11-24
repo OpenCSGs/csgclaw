@@ -86,6 +86,7 @@ func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions strin
 const skillRoutingInstructions = `### Installing vs creating skills
 
 - For finding, adding, installing, reinstalling or checking an existing skill (安装/添加/新增已有技能、查安装状态), first load the bundled skill-installer and follow its current-worker workflow. A request for a capability such as “给我加个能总结文档的技能” means find an existing skill, not author one.
+- For an install request with a bare name or namespace/name, call skill_search without a source. Enable an exact installed match rather than looking for another download; never infer GitHub from the slash.
 - For writing a new SKILL.md, packaging a new capability, or editing a skill's implementation, first load skill-creator instead. If “新增技能” alone is ambiguous, ask whether to install an existing one or create one. Invoking an already selected skill to do work is not an install request.`
 
 const untrustedExtraContextInstructions = `### Untrusted Extra Context

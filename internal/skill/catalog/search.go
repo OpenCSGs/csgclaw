@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	Global = "global"
-	Site   = "site"
-	Public = "skills_sh"
-	Limit  = 12
+	Installed = "installed"
+	Global    = "global"
+	Site      = "site"
+	Public    = "skills_sh"
+	Limit     = 12
 )
 
 var ErrDisabled = errors.New("public skill discovery is disabled")
@@ -29,6 +30,7 @@ type Candidate struct {
 	Description string `json:"description,omitempty"`
 	URL         string `json:"url,omitempty"`
 	Ref         string `json:"ref,omitempty"`
+	Repository  string `json:"repository,omitempty"`
 	Version     string `json:"version,omitempty"`
 	Site        string `json:"site,omitempty"`
 	Selection   string `json:"selection,omitempty"`
@@ -41,77 +43,81 @@ type Result struct {
 
 type Lookup func(context.Context, string) ([]Candidate, error)
 
-// Search stops on a local match; results and failures from independent remote
-// catalogs are retained in stable order regardless of completion order.
-func Search(ctx context.Context, query, source string, local, site, public Lookup) (Result, error) {
+type Lookups struct{ Installed, Global, Site, Public Lookup }
+
+// Search stops at the first hit. An unavailable higher-priority catalog
+// isn't a confirmed miss: don't send the query to a less preferred source.
+func Search(ctx context.Context, query, source string, lookups Lookups) (Result, error) {
 	out := Result{Candidates: []Candidate{}, Sources: map[string]string{}}
 	query = strings.TrimSpace(query)
 	if query == "" || len(query) > 512 {
 		return out, errors.New("a search query of 1–512 bytes is required")
 	}
-	if source != "" && source != Global && source != Site && source != Public {
+	if source != "" && source != Installed && source != Global && source != Site && source != Public {
 		return out, errors.New("unknown skill source")
 	}
-	if local != nil {
-		items, err := local(ctx, query)
-		if err != nil {
-			out.Sources[Global] = "unavailable"
-		} else {
-			out.Sources[Global] = "ok"
-			out.Candidates = append(out.Candidates, items...)
+	for _, step := range []struct {
+		key string
+		fn  Lookup
+	}{
+		{Installed, lookups.Installed}, {Global, lookups.Global}, {Site, lookups.Site}, {Public, lookups.Public},
+	} {
+		if step.fn == nil || !searchStepAllowed(source, step.key) {
+			continue
 		}
-		if len(out.Candidates) > 0 || source == Global {
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		child := ctx
+		cancel := func() {}
+		if step.key == Site || step.key == Public {
+			child, cancel = context.WithTimeout(ctx, 8*time.Second)
+		}
+		items, err := step.fn(child, query)
+		cancel()
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
+		out.Sources[step.key] = lookupStatus(err)
+		if err != nil {
+			return out, nil
+		}
+		if len(items) > 0 {
+			out.Candidates = items
 			return out, nil
 		}
 	}
-	type batch struct {
-		name  string
-		items []Candidate
-		err   error
-	}
-	results := make(chan batch, 2)
-	count := 0
-	for key, fn := range map[string]Lookup{Site: site, Public: public} {
-		if source != "" && source != key {
-			continue
-		}
-		count++
-		go func() {
-			child, cancel := context.WithTimeout(ctx, 8*time.Second)
-			defer cancel()
-			items, err := fn(child, query)
-			results <- batch{key, items, err}
-		}()
-	}
-	bySource := map[string][]Candidate{}
-	for range count {
-		select {
-		case <-ctx.Done():
-			return out, ctx.Err()
-		case b := <-results:
-			status := "ok"
-			switch {
-			case b.err == nil:
-				bySource[b.name] = b.items
-			case errors.Is(b.err, remote.ErrAgenticHubSignInRequired):
-				status = "login_required"
-			case errors.Is(b.err, context.DeadlineExceeded):
-				status = "timeout"
-			case errors.Is(b.err, remote.ErrRateLimited):
-				status = "rate_limited"
-			case errors.Is(b.err, ErrDisabled):
-				status = "disabled"
-			case errors.Is(b.err, errUnsupportedResults):
-				status = "unsupported_source"
-			default:
-				status = "unavailable"
-			}
-			out.Sources[b.name] = status
-		}
-	}
-	out.Candidates = append(out.Candidates, bySource[Site]...)
-	out.Candidates = append(out.Candidates, bySource[Public]...)
 	return out, nil
+}
+
+func searchStepAllowed(source, step string) bool {
+	switch source {
+	case "":
+		return true
+	case Installed, Global:
+		return step == source
+	default:
+		return step == Installed || step == Global || step == source // local lookups apply the explicit origin filter
+	}
+}
+
+func lookupStatus(err error) string {
+	switch {
+	case err == nil:
+		return "ok"
+	case errors.Is(err, remote.ErrAgenticHubSignInRequired):
+		return "login_required"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, remote.ErrRateLimited):
+		return "rate_limited"
+	case errors.Is(err, ErrDisabled):
+		return "disabled"
+	case errors.Is(err, errUnsupportedResults):
+		return "unsupported_source"
+	default:
+		return "unavailable"
+	}
 }
 
 // Match searches names and descriptions. Prefer an exact name over a name
@@ -125,11 +131,14 @@ func Match(items []Candidate, q string) []Candidate {
 	}
 	var hits []hit
 	for _, c := range items {
+		if IsRepositoryKey(q) && !MatchesRepository(c, q) {
+			continue
+		}
 		if strings.HasPrefix(q, "https://skills.sh/") && !strings.EqualFold(q, c.URL) {
 			continue
 		}
 		n := strings.ToLower(c.Name)
-		text := n + " " + strings.ToLower(c.Description+" "+c.Key+" "+c.URL)
+		text := n + " " + strings.ToLower(c.Description+" "+c.Key+" "+c.URL+" "+c.Repository)
 		match := true
 		for _, term := range terms {
 			if !strings.Contains(text, term) {

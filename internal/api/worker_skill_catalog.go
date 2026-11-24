@@ -58,6 +58,7 @@ func globalSkillCandidates(ctx context.Context, query, source string) ([]catalog
 	for _, item := range items {
 		c := catalog.Candidate{Key: item.Name, Name: item.Name, Description: item.Description, Source: catalog.Global}
 		if rec := item.Install; rec != nil {
+			c.Repository = rec.RemotePath
 			c.Version = rec.Version
 			c.Ref = rec.Ref
 			c.URL = rec.DisplayURL()
@@ -88,6 +89,7 @@ func globalSkillCandidates(ctx context.Context, query, source string) ([]catalog
 				return err
 			}
 			c.URL, c.Ref = b.Origin.DisplayURL(), b.Origin.Ref
+			c.Repository = b.Origin.RemotePath
 			c.Selection, err = b.Selection(ctx, c.Name)
 			if err != nil {
 				return err
@@ -105,7 +107,16 @@ func matchesLibraryOrigin(source, web string, rec *installstate.Record) bool {
 		if rec == nil || rec.SourceKind() != installstate.SourceMarket {
 			return false
 		}
-		expected, err := remote.AgenticHubSkillWebURL(web, rec.RemotePath)
+		key := rec.RemotePath
+		if key == "" {
+			// Older market records have the site page URL but no remote_path.
+			var found bool
+			key, found = strings.CutPrefix(rec.DisplayURL(), strings.TrimRight(web, "/")+"/skills/")
+			if !found || !catalog.IsRepositoryKey(key) {
+				return false
+			}
+		}
+		expected, err := remote.AgenticHubSkillWebURL(web, key)
 		return err == nil && expected == rec.DisplayURL()
 	case catalog.Public:
 		return rec != nil && catalog.ValidPublicURL(rec.DisplayURL())
@@ -118,6 +129,17 @@ func siteSkillCandidates(ctx context.Context, query string) ([]catalog.Candidate
 	site, err := loggedInSkillSite()
 	if err != nil {
 		return nil, err
+	}
+	if catalog.IsRepositoryKey(query) {
+		item, found, err := remote.FindAgenticHubSkill(ctx, site.api, site.token, query)
+		if err != nil || !found {
+			return nil, err
+		}
+		link, err := remote.AgenticHubSkillWebURL(site.web, query)
+		if err != nil {
+			return nil, err
+		}
+		return []catalog.Candidate{{Source: catalog.Site, Site: site.api, Key: query, Name: item.Name, URL: link, Ref: item.Ref, Version: item.Version, Description: item.Description}}, nil
 	}
 	list, err := remote.ListAgenticHubSkills(ctx, site.api, site.token, remote.AgenticHubSkillListOptions{Page: 1, Per: catalog.Limit, Search: query})
 	if err != nil {
@@ -135,11 +157,31 @@ func siteSkillCandidates(ctx context.Context, query string) ([]catalog.Candidate
 }
 
 func (h *Handler) registerSkillSearch(id string) {
-	h.addAppPlatformTool(id, "skill_search", "Search installable skills. By default a global library match avoids all network calls; otherwise search the signed-in CSGHub site and skills.sh concurrently. Specify source only when the user restricts the search. Report per-source failures, especially login_required.", platformTextFields("query", "source"), []string{"query"}, true, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
+	h.addAppPlatformTool(id, "skill_search", "For an install request call with the user's name or namespace/name and NO source unless the user explicitly named one. In order: this worker's installed files (including disabled), global library, signed-in OpenCSG, then skills.sh. An installed candidate is ready for skill_ensure_enabled; do not download it. A bare owner/repo does not identify GitHub.", platformTextFields("query", "source"), []string{"query"}, true, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
 		source := platformText(args, "source")
-		return catalog.Search(ctx, platformText(args, "query"), source, func(ctx context.Context, q string) ([]catalog.Candidate, error) {
+		lookups := catalog.Lookups{Global: func(ctx context.Context, q string) ([]catalog.Candidate, error) {
 			return globalSkillCandidates(ctx, q, source)
-		}, siteSkillCandidates, catalog.SearchPublic)
+		}, Site: siteSkillCandidates, Public: catalog.SearchPublic}
+		if a, ok := h.svc.Agent(id); ok && a.Role == "worker" && source != catalog.Global {
+			lookups.Installed = func(ctx context.Context, q string) ([]catalog.Candidate, error) {
+				if h.workspace == nil {
+					return nil, errors.New("worker workspace unavailable")
+				}
+				layout, err := h.workspace.AgentLayout(id)
+				if err != nil {
+					return nil, err
+				}
+				var site skillSite
+				if source == catalog.Site {
+					site, err = loggedInSkillSite()
+					if err != nil {
+						return nil, nil
+					}
+				}
+				return catalog.FindInstalled(ctx, layout.SkillsRoot, q, func(r installstate.Record) bool { return matchesLibraryOrigin(source, site.web, &r) })
+			}
+		}
+		return catalog.Search(ctx, platformText(args, "query"), source, lookups)
 	})
 }
 

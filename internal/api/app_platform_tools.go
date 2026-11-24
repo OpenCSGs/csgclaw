@@ -409,7 +409,7 @@ func (h *Handler) registerAppPlatformTools(agentID string) {
 }
 
 func (h *Handler) registerWorkerSkillTool(agentID string) {
-	h.addAppPlatformTool(agentID, "skill_ensure_enabled", "Enable an installed skill for this worker and sync its files on disk. Call after installing or reinstalling, using the installed name. Does not restart the worker or reload the current session.", platformTextFields("name"), []string{"name"}, false, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
+	h.addAppPlatformTool(agentID, "skill_ensure_enabled", "Enable an installed skill for this worker without downloading or restarting. For an installed search candidate pass its key as name and its selection unchanged. After a new install use the returned installed name.", platformTextFields("name", "selection"), []string{"name"}, false, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
 		name := platformText(args, "name")
 		if name == "" {
 			return nil, fmt.Errorf("installed skill name is required")
@@ -417,7 +417,7 @@ func (h *Handler) registerWorkerSkillTool(agentID string) {
 		if h.agentEngine == nil {
 			return nil, fmt.Errorf("agent service is unavailable")
 		}
-		_, err := h.agentEngine.Agents().Update(ctx, agentID, agentengine.AgentUpdateRequest{EnsureEnabledSkill: name})
+		_, err := h.agentEngine.Agents().Update(ctx, agentID, agentengine.AgentUpdateRequest{EnsureEnabledSkill: name, InstalledSelection: platformText(args, "selection")})
 		if err != nil {
 			return nil, err
 		}

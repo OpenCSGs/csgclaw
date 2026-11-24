@@ -4,48 +4,43 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
-	"time"
 
 	"csgclaw/internal/skill/remote"
 )
 
-func TestDiscoveryOrderAndIndependentFailures(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
-	never := func(context.Context, string) ([]Candidate, error) { t.Error("unexpected lookup"); return nil, nil }
-	local := func(context.Context, string) ([]Candidate, error) { return []Candidate{{Name: "local"}}, nil }
-	result, err := Search(ctx, "local", "", local, never, never)
-	if err != nil || len(result.Candidates) != 1 || len(result.Sources) != 1 {
-		t.Fatalf("local: %+v %v", result, err)
+func TestDiscoveryStopsAtFirstHit(t *testing.T) {
+	for _, tc := range []struct {
+		hit   string
+		order []string
+	}{
+		{Installed, []string{Installed}}, {Global, []string{Installed, Global}}, {Site, []string{Installed, Global, Site}}, {Public, []string{Installed, Global, Site, Public}}, {"", []string{Installed, Global, Site, Public}},
+	} {
+		var calls []string
+		lookup := func(source string) Lookup {
+			return func(context.Context, string) ([]Candidate, error) {
+				calls = append(calls, source)
+				if source == tc.hit {
+					return []Candidate{{Name: "demo", Source: source}}, nil
+				}
+				return nil, nil
+			}
+		}
+		out, err := Search(t.Context(), "demo", "", Lookups{lookup(Installed), lookup(Global), lookup(Site), lookup(Public)})
+		if err != nil || !slices.Equal(calls, tc.order) || tc.hit != "" && (len(out.Candidates) != 1 || out.Candidates[0].Source != tc.hit) {
+			t.Fatalf("hit=%q order=%v result=%+v err=%v", tc.hit, calls, out, err)
+		}
 	}
 	items := Match([]Candidate{{Name: "demo", Key: "demo", URL: "https://skills.sh/org/repo/demo-old"}, {Name: "demo", Key: "demo", URL: "https://skills.sh/org/repo/demo"}}, "https://skills.sh/org/repo/demo")
 	if len(items) != 1 || items[0].URL != "https://skills.sh/org/repo/demo" {
 		t.Fatalf("explicit origin match: %+v", items)
 	}
-	empty := func(context.Context, string) ([]Candidate, error) { return nil, nil }
-	started := make(chan struct{})
-	arrived := make(chan struct{})
-	site := func(ctx context.Context, _ string) ([]Candidate, error) {
-		close(started)
-		select {
-		case <-arrived:
-			return nil, remote.ErrAgenticHubSignInRequired
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-	public := func(ctx context.Context, _ string) ([]Candidate, error) {
-		close(arrived)
-		select {
-		case <-started:
-			return []Candidate{{Key: "org/repo/demo"}}, nil
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-	result, err = Search(ctx, "demo", "", empty, site, public)
-	if err != nil || len(result.Candidates) != 1 || result.Sources[Site] != "login_required" || result.Sources[Public] != "ok" {
+	result, err := Search(t.Context(), "internal/project", "", Lookups{Site: func(context.Context, string) ([]Candidate, error) { return nil, remote.ErrAgenticHubSignInRequired }, Public: func(context.Context, string) ([]Candidate, error) {
+		t.Fatal("public lookup after a failed private lookup")
+		return nil, nil
+	}})
+	if err != nil || result.Sources[Site] != "login_required" {
 		t.Fatalf("remote: %+v %v", result, err)
 	}
 }
@@ -66,9 +61,9 @@ func TestPublicCatalogSeparatesNoMatchesFromFailure(t *testing.T) {
 			w.WriteHeader(tc.status)
 			_, _ = w.Write([]byte(tc.body))
 		}))
-		out, err := Search(t.Context(), "demo", Public, nil, nil, func(ctx context.Context, q string) ([]Candidate, error) {
+		out, err := Search(t.Context(), "demo", Public, Lookups{Public: func(ctx context.Context, q string) ([]Candidate, error) {
 			return searchPublic(ctx, server.Client(), server.URL, q)
-		})
+		}})
 		server.Close()
 		if err != nil || out.Sources[Public] != tc.want || len(out.Candidates) != tc.count {
 			t.Fatalf("%+v %v", out, err)

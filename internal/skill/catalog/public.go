@@ -65,8 +65,13 @@ func searchPublic(ctx context.Context, client *http.Client, endpoint, query stri
 		return nil, errors.New("invalid skills.sh search response")
 	}
 	var out []Candidate
+	supported := false
 	for _, s := range body.Skills {
 		if !githubSkillID.MatchString(s.ID) || !strings.HasPrefix(s.ID, s.Source+"/") || strings.Count(s.Source, "/") != 1 {
+			continue
+		}
+		supported = true
+		if IsRepositoryKey(query) && !strings.EqualFold(s.Source, query) {
 			continue
 		}
 		out = append(out, Candidate{Source: Public, Name: s.Name, Key: s.ID, URL: "https://skills.sh/" + s.ID})
@@ -74,7 +79,7 @@ func searchPublic(ctx context.Context, client *http.Client, endpoint, query stri
 			break
 		}
 	}
-	if len(body.Skills) > 0 && len(out) == 0 {
+	if len(body.Skills) > 0 && !supported {
 		return nil, errUnsupportedResults
 	}
 	return out, nil

@@ -262,7 +262,7 @@ func (f *Controller) Update(ctx context.Context, agentID string, request contrac
 		return f.Get(ctx, agentID, contract.AgentGetOptions{})
 	}
 	if request.EnsureEnabledSkill != "" {
-		if err := f.ensureSkillEnabled(ctx, agentID, request.EnsureEnabledSkill); err != nil {
+		if err := f.ensureSkillEnabled(ctx, agentID, request.EnsureEnabledSkill, request.InstalledSelection); err != nil {
 			return contract.Agent{}, err
 		}
 		return f.Get(ctx, agentID, contract.AgentGetOptions{})

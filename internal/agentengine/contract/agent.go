@@ -64,6 +64,7 @@ type AgentUpdateRequest struct {
 	// EnsureEnabledSkill is a worker self-update of one installed skill.
 	// It reconciles files without draining the caller's own turn.
 	EnsureEnabledSkill string `json:"-"`
+	InstalledSelection string `json:"-"`
 	// CatalogInstall is an authenticated files-only self-install, never decoded from HTTP.
 	CatalogInstall *CatalogInstall `json:"-"`
 }
