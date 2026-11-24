@@ -33,7 +33,7 @@ import {
   formatEventMessage,
   formatMessageTimestampParts,
   formatThreadReplyCount,
-  groupVideoGenerationMessages,
+  indexVideoMessagesByTurn,
   isEventMessage,
   localIdentitiesMatch,
   resolveUserByLocalIdentity,
@@ -146,11 +146,8 @@ const MessageListContent = memo(function MessageListContent({
     () => (collaboration ? collaborationTranscript(visibleMessages) : { messages: visibleMessages, activities: [] }),
     [collaboration, visibleMessages],
   );
-  const videoGroups = useMemo(() => groupVideoGenerationMessages(transcript.messages), [transcript.messages]);
-  const displayMessages = useMemo(
-    () => transcript.messages.filter((message) => !message.id || !videoGroups.childMessageIDs.has(message.id)),
-    [transcript.messages, videoGroups],
-  );
+  const { messages: displayMessages } = transcript;
+  const videosByTurn = useMemo(() => indexVideoMessagesByTurn(displayMessages), [displayMessages]);
 
   const timelineItems = useMemo(
     () => buildMessageTimelineItems(displayMessages, agents, usersById, t("attachment")),
@@ -234,7 +231,7 @@ const MessageListContent = memo(function MessageListContent({
           const threadSummary = threadHasReplies(message.thread) ? message.thread : null;
           const latestThreadReply = threadSummary?.latest_reply;
           const messageStateKey = longMessageStateKey(conversation, message, index);
-          const embeddedVideos = message.id ? videoGroups.childrenByParentID.get(message.id) || [] : [];
+          const turnVideos = message.id ? videosByTurn.get(message.id) || [] : [];
           const isVideoGeneration = Boolean(message.metadata?.video_generation);
           const memorySource = memory.sourceFor(message);
           return (
@@ -278,7 +275,8 @@ const MessageListContent = memo(function MessageListContent({
                     <MessageTimestamp parts={timestampParts} />
                   </div>
                   {(message.content || messageResources(message.metadata).length > 0) &&
-                  !message.metadata?.image_generation ? (
+                  !message.metadata?.image_generation &&
+                  !isVideoGeneration ? (
                     <div className={`message-bubble ${messageLayoutStyles["message-bubble"]}`}>
                       <MessageContent
                         key={`${message.id}:${theme}`}
@@ -287,7 +285,7 @@ const MessageListContent = memo(function MessageListContent({
                         allowLegacyToolFormat={Boolean(messageAgent)}
                         showTurnProgress={!collaboration}
                         progressControls={renderTurnControls?.(message)}
-                        videoMessages={embeddedVideos}
+                        videoMessages={turnVideos}
                         actionBusy={messageActionBusy}
                         actionFeedback={messageActionFeedback}
                         enableLongMessageCollapse={collapsible}
@@ -331,14 +329,6 @@ const MessageListContent = memo(function MessageListContent({
                       }
                     />
                   )}
-                  {embeddedVideos.map((video) => (
-                    <VideoGenerationCard
-                      key={video.id || String(video.created_at || video.content)}
-                      message={video}
-                      t={t}
-                      onPreviewAttachment={onPreviewAttachment}
-                    />
-                  ))}
                   {!conversation.cloud_agent && threadSummary ? (
                     <div className="message-thread-actions has-thread-summary">
                       <button

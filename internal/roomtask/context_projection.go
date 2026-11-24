@@ -1,6 +1,7 @@
 package roomtask
 
 import (
+	"context"
 	"crypto/sha256"
 	"csgclaw/internal/apitypes"
 	"encoding/hex"
@@ -25,6 +26,8 @@ type TurnContextRequest struct {
 	ParticipantID  string
 	SourceID       string
 	TaskID         string
+	VideoFeedback  bool            // Internal continuation of the source turn.
+	Context        context.Context // Allows turn cancellation during admission.
 }
 
 type TurnContextProvider func(TurnContextRequest) (PrivateTurnContext, error)

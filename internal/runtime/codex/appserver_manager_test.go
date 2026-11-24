@@ -670,7 +670,7 @@ func TestAppServerManagerVideoConfirmationContinuesAppServerTurn(t *testing.T) {
 	generated := 0
 	ctx := contract.WithVideoGenerationHandler(context.Background(), func(_ context.Context, id, prompt string, options modelprovider.VideoGenerationOptions, references ...int) error {
 		generated++
-		if id != "call-video" || prompt != "kitten in a bath" || options.Seconds != 6 || len(references) != 0 {
+		if id != "call-video" || prompt != "kitten in a bath" || options.Seconds != 6 || !options.ParametersConfirmed || len(references) != 0 {
 			t.Fatalf("video request = id:%q prompt:%q options:%+v refs:%v", id, prompt, options, references)
 		}
 		return nil
@@ -4494,9 +4494,18 @@ func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 
 func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testing.T) {
 	called := 0
-	ctx := contract.WithVideoGenerationHandler(context.Background(), func(context.Context, string, string, modelprovider.VideoGenerationOptions, ...int) error {
+	turnCtx, cancelTurn := context.WithCancel(context.Background())
+	defer cancelTurn()
+	ctx := contract.WithVideoGenerationHandler(turnCtx, func(context.Context, string, string, modelprovider.VideoGenerationOptions, ...int) error {
 		called++
 		return nil
+	})
+	ctx = contract.WithVideoGenerationPreflight(ctx, func(options modelprovider.VideoGenerationOptions) (modelprovider.VideoGenerationOptions, error) {
+		if options.Size == "1080P" {
+			return options, &modelprovider.VideoGenerationError{Code: "invalid_video_size", Message: "unsupported size 1080P"}
+		}
+		options.Size, options.Seconds = "480P", 4
+		return options, nil
 	})
 	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
 	sink := &recordingSink{}
@@ -4505,8 +4514,19 @@ func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testi
 	deps.UserInput = broker
 	manager := newAppServerManager(deps)
 	request := appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
-		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-video", "tool": "csgclaw_generate_video", "arguments": map[string]any{"prompt": "slow moving clouds", "reference_images": []int{3}, "size": "1280x720", "seconds": 6},
+		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-video", "tool": "csgclaw_generate_video", "arguments": map[string]any{"prompt": "slow moving clouds", "reference_images": []int{3}, "size": "1080P"},
 	})}
+	rejected, err := manager.handleAppServerServerRequest("runtime-1", live, request)
+	if err != nil || rejected.(map[string]any)["success"] != false || len(sink.snapshot()) != 0 || called != 0 {
+		t.Fatalf("unsupported size reached confirmation or generation: response=%#v err=%v", rejected, err)
+	}
+	feedback := rejected.(map[string]any)["contentItems"].([]map[string]any)[0]["text"].(string)
+	if !strings.Contains(feedback, "request_user_input") || !strings.Contains(feedback, "unsupported size 1080P") {
+		t.Fatalf("tool feedback = %q, want parameter error and interactive recovery guidance", feedback)
+	}
+	request.Params = mustJSONRaw(t, map[string]any{
+		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-video-defaults", "tool": "csgclaw_generate_video", "arguments": map[string]any{"prompt": "slow moving clouds", "reference_images": []int{3}},
+	})
 	result := make(chan map[string]any, 1)
 	go func() {
 		response, err := manager.handleAppServerServerRequest("runtime-1", live, request)
@@ -4518,12 +4538,10 @@ func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testi
 	}()
 	requestID := waitForUserInputRequest(t, sink)
 	question, ok := broker.Get(requestID)
-	if !ok || len(question.Questions) != 1 || !strings.Contains(question.Questions[0].Question, "Duration: 6 seconds") || !strings.Contains(question.Questions[0].Question, "Reference images: 1") {
+	if !ok || len(question.Questions) != 1 || !strings.Contains(question.Questions[0].Question, "Size: 480P") || !strings.Contains(question.Questions[0].Question, "Duration: 4 seconds") || !strings.Contains(question.Questions[0].Question, "Reference images: 1") {
 		t.Fatalf("confirmation question = %#v", question)
 	}
-	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{mediaGenerationConfirmationTextFor("en", "video").cancel}}}}}); err != nil {
-		t.Fatalf("cancel generation: %v", err)
-	}
+	cancelTurn()
 	select {
 	case response := <-result:
 		if response["success"] != false {
@@ -4531,6 +4549,9 @@ func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testi
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("video generation did not stop after cancellation")
+	}
+	if snapshot, ok := broker.Get(requestID); !ok || snapshot.Status != activity.UserInputStatusCanceled {
+		t.Fatalf("confirmation after turn cancellation = %#v", snapshot)
 	}
 	if called != 0 {
 		t.Fatalf("video provider invoked after cancellation: %d", called)

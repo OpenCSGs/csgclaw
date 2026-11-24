@@ -284,6 +284,9 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 	if w.stopped {
 		return queuedEvent{}, false, fmt.Errorf("binding worker is stopped")
 	}
+	if event.ContinuationOf != "" && w.latest[string(conversationKey)] != event.ContinuationOf {
+		return queuedEvent{}, false, nil
+	}
 	if w.seen.Has(key) {
 		return queuedEvent{}, false, nil
 	}
@@ -295,7 +298,7 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 	}
 	if event.NotificationOnly && w.notifications[conversationKey] != "" {
 		w.seen.Add(key)
-		w.latest[string(conversationKey)] = w.notifications[conversationKey]
+		w.setLatestSourceLocked(conversationKey, w.notifications[conversationKey])
 		w.signalUnreadLocked(conversationKey)
 		w.signalRelatedUnreadLocked(event)
 		return queuedEvent{}, false, nil
@@ -326,7 +329,9 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 			w.signalUnreadLocked(conversationKey)
 			w.signalRelatedUnreadLocked(event)
 		}
-		w.latest[string(conversationKey)] = key
+		if event.ContinuationOf == "" {
+			w.setLatestSourceLocked(conversationKey, key)
+		}
 		return item, true, nil
 	default:
 		item.diagnostic.Failure("queue_full", "queue", "The channel queue is full")
@@ -335,10 +340,24 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 	}
 }
 
+func (w *Worker) setLatestSourceLocked(key agentengine.ConversationKey, source string) {
+	w.latest[string(key)] = source
+	for _, turn := range w.active[key] {
+		if turn.event.ContinuationOf != "" && turn.event.ContinuationOf != source {
+			turn.cancel()
+		}
+	}
+}
+
 func (w *Worker) isCurrentGeneration(item queuedEvent) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.generation[item.conversationKey] == item.generation
+	return w.isCurrentLocked(item)
+}
+
+func (w *Worker) isCurrentLocked(item queuedEvent) bool {
+	return w.generation[item.conversationKey] == item.generation &&
+		(item.event.ContinuationOf == "" || w.latest[string(item.conversationKey)] == item.event.ContinuationOf)
 }
 
 func (w *Worker) discardQueued(key string) {
@@ -375,7 +394,7 @@ func (w *Worker) finishProcessing(key string) {
 func (w *Worker) setActive(item queuedEvent, turn activeEvent) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.generation[item.conversationKey] != item.generation {
+	if !w.isCurrentLocked(item) {
 		return false
 	}
 	if w.active[item.conversationKey] == nil {

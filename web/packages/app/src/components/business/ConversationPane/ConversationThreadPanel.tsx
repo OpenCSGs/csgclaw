@@ -56,7 +56,7 @@ import {
 } from "@/models/composer";
 import {
   formatMessageTimestampParts,
-  groupVideoGenerationMessages,
+  indexVideoMessagesByTurn,
   isToolCallMessage,
   resolveAgentForUser,
   resolveUserByLocalIdentity,
@@ -202,22 +202,15 @@ export function ConversationThreadPanel({
     [collaboration, root, replies],
   );
   const publicRoot = transcript ? (transcript.messages.find((message) => message.id === root?.id) ?? null) : root;
-  const videoGroups = useMemo(
-    () => groupVideoGenerationMessages(transcript?.messages ?? (root ? [root, ...replies] : replies)),
+  const videosByTurn = useMemo(
+    () => indexVideoMessagesByTurn(transcript?.messages ?? (root ? [root, ...replies] : replies)),
     [transcript, root, replies],
   );
   const visibleRoot =
-    !emptyCompletedProgress(publicRoot) &&
-    (showToolCalls || !isToolCallMessage(publicRoot)) &&
-    (!publicRoot?.id || !videoGroups.childMessageIDs.has(publicRoot.id))
-      ? publicRoot
-      : null;
+    !emptyCompletedProgress(publicRoot) && (showToolCalls || !isToolCallMessage(publicRoot)) ? publicRoot : null;
   const visibleReplies = (
     transcript ? transcript.messages.filter((message) => message.id !== root?.id) : replies
   ).filter((message) => !emptyCompletedProgress(message) && (showToolCalls || !isToolCallMessage(message)));
-  const displayReplies = visibleReplies.filter(
-    (message) => !message.id || !videoGroups.childMessageIDs.has(message.id),
-  );
   const mentionableUsersByName = useMemo(() => {
     const result = new Map<string, (typeof mentionableUsers)[number]>();
     const duplicateNames = new Set<string>();
@@ -255,8 +248,8 @@ export function ConversationThreadPanel({
     t,
   });
   const threadScrollKey = useMemo(
-    () => messageListScrollKey([...(visibleRoot ? [visibleRoot] : []), ...displayReplies]),
-    [visibleRoot, displayReplies],
+    () => messageListScrollKey([...(visibleRoot ? [visibleRoot] : []), ...visibleReplies]),
+    [visibleRoot, visibleReplies],
   );
   useMessageListAutoScroll({
     active: Boolean(root) && !loading,
@@ -428,13 +421,13 @@ export function ConversationThreadPanel({
               onPreviewAttachment={onPreviewAttachment}
               onQuestionSelect={onQuestionSelect}
               onCitationSelect={onCitationSelect}
-              embeddedVideos={visibleRoot.id ? videoGroups.childrenByParentID.get(visibleRoot.id) : undefined}
+              turnVideos={visibleRoot.id ? videosByTurn.get(visibleRoot.id) : undefined}
             />
           </div>
         ) : null}
         <div className={conversationThreadsStyles["thread-replies"]}>
-          {displayReplies.length > 0 ? (
-            displayReplies.map((message) => (
+          {visibleReplies.length > 0 ? (
+            visibleReplies.map((message) => (
               <ThreadMessage
                 key={message.id}
                 message={message}
@@ -453,7 +446,7 @@ export function ConversationThreadPanel({
                 onPreviewAttachment={onPreviewAttachment}
                 onQuestionSelect={onQuestionSelect}
                 onCitationSelect={onCitationSelect}
-                embeddedVideos={message.id ? videoGroups.childrenByParentID.get(message.id) : undefined}
+                turnVideos={message.id ? videosByTurn.get(message.id) : undefined}
               />
             ))
           ) : !transcript?.activities.length ? (
@@ -685,7 +678,7 @@ type ThreadMessageProps = {
   onForgetMemory?: () => Promise<void>;
   agents?: AgentLike[];
   compact?: boolean;
-  embeddedVideos?: IMMessage[];
+  turnVideos?: IMMessage[];
   locale: LocaleCode;
   message: IMMessage;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
@@ -716,7 +709,7 @@ function ThreadMessage({
   onQuestionSelect,
   onCitationSelect,
   compact = false,
-  embeddedVideos = [],
+  turnVideos = [],
 }: ThreadMessageProps) {
   const user = resolveUserByLocalIdentity(message.sender_id, usersById);
   const messageAgent = user ? resolveThreadMessageAgent(agents, user, message.sender_id) : null;
@@ -761,7 +754,9 @@ function ThreadMessage({
           <span className={`message-author ${messageLayoutStyles["message-author"]}`}>{name}</span>
           <MessageTimestamp parts={timestampParts} />
         </div>
-        {(message.content || messageResources(message.metadata).length > 0) && !message.metadata?.image_generation ? (
+        {(message.content || messageResources(message.metadata).length > 0) &&
+        !message.metadata?.image_generation &&
+        !isVideoGeneration ? (
           <div className="thread-message-bubble">
             <MessageContent
               key={`${message.id}:${theme}`}
@@ -771,7 +766,7 @@ function ThreadMessage({
               showTurnProgress={showTurnProgress}
               enableLongMessageCollapse={!showTurnProgress}
               progressControls={progressControls}
-              videoMessages={embeddedVideos}
+              videoMessages={turnVideos}
               onQuestionSelect={onQuestionSelect}
               onCitationSelect={onCitationSelect}
               t={t}
@@ -800,14 +795,6 @@ function ThreadMessage({
             }
           />
         )}
-        {embeddedVideos.map((video) => (
-          <VideoGenerationCard
-            key={video.id || String(video.created_at || video.content)}
-            message={video}
-            t={t}
-            onPreviewAttachment={onPreviewAttachment}
-          />
-        ))}
         <ConversationMessageActions
           leading={footer}
           showTokenUsage={showTurnProgress}

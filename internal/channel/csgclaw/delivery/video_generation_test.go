@@ -43,6 +43,16 @@ func TestCompletedVideoReplacesStatusWithPlayableAttachment(t *testing.T) {
 	if err := store.DeliverVideoGeneration(ctx, turn, task); err != nil {
 		t.Fatal(err)
 	}
+	task.State = "failed"
+	task.Error = "video_generation_failed"
+	if err := store.DeliverVideoGeneration(ctx, turn, task); err != nil {
+		t.Fatal(err)
+	}
+	task.RequestID = "call-video-revised"
+	task.State, task.Error = "generating", ""
+	if err := store.DeliverVideoGeneration(ctx, turn, task); err != nil {
+		t.Fatal(err)
+	}
 	beforeDelivery := time.Now()
 	task.EndedAt = beforeDelivery.Add(-time.Minute).Format(time.RFC3339Nano)
 	task.State = "completed"
@@ -56,7 +66,7 @@ func TestCompletedVideoReplacesStatusWithPlayableAttachment(t *testing.T) {
 	}
 	var delivered []apitypes.Message
 	for _, message := range messages {
-		if len(message.Attachments) > 0 {
+		if message.Metadata["video_generation"] != nil {
 			delivered = append(delivered, message)
 		}
 	}
@@ -69,8 +79,8 @@ func TestCompletedVideoReplacesStatusWithPlayableAttachment(t *testing.T) {
 		t.Fatal(err)
 	}
 	end, err := time.Parse(time.RFC3339Nano, completed.EndedAt)
-	if err != nil || end.Before(beforeDelivery) || completed.State != "completed" {
-		t.Fatalf("completion timestamp precedes attachment delivery: %+v", completed)
+	if err != nil || end.Before(beforeDelivery) || completed.State != "completed" || completed.Error != "" || completed.RequestID != "call-video-revised" {
+		t.Fatalf("completed retry metadata = %+v", completed)
 	}
 
 }

@@ -117,6 +117,12 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 	if r == nil {
 		return nil
 	}
+	if event.Output != nil && event.Output.Kind == contract.OutputItemVideoFeedback {
+		if r.interactions != nil {
+			r.interactions.Observe(turn, event)
+		}
+		return nil
+	}
 	if event.Output == nil || (event.Output.Kind != contract.OutputItemImageGeneration && event.Output.Kind != contract.OutputItemVideoGeneration) {
 		if err := r.Start(ctx, turn); err != nil {
 			return err

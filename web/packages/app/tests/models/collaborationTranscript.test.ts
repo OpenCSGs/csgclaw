@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { collaborationTranscript, usesCollaborationTranscript } from "@/models/collaborationTranscript";
 import { expandProgressMessage, type TurnProgress } from "@/models/turnProgress";
-import { groupVideoGenerationMessages, type IMMessage } from "@/models/conversations";
+import { type IMMessage } from "@/models/conversations";
 
 function turn(id: string, content: string, status = "succeeded", ended = "2026-11-11T12:11:00Z"): IMMessage {
   return {
@@ -111,18 +111,19 @@ describe("collaboration transcript", () => {
     expect(result.messages.map((message) => message.id)).toEqual(["followup", "old-run"]);
   });
 
-  it("keeps generated media visible while the parent execution is collapsed", () => {
+  it("keeps the video between the confirmation and the eventual turn reply", () => {
+    const confirmation = { id: "confirmation", content: "Confirm generation", created_at: "2026-11-11T12:06:00Z" };
     const video = {
       id: "video",
       sender_id: "dev",
       content: "Generated video",
+      created_at: "2026-11-11T12:06:01Z",
       metadata: { video_generation: { status: "running" }, codex: { turn_message_id: "parent" } },
     };
-    const running = collaborationTranscript([turn("parent", "", "running"), video]);
-    expect(running.messages).toEqual([video]);
-    expect(groupVideoGenerationMessages(running.messages).childMessageIDs.size).toBe(0);
-    const finished = collaborationTranscript([turn("parent", "Here is the video"), video]);
-    expect(groupVideoGenerationMessages(finished.messages).childMessageIDs.has("video")).toBe(true);
+    const running = collaborationTranscript([turn("parent", "", "running"), confirmation, video]);
+    expect(running.messages).toEqual([confirmation, video]);
+    const finished = collaborationTranscript([turn("parent", "Here is the video"), confirmation, video]);
+    expect(finished.messages.map((message) => message.id)).toEqual(["confirmation", "video", "parent"]);
   });
 
   it("restores a hidden final reply from an unmentioned peer in the original thread", () => {

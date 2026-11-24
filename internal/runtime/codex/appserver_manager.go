@@ -1219,6 +1219,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 			Prompt          string `json:"prompt"`
 			Size            string `json:"size"`
 			Seconds         int    `json:"seconds"`
+			RetryOf         string `json:"retry_of"`
 			ReferenceImages []int  `json:"reference_images"`
 		}
 		if json.Unmarshal(params.Arguments, &args) != nil {
@@ -1228,10 +1229,26 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if !ok {
 			return appServerDynamicToolResponse(false, "video generation requires an active turn"), nil
 		}
-		if err := m.confirmMediaGeneration(ctx, runtimeID, params, appServerRequestID(req.ID), "video", args.Prompt, mediaGenerationDetails(mediaGenerationLocaleFromContext(ctx), args.Size, args.Seconds, len(args.ReferenceImages))); err != nil {
+		options, err := contract.PrepareVideoGeneration(ctx, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds, RetryOf: strings.TrimSpace(args.RetryOf)})
+		if err != nil {
+			var parameterError *modelprovider.VideoGenerationError
+			if errors.As(err, &parameterError) && (parameterError.Code == "invalid_video_size" || parameterError.Code == "invalid_video_seconds") {
+				return appServerDynamicToolResponse(false, err.Error()+"\n"+runtimeinstructions.VideoGenerationRetryPolicy), nil
+			}
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
-		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds}, args.ReferenceImages...); err != nil {
+		if err := contract.CheckVideoRetry(ctx, args.Prompt, options, args.ReferenceImages...); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
+		}
+		if err := m.confirmMediaGeneration(ctx, runtimeID, params, appServerRequestID(req.ID), "video", args.Prompt, mediaGenerationDetails(mediaGenerationLocaleFromContext(ctx), options.Size, options.Seconds, len(args.ReferenceImages))); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
+		}
+		options.ParametersConfirmed = true
+		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, options, args.ReferenceImages...); err != nil {
+			var rejection *contract.VideoRetryError
+			if errors.As(err, &rejection) {
+				return appServerDynamicToolResponse(false, fmt.Sprintf("%s\nFor a revised submission, set retry_of to %q.\n%s", err.Error(), rejection.AttemptID, runtimeinstructions.VideoGenerationRetryPolicy)), nil
+			}
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "Video generation was submitted. Briefly acknowledge submission without describing a transient status such as still generating, downloading, completed, or delivered. The attached task card is the source of truth and updates automatically. Do not publish another copy."), nil
@@ -1356,7 +1373,7 @@ func (m *appServerManager) confirmMediaGeneration(ctx context.Context, runtimeID
 		question += "\n\n" + details
 	}
 	question += "\n\n" + copy.revisionHint
-	decision, err := m.deps.UserInput.Request(context.Background(), PendingUserInputRequest{
+	decision, err := m.deps.UserInput.Request(ctx, PendingUserInputRequest{
 		Execution: activity.ExecutionRef{
 			RuntimeKind: agentruntime.KindCodex,
 			RuntimeID:   runtimeID,
@@ -2815,7 +2832,7 @@ func appServerGenerateImageToolSpec() map[string]any {
 }
 
 func appServerGenerateVideoToolSpec() map[string]any {
-	return map[string]any{"name": "csgclaw_generate_video", "description": "Generate one video with an optional first-frame reference image using this Agent's configured video model and deliver it to the conversation. Omit size or seconds unless the user explicitly supplied them; CSGClaw applies the selected model's advertised defaults and validates explicit values.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"reference_images": appServerReferenceImagesSchema(1), "prompt": map[string]any{"type": "string"}, "size": map[string]any{"type": "string", "description": "Optional provider-advertised size value. Do not convert it to width x height or guess a value."}, "seconds": map[string]any{"type": "integer", "minimum": 1, "description": "Optional requested duration. Omit when the user did not specify one."}}, "required": []string{"prompt"}, "additionalProperties": false}}
+	return map[string]any{"name": "csgclaw_generate_video", "description": "Generate one video with an optional first-frame reference image using this Agent's configured video model and deliver it to the conversation. Omit size or seconds unless the user explicitly supplied them; CSGClaw applies the selected model's advertised defaults and validates explicit values. For a retry, preserve the original reference image indices supplied by the video failure event, even if those images came from an earlier turn.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"reference_images": appServerReferenceImagesSchema(1), "prompt": map[string]any{"type": "string"}, "retry_of": map[string]any{"type": "string", "description": "Rejected video attempt identifier returned by this tool. Supply only when revising that attempt."}, "size": map[string]any{"type": "string", "description": "Optional provider-advertised size value. Do not convert it to width x height or guess a value."}, "seconds": map[string]any{"type": "integer", "minimum": 1, "description": "Optional requested duration. Omit when the user did not specify one."}}, "required": []string{"prompt"}, "additionalProperties": false}}
 }
 
 func appServerReferenceImagesSchema(maxItems int) map[string]any {

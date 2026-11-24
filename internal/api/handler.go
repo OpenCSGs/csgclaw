@@ -75,6 +75,8 @@ type Handler struct {
 	workBus                    *worklease.Bus
 	workControlBus             *worklease.ControlBus
 	participantWork            worklease.ParticipantWorkReporter
+	autonomousStopsMu          sync.Mutex
+	autonomousStops            map[string]*pendingAutonomousStop
 	imProvisioner              *im.Provisioner
 	participantBridge          *im.ParticipantBridge
 	feishu                     *feishu.Service

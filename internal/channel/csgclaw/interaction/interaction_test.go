@@ -8,6 +8,7 @@ import (
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/agentengine/enginetest"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
@@ -112,5 +113,29 @@ func TestDetachedContinuationRetainsTaskSessionAfterEngineRefactor(t *testing.T)
 	}
 	if got := recorder.events[0]; got.TaskID != turn.TaskID || got.RoomID != turn.RoomID {
 		t.Fatalf("continuation lost task/room identity: %+v", got)
+	}
+}
+
+func TestVideoFeedbackContinuationRetainsRoomAndTask(t *testing.T) {
+	c, _, turn, _ := detachedFixture(t)
+	turn.TaskID = "task-2"
+	recorder := &taskContinuationRecorder{}
+	c.SetSubmitter(recorder)
+	event := agentengine.TurnEvent{Output: &agentengine.OutputItem{
+		Kind:    contract.OutputItemVideoFeedback,
+		Payload: contract.VideoGenerationFeedback{Retry: contract.VideoGenerationRetry{AttemptID: "attempt-1", Seconds: 3}, Message: "duration rejected"},
+	}}
+	c.Observe(turn, event)
+	if len(recorder.events) != 1 {
+		t.Fatalf("continuations = %d, want one", len(recorder.events))
+	}
+	got := recorder.events[0]
+	if got.RoomID != turn.RoomID || got.TaskID != turn.TaskID || got.ContinuationOf != turn.SourceMessageID || got.VideoRetry == nil || !strings.Contains(got.Text, "duration rejected") || !strings.Contains(got.Text, "attempt-1") {
+		t.Fatalf("continuation lost failure context: %+v", got)
+	}
+	turn.SourceMessageID = got.MessageID
+	c.Observe(turn, event)
+	if len(recorder.events) != 1 {
+		t.Fatal("video feedback restarted its own continuation")
 	}
 }
