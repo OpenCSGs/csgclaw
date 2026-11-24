@@ -68,6 +68,14 @@ func (r *Runtime) SkillDiskSync(layout agentruntime.Layout, name string, enabled
 }
 
 func (r *Runtime) ReconcileSkills(_ context.Context, h agentruntime.Handle, states map[string]skill.State) error {
+	return r.reconcileSkills(h, states, "")
+}
+
+func (r *Runtime) EnableInstalledSkill(_ context.Context, h agentruntime.Handle, name string, states map[string]skill.State) error {
+	return r.reconcileSkills(h, states, name)
+}
+
+func (r *Runtime) reconcileSkills(h agentruntime.Handle, states map[string]skill.State, name string) error {
 	ref, err := r.resolveAgent(h)
 	if err != nil {
 		return err
@@ -84,10 +92,17 @@ func (r *Runtime) ReconcileSkills(_ context.Context, h agentruntime.Handle, stat
 	if err != nil {
 		return err
 	}
-	return r.writeSkillStates(home, states)
+	if name != "" && !skill.Enabled(states, name) {
+		return fmt.Errorf("runtime policy prevents enabling skill %q", name)
+	}
+	return r.updateSkillConfig(home, states, name)
 }
 
 func (r *Runtime) writeSkillStates(home string, states map[string]skill.State) error {
+	return r.updateSkillConfig(home, states, "")
+}
+
+func (r *Runtime) updateSkillConfig(home string, states map[string]skill.State, enableName string) error {
 	r.configMu.Lock()
 	defer r.configMu.Unlock()
 	path := filepath.Join(home, configFileName)
@@ -98,7 +113,14 @@ func (r *Runtime) writeSkillStates(home string, states map[string]skill.State) e
 	if err := r.mkdirAll(home, 0o700); err != nil {
 		return err
 	}
-	return r.writeFile(path, []byte(renderSkillStates(string(data), home, states)), 0o600)
+	content := renderSkillStates(string(data), home, states)
+	if enableName != "" {
+		content, err = enableSkillConfigEntries(content, filepath.Join(home, "skills", enableName, "SKILL.md"))
+		if err != nil {
+			return err
+		}
+	}
+	return r.writeFile(path, []byte(content), 0o600)
 }
 
 func renderSkillStates(content, home string, states map[string]skill.State) string {

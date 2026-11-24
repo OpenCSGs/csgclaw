@@ -2620,6 +2620,15 @@ func (s *Controller) provisionRuntimeForAgentWithPrevious(ctx context.Context, r
 	if s == nil || rt == nil {
 		return nil
 	}
+	if got.Role == RoleWorker && isHostRuntimeKind(got.RuntimeKind) {
+		root, err := s.agentSkillsRoot(got.ID, got.RuntimeKind)
+		if err != nil {
+			return err
+		}
+		if err = skillbuiltin.UpgradeSystemCopies(ctx, root); err != nil {
+			return err
+		}
+	}
 	credentials, initShell := got.RuntimeProvision()
 	return s.provisionRuntime(ctx, rt, strings.TrimSpace(got.RuntimeKind), agentruntime.ProvisionRequest{
 		RuntimeID:           normalizeRuntimeID(got.RuntimeID, got.ID),

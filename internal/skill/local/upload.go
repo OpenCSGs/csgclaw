@@ -25,6 +25,7 @@ var (
 )
 
 type InstallArchiveOptions struct {
+	Worker        *skillinstall.WorkerInstall
 	Replace       bool
 	Origin        skillinstall.Record
 	ExpectedState string
@@ -108,7 +109,9 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 		}
 		return nil
 	}
-	if options.ExpectedState != "" {
+	if options.Worker != nil {
+		err = options.Worker.Commit(root, summary.Name, skillDir, &record, apply)
+	} else if options.ExpectedState != "" {
 		err = skillinstall.UpdateChecked(root, summary.Name, &record, options.ExpectedState, apply)
 	} else {
 		err = skillinstall.Update(root, summary.Name, &record, apply)

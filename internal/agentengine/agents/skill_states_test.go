@@ -18,6 +18,10 @@ type skillStateRuntime struct {
 	syncCount  int
 }
 
+func (*skillStateRuntime) SkillDiskSync(agentruntime.Layout, string, bool, map[string]any) (string, error) {
+	return "in_sync", nil
+}
+
 func (r *skillStateRuntime) ReconcileSkills(_ context.Context, _ agentruntime.Handle, states map[string]skill.State) error {
 	r.reconciled = states
 	r.syncCount++

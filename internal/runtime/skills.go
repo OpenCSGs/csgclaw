@@ -11,6 +11,12 @@ type SkillsReconciler interface {
 	ReconcileSkills(context.Context, Handle, map[string]skill.State) error
 }
 
+// ExplicitSkillEnabler applies the user's intent to a single installed skill,
+// including native per-skill overrides. Routine reconciliation must not do so.
+type ExplicitSkillEnabler interface {
+	EnableInstalledSkill(context.Context, Handle, string, map[string]skill.State) error
+}
+
 // SkillDiskInspector compares the runtime's on-disk configuration with the
 // desired setting without creating directories or refreshing the session.
 type SkillDiskInspector interface {

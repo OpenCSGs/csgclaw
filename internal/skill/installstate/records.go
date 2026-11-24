@@ -176,16 +176,16 @@ func Update(skillsRoot, name string, record *Record, apply func() error) error {
 // UpdateMany persists related installation records together and restores them
 // when the prepared file operation fails.
 func UpdateMany(skillsRoot string, records map[string]*Record, apply func() error) error {
-	return updateChecked(skillsRoot, records, nil, apply)
+	return updateChecked(skillsRoot, records, nil, nil, apply)
 }
 
 // UpdateChecked rejects a confirmation if either the files or their origin changed.
 // The comparison and installation share the same process and filesystem lock.
 func UpdateChecked(root, name string, record *Record, expected string, apply func() error) error {
-	return updateChecked(root, map[string]*Record{name: record}, map[string]string{name: expected}, apply)
+	return updateChecked(root, map[string]*Record{name: record}, map[string]string{name: expected}, nil, apply)
 }
 
-func updateChecked(skillsRoot string, records map[string]*Record, expected map[string]string, apply func() error) error {
+func updateChecked(skillsRoot string, records map[string]*Record, expected map[string]string, check func(map[string]Record) error, apply func() error) error {
 	installRecordsMu.Lock()
 	defer installRecordsMu.Unlock()
 	lock, err := acquireRecordsLock(skillsRoot, true)
@@ -204,6 +204,11 @@ func updateChecked(skillsRoot string, records map[string]*Record, expected map[s
 		}
 		if token == "" || actual != token {
 			return ErrInstallationChanged
+		}
+	}
+	if check != nil {
+		if err := check(payload.Skills); err != nil {
+			return err
 		}
 	}
 	rollback, finish, err := cancelActivations(skillsRoot, records)

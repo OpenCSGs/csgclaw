@@ -14,12 +14,17 @@ import (
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/auth"
 	"csgclaw/internal/skill/catalog"
+	"csgclaw/internal/skill/installstate"
+	"csgclaw/internal/skill/local"
+	skillstate "csgclaw/internal/skill/state"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestWorkerCatalogAcceptance(t *testing.T) {
 	item := completeWorkerAgent("agent-catalog", "catalog")
 	item.RuntimeKind, item.RuntimeName = agent.RuntimeKindDSH, agent.RuntimeKindDSH
 	item.Status, item.DesiredState = "stopped", "stopped"
+	item.SkillStates = map[string]skillstate.State{"unique-catalog-probe": {Enabled: false}}
 	controller := mustNewSeededServiceWithOptions(t, []agent.Agent{item}, runtimewiring.WithDSHRuntime())
 	t.Cleanup(func() { _ = controller.Close() })
 	h := &Handler{svc: controller, workspace: controller.Workspace(), agentEngine: agentengine.New(controller), agentRuntime: controller}
@@ -76,10 +81,54 @@ func TestWorkerCatalogAcceptance(t *testing.T) {
 		t.Fatalf("global first: %+v", global)
 	}
 	globalArgs := map[string]any{"source": "global", "key": "skill-installer"}
-	callTaskTool(t, client, "skill_install_from_catalog", globalArgs, nil)
 	denyTaskTool(t, client, "skill_install_from_catalog", globalArgs)
+	globalArgs["selection"] = global.Candidates[0].Selection
+	callTaskTool(t, client, "skill_install_from_catalog", globalArgs, nil)
+	callTaskTool(t, client, "skill_install_from_catalog", globalArgs, nil)
 	if got := inspect("skill-installer"); !got.Installed || got.DiskSync != "pending" || got.Source != "builtin" {
 		t.Fatalf("copied builtin: %+v", got)
+	}
+
+	// A same-named entry can change provenance without changing a single byte.
+	// Also reject same-origin edits to a companion file, not just SKILL.md.
+	root, err := local.SkillsRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const swap = "selection-probe"
+	dir := filepath.Join(root, swap)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# probe"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "script"), []byte("before"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	origin := installstate.Record{Source: installstate.SourceLocal, SourceURL: "https://skills.sh/one/repo/" + swap}
+	if err := installstate.Update(root, swap, &origin, nil); err != nil {
+		t.Fatal(err)
+	}
+	selected := search(swap).Candidates[0]
+	swapArgs := map[string]any{"source": "global", "key": swap, "selection": selected.Selection}
+	origin.SourceURL = "https://skills.sh/two/repo/" + swap
+	if err := installstate.Update(root, swap, &origin, nil); err != nil {
+		t.Fatal(err)
+	}
+	denyTaskTool(t, client, "skill_install_from_catalog", swapArgs)
+	swapArgs["selection"] = search(swap).Candidates[0].Selection
+	if err := os.WriteFile(filepath.Join(dir, "script"), []byte("after"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	denyTaskTool(t, client, "skill_install_from_catalog", swapArgs)
+	if got := inspect(swap); got.Installed {
+		t.Fatal("stale selections installed files")
+	}
+	swapArgs["selection"] = search(swap).Candidates[0].Selection
+	callTaskTool(t, client, "skill_install_from_catalog", swapArgs, nil)
+	if got := inspect(swap); got.URL != origin.SourceURL {
+		t.Fatalf("unexpected selected source: %+v", got)
 	}
 
 	found := search("unique-catalog-probe")
@@ -92,9 +141,11 @@ func TestWorkerCatalogAcceptance(t *testing.T) {
 	args["site"] = c.Site
 	callTaskTool(t, client, "skill_install_from_catalog", args, nil)
 	name := "unique-catalog-probe"
-	if got := inspect(name); !got.Installed || got.DiskSync != "pending" || got.Version != "2.0" || got.URL != server.URL+"/portal/skills/"+repo {
+	if got := inspect(name); !got.Installed || got.Enabled || got.Version != "2.0" || got.URL != server.URL+"/portal/skills/"+repo {
 		t.Fatalf("installed but not synced: %+v", got)
 	}
+	args["replace"] = true
+	callTaskTool(t, client, "skill_install_from_catalog", args, nil)
 	callTaskTool(t, client, "skill_ensure_enabled", map[string]any{"name": name}, nil)
 	if got := inspect(name); got.DiskSync != "in_sync" {
 		t.Fatalf("synced: %+v", got)
@@ -111,5 +162,36 @@ func TestWorkerCatalogAcceptance(t *testing.T) {
 	}
 	if got := inspect("missing"); got.Installed || got.DiskSync != "not_applicable" {
 		t.Fatalf("absent: %+v", got)
+	}
+
+	// Even --replace for an explicit reinstall must not switch origins by
+	// itself. Both choices are identified before anything is overwritten.
+	sameName := filepath.Join(root, name)
+	if err := os.MkdirAll(sameName, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sameName, "SKILL.md"), []byte("# alternative"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := installstate.Update(root, name, &origin, nil); err != nil {
+		t.Fatal(err)
+	}
+	choice := search(name).Candidates[0]
+	collision := map[string]any{"source": "global", "key": name, "selection": choice.Selection, "replace": true}
+	response, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "skill_install_from_catalog", Arguments: collision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	details, ok := response.StructuredContent.(map[string]any)
+	if !response.IsError || !ok || details["installed_source"] != server.URL+"/portal/skills/"+repo || details["requested_source"] != origin.SourceURL {
+		t.Fatalf("unexpected conflict: %+v", response)
+	}
+	if got := inspect(name); got.URL != details["installed_source"] {
+		t.Fatal("unconfirmed install changed origin")
+	}
+	collision["confirmation"] = details["confirmation"]
+	callTaskTool(t, client, "skill_install_from_catalog", collision, nil)
+	if got := inspect(name); got.URL != origin.SourceURL {
+		t.Fatal("confirmed install did not replace skill")
 	}
 }

@@ -26,3 +26,19 @@ func TestSkillStatesSurviveConfigRefreshAndReenable(t *testing.T) {
 		t.Fatalf("重新启用后的配置错误：%s", enabled)
 	}
 }
+
+func TestExplicitEnablePreservesCommentsAndUnrelatedTOML(t *testing.T) {
+	for _, cfg := range []string{
+		"[[skills.config]]\nenabled = false # target\npath = '/home/skills/demo/SKILL.md'\n[[skills.config]]\npath = '/other/SKILL.md'\nenabled = false # keep\n",
+		"[skills]\nconfig = [{ path='/other/SKILL.md',enabled=false }, {enabled=false,path='/home/skills/demo/SKILL.md'}] # keep\n",
+		"skills = { config = [{enabled=false,path='/home/skills/demo/SKILL.md'}] }\n[other]\nenabled=false\n",
+	} {
+		got, err := enableSkillConfigEntries(cfg, filepath.FromSlash("/home/skills/demo/SKILL.md"))
+		if err != nil || got == cfg || strings.Replace(got, "true", "false", 1) != cfg {
+			t.Fatalf("unexpected TOML edit: %q, %v", got, err)
+		}
+		if strings.Contains(got, "true # keep") || strings.Contains(got, "'/other/SKILL.md',enabled=true") {
+			t.Fatal("changed another skill")
+		}
+	}
+}

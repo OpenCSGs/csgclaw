@@ -8,6 +8,7 @@ import (
 
 	"csgclaw/cli/command"
 	skillapi "csgclaw/internal/skill"
+	"csgclaw/internal/skill/installstate"
 )
 
 func (c cmd) runInstall(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
@@ -16,6 +17,7 @@ func (c cmd) runInstall(ctx context.Context, run *command.Context, args []string
 	version := fs.String("version", "", "install this semver version; default is the registry latest")
 	registry := fs.String("registry", "", "registry: opencsg or clawhub (default: opencsg first, then clawhub)")
 	force := fs.Bool("force", false, "overwrite an existing skill directory")
+	confirmation := fs.String("confirmation", "", "confirmation from the worker's source-conflict response")
 	if err := command.ParseFlexible(fs, args); err != nil {
 		return err
 	}
@@ -37,7 +39,15 @@ func (c cmd) runInstall(ctx context.Context, run *command.Context, args []string
 	if err != nil {
 		return err
 	}
-	result, err := svc.Install(ctx, strings.TrimSpace(rest[0]), *version, registryID, skillsRoot, *force)
+	var result skillapi.InstallResult
+	if isCurrentWorkerRoot(skillsRoot) {
+		result, err = svc.InstallForWorker(ctx, strings.TrimSpace(rest[0]), *version, registryID, skillsRoot, installstate.WorkerInstall{Replace: *force, Confirmation: *confirmation})
+	} else {
+		if *confirmation != "" {
+			return fmt.Errorf("confirmation applies only to the current worker")
+		}
+		result, err = svc.Install(ctx, strings.TrimSpace(rest[0]), *version, registryID, skillsRoot, *force)
+	}
 	if err != nil {
 		if errors.Is(err, skillapi.ErrSkillDirExists) {
 			return fmt.Errorf("%w; use --force to overwrite", err)

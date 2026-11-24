@@ -62,23 +62,56 @@ func globalSkillCandidates(ctx context.Context, query, source string) ([]catalog
 			c.Ref = rec.Ref
 			c.URL = rec.DisplayURL()
 		}
-		switch source {
-		case catalog.Site:
-			if item.Install == nil || item.Install.SourceKind() != installstate.SourceMarket {
-				continue
-			}
-			expected, err := remote.AgenticHubSkillWebURL(current.web, item.Install.RemotePath)
-			if err != nil || expected != c.URL {
-				continue
-			}
-		case catalog.Public:
-			if !catalog.ValidPublicURL(c.URL) {
-				continue
-			}
+		if !matchesLibraryOrigin(source, current.web, item.Install) {
+			continue
 		}
 		out = append(out, c)
 	}
-	return catalog.Match(out, query), ctx.Err()
+	matches := catalog.Match(out, query)
+	if len(matches) == 0 {
+		return nil, ctx.Err()
+	}
+	// Only hash the shortlisted entries. Refresh their visible metadata and
+	// origin under the same source lock used when preparing an installation.
+	out = nil
+	err = installstate.ReadSnapshot(root, func(records map[string]installstate.Record) error {
+		for _, c := range matches {
+			b, err := skilllocal.ResolveLibraryBundle(root, c.Name, records[c.Name])
+			if err != nil {
+				return err
+			}
+			if !matchesLibraryOrigin(source, current.web, &b.Origin) {
+				continue
+			}
+			c.Description, c.Version, err = b.Metadata()
+			if err != nil {
+				return err
+			}
+			c.URL, c.Ref = b.Origin.DisplayURL(), b.Origin.Ref
+			c.Selection, err = b.Selection(ctx, c.Name)
+			if err != nil {
+				return err
+			}
+			out = append(out, c)
+		}
+		return nil
+	})
+	return catalog.Match(out, query), err
+}
+
+func matchesLibraryOrigin(source, web string, rec *installstate.Record) bool {
+	switch source {
+	case catalog.Site:
+		if rec == nil || rec.SourceKind() != installstate.SourceMarket {
+			return false
+		}
+		expected, err := remote.AgenticHubSkillWebURL(web, rec.RemotePath)
+		return err == nil && expected == rec.DisplayURL()
+	case catalog.Public:
+		return rec != nil && catalog.ValidPublicURL(rec.DisplayURL())
+	default:
+		return true
+	}
 }
 
 func siteSkillCandidates(ctx context.Context, query string) ([]catalog.Candidate, error) {
@@ -111,9 +144,9 @@ func (h *Handler) registerSkillSearch(id string) {
 }
 
 func (h *Handler) registerWorkerCatalogTools(id string) {
-	fields := platformTextFields("source", "key", "site", "ref")
+	fields := platformTextFields("source", "key", "selection", "site", "ref", "confirmation")
 	fields["replace"] = map[string]any{"type": "boolean"}
-	h.addAppPlatformTool(id, "skill_install_from_catalog", "Install one selected global or site candidate into your own worker, files only. Pass the search result's source and key (also site and ref for site). Set replace only for an explicit reinstall. For skills.sh use the installer script.", fields, []string{"source", "key"}, false, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
+	h.addAppPlatformTool(id, "skill_install_from_catalog", "Install one selected global or site candidate into your own worker, files only. Pass the search result's source and key, plus its exact selection for global, or site and ref for site. If the selection is stale, search again. Set replace only for an explicit reinstall. For skills.sh use the installer script.", fields, []string{"source", "key"}, false, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
 		if h.agentEngine == nil {
 			return nil, errors.New("agent service is unavailable")
 		}
@@ -123,6 +156,7 @@ func (h *Handler) registerWorkerCatalogTools(id string) {
 		source := platformText(args, "source")
 		switch source {
 		case catalog.Global:
+			in.Selection = platformText(args, "selection")
 			if platformText(args, "site") != "" || platformText(args, "ref") != "" {
 				return nil, errors.New("global installs accept a library name only")
 			}
@@ -136,7 +170,12 @@ func (h *Handler) registerWorkerCatalogTools(id string) {
 		default:
 			return nil, fmt.Errorf("unsupported catalog source %q", source)
 		}
+		in.Confirmation = platformText(args, "confirmation")
 		if _, err := h.agentEngine.Agents().Update(ctx, id, agentengine.AgentUpdateRequest{CatalogInstall: &in}); err != nil {
+			var conflict *installstate.SourceConflict
+			if errors.As(err, &conflict) {
+				return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: conflict.Error()}}, StructuredContent: map[string]any{"error": "skill_source_conflict", "name": conflict.Name, "installed_source": conflict.Installed, "requested_source": conflict.Requested, "confirmation": conflict.Confirmation}}, nil
+			}
 			return nil, err
 		}
 		return map[string]any{"name": in.Name, "source": source, "installed": true}, nil

@@ -15,10 +15,14 @@ import (
 // ImportDirectory installs a downloaded skill as local, never as a Hub market
 // record. Its permissions and origin move together under the installation lock.
 func ImportDirectory(root, source string, force bool) (InstallResult, error) {
-	return ImportDirectoryWithOrigin(root, source, "", force)
+	return importDirectory(root, source, "", force, nil)
 }
 
-func ImportDirectoryWithOrigin(root, source, publicURL string, force bool) (InstallResult, error) {
+func ImportForWorker(root, source, publicURL string, options installstate.WorkerInstall) (InstallResult, error) {
+	return importDirectory(root, source, publicURL, options.Replace, &options)
+}
+
+func importDirectory(root, source, publicURL string, force bool, worker *installstate.WorkerInstall) (InstallResult, error) {
 	if publicURL != "" && !catalog.ValidPublicURL(publicURL) {
 		return InstallResult{}, fmt.Errorf("expected a skills.sh skill page")
 	}
@@ -56,7 +60,10 @@ func ImportDirectoryWithOrigin(root, source, publicURL string, force bool) (Inst
 	if rel, err := filepath.Rel(realSource, realRoot); err == nil && filepath.IsLocal(rel) {
 		return InstallResult{}, fmt.Errorf("skills root cannot be inside the import source")
 	}
-	err = installPrepared(root, name, force, func(stage string) (InstallRecord, error) {
+	if publicURL == "" && worker != nil {
+		publicURL = realSource
+	}
+	err = installPrepared(root, name, force, worker, func(stage string) (InstallRecord, error) {
 		if err := os.CopyFS(stage, src.FS()); err != nil {
 			return InstallRecord{}, err
 		}
@@ -80,7 +87,7 @@ func ImportDirectoryWithOrigin(root, source, publicURL string, force bool) (Inst
 
 // Prepare on the destination filesystem before replacing anything. Recheck
 // conflicts under the same lock as UI installs and origin record updates.
-func installPrepared(root, name string, force bool, prepare func(string) (InstallRecord, error)) error {
+func installPrepared(root, name string, force bool, worker *installstate.WorkerInstall, prepare func(string) (InstallRecord, error)) error {
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return err
 	}
@@ -103,7 +110,7 @@ func installPrepared(root, name string, force bool, prepare func(string) (Instal
 		return ErrSKILLMDMissing
 	}
 	dest := filepath.Join(root, name)
-	return installstate.Update(root, name, &record, func() error {
+	apply := func() error {
 		if _, err := os.Lstat(dest); errors.Is(err, os.ErrNotExist) {
 			return os.Rename(stage, dest)
 		} else if err != nil {
@@ -124,5 +131,9 @@ func installPrepared(root, name string, force bool, prepare func(string) (Instal
 			return err
 		}
 		return nil
-	})
+	}
+	if worker != nil {
+		return worker.Commit(root, name, stage, &record, apply)
+	}
+	return installstate.Update(root, name, &record, apply)
 }

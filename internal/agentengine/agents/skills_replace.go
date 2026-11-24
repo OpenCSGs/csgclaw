@@ -13,16 +13,15 @@ import (
 
 	skillinstall "csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
-	skillsystem "csgclaw/internal/skill/system"
 )
 
 type preparedSkillReplacement struct {
-	targetRoot string
-	stageRoot  string
-	names      []string
-	origins    map[string]*skillinstall.Record
-	keepBackup bool
-	createOnly bool
+	targetRoot    string
+	stageRoot     string
+	names         []string
+	origins       map[string]*skillinstall.Record
+	keepBackup    bool
+	workerInstall *skillinstall.WorkerInstall
 }
 
 func (s *Controller) installWorkerCatalog(ctx context.Context, id string, in contract.CatalogInstall) error {
@@ -44,15 +43,18 @@ func (s *Controller) installWorkerCatalog(ctx context.Context, id string, in con
 			if err != nil {
 				return err
 			}
-			_, err = skilllocal.InstallArchiveWithOptions(root, name+".zip", in.Archive, skilllocal.InstallArchiveOptions{Origin: in.Origin, ExpectedName: name, Replace: in.Replace})
+			_, err = skilllocal.InstallArchiveWithOptions(root, name+".zip", in.Archive, skilllocal.InstallArchiveOptions{Origin: in.Origin, ExpectedName: name, Replace: in.Replace, Worker: &skillinstall.WorkerInstall{Replace: in.Replace, Confirmation: in.Confirmation}})
 			return err
 		}
-		p, err := s.prepareSkillReplacement(item, []string{name})
+		if in.Selection == "" {
+			return fmt.Errorf("global skill selection is required; search again")
+		}
+		p, err := s.prepareSelectedSkills(ctx, item, []string{name}, in.Selection)
 		if err != nil {
 			return err
 		}
 		defer p.cleanup()
-		p.createOnly = !in.Replace
+		p.workerInstall = &skillinstall.WorkerInstall{Replace: in.Replace, Confirmation: in.Confirmation}
 		return p.apply()
 	})
 }
@@ -71,6 +73,10 @@ func validateSkillReplacements(names, desired []string) error {
 
 // Prepare all source files before changing the Agent's files or enablement.
 func (s *Controller) prepareSkillReplacement(item Agent, names []string) (*preparedSkillReplacement, error) {
+	return s.prepareSelectedSkills(context.Background(), item, names, "")
+}
+
+func (s *Controller) prepareSelectedSkills(ctx context.Context, item Agent, names []string, selection string) (*preparedSkillReplacement, error) {
 	globalRoot, err := skilllocal.SkillsRoot()
 	if err != nil {
 		return nil, err
@@ -89,9 +95,10 @@ func (s *Controller) prepareSkillReplacement(item Agent, names []string) (*prepa
 	prepared := &preparedSkillReplacement{targetRoot: targetRoot, stageRoot: stageRoot, names: slices.Clone(names), origins: make(map[string]*skillinstall.Record, len(names))}
 	err = skillinstall.ReadSnapshot(globalRoot, func(origins map[string]skillinstall.Record) error {
 		for _, name := range names {
-			source, err := resolveAgentSkillSource(globalRoot, name)
+			bundle, err := skilllocal.ResolveLibraryBundle(globalRoot, name, origins[name])
+			stage := filepath.Join(stageRoot, "next", name)
 			if err == nil {
-				err = copyWorkspaceFS(source.FS, source.RootPath, filepath.Join(stageRoot, "next", name), "skill", true)
+				err = copyWorkspaceFS(bundle.Tree, ".", stage, "skill", true)
 			}
 			if err != nil {
 				if errors.Is(err, skilllocal.ErrSkillInvalid) {
@@ -99,15 +106,25 @@ func (s *Controller) prepareSkillReplacement(item Agent, names []string) (*prepa
 				}
 				return fmt.Errorf("prepare skill %q: %w", name, err)
 			}
-			origin := origins[name]
-			if found, err := skilllocal.Discovered(globalRoot, name); err != nil {
-				return err
-			} else if found != nil {
-				origin = skillinstall.Record{Source: skillinstall.SourceDiscovered, SourceURL: found.Path, Version: found.Version}
+			if selection != "" {
+				staged := skilllocal.LibraryBundle{Tree: os.DirFS(stage), Origin: bundle.Origin}
+				actual, err := staged.Selection(ctx, name)
+				if err != nil {
+					return err
+				}
+				if actual != selection {
+					return fmt.Errorf("global skill %q changed since selection; search again", name)
+				}
+				if bundle.Origin.SourceURL == "" && (bundle.Origin.SourceKind() == skillinstall.SourceUnknown || bundle.Origin.SourceKind() == skillinstall.SourceLocal) {
+					bundle.Origin.Source = skillinstall.SourceLocal
+					bundle.Origin.SourceURL = filepath.Join(globalRoot, name)
+				}
+				bundle.Origin.SHA256, err = skillinstall.BundleSHA256(stage)
+				if err != nil {
+					return err
+				}
 			}
-			if source.Source == skillsystem.SkillSourceSystem {
-				origin = skillinstall.Record{Source: skillinstall.SourceBuiltin}
-			}
+			origin := bundle.Origin
 			prepared.origins[name] = &origin
 		}
 		return nil
@@ -130,7 +147,7 @@ func (p *preparedSkillReplacement) apply() error {
 	if err := os.MkdirAll(backupRoot, 0o755); err != nil {
 		return err
 	}
-	return skillinstall.UpdateMany(p.targetRoot, p.origins, func() (err error) {
+	apply := func() (err error) {
 		type movedSkill struct {
 			name      string
 			backedUp  bool
@@ -163,9 +180,6 @@ func (p *preparedSkillReplacement) apply() error {
 			target := filepath.Join(p.targetRoot, name)
 			entry := movedSkill{name: name}
 			if info, statErr := os.Lstat(target); statErr == nil {
-				if p.createOnly {
-					return fmt.Errorf("%w: %s", ErrAgentSkillAlreadyExists, name)
-				}
 				if info.Mode()&os.ModeSymlink != 0 {
 					return fmt.Errorf("%w: %s", ErrWorkspaceSymlinkDenied, name)
 				}
@@ -186,7 +200,12 @@ func (p *preparedSkillReplacement) apply() error {
 			moved[len(moved)-1].activated = true
 		}
 		return nil
-	})
+	}
+	if p.workerInstall != nil {
+		name := p.names[0]
+		return p.workerInstall.Commit(p.targetRoot, name, filepath.Join(p.stageRoot, "next", name), p.origins[name], apply)
+	}
+	return skillinstall.UpdateMany(p.targetRoot, p.origins, apply)
 }
 
 func (s *Controller) restoreSkillReplacementRecord(previous Agent) error {

@@ -44,6 +44,14 @@ func TestWorkerSkillMCPProjectsReinstallToNativeRuntime(t *testing.T) {
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				t.Fatal(err)
 			}
+			const externalComment = "# user's own skill configuration"
+			if kind == agent.RuntimeKindCodex {
+				p := filepath.Join(filepath.Dir(layout.SkillsRoot), "config.toml")
+				content := fmt.Sprintf("%s\n[[skills.config]]\nenabled = false # external demo rule\npath = %q\n", externalComment, filepath.Join(dir, "SKILL.md"))
+				if err := os.WriteFile(p, []byte(content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
 			h := &Handler{svc: controller, workspace: controller.Workspace(), agentEngine: agentengine.New(controller), agentRuntime: controller}
 			if err := h.EnableConnectors(filepath.Join(t.TempDir(), "apps.json")); err != nil {
 				t.Fatal(err)
@@ -93,7 +101,7 @@ func TestWorkerSkillMCPProjectsReinstallToNativeRuntime(t *testing.T) {
 					}
 				} else {
 					data, err := os.ReadFile(filepath.Join(home, "config.toml"))
-					if err != nil || !strings.Contains(string(data), "other") || strings.Contains(string(data), "demo") {
+					if err != nil || !strings.Contains(string(data), "other") || !strings.Contains(string(data), externalComment) || !strings.Contains(string(data), "true # external demo rule") {
 						t.Fatalf("Codex enablement not applied: %v", err)
 					}
 				}

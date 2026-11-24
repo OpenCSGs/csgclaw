@@ -10,7 +10,7 @@ function install() {
   }
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { skill: { type: 'string' }, force: { type: 'boolean' } },
+    options: { skill: { type: 'string' }, force: { type: 'boolean' }, confirmation: { type: 'string' } },
   });
   const pattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
   const source = positionals[0] || '';
@@ -47,6 +47,7 @@ function install() {
     const installedName = installed[0].name;
     const importArgs = ['--output', 'json', 'skill', 'import', join(root, installedName), '--source-url', `https://skills.sh/${repo}/${name}`];
     if (values.force) importArgs.push('--force');
+    if (values.confirmation) importArgs.push('--confirmation', values.confirmation);
     execFileSync(cli, importArgs, { stdio: 'inherit' });
   } finally {
     rmSync(cwd, { recursive: true, force: true });

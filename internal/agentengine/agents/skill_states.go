@@ -55,12 +55,36 @@ func (s *Controller) ensureSkillEnabled(ctx context.Context, id, name string) er
 		if !ok {
 			return ErrSkillEnablementUnsupported
 		}
+		inspector, ok := rt.(agentruntime.SkillDiskInspector)
+		if !ok {
+			return ErrSkillEnablementUnsupported
+		}
 		current, err := s.enableInstalledSkill(id, name)
 		if err != nil {
 			return err
 		}
 		// Even a default-enabled skill may have new files after a reinstall.
-		return reconciler.ReconcileSkills(ctx, runtimeHandleForAgent(current), current.SkillStates)
+		handle := runtimeHandleForAgent(current)
+		if enabler, ok := rt.(agentruntime.ExplicitSkillEnabler); ok {
+			err = enabler.EnableInstalledSkill(ctx, handle, name, current.SkillStates)
+		} else {
+			err = reconciler.ReconcileSkills(ctx, handle, current.SkillStates)
+		}
+		if err != nil {
+			return err
+		}
+		layout, err := s.agentLayout(id, current.RuntimeKind)
+		if err != nil {
+			return err
+		}
+		sync, err := inspector.SkillDiskSync(layout, name, true, current.RuntimeOptions)
+		if err != nil {
+			return err
+		}
+		if sync != "in_sync" {
+			return fmt.Errorf("skill %q enablement conflicts with effective runtime configuration (disk_sync: %s); check external skill settings and runtime policy", name, sync)
+		}
+		return nil
 	})
 }
 

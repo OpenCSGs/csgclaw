@@ -11,6 +11,7 @@ import (
 
 	"csgclaw/internal/apiclient"
 	"csgclaw/internal/config"
+	"csgclaw/internal/skill/installstate"
 )
 
 type Service struct {
@@ -96,6 +97,13 @@ func (s *Service) GetVersion(ctx context.Context, slug, version string, registry
 }
 
 func (s *Service) Install(ctx context.Context, slug, version string, registry RegistryID, skillsRoot string, force bool) (InstallResult, error) {
+	return s.install(ctx, slug, version, registry, skillsRoot, force, nil)
+}
+
+func (s *Service) InstallForWorker(ctx context.Context, slug, version string, registry RegistryID, skillsRoot string, options installstate.WorkerInstall) (InstallResult, error) {
+	return s.install(ctx, slug, version, registry, skillsRoot, options.Replace, &options)
+}
+func (s *Service) install(ctx context.Context, slug, version string, registry RegistryID, skillsRoot string, force bool, worker *installstate.WorkerInstall) (InstallResult, error) {
 	slug = normalizeSlug(slug)
 	if slug == "" {
 		return InstallResult{}, fmt.Errorf("skill slug is required")
@@ -138,7 +146,7 @@ func (s *Service) Install(ctx context.Context, slug, version string, registry Re
 		return InstallResult{}, err
 	}
 	if info, err := os.Stat(destDir); err == nil {
-		if info.IsDir() && !force {
+		if info.IsDir() && !force && worker == nil {
 			return InstallResult{}, fmt.Errorf("%w: %s", ErrSkillDirExists, destDir)
 		}
 	} else if !os.IsNotExist(err) {
@@ -151,7 +159,7 @@ func (s *Service) Install(ctx context.Context, slug, version string, registry Re
 	if err != nil {
 		return InstallResult{}, err
 	}
-	if err := installPrepared(skillsRoot, installSlug, force, func(stage string) (InstallRecord, error) {
+	if err := installPrepared(skillsRoot, installSlug, force, worker, func(stage string) (InstallRecord, error) {
 		digest, err := extractSkillZip(archive, stage, reg.client.maxArchive)
 		return newInstallRecord(detail.SourceURL, installSlug, resolvedVersion, digest), err
 	}); err != nil {

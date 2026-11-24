@@ -19,12 +19,14 @@ Use this workflow for catalog or registry skill search and installation. Do not 
 
 | Selected source | Installation action |
 |---|---|
-| Global library | Call `skill_install_from_catalog({"source":"global","key":"<key>"})`. The server copies the selected library entry to this worker. |
+| Global library | Call `skill_install_from_catalog` with the returned `source:"global"`, `key` and exact `selection` token. If the source changed, search again and review the new candidate; never retry by name alone. |
 | Signed-in CSGHub site | Call `skill_install_from_catalog` with `source:"site"` and the candidate's exact `key`, `site` and `ref` when present. If login/site changes, search again. |
 | skills.sh / GitHub | From this skill's directory run `node scripts/install-skills-sh.mjs <skills.sh-page-URL>` or `node scripts/install-skills-sh.mjs <owner/repo> --skill <name>`. Requires Node 22.20+, npx, Git and access to npm and the repository. The helper imports from a temporary project. |
 | Explicit legacy OpenCSG/ClawHub **registry** slug | Use `csgclaw-cli --output json skill install <slug> --registry opencsg` or `--registry clawhub`. This is not the signed-in site's CSGHub repository market. |
 
-Catalog MCP returns `name`; CLI and the script's final import result return `Slug`. Use that actual name. Only set `replace:true` (MCP) or `--force` (CLI/script) for an explicit reinstall. If installation fails, stop and report which source and step failed. A deliberate CLI export outside this worker's skill directory is a files-only operation.
+Catalog MCP returns `name`; CLI and the script's final import result return `Slug`. Use that actual name. A request to install/reinstall a same-origin disabled skill means the user wants it enabled: reuse a matching installation or replace for a reinstall, then enable it without asking again.
+
+On a **same-name, different (or unknown) source** conflict, stop. Show the installed source and the requested source and **ask the user whether to overwrite**. Wait for their reply; an install/reinstall request alone is not confirmation to switch origins. Do not enable the old skill as a substitute. Only after a positive reply, retry with `replace:true` and the returned `confirmation` (CLI/helper: `--force --confirmation <token>`). If the user declines, leave files and enablement unchanged. For other install failures, report the failed source and step. A deliberate CLI export outside this worker is files-only.
 
 ## 3. Enable and report
 

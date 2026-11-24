@@ -69,8 +69,10 @@ type AgentUpdateRequest struct {
 }
 
 type CatalogInstall struct {
-	Name    string
-	Replace bool
+	Name         string
+	Replace      bool
+	Selection    string
+	Confirmation string
 	// Nil selects the global library; otherwise the caller resolved the current site's archive.
 	Archive []byte
 	Origin  installstate.Record

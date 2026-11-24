@@ -31,6 +31,7 @@ type Candidate struct {
 	Ref         string `json:"ref,omitempty"`
 	Version     string `json:"version,omitempty"`
 	Site        string `json:"site,omitempty"`
+	Selection   string `json:"selection,omitempty"`
 }
 
 type Result struct {
