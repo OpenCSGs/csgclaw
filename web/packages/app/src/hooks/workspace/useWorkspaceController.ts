@@ -846,11 +846,8 @@ export function useWorkspaceController(): WorkspaceController {
     [setBootstrapData],
   );
   const routedRoomID = activePane.type === WorkspacePaneTypes.conversation ? activePane.id : undefined;
-  useMissingConversationRoute(
-    bootstrapQuery.isSuccess && routedRoomID && !rooms.some((room) => room.id === routedRoomID)
-      ? routedRoomID
-      : undefined,
-    bootstrapQuery.dataUpdatedAt,
+  const retryMissingConversation = useMissingConversationRoute(
+    data && routedRoomID && !rooms.some((room) => room.id === routedRoomID) ? routedRoomID : undefined,
     leaveDeletedConversation,
     restoreRoutedConversation,
   );
@@ -874,6 +871,7 @@ export function useWorkspaceController(): WorkspaceController {
     agents,
     onAgentTurnNotificationEvent: handleTurnNotificationEvent,
     onConversationEvent(event) {
+      if (event.type === "connection.open") retryMissingConversation();
       if (event.type === "room.deleted") leaveDeletedConversation(event.room_id || event.room?.id);
       conversation.handleRealtimeEvent(event);
       taskEntry.onHistoryEvent(event);
