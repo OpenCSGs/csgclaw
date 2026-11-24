@@ -1067,6 +1067,59 @@ func TestDeleteRoomRemovesRoom(t *testing.T) {
 	}
 }
 
+func TestDeleteRoomPreservesTranscriptWhenIndexCommitFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	const roomID = "room-1"
+	state := DefaultBootstrap()
+	state.Rooms = []Room{{
+		ID:       roomID,
+		Members:  []string{AdminUserID},
+		Messages: []Message{{ID: "message-1", SenderID: AdminUserID, Content: "keep this transcript"}},
+	}}
+	if err := SaveBootstrap(path, state); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup := path + ".saved"
+	if err := os.Rename(path, backup); err != nil {
+		t.Fatal(err)
+	}
+	// A directory at the index path forces the final atomic rename to fail.
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteRoom(roomID); err == nil {
+		t.Fatal("DeleteRoom() succeeded with an unwritable index")
+	}
+	if _, ok := svc.Room(roomID); !ok {
+		t.Fatal("room missing from memory after failed deletion")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(backup, path); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages, err := reopened.ListMessages(roomID)
+	if err != nil || len(messages) != 1 || messages[0].ID != "message-1" {
+		t.Fatalf("reopened room messages = %#v, err = %v", messages, err)
+	}
+	if err := reopened.DeleteRoom(roomID); err != nil {
+		t.Fatal(err)
+	}
+	transcript := filepath.Join(filepath.Dir(path), filepath.FromSlash(sessionRelativePath(roomID)))
+	if _, err := os.Stat(transcript); !os.IsNotExist(err) {
+		t.Fatalf("transcript stat after successful deletion = %v, want not exist", err)
+	}
+}
+
 func TestClearRoomMessagesKeepsRoomAndAllowsLaterMessages(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",

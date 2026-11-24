@@ -130,7 +130,8 @@ export function TaskConversationList({
     return () => window.clearTimeout(timer);
   }, [search]);
   const list = useTaskConversationPages(archived, query);
-  const allRooms = uniqueTaskConversations(list.data?.pages ?? []);
+  const deletingID = dialog?.kind === "delete" && entry.busyID === dialog.room.id ? dialog.room.id : "";
+  const allRooms = uniqueTaskConversations(list.data?.pages ?? []).filter((room) => room.id !== deletingID);
   const cloudCatalog = useCloudAgentAvatarMetadata(authStatus);
   const directoryPaths = Array.from(
     new Set([
@@ -438,18 +439,17 @@ export function TaskConversationList({
                     {room.is_direct && onEditAgent ? (
                       <DropdownMenuItem onSelect={() => onEditAgent(room)}>{t("taskEntryEditAgent")}</DropdownMenuItem>
                     ) : null}
-                    {archived ? (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          danger
-                          disabled={disabled || working}
-                          onSelect={() => setDialog({ kind: "delete", room })}
-                        >
-                          {t("taskEntryDelete")}
-                        </DropdownMenuItem>
-                      </>
-                    ) : null}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      danger
+                      disabled={disabled || working}
+                      onSelect={() => {
+                        setError("");
+                        setDialog({ kind: "delete", room });
+                      }}
+                    >
+                      {t("taskEntryDelete")}
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenuRoot>
                 {compact && !archived ? (
@@ -568,6 +568,7 @@ export function TaskConversationList({
               {t("cancel")}
             </Button>
             <Button
+              loading={Boolean(deletingID)}
               variant={dialog?.kind === "delete" ? "danger" : "primary"}
               disabled={Boolean(entry.busyID) || (dialog?.kind === "rename" && !title.trim())}
               onClick={() => void confirm()}

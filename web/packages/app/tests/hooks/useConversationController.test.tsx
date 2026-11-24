@@ -178,6 +178,9 @@ function renderConversationController(
     managerRuntimeWarning?: string;
     messageListActive?: boolean;
     openCSGAuthGuard?: OpenCSGAuthGuard;
+    navigatePane?: Parameters<typeof useConversationController>[0]["navigatePane"];
+    selectComputer?: Parameters<typeof useConversationController>[0]["selectComputer"];
+    selectConversation?: Parameters<typeof useConversationController>[0]["selectConversation"];
     setBootstrapData?: (updater: unknown) => void;
     workingParticipantsForRoom?: (roomID: string | null | undefined) => ConversationWorkingParticipant[];
   } = {},
@@ -221,13 +224,13 @@ function renderConversationController(
         messageActionBusy: "",
         messageActionFeedback: { key: "", message: "" },
         messageListActive,
-        navigatePane: vi.fn(),
+        navigatePane: options.navigatePane ?? vi.fn(),
         onMessageAction: vi.fn(),
         onProviderLogin: vi.fn(),
         openCSGAuthGuard: options.openCSGAuthGuard ?? openCSGAuthGuardStub(),
         rooms: data.rooms,
-        selectComputer: vi.fn(),
-        selectConversation: vi.fn(),
+        selectComputer: options.selectComputer ?? vi.fn(),
+        selectConversation: options.selectConversation ?? vi.fn(),
         setActiveConversationId: vi.fn(),
         setBootstrapData: options.setBootstrapData ?? vi.fn(),
         setShowToolCalls: vi.fn(),
@@ -250,6 +253,24 @@ function renderConversationController(
 }
 
 describe("useConversationController", () => {
+  it.each([false, true])("keeps an explicit route missing from bootstrap (other rooms: %s)", (hasOtherRooms) => {
+    const navigatePane = vi.fn();
+    const selectComputer = vi.fn();
+    const selectConversation = vi.fn();
+    const data = dataWithMessages([]);
+    renderConversationController({
+      activeConversationId: directConversation.id,
+      routedConversationId: "missing",
+      data: hasOtherRooms ? data : { ...data, rooms: [] },
+      navigatePane,
+      selectComputer,
+      selectConversation,
+    });
+    expect(navigatePane).not.toHaveBeenCalled();
+    expect(selectComputer).not.toHaveBeenCalled();
+    expect(selectConversation).not.toHaveBeenCalled();
+  });
+
   it("uses shared avatar metadata without treating it as cloud availability", () => {
     const agent = { ...cloudAgentFixture[0], type: "code" };
     const data = {

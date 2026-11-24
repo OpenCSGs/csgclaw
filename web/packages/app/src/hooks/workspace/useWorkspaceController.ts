@@ -8,6 +8,7 @@ import {
   withLocalIdentity,
 } from "@/models/workspaceIdentity";
 import { bindWorkspaceHub, saveMCPServerAndSelect } from "./bindings/hub";
+import { useMissingConversationRoute } from "./useMissingConversationRoute";
 import { useModelProviderCreation } from "./useModelProviderCreation";
 import type { WorkspaceController } from "./workspaceControllerContract";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
@@ -23,6 +24,8 @@ import { createTranslator } from "@/shared/i18n";
 import {
   resolveConversationUser,
   upsertUserInData,
+  upsertConversationInData,
+  type IMConversation,
   mergeRoomMetadataUpdateInData,
   appendMessageToData,
   removeConversationFromData,
@@ -127,6 +130,8 @@ export function useWorkspaceController(): WorkspaceController {
   }, [data?.current_user_id, data?.users, locale, setBootstrapData]);
   const displayData = useMemo(() => withLocalIdentity(data, t("localIdentityFallback")), [data, t]);
   const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
+  const activePaneRef = useRef(activePane);
+  activePaneRef.current = activePane;
   const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);
   const [conversationProfileDetailAgentID, setConversationProfileDetailAgentID] = useState("");
   const conversationProfileDetailTriggerRef = useRef<HTMLElement | null>(null);
@@ -821,6 +826,32 @@ export function useWorkspaceController(): WorkspaceController {
           ? t("resourcesKnowledgeBasesLoading")
           : t("resourcesLoading");
 
+  const leaveDeletedConversation = useCallback(
+    (id: string | undefined) => {
+      const pane = activePaneRef.current;
+      if (id && pane.type === WorkspacePaneTypes.conversation && pane.id === id) {
+        navigate("/new", { replace: true });
+      }
+    },
+    [navigate],
+  );
+  const restoreRoutedConversation = useCallback(
+    (room: IMConversation) => {
+      const pane = activePaneRef.current;
+      if (pane.type !== WorkspacePaneTypes.conversation || pane.id !== room.id) return;
+      setBootstrapData((current) =>
+        current?.rooms.some((item) => item.id === room.id) ? current : upsertConversationInData(current, room),
+      );
+    },
+    [setBootstrapData],
+  );
+  const routedRoomID = activePane.type === WorkspacePaneTypes.conversation ? activePane.id : undefined;
+  const retryMissingConversation = useMissingConversationRoute(
+    data && routedRoomID && !rooms.some((room) => room.id === routedRoomID) ? routedRoomID : undefined,
+    leaveDeletedConversation,
+    restoreRoutedConversation,
+  );
+
   const taskEntry = useTaskEntry({
     currentUserID: displayData?.current_user_id ?? "",
     rooms,
@@ -828,7 +859,7 @@ export function useWorkspaceController(): WorkspaceController {
     onMessage: (roomID, message) => setBootstrapData((current) => appendMessageToData(current, roomID, message)),
     onDelete: (id) => {
       setBootstrapData((current) => removeConversationFromData(current, id));
-      if (activePane.type === WorkspacePaneTypes.conversation && activePane.id === id) navigate("/new");
+      leaveDeletedConversation(id);
     },
     onOpen: (room) => selectConversation(room.id, { rooms: [room] }),
     isWorking: (id) =>
@@ -840,6 +871,8 @@ export function useWorkspaceController(): WorkspaceController {
     agents,
     onAgentTurnNotificationEvent: handleTurnNotificationEvent,
     onConversationEvent(event) {
+      if (event.type === "connection.open") retryMissingConversation();
+      if (event.type === "room.deleted") leaveDeletedConversation(event.room_id || event.room?.id);
       conversation.handleRealtimeEvent(event);
       taskEntry.onHistoryEvent(event);
     },
