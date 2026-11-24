@@ -226,6 +226,8 @@ export type ParticipantWorkUpdate = {
     phase: "working" | "thinking";
     context_usage?: ContextUsage;
     context_usage_epoch?: number;
+    output_tokens_per_second?: number;
+    output_rate_sampled_at?: number;
     sequence: number;
     stage?: ParticipantWorkStage | null;
     thinking?: {

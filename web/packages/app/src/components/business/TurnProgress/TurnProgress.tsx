@@ -1,4 +1,3 @@
-import { ToolOutput } from "@/components/business/ToolOutput";
 import { imEventsConnected, subscribeIMConnection } from "@/shared/realtime/imEvents";
 import { memo, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
@@ -304,6 +303,8 @@ function GroupToolIcon({ items }: { items: ProgressGroup["items"] }) {
 
 const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool; number: number; t: TranslateFn }) {
   const [open, setOpen] = useState(false);
+  /** 输出够长时默认只露 200px，给一个「展开全部」，否则整轮对话会被一次 `cat` 顶走。 */
+  const [outputExpanded, setOutputExpanded] = useState(false);
   const id = useId();
   const failed = ["failed", "error", "declined"].includes(tool.status);
   const label = t(`progressToolStatus_${tool.status}`);
@@ -319,6 +320,7 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
         aria-expanded={open}
         aria-controls={id}
         aria-label={t("progressToolDetails", { number, command: preview, status })}
+        data-scroll-anchor-toggle
         onClick={() => {
           setOpen(!open);
         }}
@@ -344,7 +346,19 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
           <div className={styles.detailSection}>
             <span className={styles.detailLabel}>{t("progressOutput")}</span>
             {tool.output ? (
-              <ToolOutput label={t("progressOutput")} text={tool.output} />
+              <>
+                <pre className={outputExpanded ? styles.outputExpanded : undefined}>{tool.output}</pre>
+                {longToolOutput(tool.output) ? (
+                  <button
+                    type="button"
+                    className={styles.outputToggle}
+                    aria-expanded={outputExpanded}
+                    onClick={() => setOutputExpanded((value) => !value)}
+                  >
+                    {outputExpanded ? t("messageLongCollapse") : t("messageLongExpand")}
+                  </button>
+                ) : null}
+              </>
             ) : (
               <p className={styles.emptyOutput}>
                 {t(terminalTool(tool.status) ? "progressNoOutput" : "progressWaitingOutput")}
@@ -369,6 +383,11 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
     </li>
   );
 });
+
+/** 超过约 12 行或 800 字符就认为“长”，此时才需要展开按钮。 */
+function longToolOutput(output: string): boolean {
+  return output.length > 800 || output.split("\n").length > 12;
+}
 
 function toolIcon(action: string) {
   switch (action) {

@@ -234,7 +234,8 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			if mode == "reasoning_snapshot" {
 				select {
 				case event := <-events:
-					if event.Kind != activity.RuntimeEventReasoningSummary || event.Text != "First\n\nSecond" {
+					payload, _ := event.Payload.(map[string]any)
+					if event.Kind != activity.RuntimeEventReasoningSummary || event.Text != "First\n\nSecond" || payload["text_snapshot"] != true {
 						t.Fatalf("invalid reasoning snapshot event: %+v", event)
 					}
 				case <-ctx.Done():

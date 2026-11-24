@@ -118,8 +118,17 @@
   line-height: 1.65;
 }
 
+/* 过程区（工具/推理）与正文回答分开：
+   靠一条左侧竖线告诉人“这一段是过程，不是答案”，组多了也不会糊成一片。 */
 .group {
   margin: 4px 0 16px;
+  padding-left: 12px;
+  border-left: 2px solid color-mix(in oklab, var(--brand-600) 26%, var(--line));
+}
+
+.commentary {
+  padding-left: 12px;
+  border-left: 2px solid transparent;
 }
 
 .details {
@@ -138,6 +147,12 @@
   contain-intrinsic-block-size: auto 41px;
   min-width: 0;
   border-bottom: 1px solid var(--line);
+  border-radius: 4px;
+  transition: background-color 120ms ease;
+}
+
+.tool:hover {
+  background: color-mix(in oklab, var(--text) 4%, transparent);
 }
 
 .tool:first-child {
@@ -212,6 +227,7 @@
 .toolDetails {
   margin: 0 0 10px;
   padding: 12px;
+  border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel-strong);
 }
@@ -229,8 +245,16 @@
   color: var(--muted);
 }
 
-.detailSection > pre {
-  overflow: visible;
+/* 工具输出**默认限高**：`cat` 一个长文件、`ls -R` 一棵大树，展开就会把整轮对话顶走。
+   想细看可以点「展开全部」，或者直接在框里滚。
+
+   ⚠️ `overscroll-behavior` 必须是 `auto`（默认值），**不能写 `contain`**。
+      `contain` 会把滚到边界后的滚轮事件完全吃掉，于是「输出滚到底了、整页却没反应」，
+      手感上就是鼠标卡在那儿（用户 2026-11-08 反馈）。改成 `auto` 让它继续滚外层消息列表。 */
+.toolDetails pre {
+  max-height: 200px;
+  overflow: auto;
+  overscroll-behavior: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font:
@@ -298,4 +322,25 @@
     transition: none;
     animation: none;
   }
+}
+
+.toolDetails pre.outputExpanded {
+  max-height: none;
+}
+
+.outputToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.outputToggle:hover {
+  text-decoration: underline;
 }

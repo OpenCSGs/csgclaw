@@ -5,6 +5,7 @@ import (
 	"csgclaw/internal/modelcap"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -283,7 +284,11 @@ func (r *Registry) UpdateStatus(
 		lease.statusWindowStartedAt = now
 		lease.statusWindowCount = 0
 	}
-	if lease.statusWindowCount >= MaxStatusPerWindow {
+	// A clear can exceed the quota once. It consumes the published sample,
+	// so subsequent updates are still rate limited.
+	clearsOutputRate := lease.status != nil && lease.status.OutputTokensPerSecond > 0 &&
+		request.OutputTokensPerSecond == 0
+	if lease.statusWindowCount >= MaxStatusPerWindow && !clearsOutputRate {
 		r.mu.Unlock()
 		return apitypes.ParticipantWorkUpdate{}, false, ErrRateLimited
 	}
@@ -311,12 +316,14 @@ func (r *Registry) UpdateStatus(
 		request.ContextUsage = lease.status.ContextUsage
 	}
 	lease.status = &apitypes.ParticipantWorkStatus{
-		ContextUsageEpoch: usageEpoch,
-		ContextUsage:      modelcap.CloneUsage(request.ContextUsage),
-		Sequence:          request.Sequence,
-		Phase:             request.Phase,
-		Stage:             request.Stage,
-		Thinking:          cloneThinking(request.Thinking),
+		ContextUsageEpoch:     usageEpoch,
+		OutputTokensPerSecond: request.OutputTokensPerSecond,
+		OutputRateSampledAt:   request.OutputRateSampledAt,
+		ContextUsage:          modelcap.CloneUsage(request.ContextUsage),
+		Sequence:              request.Sequence,
+		Phase:                 request.Phase,
+		Stage:                 request.Stage,
+		Thinking:              cloneThinking(request.Thinking),
 	}
 	lease.revision++
 	r.activeByKey[key] = lease
@@ -712,12 +719,14 @@ func (r *Registry) updateFor(lease activeLease, state, reason string) apitypes.P
 	}
 	if lease.status != nil {
 		update.Status = &apitypes.ParticipantWorkStatus{
-			ContextUsage:      modelcap.CloneUsage(lease.status.ContextUsage),
-			ContextUsageEpoch: lease.status.ContextUsageEpoch,
-			Sequence:          lease.status.Sequence,
-			Phase:             lease.status.Phase,
-			Stage:             lease.status.Stage,
-			Thinking:          cloneThinking(lease.status.Thinking),
+			ContextUsage:          modelcap.CloneUsage(lease.status.ContextUsage),
+			ContextUsageEpoch:     lease.status.ContextUsageEpoch,
+			OutputTokensPerSecond: lease.status.OutputTokensPerSecond,
+			OutputRateSampledAt:   lease.status.OutputRateSampledAt,
+			Sequence:              lease.status.Sequence,
+			Phase:                 lease.status.Phase,
+			Stage:                 lease.status.Stage,
+			Thinking:              cloneThinking(lease.status.Thinking),
 		}
 	}
 	return update
@@ -761,6 +770,14 @@ func maxTime(left, right time.Time) time.Time {
 	return right
 }
 func validateStatusPatch(request apitypes.ParticipantWorkStatusPatchRequest) error {
+	rate := request.OutputTokensPerSecond
+	samplingStage := request.Stage == apitypes.ParticipantWorkStageGeneratingReply ||
+		request.Stage == apitypes.ParticipantWorkStageThinking
+	if math.IsNaN(rate) || rate < 0 || rate > 10000 ||
+		(rate == 0 && request.OutputRateSampledAt != 0) ||
+		(rate > 0 && (request.OutputRateSampledAt <= 0 || !samplingStage)) {
+		return ErrInvalidStatus
+	}
 	if request.Sequence == 0 {
 		return ErrInvalidStatus
 	}

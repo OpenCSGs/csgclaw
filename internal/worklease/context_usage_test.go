@@ -82,3 +82,83 @@ func TestClearRoomOnlyAcceptsFreshContextReports(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestWorkStatusExposesOutputRateUntilTheStageChanges(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	registry, _ := newTestRegistry(t, &now)
+	lease := testLease(NewID())
+	if _, err := registry.StartOrRenew(ctx, lease); err != nil {
+		t.Fatal(err)
+	}
+	request := apitypes.ParticipantWorkStatusPatchRequest{
+		Sequence: 1, Phase: apitypes.ParticipantWorkPhaseWorking, Stage: apitypes.ParticipantWorkStageGeneratingReply,
+		OutputTokensPerSecond: 18, OutputRateSampledAt: now.UnixMilli(),
+		Capabilities: []string{apitypes.ParticipantWorkCapabilityStageV1},
+	}
+	if _, ok, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request); err != nil || !ok {
+		t.Fatalf("update status: accepted=%t, error=%v", ok, err)
+	}
+	active := registry.ActiveWork(lease.RoomID)
+	if len(active) != 1 || active[0].Status.OutputTokensPerSecond != 18 || active[0].Status.OutputRateSampledAt != now.UnixMilli() {
+		t.Fatalf("snapshot lost rate: %+v", active)
+	}
+	request.Sequence++
+	request.Phase = apitypes.ParticipantWorkPhaseThinking
+	request.Stage = apitypes.ParticipantWorkStageThinking
+	request.Capabilities = append(request.Capabilities, apitypes.ParticipantWorkCapabilityThinkingStatusV1)
+	request.Thinking = &apitypes.ParticipantThinkingStatus{Format: apitypes.ParticipantThinkingFormatPlainText, Text: "Checking"}
+	if thinking, ok, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request); err != nil || !ok || thinking.Status.OutputTokensPerSecond != 18 {
+		t.Fatalf("thinking rate was not accepted: %+v, %v", thinking.Status, err)
+	}
+
+	request.Sequence++
+	request.Phase = apitypes.ParticipantWorkPhaseWorking
+	request.Stage = apitypes.ParticipantWorkStageRunningTool
+	request.Thinking = nil
+	if _, _, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request); err != ErrInvalidStatus {
+		t.Fatalf("rate on a non-generating stage: %v", err)
+	}
+	request.OutputTokensPerSecond, request.OutputRateSampledAt = 0, 0
+	cleared, ok, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request)
+	if err != nil || !ok || cleared.Status == nil || cleared.Status.OutputTokensPerSecond != 0 {
+		t.Fatalf("tool status failed to clear the rate: %+v, %v", cleared.Status, err)
+	}
+}
+
+func TestOutputRateClearCanExceedStatusQuotaOnce(t *testing.T) {
+	now := time.Now()
+	registry, _ := newTestRegistry(t, &now)
+	lease := testLease(NewID())
+	ctx := context.Background()
+	if _, err := registry.StartOrRenew(ctx, lease); err != nil {
+		t.Fatal(err)
+	}
+	request := apitypes.ParticipantWorkStatusPatchRequest{
+		Capabilities: []string{apitypes.ParticipantWorkCapabilityStageV1},
+		Phase:        apitypes.ParticipantWorkPhaseWorking, Stage: apitypes.ParticipantWorkStageGeneratingReply,
+		OutputTokensPerSecond: 18, OutputRateSampledAt: now.UnixMilli(),
+	}
+	for range MaxStatusPerWindow {
+		request.Sequence++
+		if _, ok, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request); err != nil || !ok {
+			t.Fatalf("sequence %d: accepted=%t, err=%v", request.Sequence, ok, err)
+		}
+	}
+
+	request.Sequence++
+	if _, _, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request); err != ErrRateLimited {
+		t.Fatalf("expected rate limit for another sample, got %v", err)
+	}
+	request.Stage = apitypes.ParticipantWorkStageRunningTool
+	request.OutputTokensPerSecond, request.OutputRateSampledAt = 0, 0
+	update, ok, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request)
+	if err != nil || !ok || update.Status == nil || update.Status.OutputTokensPerSecond != 0 ||
+		update.Status.Stage != apitypes.ParticipantWorkStageRunningTool {
+		t.Fatalf("clear was not accepted: %+v, %v", update, err)
+	}
+	request.Sequence++
+	if _, _, err := registry.UpdateStatus(ctx, "worker", lease.LeaseID, request); err != ErrRateLimited {
+		t.Fatalf("expected rate limit after the sample was cleared, got %v", err)
+	}
+}

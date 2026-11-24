@@ -54,6 +54,46 @@ describe("participantWorkReducer", () => {
     expect(activeParticipantWorkForRoom(state, "room-1")["pt-worker"]).toBeUndefined();
   });
 
+  it.each([18, 10000, 10001, 0, -1, Infinity, NaN])("normalizes the sampled rate %s", (rate) => {
+    const state = participantWorkReducer(createParticipantWorkState(), {
+      now,
+      type: "workEvent",
+      work: work({
+        status: {
+          phase: "working",
+          stage: "generating_reply",
+          sequence: 1,
+          output_tokens_per_second: rate,
+          output_rate_sampled_at: now,
+        },
+      }),
+    });
+    const status = activeParticipantWorkForRoom(state, "room-1")["pt-worker"]?.["lease-1"]?.status;
+    expect(status?.output_tokens_per_second).toBe(rate > 0 && rate <= 10000 ? rate : undefined);
+  });
+
+  it("keeps the rate in a thinking lease status", () => {
+    const state = participantWorkReducer(createParticipantWorkState(), {
+      now,
+      type: "workEvent",
+      work: work({
+        status: {
+          phase: "thinking",
+          stage: "thinking",
+          sequence: 1,
+          thinking: { format: "plain_text", text: "Checking", truncated: false },
+          output_tokens_per_second: 18,
+          output_rate_sampled_at: now,
+        },
+      }),
+    });
+    expect(activeParticipantWorkForRoom(state, "room-1")["pt-worker"]?.["lease-1"]?.status).toMatchObject({
+      phase: "thinking",
+      output_tokens_per_second: 18,
+      output_rate_sampled_at: now,
+    });
+  });
+
   it("keeps concurrent leases independent and expires them with one clock action", () => {
     let state = participantWorkReducer(createParticipantWorkState(), { now, type: "workEvent", work: work() });
     state = participantWorkReducer(state, {

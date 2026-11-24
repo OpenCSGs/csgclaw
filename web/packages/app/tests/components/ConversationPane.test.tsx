@@ -141,6 +141,7 @@ const t: TranslateFn = (key, params = {}) => {
     composerTip: "Enter to send",
     directMessagesSection: "Direct Messages",
     inputPlaceholder: "Message",
+    tokenRateLabel: "Generating at {rate} tokens per second",
     localIdentityFallback: "Local user",
     conversationWorkingEditing: "Editing",
     conversationWorkingGeneratingReply: "Generating reply",
@@ -587,6 +588,45 @@ describe("ConversationPane", () => {
     expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
   });
 
+  it("shows the sampled rate in a pending reply header", () => {
+    renderThreadPane({
+      workingParticipants: [
+        {
+          id: "u-manager",
+          name: "manager",
+          roomID: "room-1",
+          leaseID: "lease-pending",
+          requestID: "request-pending",
+          outputTokensPerSecond: 18,
+          outputRateSampledAt: Date.now(),
+        },
+      ],
+    });
+    expect(
+      screen.getByLabelText("Generating at 18 tokens per second").closest("[data-work-lease-id] .message-meta"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the sampled thinking rate for a pending thread reply", () => {
+    renderThreadPane({
+      workingParticipants: [
+        {
+          id: "u-manager",
+          name: "manager",
+          roomID: "room-1",
+          leaseID: "lease-thread-pending",
+          requestID: "request-thread-pending",
+          threadRootID: "msg-root",
+          workStage: "thinking",
+          outputTokensPerSecond: 18,
+          outputRateSampledAt: Date.now(),
+        },
+      ],
+    });
+    const rate = screen.getByLabelText("Generating at 18 tokens per second");
+    expect(rate.closest(".composer-working")).toBeInTheDocument();
+  });
+
   it.each(["running", "succeeded", "canceled"])(
     "replaces the pending reply with a matching %s message without duplicating controls",
     (status) => {
@@ -598,6 +638,8 @@ describe("ConversationPane", () => {
         requestID: "request-pending",
         leaseID: "lease-pending",
         canStop: true,
+        outputTokensPerSecond: 18,
+        outputRateSampledAt: Date.now(),
       };
       const { container } = renderThreadPane({
         workingParticipants: [participant],
@@ -625,8 +667,15 @@ describe("ConversationPane", () => {
       expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
       expect(container.querySelector(`.message-row .${testWorkingTurnStyles["composer-working-stop"]}`)).toBeNull();
       const stop = screen.queryByRole("button", { name: "conversationWorkingStopAria" });
-      if (status === "running") expect(stop?.closest(".composer-box")).toBeInTheDocument();
-      else expect(stop).not.toBeInTheDocument();
+      if (status === "running") {
+        expect(stop?.closest(".composer-box")).toBeInTheDocument();
+        expect(
+          screen.getByLabelText("Generating at 18 tokens per second").closest(".message-meta"),
+        ).toBeInTheDocument();
+      } else {
+        expect(stop).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Generating at 18 tokens per second")).not.toBeInTheDocument();
+      }
     },
   );
 

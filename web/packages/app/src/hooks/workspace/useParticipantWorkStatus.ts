@@ -160,6 +160,8 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
           const stopRequest = stopRequests[lease.lease_id];
           const thinking = lease.status?.phase === "thinking" ? (lease.status.thinking?.text ?? "") : undefined;
           result.push({
+            outputTokensPerSecond: lease.status?.output_tokens_per_second,
+            outputRateSampledAt: lease.status?.output_rate_sampled_at,
             contextUsage: lease.status?.context_usage,
             contextUsageEpoch: lease.status?.context_usage_epoch,
             showContextUsage:

@@ -16,6 +16,7 @@ import { collaborationWork, collaborationWorkSummary, type CollaborationWork } f
 import { progressActive } from "@/models/turnProgress";
 import { resolveMessageAgent } from "../MessageTimeline";
 import { ContextUsageRing } from "../ContextUsageRing";
+import { OutputTokenRate } from "../OutputTokenRate";
 import type { ConversationWorkingParticipant, VoidOrPromise } from "../types";
 import styles from "./CollaborationStatus.module.css";
 
@@ -131,6 +132,13 @@ function Member({
           <span className={styles.action}>
             {problem ? <CircleAlert size={12} aria-hidden="true" /> : null}
             <span title={label}>{label}</span>
+            {active && progress?.status !== "waiting" ? (
+              <OutputTokenRate
+                rate={participant?.outputTokensPerSecond}
+                sampledAt={participant?.outputRateSampledAt}
+                t={t}
+              />
+            ) : null}
           </span>
         </span>
         <span className={styles.detail} title={detail}>

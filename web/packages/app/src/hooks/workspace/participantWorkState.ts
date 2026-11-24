@@ -352,23 +352,27 @@ function normalizeParticipantWorkStatus(
     return undefined;
   }
   const stage = normalizeParticipantWorkStage(status.stage, status.phase);
-  if (status.phase === "working") {
-    return {
-      phase: "working",
-      sequence,
-      stage,
-      context_usage_epoch: status.context_usage_epoch ?? 0,
-      context_usage: normalizeContextUsage(status.context_usage),
-    };
-  }
-  if (!status.thinking) {
-    return {
-      phase: "thinking",
-      sequence,
-      stage,
-      context_usage_epoch: status.context_usage_epoch ?? 0,
-      context_usage: normalizeContextUsage(status.context_usage),
-    };
+  const rate = status.output_tokens_per_second;
+  const sampledAt = status.output_rate_sampled_at;
+  const hasRate =
+    (stage === "generating_reply" || stage === "thinking") &&
+    typeof rate === "number" &&
+    Number.isFinite(rate) &&
+    rate > 0 &&
+    rate <= 10000 &&
+    typeof sampledAt === "number" &&
+    Number.isSafeInteger(sampledAt) &&
+    sampledAt > 0;
+  const common = {
+    sequence,
+    stage,
+    output_tokens_per_second: hasRate ? rate : undefined,
+    output_rate_sampled_at: hasRate ? sampledAt : undefined,
+    context_usage_epoch: status.context_usage_epoch ?? 0,
+    context_usage: normalizeContextUsage(status.context_usage),
+  };
+  if (status.phase === "working" || !status.thinking) {
+    return { ...common, phase: status.phase };
   }
   if (
     status.thinking.format !== "plain_text" ||
@@ -378,11 +382,8 @@ function normalizeParticipantWorkStatus(
     return undefined;
   }
   return {
+    ...common,
     phase: "thinking",
-    context_usage_epoch: status.context_usage_epoch ?? 0,
-    context_usage: normalizeContextUsage(status.context_usage),
-    sequence,
-    stage,
     thinking: {
       format: "plain_text",
       text: status.thinking.text,
