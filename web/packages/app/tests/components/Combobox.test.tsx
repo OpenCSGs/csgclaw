@@ -212,6 +212,78 @@ test("Tab and Shift+Tab leave a portalled picker and skip hidden fields in its d
   expect(screen.getByRole("dialog", { name: "Configure" })).toBeInTheDocument();
 });
 
+test("Tab reaches footer actions before leaving a portalled picker", async () => {
+  const user = userEvent.setup();
+  render(
+    <DialogRoot defaultOpen>
+      <DialogContent aria-describedby={undefined}>
+        <DialogTitle>Configure</DialogTitle>
+        <Combobox
+          triggerProps={{ "aria-label": "Model" }}
+          options={options}
+          searchPlaceholder="Search models"
+          tabIntoFooter
+          footer={
+            <>
+              <button disabled>Unavailable action</button>
+              <button>Add provider</button>
+              <button>Retry connection</button>
+            </>
+          }
+        />
+        <button>Next field</button>
+      </DialogContent>
+    </DialogRoot>,
+  );
+
+  await user.click(screen.getByRole("combobox", { name: "Model" }));
+  const search = screen.getByRole("combobox", { name: "Search models" });
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Add provider" })).toHaveFocus();
+  await user.tab({ shift: true });
+  expect(search).toHaveFocus();
+  await user.tab();
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Retry connection" })).toHaveFocus();
+  await user.tab();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Next field" })).toHaveFocus());
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});
+
+test.each([false, true])("Tab keeps focus on the only footer action with no options (dialog: %s)", async (inDialog) => {
+  const user = userEvent.setup();
+  const onAdd = vi.fn();
+  const picker = (
+    <Combobox
+      triggerProps={{ "aria-label": "Model" }}
+      options={[]}
+      searchPlaceholder="Search models"
+      tabIntoFooter
+      footer={<button onClick={onAdd}>Connect model service</button>}
+    />
+  );
+  render(
+    inDialog ? (
+      <DialogRoot defaultOpen>
+        <DialogContent aria-describedby={undefined}>
+          <DialogTitle>Configure</DialogTitle>
+          {picker}
+        </DialogContent>
+      </DialogRoot>
+    ) : (
+      picker
+    ),
+  );
+
+  screen.getByRole("combobox", { name: "Model" }).focus();
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("combobox", { name: "Search models" })).toHaveFocus();
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Connect model service" })).toHaveFocus();
+  await user.keyboard("{Enter}");
+  expect(onAdd).toHaveBeenCalledTimes(1);
+});
+
 test("a controlled saved value stays visible while async options load and then becomes selectable", async () => {
   const user = userEvent.setup();
   const changed = vi.fn();
