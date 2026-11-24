@@ -8,6 +8,7 @@ import (
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/im"
 	"csgclaw/internal/roomtask"
 	"csgclaw/internal/taskcore"
 )
@@ -53,9 +54,9 @@ func (h *Handler) roomContextFacts(meta roomtask.Roster) map[string]any {
 func (h *Handler) roomExecutionContext(request roomtask.TurnContextRequest) (roomtask.PrivateTurnContext, error) {
 	roomID, participantID := request.RoomID, request.ParticipantID
 	sourceID, taskID := request.SourceID, request.TaskID
-	room, ok := h.im.Room(roomID)
+	room, ok := h.roomForExecution(request)
 	if !ok {
-		return roomtask.PrivateTurnContext{}, nil
+		return roomtask.PrivateTurnContext{Skip: request.VideoFeedback}, nil
 	}
 	if !room.IsOnDemand() {
 		return h.roomSceneContext(room, request)
@@ -164,6 +165,32 @@ func (h *Handler) roomExecutionContext(request roomtask.TurnContextRequest) (roo
 		ScopeJSON: string(scopeJSON), SnapshotJSON: string(snapshotJSON), TurnJSON: string(turnJSON),
 		CollaborationGuide: room.CollaborationGuide,
 	}, nil
+}
+
+func (h *Handler) roomForExecution(request roomtask.TurnContextRequest) (im.Room, bool) {
+	if !request.VideoFeedback {
+		return h.im.Room(request.RoomID)
+	}
+	ctx := request.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for ctx.Err() == nil {
+		h.autonomousStopsMu.Lock()
+		stop := h.autonomousStops[request.RoomID]
+		if stop == nil {
+			room, ok := h.im.Room(request.RoomID)
+			h.autonomousStopsMu.Unlock()
+			return room, ok
+		}
+		h.autonomousStopsMu.Unlock()
+		// Read the pause state after Stop has returned and any pause is saved.
+		select {
+		case <-stop.done:
+		case <-ctx.Done():
+		}
+	}
+	return im.Room{}, false
 }
 
 func contextExcerpt(value string, limit int) string {

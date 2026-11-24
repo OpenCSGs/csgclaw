@@ -288,6 +288,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		if event.VideoRetry != nil && event.ContinuationOf != "" {
 			request.SourceID = event.ContinuationOf
 			request.VideoFeedback = true
+			request.Context = ctx
 		}
 		current, err = a.roomContext(request)
 		if err != nil {

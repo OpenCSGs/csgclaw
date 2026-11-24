@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
@@ -264,5 +265,36 @@ func TestAutonomousVideoFeedbackHonorsRoomPause(t *testing.T) {
 	feedback, err = h.roomExecutionContext(request)
 	if err != nil || feedback.Skip || feedback.Role != roomtask.TurnRoleAutonomous || feedback.Notification != nil {
 		t.Fatalf("video feedback after room resume: %+v, %v", feedback, err)
+	}
+}
+
+func TestAutonomousVideoFeedbackWaitsForStopToSavePause(t *testing.T) {
+	h := newAppTaskTestHandler(t)
+	h.serverNoAuth = true
+	room, source := createAutonomousTaskFixture(t, h)
+	request := roomtask.TurnContextRequest{RoomID: room.ID, ParticipantID: "pt-dev", SourceID: source.ID, VideoFeedback: true}
+	h.participantWork = &roomStopControl{confirm: func() {
+		current, _ := h.im.Room(room.ID)
+		if current.AutonomousState != nil && current.AutonomousState.Paused {
+			t.Error("room paused before turn cancellation completed")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		queued := request
+		queued.Context = ctx
+		feedback, err := h.roomExecutionContext(queued)
+		if err != nil || !feedback.Skip || ctx.Err() == nil {
+			t.Errorf("feedback while Stop is in progress: %+v, %v (context: %v)", feedback, err, ctx.Err())
+		}
+	}}
+	stopped := performParticipantWorkRequest(t, h, http.MethodPost, "/api/v1/channels/csgclaw/participants/dev/work:stop", map[string]any{
+		"room_id": room.ID, "lease_id": worklease.NewID(), "request_id": source.ID,
+	})
+	if stopped.Code != http.StatusAccepted {
+		t.Fatalf("stop: %d %s", stopped.Code, stopped.Body.String())
+	}
+	feedback, err := h.roomExecutionContext(request)
+	if err != nil || !feedback.Skip {
+		t.Fatalf("feedback after Stop: %+v, %v", feedback, err)
 	}
 }
