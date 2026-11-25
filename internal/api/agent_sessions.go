@@ -52,6 +52,7 @@ type agentSessionResponseRequest struct {
 	UserInput       bool                         `json:"user_input,omitempty"`
 	Model           string                       `json:"model,omitempty"`
 	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
+	AutoProfile     string                       `json:"auto_profile,omitempty"`
 	AttachmentIDs   []string                     `json:"attachment_ids,omitempty"`
 	Input           json.RawMessage              `json:"input"`
 	Stream          *bool                        `json:"stream,omitempty"`
@@ -179,7 +180,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
-	input.turnModel, err = h.sessionTurnModel(selected, input.model, input.reasoningEffort)
+	input.turnModel, err = h.sessionTurnModel(selected, input.model, input.reasoningEffort, input.autoProfile)
 	if err != nil {
 		writeSessionInputError(w, err)
 		return
@@ -670,6 +671,8 @@ func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body
 			err = decoder.Decode(&request.Model)
 		case strings.EqualFold(name, "reasoning_effort"):
 			err = decoder.Decode(&request.ReasoningEffort)
+		case strings.EqualFold(name, "auto_profile"):
+			err = decoder.Decode(&request.AutoProfile)
 		default:
 			return fmt.Errorf("unknown field %q", name)
 		}
@@ -703,6 +706,7 @@ func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInp
 	input.userInput = request.UserInput
 	input.model = strings.TrimSpace(request.Model)
 	input.reasoningEffort = strings.TrimSpace(request.ReasoningEffort)
+	input.autoProfile = strings.TrimSpace(request.AutoProfile)
 	input.attachmentIDs = request.AttachmentIDs
 	input.resourceRefs = request.ResourceRefs
 	if input.Text == "" && len(input.Files)+len(input.attachmentIDs) == 0 && len(input.resourceRefs) == 0 {

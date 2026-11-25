@@ -1621,6 +1621,8 @@ For a Codex agent, optional string fields `model` and `reasoning_effort` select 
 
 `reasoning_effort` accepts `auto`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; `off` is an alias for `none`. The selected provider/model must support the requested level. `auto` lets the model choose its reasoning default. Each omitted field independently inherits its Profile value, including when the other field is specified. Both fields also work with `stream: true`.
 
+For the OpenCSG model `auto`, also pass `auto_profile` with an ID published by the gateway in `metadata.auto_routing.profiles`. Set `model` to `auto` explicitly when sending this option. CSGClaw applies the profile to the turn's model calls through `CSG-Router-Auto-Profile`. The gateway determines its default when the request omits `auto_profile`; the reasoning effort remains a separate option.
+
 An explicit `model` can name any chat model served by the configured provider, including one absent from its configured model list. Image and video generation models return HTTP 400 with `param: model`. When a selected model requires a new context window, CSGClaw waits for the agent's active turns to finish and reloads the Codex App Server automatically. Existing sessions retain their conversation history.
 
 The request may attach supplemental text to the current user message with the
@@ -1701,7 +1703,7 @@ const response = await fetch(responsesUrl, {
 if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
 ```
 
-The multipart fields are `input`, optional `stream`, `user_input`, `model`, and `reasoning_effort`, and repeated `file`. Each optional field accepts at most one value. Model options have the same meaning as the JSON fields. To send files with `attachment_ids`, `extra`, or `extra_type`, upload the files to the session's `/attachments` endpoint using `files`, then include the returned IDs in a JSON request to `/responses`. A JSON request containing only `attachment_ids` starts a file-only turn.
+The multipart fields are `input`, optional `stream`, `user_input`, `model`, `reasoning_effort`, and `auto_profile`, and repeated `file`. Each optional field accepts at most one value. Model options have the same meaning as the JSON fields. To send files with `attachment_ids`, `extra`, or `extra_type`, upload the files to the session's `/attachments` endpoint using `files`, then include the returned IDs in a JSON request to `/responses`. A JSON request containing only `attachment_ids` starts a file-only turn.
 
 JSON requests also support files through `input_file` parts:
 

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/auth"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/codexmodel"
@@ -273,16 +274,22 @@ func (s *Service) resolveProfile(ctx context.Context, botID string) (agent.Agent
 	if profile, ok := ctx.Value(taskProfileKey{}).(agent.AgentProfile); ok {
 		return profile, nil
 	}
-	if selection, ok := ctx.Value(sessionModelKey{}).(sessionModel); ok {
+	if selection, ok := ctx.Value(sessionModelKey{}).(contract.TurnModel); ok {
 		models, ok := s.agents.(sessionProfileReader)
 		if !ok {
 			return agent.AgentProfile{}, &HTTPError{Status: http.StatusServiceUnavailable, Message: "session model configuration is unavailable"}
 		}
-		profile, err := models.ResolvedSessionProfile(botID, selection.model, "")
+		profile, err := models.ResolvedSessionProfile(botID, selection.ModelID, "")
 		if err != nil {
 			return agent.AgentProfile{}, &HTTPError{Status: http.StatusConflict, Message: err.Error()}
 		}
-		profile.ReasoningEffort = selection.effort
+		profile.ReasoningEffort = selection.ReasoningEffort
+		if selection.AutoProfile != "" {
+			if profile.ModelID != "auto" || profile.Provider != agent.ProviderCSGHub {
+				return agent.AgentProfile{}, &HTTPError{Status: http.StatusConflict, Message: "Auto routing profile requires the OpenCSG Auto model"}
+			}
+			profile.Headers = autoProfileHeaders(profile.Headers, selection.AutoProfile)
+		}
 		return profile, nil
 	}
 	if s.agents == nil {

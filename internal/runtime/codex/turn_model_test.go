@@ -91,6 +91,7 @@ func TestTurnModelCompactionPreservesAcceptedEffort(t *testing.T) {
 			if test.previousModel != "" {
 				previous := large
 				previous.ModelID, previous.ReasoningEffort = test.previousModel, test.previousEffort
+				previous.AutoProfile = "previous-turn-profile"
 				waiter, err := live.registerAppServerTurnWaiterWithModel("thread", previous, true)
 				if err != nil {
 					t.Fatal(err)
@@ -121,7 +122,7 @@ func TestTurnModelCompactionPreservesAcceptedEffort(t *testing.T) {
 			waiter.setTurnID("current")
 			live.setTurnCompacting("thread", "current", "item/started")
 			got, overridden, err := rt.TurnModel("alice", "thread", "current", "large")
-			if err != nil || !overridden || got.ModelID != large.ModelID || got.Metadata != large.Metadata.Normalized() || got.ReasoningEffort != test.wantEffort {
+			if err != nil || !overridden || got.ModelID != large.ModelID || got.Metadata != large.Metadata.Normalized() || got.ReasoningEffort != test.wantEffort || got.AutoProfile != "" {
 				t.Fatalf("compaction selection = %+v, overridden = %t, error = %v; want effort %q", got, overridden, err, test.wantEffort)
 			}
 			live.setTurnCompacting("thread", "current", "item/completed")

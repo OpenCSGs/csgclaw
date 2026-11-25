@@ -332,7 +332,7 @@ func (h *Handler) withLLMTurnModel(r *http.Request, agentID string, body []byte)
 		return nil, &llm.HTTPError{Status: http.StatusConflict, Message: err.Error()}
 	}
 	if ok {
-		r = r.WithContext(llm.WithSessionModel(r.Context(), model.ModelID, model.ReasoningEffort))
+		r = r.WithContext(llm.WithSessionModel(r.Context(), model))
 	}
 	return r, nil
 }
