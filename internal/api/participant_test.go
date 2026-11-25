@@ -4,18 +4,22 @@ import (
 	"context"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apiclient"
 	"csgclaw/internal/apitypes"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/relay"
 	agentruntime "csgclaw/internal/runtime"
 	hub "csgclaw/internal/template"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -195,11 +199,70 @@ func TestRetryExplicitParticipantBinding(t *testing.T) {
 	if err := engine.Agents().Delete(context.Background(), "agent-qa"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := srv.participant.RepairDanglingCSGClawAgentParticipants(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.Get(participant.ChannelCSGClaw, "pt-qa"); !ok {
+		t.Fatal("startup removed recoverable participant")
+	}
+	if user, ok := imSvc.User("user-qa"); !ok || user.AgentState == "deleted" {
+		t.Fatal("startup retired recoverable user")
+	}
+	if _, err := agentSvc.CreateRecord(t.Context(), agent.CreateRequest{Spec: agent.CreateAgentSpec{ID: "agent-other", Name: "agent-qa", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeNameCodex, Image: "agent-image:test"}}); err != nil {
+		t.Fatal(err)
+	}
 	if rec := post(body); rec.Code != http.StatusOK {
 		t.Fatalf("restore: %d %s", rec.Code, rec.Body)
 	}
 	if _, ok := agentSvc.Agent("agent-qa"); !ok {
 		t.Fatal("worker was not restored")
+	}
+}
+
+func TestParticipantCreatedEventOnPublicationRetry(t *testing.T) {
+	root := t.TempDir()
+	local := httptest.NewServer(http.NotFoundHandler())
+	defer local.Close()
+	manager, err := relay.NewManager(t.Context(), root, apiclient.New(local.URL, "", local.Client()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	manifest := filepath.Join(root, "publications.json")
+	if err := os.Remove(manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(manifest, 0700); err != nil {
+		t.Fatal(err)
+	}
+	agents, _ := mustNewSeededServiceWithPath(t, []agent.Agent{{ID: "agent-qa", Name: "QA", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex}})
+	engine := agentengine.New(agents)
+	bus := im.NewBus()
+	events, cancel := bus.Subscribe()
+	defer cancel()
+	h := &Handler{svc: agents, agentEngine: engine, imBus: bus, relayManager: manager, participant: participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(engine))}
+	routes := h.Routes()
+	post := func(want int) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(`{"id":"pt-qa","name":"QA","type":"agent","agent_binding":{"mode":"create","agent_id":"agent-qa"},"auto_publish":true}`))
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, req)
+		if rec.Code != want {
+			t.Fatalf("status %d, want %d: %s", rec.Code, want, rec.Body)
+		}
+	}
+	post(http.StatusBadGateway)
+	if evt := mustReceiveIMEvent(t, events); evt.Type != im.EventTypeParticipantCreated || evt.Participant.ID != "pt-qa" {
+		t.Fatalf("unexpected creation event: %+v", evt)
+	}
+	if err := os.Remove(manifest); err != nil {
+		t.Fatal(err)
+	}
+	post(http.StatusOK)
+	select {
+	case evt := <-events:
+		t.Fatalf("duplicate event: %+v", evt)
+	default:
 	}
 }
 

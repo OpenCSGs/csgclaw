@@ -113,12 +113,6 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			writeAgentOperationErrorWithBillingURL(w, err, participantCreateStatus(err), billingURL)
 			return
 		}
-		if req.AutoPublish {
-			if err := h.queueAgentPublication(created.AgentID); err != nil {
-				writeAgentSessionError(w, 502, "relay_publish_failed", "participant created; automatic publication could not be queued: "+err.Error(), nil)
-				return
-			}
-		}
 		presented := h.presentParticipant(created)
 		if len(skippedResources) > 0 {
 			presented.Metadata = maps.Clone(presented.Metadata)
@@ -131,6 +125,12 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 		if inserted {
 			h.publishParticipantEvent(im.EventTypeParticipantCreated, presented)
 			status = http.StatusCreated
+		}
+		if req.AutoPublish {
+			if err := h.queueAgentPublication(created.AgentID); err != nil {
+				writeAgentSessionError(w, 502, "relay_publish_failed", "participant created; automatic publication could not be queued: "+err.Error(), nil)
+				return
+			}
 		}
 		writeJSON(w, status, presented)
 	default:

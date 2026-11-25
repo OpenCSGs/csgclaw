@@ -21,10 +21,10 @@ import (
 )
 
 type Service struct {
-	creating sync.Map // participant key -> completion channel
-	store    *Store
-	agents   agentengine.AgentInterface
-	im       *im.Service
+	mutations sync.Map // participant key -> completion channel
+	store     *Store
+	agents    agentengine.AgentInterface
+	im        *im.Service
 }
 
 type Option func(*Service)
@@ -85,7 +85,7 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 	if err != nil {
 		return apitypes.Participant{}, false, err
 	}
-	release, err := s.lockCreate(ctx, storeKey(normalized.Channel, normalized.ID))
+	release, err := s.lockParticipant(ctx, normalized.Channel, normalized.ID)
 	if err != nil {
 		return apitypes.Participant{}, false, err
 	}
@@ -115,14 +115,15 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 	return item, err == nil, err
 }
 
-// Serialize creation for one participant across the agent and participant stores.
-func (s *Service) lockCreate(ctx context.Context, key string) (func(), error) {
+// Serialize changes to the participant and its associated IM user.
+func (s *Service) lockParticipant(ctx context.Context, channel, id string) (func(), error) {
+	key := storeKey(channel, canonicalParticipantID(slugify(id)))
 	done := make(chan struct{})
 	for {
-		active, occupied := s.creating.LoadOrStore(key, done)
+		active, occupied := s.mutations.LoadOrStore(key, done)
 		if !occupied {
 			return func() {
-				s.creating.Delete(key)
+				s.mutations.Delete(key)
 				close(done)
 			}, nil
 		}
@@ -419,7 +420,7 @@ func isLegacyManagerParticipant(item apitypes.Participant) bool {
 	return strings.EqualFold(strings.TrimSpace(item.Name), agent.ManagerName)
 }
 
-func (s *Service) Update(_ context.Context, channel, id string, req UpdateRequest) (apitypes.Participant, bool, error) {
+func (s *Service) Update(ctx context.Context, channel, id string, req UpdateRequest) (apitypes.Participant, bool, error) {
 	if s == nil || s.store == nil {
 		return apitypes.Participant{}, false, fmt.Errorf("participant store is required")
 	}
@@ -428,6 +429,11 @@ func (s *Service) Update(_ context.Context, channel, id string, req UpdateReques
 	if channel == "" || id == "" {
 		return apitypes.Participant{}, false, fmt.Errorf("channel and id are required")
 	}
+	release, err := s.lockParticipant(ctx, channel, id)
+	if err != nil {
+		return apitypes.Participant{}, false, err
+	}
+	defer release()
 	item, _, ok := s.getByID(channel, id)
 	if !ok {
 		return apitypes.Participant{}, false, nil
@@ -629,10 +635,19 @@ func (s *Service) RepairDanglingCSGClawAgentParticipants() ([]apitypes.Participa
 		}
 		agentID := strings.TrimSpace(item.AgentID)
 		if agentID != "" {
-			if _, err := s.agents.Get(context.Background(), agentID, agentengine.AgentGetOptions{}); err == nil {
-				continue
-			} else if agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+			_, found, err := s.boundAgentByID(context.Background(), agentID)
+			if err != nil {
 				return deleted, fmt.Errorf("inspect agent %q while repairing participants: %w", agentID, err)
+			}
+			if found {
+				continue
+			}
+			// A persisted binding with a live local identity can be restored by
+			// participant create even when its worker record is missing.
+			if item.ChannelUserKind == ChannelUserKindLocalUserID {
+				if user, ok := s.im.User(item.ChannelUserRef); ok && user.AgentState != "deleted" {
+					continue
+				}
 			}
 		}
 		removed, ok, err := s.store.Delete(item.Channel, item.ID)
@@ -951,6 +966,18 @@ func trimLocalIdentityPrefixes(id string) string {
 	return strings.TrimSpace(id)
 }
 
+// Engine Get also accepts display names. Bindings refer to canonical IDs only.
+func (s *Service) boundAgentByID(ctx context.Context, id string) (string, bool, error) {
+	selected, err := s.agents.Get(ctx, id, agentengine.AgentGetOptions{})
+	if err != nil {
+		if agentengine.ErrorCodeOf(err) == agentengine.ErrorAgentNotFound {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return selected.ID, selected.ID == agent.CanonicalID(id), nil
+}
+
 func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRequest, restoring bool) (string, error) {
 	switch req.AgentBinding.Mode {
 	case BindingModeNone:
@@ -971,10 +998,10 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if agentID == "" {
 			agentID = defaultAgentID(req.ID)
 		}
-		if existing, err := s.agents.Get(ctx, agentID, agentengine.AgentGetOptions{}); err == nil {
-			return existing.ID, nil
-		} else if agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+		if existingID, found, err := s.boundAgentByID(ctx, agentID); err != nil {
 			return "", err
+		} else if found {
+			return existingID, nil
 		}
 		if restoring && (req.AgentBinding.Agent == nil || strings.TrimSpace(req.AgentBinding.Agent.FromTemplate) == "") {
 			return "", fmt.Errorf("restoring missing agent %q requires a template", agentID)
