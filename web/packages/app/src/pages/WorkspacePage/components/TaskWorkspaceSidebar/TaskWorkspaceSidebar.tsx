@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
 import { resolveAgentChannelUserID, agentRuntimeOptions, isManagerAgent } from "@/models/agents";
 import { resolveConversationUser, agentMatchesUser } from "@/models/conversations";
+import { latestSidebarUpdateVersion } from "@/models/upgradeStatus";
 import { pathForPane, WorkspacePaneTypes } from "@/models/routing";
 import { Tooltip } from "@/components/ui";
 import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import type { IMConversation } from "@/models/conversations";
 import styles from "./TaskWorkspaceSidebar.module.css";
+import { SidebarUpgradeButton } from "../SidebarUpgradeButton";
 import { ManagerSetupNotice } from "../ManagerSetupNotice";
 import { WorkspaceUserMenu } from "../WorkspaceUserMenu";
 import { LogoMark, LogoWordmark } from "../WorkspaceSidebar/WorkspaceSidebarBrand";
@@ -44,6 +46,7 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
   const navigate = useNavigate();
   const { openSettings, openProfile } = useWorkspaceDialogs();
   const { t, entry, isSidebarCollapsed, currentUserID, usersById } = props;
+  const updateVersion = latestSidebarUpdateVersion(props);
   const directories = props.workerAgentItems.reduce<Array<{ path: string; agentIDs: string[] }>>((items, agent) => {
     const path = agentRuntimeOptions(agent).local_workspace_dir;
     if (typeof path !== "string" || !path) return items;
@@ -194,6 +197,14 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
         </div>
       ) : null}
       <footer>
+        {updateVersion ? (
+          <SidebarUpgradeButton
+            collapsed={isSidebarCollapsed}
+            version={updateVersion}
+            t={t}
+            onClick={() => selectDestination(() => openSettings("version", { mark: "version" }))}
+          />
+        ) : null}
         <WorkspaceUserMenu
           currentUser={usersById.get(currentUserID)}
           openCSG={{

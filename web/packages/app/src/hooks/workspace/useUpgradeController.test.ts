@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyUpgradeRequest, setUpgradeChannelRequest } from "@/api/upgrade";
 import type { TranslateFn } from "@/models/conversations";
 import type { UpgradeStatus } from "@/models/upgradeStatus";
+import { createTranslator } from "@/shared/i18n";
 import { scheduleUpgradePageReload, UPGRADE_PAGE_RELOAD_DELAY_MS, useUpgradeController } from "./useUpgradeController";
 
 vi.mock("@/api/upgrade", () => ({
@@ -74,7 +75,7 @@ describe("useUpgradeController", () => {
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const setUpgradeStatusData = vi.fn();
     const setAppVersionData = vi.fn();
-    const refreshWorkspaceAppVersion = vi.fn().mockResolvedValue("v0.3.19");
+    const refreshWorkspaceAppVersion = vi.fn().mockResolvedValue("0.3.19");
     const refreshWorkspaceUpgradeStatus = vi.fn().mockResolvedValue(upgradeStatus());
 
     const { result } = renderHook(() =>
@@ -100,8 +101,92 @@ describe("useUpgradeController", () => {
 
     expect(mockedApplyUpgradeRequest).toHaveBeenCalledTimes(1);
     expect(refreshWorkspaceAppVersion).toHaveBeenCalledWith({ cacheBust: true });
-    expect(setAppVersionData).toHaveBeenCalledWith("v0.3.19");
+    expect(setAppVersionData).toHaveBeenCalledWith("0.3.19");
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), UPGRADE_PAGE_RELOAD_DELAY_MS);
+  });
+
+  it("translates the same preview error when the interface language changes", async () => {
+    mockedApplyUpgradeRequest.mockRejectedValueOnce({
+      status: 409,
+      code: "upgrade_preview_only",
+      message: "Upgrade actions are disabled in the preview.",
+    });
+    const args = {
+      appVersion: "v0.3.18",
+      refreshWorkspaceAppVersion: vi.fn(),
+      refreshWorkspaceUpgradeStatus: vi.fn().mockResolvedValue(upgradeStatus()),
+      setAppVersionData: vi.fn(),
+      setUpgradeStatusData: vi.fn(),
+      upgradeStatus: upgradeStatus(),
+    };
+    const { result, rerender } = renderHook(({ t }) => useUpgradeController({ ...args, t }), {
+      initialProps: { t: createTranslator("zh") },
+    });
+
+    act(() => result.current.openUpgradeModal());
+    await act(async () => result.current.upgradeModalProps?.onApply());
+    expect(result.current.upgradeError).toBe("预览模式下无法执行升级。");
+    rerender({ t: createTranslator("en") });
+    expect(result.current.upgradeError).toBe("Upgrades are unavailable in preview mode.");
+    expect(mockedApplyUpgradeRequest).toHaveBeenCalledOnce();
+  });
+
+  it("does not overlap reconnect requests and still reads the helper result after a connection error", async () => {
+    vi.useFakeTimers();
+    let disconnect!: (error: Error) => void;
+    const refreshWorkspaceAppVersion = vi.fn(
+      () =>
+        new Promise<string>((_, reject) => {
+          disconnect = reject;
+        }),
+    );
+    const refreshWorkspaceUpgradeStatus = vi.fn().mockResolvedValue(upgradeStatus({ manual_restart_required: true }));
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.3.18",
+        refreshWorkspaceAppVersion,
+        refreshWorkspaceUpgradeStatus,
+        setAppVersionData: vi.fn(),
+        setUpgradeStatusData: vi.fn(),
+        t,
+        upgradeStatus: upgradeStatus(),
+      }),
+    );
+
+    act(() => result.current.openUpgradeModal());
+    await act(async () => result.current.upgradeModalProps?.onApply());
+    await act(async () => vi.advanceTimersByTimeAsync(6000));
+    expect(refreshWorkspaceAppVersion).toHaveBeenCalledTimes(1);
+
+    await act(async () => disconnect(new Error("service restarting")));
+    expect(result.current.upgradePhase).toBe("manual_restart");
+    expect(result.current.showUpgradeModal).toBe(true);
+    expect(refreshWorkspaceUpgradeStatus).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(6000));
+    expect(refreshWorkspaceAppVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports an unconfirmed outcome when the daemon keeps returning the old version", async () => {
+    vi.useFakeTimers();
+    const setAppVersionData = vi.fn();
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.3.18",
+        refreshWorkspaceAppVersion: vi.fn().mockResolvedValue("v0.3.18"),
+        refreshWorkspaceUpgradeStatus: vi.fn().mockResolvedValue(upgradeStatus({ upgrading: true })),
+        setAppVersionData,
+        setUpgradeStatusData: vi.fn(),
+        t,
+        upgradeStatus: upgradeStatus(),
+      }),
+    );
+
+    act(() => result.current.openUpgradeModal());
+    await act(async () => result.current.upgradeModalProps?.onApply());
+    await act(async () => vi.advanceTimersByTimeAsync(120_000));
+    expect(result.current.upgradePhase).toBe("unconfirmed");
+    expect(result.current.showUpgradeModal).toBe(true);
+    expect(setAppVersionData).not.toHaveBeenCalled();
   });
 
   it("requests a one-shot server channel switch while keeping the installed channel", async () => {
@@ -235,7 +320,7 @@ describe("useUpgradeController", () => {
     expect(setUpgradeStatusData).not.toHaveBeenCalled();
   });
 
-  it("shows the message from a plain API error without issuing a second channel request", async () => {
+  it("localizes a plain API error without issuing a second channel request", async () => {
     mockedSetUpgradeChannelRequest.mockRejectedValueOnce({ status: 502, message: "preview feed unavailable" });
     const setUpgradeStatusData = vi.fn();
     const refreshWorkspaceUpgradeStatus = vi.fn().mockResolvedValue(upgradeStatus({ update_available: false }));
@@ -260,7 +345,7 @@ describe("useUpgradeController", () => {
     expect(refreshWorkspaceUpgradeStatus).not.toHaveBeenCalled();
     expect(setUpgradeStatusData).not.toHaveBeenCalled();
     expect(result.current.upgradeChannelError).toContain("upgradeChannelSwitchFailed");
-    expect(result.current.upgradeChannelError).toContain("preview feed unavailable");
+    expect(result.current.upgradeChannelError).not.toContain("preview feed unavailable");
     expect(result.current.upgradeChannelError).not.toContain("upgradeErrorUnknown");
     expect(result.current.upgradeError).toBe("");
     expect(result.current.upgradePhase).toBe("idle");
@@ -329,8 +414,7 @@ describe("useUpgradeController", () => {
       await expect(result.current.changeUpgradeChannel("release")).resolves.toBe(false);
     });
 
-    expect(result.current.upgradeChannelError).toContain("upgradeChannelSwitchFailed");
-    expect(result.current.upgradeChannelError).toContain("upgradeErrorMissingUpdatePackage");
+    expect(result.current.upgradeChannelError).toBe("upgradeErrorMissingUpdatePackage");
     expect(result.current.upgradeError).toBe("");
     expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledTimes(1);
 

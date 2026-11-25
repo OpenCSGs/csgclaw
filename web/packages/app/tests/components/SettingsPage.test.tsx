@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@/components/ui";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
@@ -50,6 +50,7 @@ const labels: Record<string, string> = {
   turnNotificationModeOff: "Off",
   turnNotificationModeWhenUnfocused: "Only when the app is unfocused",
   upgradeAction: "Update & Restart",
+  upgradeLatestVersion: "Latest version",
   upgradeDownloadAction: "Update",
   upgradeChannel: "Update channel",
   upgradeChannelBeta: "Preview",
@@ -63,7 +64,7 @@ const labels: Record<string, string> = {
   upgradeChannelSwitchTitle: "Switch channel",
   upgradeLocalBuildUnsupported:
     "This is a local development build. In-app upgrades and channel switching are unavailable.",
-  upgradeProgressLabel: "Checking and preparing the update",
+  upgradeStatusChecking: "Checking for updates",
 };
 
 const t: TranslateFn = (key) => labels[key] ?? key;
@@ -248,6 +249,8 @@ describe("Settings sections", () => {
 
     renderSettings(controller);
 
+    expect(screen.getByText("Latest version")).toBeVisible();
+    expect(screen.getByText("v0.3.18")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     fireEvent.click(screen.getByRole("button", { name: "Enable notifications" }));
 
@@ -309,7 +312,7 @@ describe("Settings sections", () => {
 
     const versionLabel = screen.getByText("v0.2.0-beta.1");
     const switchButton = screen.getByRole("button", { name: "Switch channel" });
-    const updateButton = screen.getByRole("button", { name: "Update & Restart" });
+    const updateButton = screen.getByRole("button", { name: "Update" });
     expect(switchButton).toBeEnabled();
     expect(updateButton).toBeInTheDocument();
     expect(versionLabel.compareDocumentPosition(updateButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -365,7 +368,7 @@ describe("Settings sections", () => {
 
     renderSettings(controller);
 
-    expect(screen.queryByRole("button", { name: "Update & Restart" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Update" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Switch channel" }));
 
     expect(screen.getByRole("radio", { name: "Preview" })).toBeChecked();
@@ -448,8 +451,7 @@ describe("Settings sections", () => {
     );
   });
 
-  it("advances simulated progress while switching channels or downloading", () => {
-    vi.useFakeTimers();
+  it("announces that an update check is in progress", () => {
     const controller = {
       ready: true,
       sidebarProps: {
@@ -494,10 +496,8 @@ describe("Settings sections", () => {
 
     renderSettings(controller);
 
-    const progress = screen.getByRole("progressbar", { name: "Checking and preparing the update" });
-    expect(progress).toHaveAttribute("aria-valuenow", "3");
-    act(() => vi.advanceTimersByTime(1000));
-    expect(progress).toHaveAttribute("aria-valuenow", "10");
+    expect(screen.getByText("Checking for updates")).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Switch channel" })).toBeDisabled();
   });
 

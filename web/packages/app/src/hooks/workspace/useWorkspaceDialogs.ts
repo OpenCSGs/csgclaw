@@ -5,12 +5,13 @@ import {
   openWorkspaceDialog,
   profileDialogSearch,
   settingsDialogSearch,
+  WorkspaceDialogNames,
 } from "@/models/workspaceDialogs";
 import type { WorkspaceDialogName } from "@/models/workspaceDialogs";
 
 export type UseWorkspaceDialogsResult = {
   current: WorkspaceDialogName | "";
-  openSettings: (section?: string) => void;
+  openSettings: (section?: string, options?: { mark?: "version" }) => void;
   openProfile: (humanID: string) => void;
   close: () => void;
 };
@@ -23,10 +24,17 @@ export function useWorkspaceDialogs(): UseWorkspaceDialogsResult {
   const current = useMemo(() => openWorkspaceDialog(search), [search]);
 
   const openSettings = useCallback(
-    (section?: string) => {
-      navigate({ search: settingsDialogSearch(search, section) }, { replace: true });
+    (section?: string, options?: { mark?: "version" }) => {
+      const fromUpdateNotice = section === "version" && options?.mark === "version" && !current;
+      navigate(
+        { search: settingsDialogSearch(search, section, options?.mark) },
+        {
+          replace: !fromUpdateNotice,
+          state: fromUpdateNotice ? { ...location.state, settingsOpenedFromUpdateNotice: true } : location.state,
+        },
+      );
     },
-    [navigate, search],
+    [current, location.state, navigate, search],
   );
 
   const openProfile = useCallback(
@@ -37,8 +45,12 @@ export function useWorkspaceDialogs(): UseWorkspaceDialogsResult {
   );
 
   const close = useCallback(() => {
-    navigate({ search: closeDialogSearch(search) }, { replace: true });
-  }, [navigate, search]);
+    if (current === WorkspaceDialogNames.settings && location.state?.settingsOpenedFromUpdateNotice === true) {
+      navigate(-1);
+    } else {
+      navigate({ search: closeDialogSearch(search) }, { replace: true });
+    }
+  }, [current, location.state, navigate, search]);
 
   return { current, openSettings, openProfile, close };
 }

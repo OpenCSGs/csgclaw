@@ -15,6 +15,14 @@ describe("workspace dialog URLs", () => {
       new URLSearchParams("tab=connectors&view=scheduled"),
     );
   });
+  it("marks the version section and clears the mark when leaving it", () => {
+    const opened = settingsDialogSearch("?tab=connectors", "version", "version");
+    expect(new URLSearchParams(opened)).toEqual(
+      new URLSearchParams("tab=connectors&dialog=settings&section=version&mark=version"),
+    );
+    expect(new URLSearchParams(settingsDialogSearch(opened, "models")).has("mark")).toBe(false);
+    expect(closeDialogSearch(opened)).toBe("tab=connectors");
+  });
   it("cleans up the profile selection without changing the underlying query", () => {
     const opened = profileDialogSearch("?tab=skills", "u-admin");
     expect(openWorkspaceDialog(opened)).toBe("profile");

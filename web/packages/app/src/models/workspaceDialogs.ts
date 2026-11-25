@@ -1,4 +1,5 @@
 export const WORKSPACE_DIALOG_PARAM = "dialog";
+export const SETTINGS_MARK_PARAM = "mark";
 
 export const WorkspaceDialogNames = {
   settings: "settings",
@@ -8,7 +9,7 @@ export const WorkspaceDialogNames = {
 export type WorkspaceDialogName = (typeof WorkspaceDialogNames)[keyof typeof WorkspaceDialogNames];
 
 const DIALOG_OWNED_PARAMS: Record<WorkspaceDialogName, readonly string[]> = {
-  settings: ["section", "app_resource"],
+  settings: ["section", "app_resource", SETTINGS_MARK_PARAM],
   profile: ["human"],
 };
 
@@ -21,11 +22,16 @@ export function openWorkspaceDialog(search: string): WorkspaceDialogName | "" {
   return value === WorkspaceDialogNames.settings || value === WorkspaceDialogNames.profile ? value : "";
 }
 
-export function settingsDialogSearch(search: string, section = ""): string {
+export function settingsDialogSearch(search: string, section = "", mark?: "version"): string {
   const next = paramsOf(search);
   next.set(WORKSPACE_DIALOG_PARAM, WorkspaceDialogNames.settings);
   if (section) {
     next.set("section", section);
+  }
+  if (mark && mark === section) {
+    next.set(SETTINGS_MARK_PARAM, mark);
+  } else {
+    next.delete(SETTINGS_MARK_PARAM);
   }
   return next.toString();
 }
