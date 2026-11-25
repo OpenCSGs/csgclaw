@@ -15,11 +15,75 @@ import (
 type skillStateRuntime struct {
 	fakeAgentRuntime
 	reconciled map[string]skill.State
+	syncCount  int
+}
+
+func (*skillStateRuntime) SkillDiskSync(agentruntime.Layout, string, bool, map[string]any) (string, error) {
+	return "in_sync", nil
 }
 
 func (r *skillStateRuntime) ReconcileSkills(_ context.Context, _ agentruntime.Handle, states map[string]skill.State) error {
 	r.reconciled = states
+	r.syncCount++
 	return nil
+}
+
+func TestWorkerEnableDuringOwnTurnRefreshesReinstallWithoutRestart(t *testing.T) {
+	for _, kind := range []string{RuntimeKindDSH, RuntimeKindCodex} {
+		t.Run(kind, func(t *testing.T) {
+			ctx := context.Background()
+			rt := &skillStateRuntime{fakeAgentRuntime: fakeAgentRuntime{kind: kind,
+				start: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+					t.Fatal("unexpected start")
+					return "", nil
+				},
+				stop: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+					t.Fatal("unexpected stop")
+					return "", nil
+				},
+			}}
+			svc, err := NewController(testModelConfig(), config.ServerConfig{}, "", filepath.Join(t.TempDir(), "agents.json"), WithRuntime(rt))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = svc.Close() })
+			id := "agent-skill"
+			svc.agents[id] = Agent{ID: id, Name: "skill", Role: RoleWorker, RuntimeID: "rt-skill", RuntimeKind: kind, RuntimeName: kind, Status: "running", DesiredState: DesiredStateRunning,
+				SkillStates:  map[string]skill.State{"demo": {Enabled: false}, "other": {Enabled: false}},
+				AgentProfile: AgentProfile{EnvRestartRequired: true},
+			}
+			root, err := svc.agentSkillsRoot(id, kind)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Join(root, "demo"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "demo", "SKILL.md"), []byte("# Demo"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			release, err := svc.LifecycleCoordinator().Execution(ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer release()
+			for range 2 {
+				if _, err := svc.Update(ctx, id, contract.AgentUpdateRequest{EnsureEnabledSkill: "demo"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if rt.syncCount != 2 || !skill.Enabled(rt.reconciled, "demo") || skill.Enabled(rt.reconciled, "other") {
+				t.Fatalf("syncs=%d states=%v", rt.syncCount, rt.reconciled)
+			}
+			if err := svc.Reload(); err != nil {
+				t.Fatal(err)
+			}
+			a, _ := svc.agentSnapshot(id)
+			if !a.AgentProfile.EnvRestartRequired || !skill.Enabled(a.SkillStates, "demo") || skill.Enabled(a.SkillStates, "other") {
+				t.Fatal("did not preserve persisted skill and pending restart state")
+			}
+		})
+	}
 }
 
 func TestResourceEnablementLifecycle(t *testing.T) {

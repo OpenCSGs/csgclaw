@@ -4,13 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"csgclaw/internal/utils/filebrowse"
 )
 
 const lockFileName = ".skillhub-lock.json"
@@ -88,6 +92,37 @@ func Read(skillsRoot string) (map[string]Record, error) {
 	return records, err
 }
 
+// Lookup reads the atomically published origin without creating a lock file
+// for older installations that have never recorded provenance.
+func Lookup(root, name string) (Record, error) {
+	f, err := filebrowse.OpenFile(root, lockFileName)
+	if errors.Is(err, os.ErrNotExist) {
+		return Record{}, nil
+	}
+	if err != nil {
+		return Record{}, err
+	}
+	defer f.Close()
+	var records lockFile
+	if err := json.NewDecoder(io.LimitReader(f, 16<<20)).Decode(&records); err != nil {
+		return Record{}, err
+	}
+	return records.Skills[name], nil
+}
+
+// DisplayURL omits local paths, userinfo, signed queries and fragments.
+func (r Record) DisplayURL() string {
+	u, err := url.Parse(r.SourceURL)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return ""
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	return u.String()
+}
+
 // ReadSnapshot holds the installation lock while consuming origins and files.
 // It creates a missing root so concurrent installations share the same lock.
 // The callback must not call other installstate functions.
@@ -141,16 +176,16 @@ func Update(skillsRoot, name string, record *Record, apply func() error) error {
 // UpdateMany persists related installation records together and restores them
 // when the prepared file operation fails.
 func UpdateMany(skillsRoot string, records map[string]*Record, apply func() error) error {
-	return updateChecked(skillsRoot, records, nil, apply)
+	return updateChecked(skillsRoot, records, nil, nil, apply)
 }
 
 // UpdateChecked rejects a confirmation if either the files or their origin changed.
 // The comparison and installation share the same process and filesystem lock.
 func UpdateChecked(root, name string, record *Record, expected string, apply func() error) error {
-	return updateChecked(root, map[string]*Record{name: record}, map[string]string{name: expected}, apply)
+	return updateChecked(root, map[string]*Record{name: record}, map[string]string{name: expected}, nil, apply)
 }
 
-func updateChecked(skillsRoot string, records map[string]*Record, expected map[string]string, apply func() error) error {
+func updateChecked(skillsRoot string, records map[string]*Record, expected map[string]string, check func(map[string]Record) error, apply func() error) error {
 	installRecordsMu.Lock()
 	defer installRecordsMu.Unlock()
 	lock, err := acquireRecordsLock(skillsRoot, true)
@@ -169,6 +204,11 @@ func updateChecked(skillsRoot string, records map[string]*Record, expected map[s
 		}
 		if token == "" || actual != token {
 			return ErrInstallationChanged
+		}
+	}
+	if check != nil {
+		if err := check(payload.Skills); err != nil {
+			return err
 		}
 	}
 	rollback, finish, err := cancelActivations(skillsRoot, records)

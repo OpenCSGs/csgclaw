@@ -11,6 +11,7 @@ import (
 
 	"csgclaw/internal/apiclient"
 	"csgclaw/internal/config"
+	"csgclaw/internal/skill/installstate"
 )
 
 type Service struct {
@@ -96,6 +97,13 @@ func (s *Service) GetVersion(ctx context.Context, slug, version string, registry
 }
 
 func (s *Service) Install(ctx context.Context, slug, version string, registry RegistryID, skillsRoot string, force bool) (InstallResult, error) {
+	return s.install(ctx, slug, version, registry, skillsRoot, force, nil)
+}
+
+func (s *Service) InstallForWorker(ctx context.Context, slug, version string, registry RegistryID, skillsRoot string, options installstate.WorkerInstall) (InstallResult, error) {
+	return s.install(ctx, slug, version, registry, skillsRoot, options.Replace, &options)
+}
+func (s *Service) install(ctx context.Context, slug, version string, registry RegistryID, skillsRoot string, force bool, worker *installstate.WorkerInstall) (InstallResult, error) {
 	slug = normalizeSlug(slug)
 	if slug == "" {
 		return InstallResult{}, fmt.Errorf("skill slug is required")
@@ -138,18 +146,12 @@ func (s *Service) Install(ctx context.Context, slug, version string, registry Re
 		return InstallResult{}, err
 	}
 	if info, err := os.Stat(destDir); err == nil {
-		if info.IsDir() && !force {
+		if info.IsDir() && !force && worker == nil {
 			return InstallResult{}, fmt.Errorf("%w: %s", ErrSkillDirExists, destDir)
 		}
 	} else if !os.IsNotExist(err) {
 		return InstallResult{}, fmt.Errorf("stat skill dir %q: %w", destDir, err)
 	}
-	if force {
-		if err := os.RemoveAll(destDir); err != nil {
-			return InstallResult{}, fmt.Errorf("remove existing skill dir %q: %w", destDir, err)
-		}
-	}
-
 	archive, err := reg.client.Download(ctx, installSlug, resolvedVersion, "")
 	if err != nil && resolvedVersion == "" {
 		return InstallResult{}, fmt.Errorf("skill %q has no installable version (%s)", installSlug, reg.id)
@@ -157,14 +159,10 @@ func (s *Service) Install(ctx context.Context, slug, version string, registry Re
 	if err != nil {
 		return InstallResult{}, err
 	}
-	sha256, err := extractSkillZip(archive, destDir, reg.client.maxArchive)
-	if err != nil {
-		_ = os.RemoveAll(destDir)
-		return InstallResult{}, err
-	}
-	record := newInstallRecord(detail.SourceURL, installSlug, resolvedVersion, sha256)
-	if err := writeLockRecord(skillsRoot, record); err != nil {
-		_ = os.RemoveAll(destDir)
+	if err := installPrepared(skillsRoot, installSlug, force, worker, func(stage string) (InstallRecord, error) {
+		digest, err := extractSkillZip(archive, stage, reg.client.maxArchive)
+		return newInstallRecord(detail.SourceURL, installSlug, resolvedVersion, digest), err
+	}); err != nil {
 		return InstallResult{}, err
 	}
 	return InstallResult{
@@ -305,7 +303,7 @@ func validateSkillSlug(slug string) error {
 	if slug == "" {
 		return fmt.Errorf("skill slug is required")
 	}
-	if filepath.IsAbs(slug) {
+	if !filepath.IsLocal(slug) || strings.HasPrefix(slug, ".") {
 		return fmt.Errorf("%w: %s", ErrWorkspacePathUnsafe, slug)
 	}
 	if strings.Contains(slug, "..") {

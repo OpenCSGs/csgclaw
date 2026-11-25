@@ -3,6 +3,7 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,6 +31,25 @@ type mutation struct {
 	parent  *mutation
 }
 type mutationKey struct{}
+
+var ErrMutationInProgress = errors.New("agent lifecycle change is in progress")
+
+// TryUpdateFiles serializes an on-disk configuration update with mutations,
+// without draining the execution that requested it. Never wait for a mutation:
+// it may already be waiting for that same execution to finish.
+func (c *Coordinator) TryUpdateFiles(ctx context.Context, id string, update func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	g := c.gate(id)
+	select {
+	case <-g.token:
+		defer func() { g.token <- struct{}{} }()
+		return update()
+	default:
+		return ErrMutationInProgress
+	}
+}
 
 func (c *Coordinator) gate(id string) *gate {
 	c.mu.Lock()

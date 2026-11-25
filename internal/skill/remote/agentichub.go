@@ -33,6 +33,8 @@ const (
 )
 
 var ErrAgenticHubSignInRequired = errors.New("OpenCSG sign-in is required")
+var ErrRateLimited = errors.New("skill catalog rate limited")
+var errCatalogNotFound = errors.New("skill catalog returned status 404")
 
 var ErrInvalidAgenticHubRequest = errors.New("invalid AgenticHub skill request")
 
@@ -190,6 +192,12 @@ func downloadAgenticHubSkillArchive(
 		// Older Hub deployments expose only tree/blob endpoints.
 		return nil, false, nil
 	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, false, ErrAgenticHubSignInRequired
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, false, ErrRateLimited
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, agenticHubMaxArchiveBytes+1))
 	if err != nil {
 		return nil, false, fmt.Errorf("read AgenticHub archive response: %w", err)
@@ -207,6 +215,43 @@ func downloadAgenticHubSkillArchive(
 		return nil, false, fmt.Errorf("invalid AgenticHub skill archive: %w", err)
 	}
 	return body, true, nil
+}
+
+// An exact repository identity is not a keyword search. The catalog search
+// endpoint can legitimately return no matches for a complete namespace/name.
+func FindAgenticHubSkill(ctx context.Context, baseURL, token, key string) (AgenticHubSkillSummary, bool, error) {
+	parts := strings.Split(key, "/")
+	if len(parts) != 2 {
+		return AgenticHubSkillSummary{}, false, ErrInvalidAgenticHubRequest
+	}
+	if clean, err := cleanAgenticHubPath(key, false); err != nil || clean != key {
+		return AgenticHubSkillSummary{}, false, ErrInvalidAgenticHubRequest
+	}
+	endpoint, err := buildAgenticHubURL(baseURL, append([]string{"api", "v1", "skills"}, parts...), false, nil)
+	if err != nil {
+		return AgenticHubSkillSummary{}, false, err
+	}
+	var payload struct {
+		Data *agenticHubSkillRecord `json:"data"`
+	}
+	err = getAgenticHubJSONWithAccessToken(ctx, &http.Client{Timeout: agenticHubRequestTimeout}, endpoint, token, &payload)
+	if errors.Is(err, errCatalogNotFound) {
+		return AgenticHubSkillSummary{}, false, nil
+	}
+	if err != nil {
+		return AgenticHubSkillSummary{}, false, err
+	}
+	if payload.Data == nil {
+		return AgenticHubSkillSummary{}, false, fmt.Errorf("empty Hub skill detail")
+	}
+	if payload.Data.Path == "" {
+		payload.Data.Path = key
+	}
+	item, ok := agenticHubSkillSummaryFromRecord(*payload.Data)
+	if !ok || !strings.EqualFold(item.RemotePath, key) {
+		return AgenticHubSkillSummary{}, false, fmt.Errorf("unexpected Hub skill identity")
+	}
+	return item, true, nil
 }
 
 func ListAgenticHubSkills(ctx context.Context, baseURL, accessToken string, options AgenticHubSkillListOptions) (AgenticHubSkillList, error) {
@@ -395,6 +440,12 @@ func getAgenticHubJSONWithAccessToken(ctx context.Context, client *http.Client, 
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		return ErrAgenticHubSignInRequired
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return ErrRateLimited
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return errCatalogNotFound
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("AgenticHub request failed with status %d: %s", resp.StatusCode, truncateAgenticHubBody(body))

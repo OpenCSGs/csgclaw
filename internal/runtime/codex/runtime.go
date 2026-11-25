@@ -742,7 +742,7 @@ func (r *Runtime) Info(_ context.Context, h agentruntime.Handle) (agentruntime.I
 		}
 		meta.State = state
 		meta.ProcessID = 0
-		_ = writeJSONFile(r.writeMetadataFile, path, meta)
+		_ = writeJSONFile(r.writePrivateFile, path, meta)
 	}
 	return agentruntime.Info{
 		HandleID:  strings.TrimSpace(meta.SessionID),
@@ -801,7 +801,7 @@ func (r *Runtime) sessionManager() Manager {
 			meta := sessionToSessionMetadata(session)
 			meta.ConversationSessions = cloneConversationSessions(conversations)
 			meta.FilePublishingConversations = cloneFilePublishingConversations(filePublishing)
-			return writeJSONFile(r.writeMetadataFile, filepath.Join(session.RuntimeDir, sessionFileName), meta)
+			return writeJSONFile(r.writePrivateFile, filepath.Join(session.RuntimeDir, sessionFileName), meta)
 		},
 	})
 	manager.deps.HydrateSession = func(ctx context.Context, handle SessionHandle) (*Session, error) {
@@ -1781,12 +1781,12 @@ func (r *Runtime) storeRuntimeMetadata(path string, meta runtimeMetadata) error 
 			return nil
 		}
 	}
-	return writeJSONFile(r.writeMetadataFile, path, normalizeRuntimeMetadata(meta))
+	return writeJSONFile(r.writePrivateFile, path, normalizeRuntimeMetadata(meta))
 }
 
 func (r *Runtime) persistStartedSession(manager Manager, runtimeDir string, session *Session) error {
 	save := func(session *Session) error {
-		return writeJSONFile(r.writeMetadataFile, filepath.Join(runtimeDir, sessionFileName), sessionToSessionMetadata(session))
+		return writeJSONFile(r.writePrivateFile, filepath.Join(runtimeDir, sessionFileName), sessionToSessionMetadata(session))
 	}
 	if appServer, ok := manager.(*appServerManager); ok {
 		return appServer.persistSessionMetadata(session, save)
@@ -1800,10 +1800,10 @@ func (r *Runtime) writeSessionMetadata(meta sessionMetadata) error {
 		return err
 	}
 	meta = normalizeSessionMetadata(meta)
-	return writeJSONFile(r.writeMetadataFile, path, meta)
+	return writeJSONFile(r.writePrivateFile, path, meta)
 }
 
-func (r *Runtime) writeMetadataFile(path string, data []byte, mode os.FileMode) error {
+func (r *Runtime) writePrivateFile(path string, data []byte, mode os.FileMode) error {
 	if r.deps.WriteFile != nil {
 		return r.deps.WriteFile(path, data, mode)
 	}

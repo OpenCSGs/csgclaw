@@ -1,59 +1,34 @@
 ---
 name: skill-installer
-description: Search, inspect, and install ClawHub-compatible skills with csgclaw-cli skill. Use when the user asks to find skills on opencsg or clawhub.ai, list versions, or install into this sandbox workspace/skills directory.
+description: Find, add, install, reinstall or check an existing skill for the current CSGClaw worker (安装、添加、搜索、重装或查询技能). Use for the global library, the signed-in site's CSGHub market, skills.sh, GitHub skill URLs and npx skills requests. To author a new skill, use skill-creator instead.
 ---
 
-# Skill Installer (`csgclaw-cli skill`)
+# Install an existing skill
 
-Use this skill for **all** registry skill search and install work.
+Use this workflow for catalog or registry skill search and installation. Do not switch sources silently. A Manager delegates installs to the target worker; it must not write another agent's files.
 
-Run commands via `exec` inside the current agent container.
+## 1. Find or inspect
 
-## Registries
+- Start an install request with `csgclaw` MCP `skill_search`. For “帮我安装这个技能 team/demo”, use **`{"query":"team/demo"}` with no `source`**. A bare `namespace/name` does not identify GitHub, skills.sh, a legacy registry, or a particular CSGHub site.
+- Default order: **this worker's installed skills (including disabled) → CSGClaw global library → signed-in OpenCSG site → skills.sh**. Stop at the first match. For an `installed` result, directly call `skill_ensure_enabled` with `{"name":"<key>","selection":"<selection>"}` and report its result. Do not download or copy the skill again.
+- If the user names a specific source, pass `source: "global"`, `"site"` or `"skills_sh"`; only a local copy from that source may satisfy the search. For an exact skills.sh page, pass the full URL as `query` with `source:"skills_sh"`. A GitHub repository and known skill name can also be passed directly to the helper below. Never replace a specified source or version with a different one.
+- Preserve each candidate's `source`, `key`, `selection`, `site`, `ref` and `url`. Show distinct choices for ambiguous matches. If an exact identifier returns no candidate, report the miss or ask for a link; do not invent a site, try the legacy CLI, or construct a GitHub clone command. Use synonyms only for capability/keyword searches.
+- Report source results accurately: `ok` with no candidates means no match; `login_required` means sign in to the intended CSGHub site; `disabled`, `timeout`, `rate_limited`, `unsupported_source` and `unavailable` are not zero results. Do not automatically switch to a public source on an error.
+- For “is it installed/enabled?” call **only** `skill_status({"name":"<installed-name>"})`. Report installed files, recorded source/version, desired enablement and disk sync. `pending` is not synced; `unknown` is not proof of sync. Don't change state to answer a question.
 
-- **opencsg** (primary): `https://claw.opencsg.com` — searched first
-- **clawhub** (official): `https://clawhub.ai` — used when opencsg has no hits
+## 2. Install files in this worker
 
-Slugs are **case-sensitive**. Copy exact `SLUG` and `REGISTRY` from search output.
+| Selected source | Installation action |
+|---|---|
+| Global library | Call `skill_install_from_catalog` with the returned `source:"global"`, `key` and exact `selection` token. If the source changed, search again and review the new candidate; never retry by name alone. |
+| Signed-in CSGHub site | Call `skill_install_from_catalog` with `source:"site"` and the candidate's exact `key`, `site` and `ref` when present. If login/site changes, search again. |
+| skills.sh / GitHub | Run `node scripts/install-skills-sh.mjs <skills.sh-page-URL>` or `node scripts/install-skills-sh.mjs <owner/repo> --skill <name>` from this skill's directory. The helper uses `skills` on PATH; only when absent does it use `npx --yes skills@1.9.0`. A preinstalled CLI needs no npm download. Git and access to the selected repository are still needed. |
+| Explicit legacy OpenCSG/ClawHub **registry** slug | Use `csgclaw-cli --output json skill install <slug> --registry opencsg` or `--registry clawhub`. This is not the signed-in site's CSGHub repository market. |
 
-| Subcommand | Purpose |
-|------------|---------|
-| `search <query>` | Search opencsg first; clawhub if empty (`--limit`) |
-| `get <slug>` | Show one skill (`--registry`, `--version`) |
-| `versions <slug>` | List published versions (`--registry`, `--limit`) |
-| `install <slug>` | Install into **this** sandbox `workspace/skills/<slug>/` |
+Catalog MCP returns `name`; CLI and the script's final import result return `Slug`. Use that actual name. A request to install/reinstall a same-origin disabled skill means the user wants it enabled: reuse a matching installation or replace for a reinstall, then enable it without asking again.
 
-## Search and inspect
+On a **same-name, different (or unknown) source** conflict, stop. Show the installed source and the requested source and **ask the user whether to overwrite**. Wait for their reply; an install/reinstall request alone is not confirmation to switch origins. Do not enable the old skill as a substitute. Only after a positive reply, retry with `replace:true` and the returned `confirmation` (CLI/helper: `--force --confirmation <token>`). If the user declines, leave files and enablement unchanged. For other install failures, report the failed source and step. A deliberate CLI export outside this worker is files-only.
 
-```bash
-csgclaw-cli skill search gitlab --limit 10
-csgclaw-cli skill get AIWizards--gitlab-fullstack-pro --registry opencsg
-csgclaw-cli skill versions AIWizards--gitlab-fullstack-pro --registry opencsg
-```
+## 3. Enable and report
 
-Flags may appear before or after the query/slug (for example `skill search gitlab --limit 10`).
-
-## Install (this sandbox)
-
-Use `CSGCLAW_SKILLS_DIR` when set, otherwise `${CODEX_HOME:-$HOME/.codex}/skills`.
-
-```bash
-csgclaw-cli skill install AIWizards--gitlab-fullstack-pro --registry opencsg
-csgclaw-cli skill install AIWizards--gitlab-fullstack-pro --registry opencsg --version 1.0.0
-csgclaw-cli skill install my-skill --force
-```
-
-Use `--skills-dir` only when the workspace layout is non-standard.
-
-## Manager vs worker
-
-- **Manager** may use this skill for `search`, `get`, and `versions` only.
-- To install a skill for **another** agent, use the active conversation's task or message workflow. Ask that worker to run `csgclaw-cli skill install` in its own runtime using this skill.
-- Never install into another agent's filesystem from the manager sandbox.
-
-## Operating rules
-
-- Never guess or change slug casing.
-- Prefer `skill get` / `skill versions` before install when version or moderation matters.
-- Add `--output json` when structured output is needed (place global flags before the subcommand, e.g. `csgclaw-cli --output json skill search gitlab`).
-- Run `csgclaw-cli skill -h` or `csgclaw-cli skill <subcommand> -h` for flags.
+After each successful worker install or reinstall, call `skill_ensure_enabled({"name":"<actual installed name>"})` **once** through the `csgclaw` MCP connection. Only report “installed and enabled” after `disk_synced:true`. If it fails, report “installed, not synced” and retry only enablement. Never restart the worker, write `skill-view` yourself or claim an existing session hot-reloaded.

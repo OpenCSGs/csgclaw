@@ -2,6 +2,7 @@
 package builtin
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -10,8 +11,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 
+	"csgclaw/internal/skill/discovery"
 	"csgclaw/internal/skill/installstate"
 	"csgclaw/internal/skill/local"
 )
@@ -62,6 +65,16 @@ func Sync(root string) error {
 }
 
 func syncSkill(root, name, hash string) error {
+	source, err := fs.Sub(bundled, "embed/"+name)
+	if err != nil {
+		return err
+	}
+	return syncBundle(context.Background(), root, name, hash, source, nil)
+}
+
+// When legacy is supplied, perform an upgrade only (never seed an absent
+// skill). Both policies use the same locked, crash-recoverable activation.
+func syncBundle(ctx context.Context, root, name, hash string, source fs.FS, legacy []string) error {
 	var stage string
 	defer func() {
 		if stage != "" {
@@ -86,7 +99,18 @@ func syncSkill(root, name, hash string) error {
 			return nil, nil, err
 		}
 		exists := err == nil
-		if exists {
+		if legacy != nil {
+			if !exists || !info.IsDir() || (managed && record.Source != installstate.SourceBuiltin) {
+				return nil, nil, nil
+			}
+			digest, err := installstate.TreeFingerprint(ctx, discovery.BoundedFS(dst))
+			if ctx.Err() != nil {
+				return nil, nil, ctx.Err()
+			}
+			if err != nil || !slices.Contains(legacy, digest) {
+				return nil, nil, nil
+			}
+		} else if exists {
 			if !info.IsDir() || !managed || record.Source != installstate.SourceBuiltin {
 				return nil, nil, nil
 			}
@@ -110,10 +134,6 @@ func syncSkill(root, name, hash string) error {
 		if err != nil {
 			return nil, nil, err
 		}
-		source, err := fs.Sub(bundled, "embed/"+name)
-		if err != nil {
-			return nil, nil, err
-		}
 		err = fs.WalkDir(source, ".", func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -130,6 +150,12 @@ func syncSkill(root, name, hash string) error {
 		})
 		if err != nil {
 			return nil, nil, err
+		}
+		if legacy != nil {
+			hash, err = installstate.BundleSHA256(stage)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 		next := installstate.Record{Source: installstate.SourceBuiltin, Version: hash, SHA256: hash}
 		return map[string]*installstate.Record{name: &next}, func() error {
@@ -156,7 +182,7 @@ func syncSkill(root, name, hash string) error {
 		}, nil
 	})
 	if err == nil && commitRecovery {
-		return syncSkill(root, name, hash)
+		return syncBundle(ctx, root, name, hash, source, legacy)
 	}
 	return err
 }

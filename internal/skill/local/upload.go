@@ -25,6 +25,7 @@ var (
 )
 
 type InstallArchiveOptions struct {
+	Worker        *skillinstall.WorkerInstall
 	Replace       bool
 	Origin        skillinstall.Record
 	ExpectedState string
@@ -91,7 +92,10 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 		return SkillSummary{}, err
 	}
 	apply := func() error {
-		if _, err := os.Stat(destDir); err == nil {
+		if info, err := os.Lstat(destDir); err == nil {
+			if !info.IsDir() {
+				return ErrSkillArchiveUnsafe
+			}
 			if !options.Replace {
 				return fmt.Errorf("%w: %s", ErrSkillAlreadyExists, summary.Name)
 			}
@@ -105,7 +109,9 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 		}
 		return nil
 	}
-	if options.ExpectedState != "" {
+	if options.Worker != nil {
+		err = options.Worker.Commit(root, summary.Name, skillDir, &record, apply)
+	} else if options.ExpectedState != "" {
 		err = skillinstall.UpdateChecked(root, summary.Name, &record, options.ExpectedState, apply)
 	} else {
 		err = skillinstall.Update(root, summary.Name, &record, apply)
