@@ -1,10 +1,13 @@
-import { feedbackImagesValid, MAX_FEEDBACK_IMAGE_BYTES } from "@/models/feedback";
+import { feedbackAttachmentKind } from "@/models/feedback";
 
-it("validates image count, size and format", () => {
-  const image = { size: 100, type: "image/png" };
-  expect(feedbackImagesValid(Array(6).fill(image))).toBe(true);
-  expect(feedbackImagesValid(Array(7).fill(image))).toBe(false);
-  expect(feedbackImagesValid([{ ...image, size: 0 }])).toBe(false);
-  expect(feedbackImagesValid([{ ...image, size: MAX_FEEDBACK_IMAGE_BYTES + 1 }])).toBe(false);
-  expect(feedbackImagesValid([{ ...image, type: "image/svg+xml" }])).toBe(false);
+it.each([
+  ["clipboard", "image/png", "image"],
+  ["SCREENSHOT.JPG", "", "image"],
+  ["diagnostics.7z", "", "archive"],
+  ["diagnostics", "application/vnd.rar", "archive"],
+  ["diagnostics.tar.gz", "application/octet-stream", "archive"],
+  ["renamed.png", "image/svg+xml", undefined],
+  ["zip", "", undefined],
+] as const)("classifies %s with MIME type %s as %s", (name, type, expected) => {
+  expect(feedbackAttachmentKind(new File(["a"], name, { type }))).toBe(expected);
 });

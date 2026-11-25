@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { newerProgressMessage, progressDuration, progressGroups, toolGroupLabel } from "./turnProgress";
+import { newerProgressMessage, progressDuration, progressGroups, toolRowPreview } from "./turnProgress";
 import type { ProgressItem, TurnProgress } from "./turnProgress";
-import { createTranslator } from "@/shared/i18n";
 
 const tool = (id: string, action: string, status = "completed"): ProgressItem => ({
   id,
@@ -18,12 +17,13 @@ describe("turn progress projection", () => {
     ]);
     expect(groups.map((group) => group.items.length)).toEqual([2, 1, 1]);
     expect(groups.filter((group) => group.kind === "tool").map((group) => group.firstToolNumber)).toEqual([1, 3]);
-    expect(toolGroupLabel(groups[0].items, createTranslator("zh"))).toBe("已完成：读取文件 · 2 次调用");
   });
-  it("uses safe generic labels and honest failure status", () => {
-    expect(toolGroupLabel([tool("mcp", "unknown", "failed")], createTranslator("en"))).toBe(
-      "Call tools · 1 calls, includes failures",
-    );
+  it("summarizes historical tool input without showing raw JSON", () => {
+    const mcp = { ...tool("smart_search", "tool").tool!, input: '{"arguments":{"q":"上海天气"}}' };
+    const web = { ...tool("web", "web").tool!, input: '{"action":{"type":"openPage","url":"https://example.test"}}' };
+    expect(toolRowPreview(mcp)).toBe("上海天气");
+    expect(toolRowPreview(web)).toBe("https://example.test");
+    expect(toolRowPreview({ ...mcp, input: '{"arguments":' })).toBe("smart_search");
   });
   it("ignores stale and duplicate snapshots", () => {
     const message = (revision: number) => ({

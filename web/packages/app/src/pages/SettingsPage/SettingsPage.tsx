@@ -57,6 +57,9 @@ export function SettingsPage() {
   const navigating = location.search.includes("section=");
   const activeSection = settingsSectionFromSearch(location.search);
 
+  const highlightVersion =
+    activeSection === "version" && new URLSearchParams(location.search).get("highlight") === "version";
+
   function closeSettings() {
     close();
   }
@@ -64,6 +67,7 @@ export function SettingsPage() {
   // Replace history so Back does not reopen settings after the dialog closes.
   function goToSection(id: SettingsSectionID | null) {
     const next = new URLSearchParams(location.search);
+    if (id !== activeSection) next.delete("highlight");
     if (!id || id === DEFAULT_SETTINGS_SECTION) {
       next.delete("section");
     } else {
@@ -143,7 +147,7 @@ export function SettingsPage() {
                 <ChevronLeft size={15} strokeWidth={2} aria-hidden="true" />
                 {t("iaSettingsBackToCatalog")}
               </button>
-              <SettingsSectionBody section={activeSection} />
+              <SettingsSectionBody section={activeSection} highlightVersion={highlightVersion} />
             </div>
           </div>
         </section>
@@ -152,7 +156,7 @@ export function SettingsPage() {
   );
 }
 
-function SettingsSectionBody({ section }: { section: SettingsSectionID }) {
+function SettingsSectionBody({ section, highlightVersion }: { section: SettingsSectionID; highlightVersion: boolean }) {
   switch (section) {
     case "account":
       return <AccountSection />;
@@ -177,7 +181,7 @@ function SettingsSectionBody({ section }: { section: SettingsSectionID }) {
     case "archived":
       return <ArchivedSection />;
     case "version":
-      return <VersionSection />;
+      return <VersionSection highlighted={highlightVersion} />;
     case "feedback":
       return <FeedbackSection />;
     default:

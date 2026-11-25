@@ -10,9 +10,8 @@ import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import type { IMConversation } from "@/models/conversations";
 import styles from "./TaskWorkspaceSidebar.module.css";
 import { ManagerSetupNotice } from "../ManagerSetupNotice";
-import { WorkspaceUserMenu } from "../WorkspaceUserMenu";
+import { WorkspaceAccountFooter } from "../WorkspaceUserMenu";
 import { LogoMark, LogoWordmark } from "../WorkspaceSidebar/WorkspaceSidebarBrand";
-import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
 
 function AgentNavigationIcon({ size = 16 }: { size?: number }) {
   return (
@@ -42,7 +41,6 @@ function ScheduledTaskNavigationIcon({ size = 16 }: { size?: number }) {
 
 export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: TaskEntryController }) {
   const navigate = useNavigate();
-  const { openSettings, openProfile } = useWorkspaceDialogs();
   const { t, entry, isSidebarCollapsed, currentUserID, usersById } = props;
   const directories = props.workerAgentItems.reduce<Array<{ path: string; agentIDs: string[] }>>((items, agent) => {
     const path = agentRuntimeOptions(agent).local_workspace_dir;
@@ -194,24 +192,7 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
         />
       </div>
       <footer>
-        <WorkspaceUserMenu
-          currentUser={usersById.get(currentUserID)}
-          openCSG={{
-            authenticated: props.authStatus.authenticated === true,
-            expired: props.authExpired,
-            baseURL: props.authStatus.base_url,
-          }}
-          theme={props.theme}
-          locale={props.locale}
-          t={t}
-          presentation={isSidebarCollapsed ? "icon" : "row"}
-          onThemeChange={props.onThemeChange}
-          onLocaleChange={props.onLocaleChange}
-          onOpenSettings={() => selectDestination(props.onOpenSettings)}
-          onOpenProfile={() => selectDestination(() => openProfile(currentUserID))}
-          onOpenCSGLogin={() => selectDestination(() => openSettings("account"))}
-          onOpenCSGLogout={() => void props.onLogout()}
-        />
+        <WorkspaceAccountFooter {...props} onSelectDestination={selectDestination} />
       </footer>
     </aside>
   );

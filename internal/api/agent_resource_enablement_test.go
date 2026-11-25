@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/config"
 	"csgclaw/internal/knowledgebase"
 	agentruntime "csgclaw/internal/runtime"
@@ -17,9 +18,104 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type resourceEnablementRuntime struct{ snapshotMCPServersRuntime }
+
+func TestWorkerSkillMCPProjectsReinstallToNativeRuntime(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, config string
+	}{
+		{"codex", agent.RuntimeKindCodex, "[[skills.config]]\npath = %q\nenabled = false # external demo rule\n"},
+		{"codex-inline", agent.RuntimeKindCodex, "[skills]\nconfig = [{path = %q, enabled = false}] # external demo rule\n"},
+		{"dsh", agent.RuntimeKindDSH, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			kind := tc.kind
+			item := completeWorkerAgent("agent-native-skill", "native")
+			item.RuntimeKind, item.RuntimeName = kind, kind
+			item.SkillStates = map[string]skill.State{"demo": {Enabled: false}, "other": {Enabled: false}}
+			controller := mustNewSeededServiceWithOptions(t, []agent.Agent{item}, runtimewiring.WithDSHRuntime(), runtimewiring.WithCodexRuntime())
+			t.Cleanup(func() { _ = controller.Close() })
+			layout, err := controller.AgentLayout(item.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			profile, err := controller.RuntimeHost().ResolveRuntimeProfile(agentruntime.Handle{RuntimeID: item.RuntimeID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(layout.SkillsRoot, "demo")
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			const externalComment = "# user's own skill configuration"
+			if kind == agent.RuntimeKindCodex {
+				p := filepath.Join(filepath.Dir(layout.SkillsRoot), "config.toml")
+				content := externalComment + "\n" + fmt.Sprintf(tc.config, filepath.Join(dir, "SKILL.md"))
+				if err := os.WriteFile(p, []byte(content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			h := &Handler{svc: controller, workspace: controller.Workspace(), agentEngine: agentengine.New(controller), agentRuntime: controller}
+			if err := h.EnableConnectors(filepath.Join(t.TempDir(), "apps.json")); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = h.CloseConnectors() })
+			routes := h.Routes()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				r.Header.Set("Authorization", "Bearer "+profile.Env["CSGCLAW_ACCESS_TOKEN"])
+				routes.ServeHTTP(w, r)
+			}))
+			t.Cleanup(server.Close)
+			client := mcp.NewClient(&mcp.Implementation{Name: "worker-skills-test", Version: "1"}, nil)
+			session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+				Endpoint: server.URL + "/api/v1/agents/" + item.ID + "/mcp", DisableStandaloneSSE: true,
+			}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = session.Close() })
+			denyTaskTool(t, session, "skill_ensure_enabled", map[string]any{"name": "demo", "agent_id": "other"})
+			for _, invalid := range []string{"", "../demo", "not-installed"} {
+				denyTaskTool(t, session, "skill_ensure_enabled", map[string]any{"name": invalid})
+			}
+			for _, contents := range []string{"first", "updated"} {
+				if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(contents), 0644); err != nil {
+					t.Fatal(err)
+				}
+				var result struct {
+					Name       string
+					Enabled    bool
+					DiskSynced bool `json:"disk_synced"`
+				}
+				callTaskTool(t, session, "skill_ensure_enabled", map[string]any{"name": "demo"}, &result)
+				if result.Name != "demo" || !result.Enabled || !result.DiskSynced {
+					t.Fatalf("unexpected MCP result: %+v", result)
+				}
+				var status agent.WorkerSkillStatus
+				callTaskTool(t, session, "skill_status", map[string]any{"name": "demo"}, &status)
+				if !status.Installed || !status.Enabled || status.DiskSync != "in_sync" {
+					t.Fatalf("unexpected post-install status: %+v", status)
+				}
+				home := filepath.Dir(layout.SkillsRoot)
+				if kind == agent.RuntimeKindDSH {
+					data, err := os.ReadFile(filepath.Join(filepath.Dir(home), "skill-view", "skills", "demo", "SKILL.md"))
+					if err != nil || string(data) != contents {
+						t.Fatalf("DSH projected %q: %v", data, err)
+					}
+				} else {
+					data, err := os.ReadFile(filepath.Join(home, "config.toml"))
+					if err != nil || !strings.Contains(string(data), "other") || !strings.Contains(string(data), externalComment) || !strings.Contains(string(data), "# external demo rule") {
+						t.Fatalf("Codex enablement not applied: %v", err)
+					}
+				}
+			}
+		})
+	}
+}
 
 func (*resourceEnablementRuntime) ReconcileSkills(context.Context, agentruntime.Handle, map[string]skill.State) error {
 	return nil

@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -20,6 +21,32 @@ type SkillReleases struct {
 	DefaultBranch string         `json:"default_branch"`
 	LatestVersion string         `json:"latest_version"`
 	Versions      []SkillRelease `json:"versions"`
+}
+
+// ResolveSkillRelease uses the release commit when available, and preserves
+// branch-based installs on sites without release metadata.
+func ResolveSkillRelease(ctx context.Context, baseURL, token, path, requested string) (version, commit, ref string, err error) {
+	_, ref, err = NormalizeAgenticHubSkillRequest(path, requested)
+	if err != nil {
+		return
+	}
+	releases, err := GetAgenticHubSkillReleases(ctx, baseURL, token, path)
+	if err != nil {
+		if errors.Is(err, errCatalogNotFound) {
+			return "", "", ref, nil
+		}
+		return "", "", "", err
+	}
+	if r, ok := releases.Latest(); ok && (requested == "" || requested == "main" || requested == releases.DefaultBranch || requested == r.Commit) {
+		version, commit, ref = r.Version, r.Commit, r.Commit
+	}
+	for _, r := range releases.Versions {
+		if r.Version == requested || r.Commit == requested {
+			version, commit, ref = r.Version, r.Commit, r.Commit
+			break
+		}
+	}
+	return
 }
 
 func GetAgenticHubSkillReleases(ctx context.Context, baseURL, token, remotePath string) (SkillReleases, error) {

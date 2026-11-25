@@ -49,7 +49,7 @@ export function OutputTokenRate({ rate, expiresAt, t }: { rate?: number; expires
   return (
     <span className={styles.rate} data-tier={tier} title={accessibleLabel} aria-label={accessibleLabel}>
       <span className={styles.pulse} aria-hidden="true" />
-      <span aria-hidden="true">≈{rounded}</span>
+      <span aria-hidden="true">{rounded}</span>
       <span className={styles.unit} aria-hidden="true">
         t/s
       </span>

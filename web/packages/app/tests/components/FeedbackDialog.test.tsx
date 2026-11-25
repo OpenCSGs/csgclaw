@@ -1,8 +1,8 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { LocaleCode } from "@/models/conversations";
-import { FeedbackDialog } from "@/pages/SettingsPage/components/FeedbackDialog";
-import { useFeedback } from "@/pages/SettingsPage/useFeedback";
+import { FeedbackDialog } from "@/components/business/Feedback";
+import { useFeedback } from "@/components/business/Feedback/useFeedback";
 import { createTranslator } from "@/shared/i18n";
 
 afterEach(() => {
@@ -19,7 +19,10 @@ const props = {
   t: (key: string) => key,
   onOpenChange: vi.fn(),
   onDescriptionChange: vi.fn(),
-  onImagesChange: vi.fn(),
+  archives: [],
+  receipt: null,
+  onAddAttachments: vi.fn(),
+  onRemoveAttachment: vi.fn(),
   onSubmit: vi.fn(),
 };
 
@@ -46,7 +49,8 @@ function FeedbackForm({ locale }: { locale: LocaleCode }) {
       t={t}
       onOpenChange={() => {}}
       onDescriptionChange={feedback.changeDescription}
-      onImagesChange={feedback.changeImages}
+      onAddAttachments={feedback.addAttachments}
+      onRemoveAttachment={feedback.removeAttachment}
       onSubmit={() => void feedback.submit()}
     />
   );
@@ -61,6 +65,12 @@ it.each([
   ],
   ["zh", "feedback_login_required", "请登录 OpenCSG 后提交反馈。"],
   ["en", "feedback_login_required", "Sign in to OpenCSG to submit feedback."],
+  ["zh", "feedback_upload_too_large", "门户拒绝了过大的附件，反馈尚未提交。请移除该附件或换用更小的文件后重试。"],
+  [
+    "en",
+    "feedback_upload_too_large",
+    "The portal rejected an attachment because it was too large. Remove it or choose a smaller file and try again. Your feedback has not been submitted.",
+  ],
 ] as const)("shows the %s %s response and preserves feedback for retry", async (locale, code, expected) => {
   vi.stubGlobal(
     "URL",
@@ -96,7 +106,7 @@ it.each([
   await act(async () => {
     respond(
       new Response(JSON.stringify({ error: { code, message: "unauthorized" } }), {
-        status: 401,
+        status: code === "feedback_upload_too_large" ? 413 : 401,
         headers: { "Content-Type": "application/json" },
       }),
     );
@@ -119,7 +129,45 @@ it.each([
   const body = options?.body as FormData;
   expect(body.get("problem_description")).toBe("A problem");
   expect(body.getAll("images")).toEqual([image]);
-  await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
+  await waitFor(() => expect(screen.getByText(t("feedbackSuccess"))).toBeInTheDocument());
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   expect(screen.queryByRole("img", { name: image.name })).not.toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("accepts window paste and dropped files while the form is open", () => {
+  const addAttachments = vi.fn();
+  const { rerender } = render(<FeedbackDialog {...props} onAddAttachments={addAttachments} />);
+  const image = new File(["image"], "screenshot.png");
+  const archive = new File(["zip"], "diagnostics.zip");
+  const paste = new Event("paste", { cancelable: true });
+  Object.defineProperty(paste, "clipboardData", { value: { files: [image] } });
+  window.dispatchEvent(paste);
+  expect(paste.defaultPrevented).toBe(true);
+  expect(addAttachments).toHaveBeenCalledWith([image]);
+  const drop = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(drop, "dataTransfer", { value: { files: [archive] } });
+  screen.getByRole("textbox").dispatchEvent(drop);
+  expect(drop.defaultPrevented).toBe(true);
+  expect(addAttachments).toHaveBeenCalledWith([archive]);
+  rerender(<FeedbackDialog {...props} open={false} onAddAttachments={addAttachments} />);
+  window.dispatchEvent(paste);
+  expect(addAttachments).toHaveBeenCalledTimes(2);
+});
+
+it("shows only a confirmation after the feedback is submitted", () => {
+  const { rerender } = render(<FeedbackDialog {...props} />);
+  const status = screen.getByRole("status");
+  expect(status).toBeEmptyDOMElement();
+  rerender(
+    <FeedbackDialog
+      {...props}
+      receipt={{ success: true, issue_id: 123, issue_url: "https://example.test/issues/123" }}
+    />,
+  );
+  expect(screen.getByRole("status")).toBe(status);
+  expect(status).toHaveTextContent("feedbackSuccess");
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  expect(screen.queryByText("#123")).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 });

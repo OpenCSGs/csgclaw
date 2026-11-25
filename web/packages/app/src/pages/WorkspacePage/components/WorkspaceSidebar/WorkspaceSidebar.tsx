@@ -17,7 +17,7 @@ import {
   SidebarUsersIcon,
 } from "@/components/business/Icons";
 import { SidebarRailControlButton } from "./SidebarRailControlButton";
-import { SidebarUserButton } from "./SidebarUserButton";
+import { WorkspaceAccountFooter } from "../WorkspaceUserMenu";
 import { KnowledgeBaseDiscoveryDialog } from "@/components/business/KnowledgeBaseDiscoveryDialog";
 import { LogoMark, LogoWordmark } from "./WorkspaceSidebarBrand";
 import { SkillUploadDialog } from "@/components/business/SkillUploadDialog";
@@ -28,7 +28,7 @@ import { TextInput, Tooltip } from "@/components/ui";
 import { WorkspacePaneTypes, WorkspaceTabs, workspaceHasContextSidebar } from "@/models/routing";
 import { classNames } from "@/shared/lib/classNames";
 import styles from "./WorkspaceSidebar.module.css";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import type { PrimaryNavigationItem, PrimaryNavigationSection } from "./WorkspacePrimaryNavigation";
 import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
@@ -50,7 +50,8 @@ const WORKSPACE_NAVIGATION_ICONS = {
 } as const;
 
 export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
-  if (!props.taskEntry) return <LegacyWorkspaceSidebar {...props} />;
+  if (!props.taskEntry)
+    return <LegacyWorkspaceSidebar {...props} accountFooter={<WorkspaceAccountFooter {...props} />} />;
   return (
     <>
       <LegacyWorkspaceSidebar {...props} hidePrimaryNavigation hideContextSidebar />
@@ -63,6 +64,7 @@ function LegacyWorkspaceSidebar({
   hidePrimaryNavigation = false,
   hideContextSidebar = false,
   isSidebarCollapsed,
+  accountFooter,
   locale,
   t,
   agentItems,
@@ -85,7 +87,6 @@ function LegacyWorkspaceSidebar({
   usersById,
   collapsedWorkspaceGroups,
   currentWorkspaceLabel,
-  showUpgradeControls,
   onToggleWorkspaceGroup,
   onCreateRoom,
   onCreateAgent,
@@ -114,11 +115,6 @@ function LegacyWorkspaceSidebar({
   onSelectModelProvider,
   onSelectHuman,
   onSelectComputer,
-  appVersion,
-  upgradeStatus,
-  upgradeBusy,
-  upgradePhase,
-  onOpenSettings,
   onCollapseSidebar,
   onExpandSidebar,
   onSkillUploadOpenChange,
@@ -128,7 +124,11 @@ function LegacyWorkspaceSidebar({
   teams,
   planningTaskID = "",
   startingTaskID = "",
-}: WorkspaceSidebarProps & { hidePrimaryNavigation?: boolean; hideContextSidebar?: boolean }) {
+}: WorkspaceSidebarProps & {
+  hidePrimaryNavigation?: boolean;
+  hideContextSidebar?: boolean;
+  accountFooter?: ReactNode;
+}) {
   const [contextQuery, setContextQuery] = useState("");
   const [internalSkillUploadOpen, setInternalSkillUploadOpen] = useState(false);
   const resolvedSkillUploadOpen = skillUploadOpen ?? internalSkillUploadOpen;
@@ -442,17 +442,7 @@ function LegacyWorkspaceSidebar({
             />
           </div>
           <div className={classNames(styles.primaryFooter, isSidebarCollapsed && styles.primaryFooterCollapsed)}>
-            <SidebarUserButton
-              active={isSettingsPane}
-              presentation={isSidebarCollapsed ? "icon" : "row"}
-              appVersion={appVersion}
-              upgradeStatus={upgradeStatus}
-              upgradeBusy={upgradeBusy}
-              upgradePhase={upgradePhase}
-              showUpgradeControls={showUpgradeControls}
-              onOpenSettings={onOpenSettings}
-              t={t}
-            />
+            {accountFooter}
           </div>
         </aside>
       ) : null}

@@ -2,17 +2,19 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
+import { deleteRoomRequest } from "@/api/im";
 import { fetchTaskConversations } from "@/api/taskConversations";
 import { fetchRelayCatalog, type RelayCatalogTarget } from "@/api/relay";
 import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { useArchiveConfirmation } from "@/hooks/workspace/useArchiveConfirmation";
-import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
+import { useTaskEntry, type TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { cloudAgentCatalogKey } from "@/hooks/workspace/useCloudAgentCatalog";
 import type { CloudAgent } from "@/models/cloudAgents";
 import { createTranslator } from "@/shared/i18n";
 
+vi.mock("@/api/im", () => ({ deleteRoomRequest: vi.fn() }));
 vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
 vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
 const room = { id: "r1", title: "Review", members: ["user-admin", "manager"], is_direct: true, messages: [] };
@@ -492,14 +494,81 @@ describe("TaskConversationList archive management", () => {
     expect(screen.getByTestId("preference")).toHaveTextContent("false");
   });
 
-  it("disables running conversation deletion and archive", async () => {
+  it.each([false, true])("disables deletion while a conversation is running (archived=%s)", async (archived) => {
     const user = userEvent.setup();
-    const { remove } = setup(true, true);
+    const { remove } = setup(true, archived);
     await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
     const item = screen.getByRole("menuitem", { name: "taskEntryDelete" });
     expect(item).toHaveAttribute("data-disabled");
     fireEvent.click(item);
     expect(remove).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+it("confirms deletion, restores the row on failure, and removes it from cached history on success", async () => {
+  const user = userEvent.setup();
+  const page = { rooms: [room], total: 1, has_more: false };
+  const fetch = vi.mocked(fetchTaskConversations).mockResolvedValue(page);
+  let rejectDeletion!: (error: Error) => void;
+  const remove = vi
+    .mocked(deleteRoomRequest)
+    .mockReset()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectDeletion = reject;
+        }),
+    )
+    .mockResolvedValueOnce(undefined);
+  const onDelete = vi.fn();
+  function History() {
+    const entry = useTaskEntry({
+      currentUserID: "user-admin",
+      rooms: [],
+      onUpdate: vi.fn(),
+      onMessage: vi.fn(),
+      onDelete,
+      onOpen: vi.fn(),
+      isWorking: () => false,
+    });
+    return (
+      <TaskConversationList
+        entry={entry}
+        currentUserID="user-admin"
+        usersById={new Map()}
+        t={(key) => key}
+        onSelect={vi.fn()}
+      />
+    );
+  }
+  const { client, wrapper } = createQueryWrapper();
+  client.setQueryData(["task-conversations", false, "review"], { pages: [page], pageParams: [0] });
+  render(<History />, { wrapper });
+  async function openDeleteDialog() {
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryDelete" }));
+  }
+  await openDeleteDialog();
+  await user.click(screen.getByRole("button", { name: "cancel" }));
+  expect(remove).not.toHaveBeenCalled();
+
+  await openDeleteDialog();
+  await user.click(screen.getByRole("button", { name: "confirm" }));
+  expect(remove).toHaveBeenCalledWith("r1");
+  expect(screen.queryByRole("button", { name: "Review", hidden: true })).not.toBeInTheDocument();
+  await act(async () => rejectDeletion(new Error("Delete failed")));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Delete failed");
+  expect(screen.getByRole("button", { name: "Review", hidden: true })).toBeInTheDocument();
+  expect(onDelete).not.toHaveBeenCalled();
+
+  // Hold reconciliation open to verify the row is removed without waiting for it.
+  fetch.mockImplementation(() => new Promise(() => {}));
+  await user.click(screen.getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(screen.queryByRole("button", { name: "Review" })).not.toBeInTheDocument();
+  expect(onDelete).toHaveBeenCalledWith("r1");
+  expect(client.getQueryData(["task-conversations", false, "review"])).toMatchObject({
+    pages: [{ rooms: [], total: 0 }],
   });
 });

@@ -20,6 +20,7 @@ export interface QuestionCardProps {
   children?: ReactNode;
   footerMeta?: ReactNode;
   footerActions?: ReactNode;
+  controlsPlacement?: "header" | "footer";
   pagination?: { index: number; onChange: (index: number) => void };
   disabled?: boolean;
   optionMode?: "button" | "radio";
@@ -47,6 +48,7 @@ export function QuestionCard({
   children,
   footerMeta,
   footerActions,
+  controlsPlacement = "footer",
   pagination,
   disabled = false,
   optionMode = "button",
@@ -68,6 +70,52 @@ export function QuestionCard({
   const radioOptions = optionMode === "radio";
   const navigate = pagination?.onChange ?? setIndex;
   const answerVisible = current && onAnswer && showAnswer;
+
+  const pageIndicator = current ? (
+    <span className={styles.pageIndicator} role="status">
+      {labels.progress(currentIndex + 1, questions.length)}
+    </span>
+  ) : null;
+  const actions =
+    questions.length > 1 || answerVisible || footerActions ? (
+      <div className={styles.actions}>
+        {questions.length > 1 ? (
+          <nav className={styles.navigation} aria-label={labels.navigation}>
+            <button
+              type="button"
+              className={styles.navButton}
+              aria-label={labels.previous}
+              title={labels.previous}
+              disabled={disabled || currentIndex === 0}
+              onClick={() => navigate(currentIndex - 1)}
+            >
+              <ChevronLeft size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={styles.navButton}
+              aria-label={labels.next}
+              title={labels.next}
+              disabled={disabled || currentIndex === questions.length - 1}
+              onClick={() => navigate(currentIndex + 1)}
+            >
+              <ChevronRight size={14} aria-hidden="true" />
+            </button>
+          </nav>
+        ) : null}
+        {answerVisible ? (
+          <button
+            type="button"
+            className={styles.answer}
+            disabled={disabled}
+            onClick={() => onAnswer(current.id)}
+          >
+            {labels.answer}
+          </button>
+        ) : null}
+        {footerActions}
+      </div>
+    ) : null;
 
   function choose(optionIndex: number) {
     if (disabled || !current || !onAnswer) return;
@@ -108,6 +156,12 @@ export function QuestionCard({
           <span className={styles.status} role="status">
             {status}
           </span>
+        ) : null}
+        {controlsPlacement === "header" && (pageIndicator || actions) ? (
+          <div className={styles.headerControls}>
+            {pageIndicator}
+            {actions}
+          </div>
         ) : null}
       </header>
       {current ? (
@@ -151,7 +205,7 @@ export function QuestionCard({
                     onClick={() => choose(optionIndex)}
                   >
                     <kbd className={styles.marker} aria-hidden="true">
-                      {optionIndex < 26
+                      {letterShortcuts && optionIndex < 26
                         ? String.fromCharCode(65 + optionIndex)
                         : optionIndex + 1}
                     </kbd>
@@ -178,14 +232,12 @@ export function QuestionCard({
         </div>
       ) : null}
       {children}
-      {current || deadline || footerMeta || footerActions ? (
+      {deadline ||
+      footerMeta ||
+      (controlsPlacement === "footer" && (pageIndicator || actions)) ? (
         <footer className={styles.footer}>
           <div className={styles.meta}>
-            {current ? (
-              <span role="status">
-                {labels.progress(currentIndex + 1, questions.length)}
-              </span>
-            ) : null}
+            {controlsPlacement === "footer" ? pageIndicator : null}
             {deadline ? (
               <span className={styles.deadline}>
                 <Clock3 size={12} aria-hidden="true" />
@@ -194,48 +246,7 @@ export function QuestionCard({
             ) : null}
             {footerMeta}
           </div>
-          {questions.length > 1 || answerVisible || footerActions ? (
-            <div className={styles.actions}>
-              {questions.length > 1 ? (
-                <nav
-                  className={styles.navigation}
-                  aria-label={labels.navigation}
-                >
-                  <button
-                    type="button"
-                    className={styles.navButton}
-                    aria-label={labels.previous}
-                    title={labels.previous}
-                    disabled={disabled || currentIndex === 0}
-                    onClick={() => navigate(currentIndex - 1)}
-                  >
-                    <ChevronLeft size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.navButton}
-                    aria-label={labels.next}
-                    title={labels.next}
-                    disabled={disabled || currentIndex === questions.length - 1}
-                    onClick={() => navigate(currentIndex + 1)}
-                  >
-                    <ChevronRight size={14} aria-hidden="true" />
-                  </button>
-                </nav>
-              ) : null}
-              {answerVisible ? (
-                <button
-                  type="button"
-                  className={styles.answer}
-                  disabled={disabled}
-                  onClick={() => onAnswer(current.id)}
-                >
-                  {labels.answer}
-                </button>
-              ) : null}
-              {footerActions}
-            </div>
-          ) : null}
+          {controlsPlacement === "footer" ? actions : null}
         </footer>
       ) : null}
     </section>

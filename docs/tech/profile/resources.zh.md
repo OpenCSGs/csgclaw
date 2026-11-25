@@ -83,6 +83,20 @@ sequenceDiagram
 
 配置修改沿用持久化的 `EnvRestartRequired`。配置写入或启动失败时保留目标状态与重试标记，页面展示错误和重试按钮；重试提交相同目标状态，继续应用配置。一次请求内的 Skill 与 MCP 修改统一由 controller 安排重启，保留 Agent 目录与会话记录。
 
+## Worker 自助安装（Codex 和 DSH）
+
+安装已有技能先读 `skill-installer`；从零编写技能读 `skill-creator`。来源未指定（包括裸 `namespace/name`）时，`skill_search` 依次查当前 worker 已安装资源（含禁用）、全局库、当前登录的 OpenCSG 站点、skills.sh，首次命中即停止。对 `installed` 候选直接用 `key` 和 `selection` 调用启用工具，不下载。命名空间按安装来源匹配，不将同名或另一个仓库当作命中。网络错误或未登录不会被当成“无结果”而自动转向公网。`CSGCLAW_DISABLE_PUBLIC_SKILLS=true` 禁用 skills.sh 检索与下载。
+
+对选中的全局/站点候选调用 `skill_install_from_catalog`，原样传回 `source`、`key`，全局候选还须传 `selection`，站点候选传 `site`、`ref`。全局来源或技能包发生变化时需重新搜索。它只写本 worker 文件；站点凭据仅在 Server 使用。安装结果返回实际 `name`；读 `skill_status(name)` 可查询来源、已知版本、期望启用状态及磁盘是否同步，不触发修复或会话重载。
+
+同名同源的安装/重装表示用户希望使用该技能，应继续 MCP 启用步骤，即使原先被禁用。同名异源（或无法确认旧来源）必须告知两个来源，询问是否覆盖。用户明确同意后，带 `replace:true` 和冲突返回的 `confirmation` 重试；CLI/脚本使用 `--force --confirmation <token>`。已安装副本变化后旧确认失效。
+
+已有 Codex/DSH worker 普通启动时识别历史发布的完整 `skill-installer`、`skill-creator` 文件树，仅升级未改动的内置副本。用户改写、其他来源、主动删除和原有禁用状态均保留。
+
+在 worker 内执行 `csgclaw-cli --output json skill install <slug> --registry opencsg` 只安装文件；显式重装使用 `--force`。skills.sh/GitHub 由 `skill-installer` 内置脚本在临时项目下载，再用 `skill import` 安装。两条路径都返回实际安装名 `Slug`，不需要 shell 持有 worker 的服务端凭据。
+
+安装或重装到当前 worker 后，Agent 按 `skill-installer/SKILL.md` 调用内置 `csgclaw` MCP 工具 `skill_ensure_enabled({"name":"<Slug>"})`。服务端从已认证的 MCP 连接确定目标 worker；工具不接受 Agent ID 或目录。`disk_synced: true` 表示启用配置与磁盘已同步，不表示当前会话已加载。原先已启用的技能也会同步最新文件，全程不重启 worker。若启用失败，只重试 MCP 调用；普通终端安装或导出到其他目录不会触发 MCP。已有 Web/Portal 管理开关保持原行为。
+
 ## Codex
 
 Skill 禁用配置写入 Agent 独立的 `.codex/home/config.toml`，使用带管理标记的 `[[skills.config]]` 段，`path` 指向对应 Skill 的 `SKILL.md` 文件，`enabled = false`。启用时移除该禁用项。配置重新生成时保留管理段。MCP 使用已有 `[mcp_servers.<name>]` 配置及原生 `enabled` 字段。

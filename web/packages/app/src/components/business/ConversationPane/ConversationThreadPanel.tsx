@@ -79,9 +79,9 @@ import { MessageTimestamp } from "./MessageTime";
 import { SlashPicker } from "./SlashPicker";
 import { handleSlashPickerNavigation } from "./slashPickerNavigation";
 import type { MentionPickerUser, VoidOrPromise } from "./types";
-import { AgentQuestionComposer } from "./AgentQuestionComposer";
+import { InlineAgentQuestion } from "./InlineAgentQuestion";
+import { useQuestionTranscriptVisibility } from "./useQuestionTranscriptVisibility";
 import { VideoGenerationCard } from "./VideoGenerationCard";
-import type { QuestionAnswerMode } from "./useQuestionAnswerMode";
 
 type ThreadMentionState = {
   endOffset: number;
@@ -119,9 +119,7 @@ export type ConversationThreadPanelProps = ComposerResourceProps & {
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
-  onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   onCitationSelect?: CitationSelectHandler;
-  questionMode?: QuestionAnswerMode;
   onRemoveAttachment?: (id: string) => void;
   onSend: () => VoidOrPromise;
   onSetThreadSlashIndex?: (index: number) => void;
@@ -176,9 +174,7 @@ export function ConversationThreadPanel({
   onOpenAgentDetail,
   onPreviewUser,
   onPreviewAttachment,
-  onQuestionSelect,
   onCitationSelect,
-  questionMode,
   onRemoveAttachment = () => {},
   mentionableUsers = [],
   onSend,
@@ -207,11 +203,20 @@ export function ConversationThreadPanel({
     () => indexVideoMessagesByTurn(transcript?.messages ?? (root ? [root, ...replies] : replies)),
     [transcript, root, replies],
   );
+  const { hideQuestionTranscript, onQuestionSettled } = useQuestionTranscriptVisibility();
+  const rootTranscriptHidden = Boolean(root && hideQuestionTranscript(root));
   const visibleRoot =
-    !emptyCompletedProgress(publicRoot) && (showToolCalls || !isToolCallMessage(publicRoot)) ? publicRoot : null;
+    !rootTranscriptHidden && !emptyCompletedProgress(publicRoot) && (showToolCalls || !isToolCallMessage(publicRoot))
+      ? publicRoot
+      : null;
   const visibleReplies = (
     transcript ? transcript.messages.filter((message) => message.id !== root?.id) : replies
-  ).filter((message) => !emptyCompletedProgress(message) && (showToolCalls || !isToolCallMessage(message)));
+  ).filter(
+    (message) =>
+      !emptyCompletedProgress(message) &&
+      (showToolCalls || !isToolCallMessage(message)) &&
+      !hideQuestionTranscript(message),
+  );
   const mentionableUsersByName = useMemo(() => {
     const result = new Map<string, (typeof mentionableUsers)[number]>();
     const duplicateNames = new Set<string>();
@@ -371,7 +376,9 @@ export function ConversationThreadPanel({
     <aside className="thread-panel" aria-label={t("threadPanelTitle")}>
       <div className={conversationThreadsStyles["thread-panel-header"]}>
         <div>
-          <div className={conversationThreadsStyles["thread-panel-kicker"]}>{t("threadPanelTitle")}</div>
+          {!rootTranscriptHidden ? (
+            <div className={conversationThreadsStyles["thread-panel-kicker"]}>{t("threadPanelTitle")}</div>
+          ) : null}
           <div className={`${conversationThreadsStyles["thread-panel-title"]} truncate`}>
             {visibleRoot ? (
               <MessagePreviewText
@@ -383,7 +390,7 @@ export function ConversationThreadPanel({
                 }
               />
             ) : (
-              t("noVisibleMessages")
+              t(rootTranscriptHidden ? "threadPanelTitle" : "noVisibleMessages")
             )}
           </div>
         </div>
@@ -405,6 +412,7 @@ export function ConversationThreadPanel({
           <div className={conversationThreadsStyles["thread-root"]}>
             <ThreadMessage
               message={visibleRoot}
+              onQuestionSettled={onQuestionSettled}
               showTurnProgress={!collaboration}
               onForgetMemory={
                 memory.sourceFor(visibleRoot) ? () => memory.forget(memory.sourceFor(visibleRoot)) : undefined
@@ -420,7 +428,6 @@ export function ConversationThreadPanel({
               onOpenAgentDetail={onOpenAgentDetail}
               onPreviewUser={onPreviewUser}
               onPreviewAttachment={onPreviewAttachment}
-              onQuestionSelect={onQuestionSelect}
               onCitationSelect={onCitationSelect}
               turnVideos={visibleRoot.id ? videosByTurn.get(visibleRoot.id) : undefined}
             />
@@ -432,6 +439,7 @@ export function ConversationThreadPanel({
               <ThreadMessage
                 key={message.id}
                 message={message}
+                onQuestionSettled={onQuestionSettled}
                 showTurnProgress={!collaboration}
                 onForgetMemory={memory.sourceFor(message) ? () => memory.forget(memory.sourceFor(message)) : undefined}
                 currentUserID={currentUserID}
@@ -445,7 +453,6 @@ export function ConversationThreadPanel({
                 onOpenAgentDetail={onOpenAgentDetail}
                 onPreviewUser={onPreviewUser}
                 onPreviewAttachment={onPreviewAttachment}
-                onQuestionSelect={onQuestionSelect}
                 onCitationSelect={onCitationSelect}
                 turnVideos={message.id ? videosByTurn.get(message.id) : undefined}
               />
@@ -455,218 +462,214 @@ export function ConversationThreadPanel({
           ) : null}
         </div>
       </div>
-      {questionMode?.pending.length ? (
-        <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} statusSlot={status} />
-      ) : (
-        <div
-          className={conversationThreadsStyles["thread-composer"]}
-          onDragOver={(event) => {
-            if (disabled || !dataTransferHasFiles(event.dataTransfer)) {
-              return;
-            }
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "copy";
-          }}
-          onDrop={(event) => {
-            const files = filesFromDataTransfer(event.dataTransfer);
-            if (files.length === 0) {
-              return;
-            }
-            event.preventDefault();
-            handleFiles(files);
-          }}
-        >
-          {!resourcePicker.active && threadSlashPickerOpen ? (
-            <SlashPicker
-              candidates={threadSlashCandidates}
-              activeIndex={threadSlashIndex}
-              continuation={threadSlashContinuation}
-              loading={threadSlashPickerLoading}
-              className={conversationThreadsStyles["thread-slash-picker"]}
-              t={t}
-              onSelect={(name) => onApplyThreadSlashCandidate(name)}
-            />
-          ) : null}
-          {resourcePicker.active ? null : fileScope ? (
-            fileMentions.picker
-          ) : threadMentionCandidates.length > 0 ? (
-            <MentionPicker
-              users={threadMentionCandidates}
-              activeIndex={mentionIndex}
-              className={conversationThreadsStyles["thread-mention-picker"]}
-              showRole={false}
-              t={t}
-              onSelect={insertThreadMention}
-            />
-          ) : null}
-          {status}
-          <div className={conversationThreadsStyles["thread-composer-box"]}>
-            <AttachmentDraftStrip
-              drafts={attachmentDrafts}
-              t={t}
-              onPreviewAttachment={onPreviewAttachment}
-              onRemove={onRemoveAttachment}
-            />
-            <div
-              ref={threadEditorRef}
-              hidden={resourcePicker.active}
-              contentEditable={!disabled}
-              suppressContentEditableWarning={true}
-              role="textbox"
-              aria-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
-              aria-label={t("threadComposerPlaceholder")}
-              className={`${composerTokenStyles.editor} thread-composer-editor ${disabled ? "disabled" : ""}`}
-              data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
-              onInput={(event) => syncThreadDraft(event.currentTarget)}
-              onClick={(event) => {
-                if (!disabled && removeComposerResourceToken(event.currentTarget, event.target)) {
-                  syncThreadDraft(event.currentTarget);
-                } else {
-                  syncThreadQueryState(event.currentTarget);
-                }
-              }}
-              onKeyDown={(event) => {
-                if (
-                  disabled ||
-                  isComposerKeyboardEventComposing(event) ||
-                  (event.target instanceof Element && event.target.closest("[data-composer-resource-remove]")) ||
-                  fileMentions.handleKeyDown(event)
-                ) {
-                  return;
-                }
-                if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {
-                  event.preventDefault();
-                  syncThreadDraft(event.currentTarget);
-                  return;
-                }
-                if (event.key === "Delete" && removeAdjacentMentionToken(threadEditorRef.current, "forward")) {
-                  event.preventDefault();
-                  syncThreadDraft(event.currentTarget);
-                  return;
-                }
-                if (
-                  handleSlashPickerNavigation({
-                    event,
-                    candidates: threadSlashCandidates,
-                    activeIndex: threadSlashIndex,
-                    pickerOpen: threadSlashPickerOpen,
-                    continuation: threadSlashContinuation,
-                    onIndexChange: (value) => onSetThreadSlashIndex(value),
-                    onApply: (value) => onApplyThreadSlashCandidate(value),
-                    onDismiss: () => {
-                      onDismissThreadSlashPicker();
-                      setMentionState(null);
-                      setMentionIndex(0);
-                    },
-                    onPrepareNavigation: () => {
-                      setMentionState(null);
-                      setMentionIndex(0);
-                    },
-                  })
-                ) {
-                  return;
-                }
-                if (threadMentionCandidates.length > 0) {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    setMentionIndex((value) => (value + 1) % threadMentionCandidates.length);
-                    return;
-                  }
-                  if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    setMentionIndex(
-                      (value) => (value - 1 + threadMentionCandidates.length) % threadMentionCandidates.length,
-                    );
-                    return;
-                  }
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    insertThreadMention(threadMentionCandidates[mentionIndex]);
-                    return;
-                  }
-                  if (event.key === "Escape") {
-                    event.preventDefault();
+      <div
+        className={conversationThreadsStyles["thread-composer"]}
+        onDragOver={(event) => {
+          if (disabled || !dataTransferHasFiles(event.dataTransfer)) {
+            return;
+          }
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={(event) => {
+          const files = filesFromDataTransfer(event.dataTransfer);
+          if (files.length === 0) {
+            return;
+          }
+          event.preventDefault();
+          handleFiles(files);
+        }}
+      >
+        {!resourcePicker.active && threadSlashPickerOpen ? (
+          <SlashPicker
+            candidates={threadSlashCandidates}
+            activeIndex={threadSlashIndex}
+            continuation={threadSlashContinuation}
+            loading={threadSlashPickerLoading}
+            className={conversationThreadsStyles["thread-slash-picker"]}
+            t={t}
+            onSelect={(name) => onApplyThreadSlashCandidate(name)}
+          />
+        ) : null}
+        {resourcePicker.active ? null : fileScope ? (
+          fileMentions.picker
+        ) : threadMentionCandidates.length > 0 ? (
+          <MentionPicker
+            users={threadMentionCandidates}
+            activeIndex={mentionIndex}
+            className={conversationThreadsStyles["thread-mention-picker"]}
+            showRole={false}
+            t={t}
+            onSelect={insertThreadMention}
+          />
+        ) : null}
+        {status}
+        <div className={conversationThreadsStyles["thread-composer-box"]}>
+          <AttachmentDraftStrip
+            drafts={attachmentDrafts}
+            t={t}
+            onPreviewAttachment={onPreviewAttachment}
+            onRemove={onRemoveAttachment}
+          />
+          <div
+            ref={threadEditorRef}
+            hidden={resourcePicker.active}
+            contentEditable={!disabled}
+            suppressContentEditableWarning={true}
+            role="textbox"
+            aria-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
+            aria-label={t("threadComposerPlaceholder")}
+            className={`${composerTokenStyles.editor} thread-composer-editor ${disabled ? "disabled" : ""}`}
+            data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
+            onInput={(event) => syncThreadDraft(event.currentTarget)}
+            onClick={(event) => {
+              if (!disabled && removeComposerResourceToken(event.currentTarget, event.target)) {
+                syncThreadDraft(event.currentTarget);
+              } else {
+                syncThreadQueryState(event.currentTarget);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (
+                disabled ||
+                isComposerKeyboardEventComposing(event) ||
+                (event.target instanceof Element && event.target.closest("[data-composer-resource-remove]")) ||
+                fileMentions.handleKeyDown(event)
+              ) {
+                return;
+              }
+              if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {
+                event.preventDefault();
+                syncThreadDraft(event.currentTarget);
+                return;
+              }
+              if (event.key === "Delete" && removeAdjacentMentionToken(threadEditorRef.current, "forward")) {
+                event.preventDefault();
+                syncThreadDraft(event.currentTarget);
+                return;
+              }
+              if (
+                handleSlashPickerNavigation({
+                  event,
+                  candidates: threadSlashCandidates,
+                  activeIndex: threadSlashIndex,
+                  pickerOpen: threadSlashPickerOpen,
+                  continuation: threadSlashContinuation,
+                  onIndexChange: (value) => onSetThreadSlashIndex(value),
+                  onApply: (value) => onApplyThreadSlashCandidate(value),
+                  onDismiss: () => {
+                    onDismissThreadSlashPicker();
                     setMentionState(null);
                     setMentionIndex(0);
-                    return;
-                  }
-                }
-                if (event.key === "Enter" && event.shiftKey) {
+                  },
+                  onPrepareNavigation: () => {
+                    setMentionState(null);
+                    setMentionIndex(0);
+                  },
+                })
+              ) {
+                return;
+              }
+              if (threadMentionCandidates.length > 0) {
+                if (event.key === "ArrowDown") {
                   event.preventDefault();
-                  insertComposerLineBreak(threadEditorRef.current);
-                  syncThreadDraft(threadEditorRef.current);
+                  setMentionIndex((value) => (value + 1) % threadMentionCandidates.length);
+                  return;
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setMentionIndex(
+                    (value) => (value - 1 + threadMentionCandidates.length) % threadMentionCandidates.length,
+                  );
                   return;
                 }
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
-                  onSend();
+                  insertThreadMention(threadMentionCandidates[mentionIndex]);
+                  return;
                 }
-              }}
-              onKeyUp={(event) => syncThreadQueryState(event.currentTarget)}
-              onPaste={(event) => {
-                const files = filesFromDataTransfer(event.clipboardData);
-                const pasted = event.clipboardData?.getData("text/plain") ?? "";
-                if (files.length > 0) {
+                if (event.key === "Escape") {
                   event.preventDefault();
-                  handleFiles(files);
-                  if (!pasted) {
-                    return;
-                  }
-                } else {
-                  event.preventDefault();
+                  setMentionState(null);
+                  setMentionIndex(0);
+                  return;
                 }
-                const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByName);
-                if (segments.some((segment) => segment.type === "mention")) {
-                  insertComposerSegmentsAtSelection(segments);
-                } else {
-                  insertPlainTextAtSelection(pasted);
+              }
+              if (event.key === "Enter" && event.shiftKey) {
+                event.preventDefault();
+                insertComposerLineBreak(threadEditorRef.current);
+                syncThreadDraft(threadEditorRef.current);
+                return;
+              }
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                onSend();
+              }
+            }}
+            onKeyUp={(event) => syncThreadQueryState(event.currentTarget)}
+            onPaste={(event) => {
+              const files = filesFromDataTransfer(event.clipboardData);
+              const pasted = event.clipboardData?.getData("text/plain") ?? "";
+              if (files.length > 0) {
+                event.preventDefault();
+                handleFiles(files);
+                if (!pasted) {
+                  return;
                 }
-                syncThreadDraft(threadEditorRef.current);
-              }}
-              onCompositionEnd={() => {
-                syncThreadDraft(threadEditorRef.current);
-              }}
+              } else {
+                event.preventDefault();
+              }
+              const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByName);
+              if (segments.some((segment) => segment.type === "mention")) {
+                insertComposerSegmentsAtSelection(segments);
+              } else {
+                insertPlainTextAtSelection(pasted);
+              }
+              syncThreadDraft(threadEditorRef.current);
+            }}
+            onCompositionEnd={() => {
+              syncThreadDraft(threadEditorRef.current);
+            }}
+          />
+          {resourcePicker.pickerProps ? (
+            <ConversationResourcePicker
+              key={`${resourceAgentID}:${resourcePicker.pickerProps.kind}`}
+              {...resourcePicker.pickerProps}
+              t={t}
             />
-            {resourcePicker.pickerProps ? (
-              <ConversationResourcePicker
-                key={`${resourceAgentID}:${resourcePicker.pickerProps.kind}`}
-                {...resourcePicker.pickerProps}
-                t={t}
-              />
-            ) : null}
-            <input
-              ref={fileInputRef}
-              className="sr-only"
-              type="file"
-              multiple
-              aria-label={t("addAttachment")}
-              onChange={(event) => {
-                handleFiles(Array.from(event.currentTarget.files || []));
-                event.currentTarget.value = "";
-              }}
+          ) : null}
+          <input
+            ref={fileInputRef}
+            className="sr-only"
+            type="file"
+            multiple
+            aria-label={t("addAttachment")}
+            onChange={(event) => {
+              handleFiles(Array.from(event.currentTarget.files || []));
+              event.currentTarget.value = "";
+            }}
+          />
+          <div className={conversationThreadsStyles["thread-composer-toolbar"]}>
+            <ComposerAddMenu
+              onOpenResourcePicker={resourcePicker.open}
+              disabled={disabled}
+              t={t}
+              onAddFiles={() => fileInputRef.current?.click()}
             />
-            <div className={conversationThreadsStyles["thread-composer-toolbar"]}>
-              <ComposerAddMenu
-                onOpenResourcePicker={resourcePicker.open}
-                disabled={disabled}
-                t={t}
-                onAddFiles={() => fileInputRef.current?.click()}
-              />
-              <Button
-                variant="primary"
-                className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
-                iconOnly
-                size="sm"
-                aria-label={t("send")}
-                disabled={disabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length)}
-                onClick={onSend}
-              >
-                <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
-              </Button>
-            </div>
+            <Button
+              variant="primary"
+              className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
+              iconOnly
+              size="sm"
+              aria-label={t("send")}
+              disabled={disabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length)}
+              onClick={onSend}
+            >
+              <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
+            </Button>
           </div>
         </div>
-      )}
+      </div>
     </aside>
   );
 }
@@ -685,8 +688,8 @@ type ThreadMessageProps = {
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
-  onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   onCitationSelect?: CitationSelectHandler;
+  onQuestionSettled: (id: string) => void;
   t: TranslateFn;
   theme: ThemeMode;
   usersById: UsersById;
@@ -707,8 +710,8 @@ function ThreadMessage({
   onOpenAgentDetail,
   onPreviewUser,
   onPreviewAttachment,
-  onQuestionSelect,
   onCitationSelect,
+  onQuestionSettled,
   compact = false,
   turnVideos = [],
 }: ThreadMessageProps) {
@@ -759,21 +762,22 @@ function ThreadMessage({
         {(message.content || messageResources(message.metadata).length > 0) &&
         !message.metadata?.image_generation &&
         !isVideoGeneration ? (
-          <div className="thread-message-bubble">
-            <MessageContent
-              key={`${message.id}:${theme}`}
-              content={message.content}
-              message={message}
-              allowLegacyToolFormat={Boolean(messageAgent)}
-              showTurnProgress={showTurnProgress}
-              enableLongMessageCollapse={!showTurnProgress}
-              progressControls={progressControls}
-              videoMessages={turnVideos}
-              onQuestionSelect={onQuestionSelect}
-              onCitationSelect={onCitationSelect}
-              t={t}
-            />
-          </div>
+          <InlineAgentQuestion message={message} t={t} onSettled={onQuestionSettled}>
+            <div className="thread-message-bubble">
+              <MessageContent
+                key={`${message.id}:${theme}`}
+                content={message.content}
+                message={message}
+                allowLegacyToolFormat={Boolean(messageAgent)}
+                showTurnProgress={showTurnProgress}
+                enableLongMessageCollapse={!showTurnProgress}
+                progressControls={progressControls}
+                videoMessages={turnVideos}
+                onCitationSelect={onCitationSelect}
+                t={t}
+              />
+            </div>
+          </InlineAgentQuestion>
         ) : null}
         <DiagnosticMessageAction metadata={message.metadata} t={t} />
         {isVideoGeneration && message.metadata?.image_generation ? (

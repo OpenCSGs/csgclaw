@@ -338,6 +338,7 @@ func writeRuntimePatch(path string, profile agentruntime.Profile) error {
 		return err
 	}
 	patch := fmt.Sprintf("- id: llm-deepseek\n  config: %s\n- id: acp\n  config:\n    provider: deepseek-official\n    model: %q\n- id: compaction-basic\n  config:\n    thresholdRatio: 0.75\n    maxOverflowRetries: 1\n    auto: %t\n- insert:\n    - id: csgclaw-context\n      name: %q\n", providerConfig, profile.ModelID, enabled, moduleFileURL(bridgePath))
+	patch += fmt.Sprintf("\n- id: skill-filesystem\n  config:\n    dshHome: %q\n    includeDefaultRoots: true\n", filepath.Join(filepath.Dir(path), "skill-view"))
 	if err := os.WriteFile(filepath.Join(filepath.Dir(path), contextPatchFileName), []byte(patch), 0o600); err != nil {
 		return err
 	}

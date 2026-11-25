@@ -122,6 +122,10 @@ function renderModelProviderPage(
   controllerOverrides: Record<string, unknown> = {},
 ) {
   const refreshWorkspaceModelProviders = vi.fn().mockResolvedValue(null);
+  const checkWorkspaceModelProvider = vi.fn(async (...args: Parameters<typeof checkModelProvider>) => {
+    const check = await checkModelProvider(...args);
+    return { check, savedProvider: check.provider };
+  });
   const renderPage = (nextCatalog = catalog) => (
     <WorkspaceControllerProvider
       controller={
@@ -130,6 +134,7 @@ function renderModelProviderPage(
           modelProviders: nextCatalog,
           ready: true,
           refreshWorkspaceModelProviders,
+          checkWorkspaceModelProvider,
           sidebarProps: {
             authBusy: false,
             authPending: false,
@@ -666,13 +671,10 @@ describe("ModelProviderPage", () => {
   });
 
   it("loads OpenCSG models automatically after authentication", async () => {
-    vi.mocked(checkModelProvider).mockResolvedValueOnce({
-      id: "opencsg",
-      last_checked_at: "2026-07-16T09:00:00Z",
-      models: ["stage-model"],
-      status: "connected",
-    });
-    renderModelProviderPage(
+    const catalog = createCatalog({ id: "opencsg", display_name: "OpenCSG", models: ["stage-model"] });
+    const provider = catalog.providers[0];
+    vi.mocked(checkModelProvider).mockResolvedValueOnce({ ...provider, provider });
+    const { container, rerenderWithCatalog } = renderModelProviderPage(
       normalizeModelProviderCatalog({
         providers: [
           {
@@ -707,7 +709,9 @@ describe("ModelProviderPage", () => {
         }),
       ),
     );
+    rerenderWithCatalog(catalog);
     expect(await screen.findByText("stage-model")).toBeInTheDocument();
+    expect(within(container).getByText("1 models")).toBeInTheDocument();
   });
 
   it("clears rendered OpenCSG models when the provider catalog is cleared", async () => {

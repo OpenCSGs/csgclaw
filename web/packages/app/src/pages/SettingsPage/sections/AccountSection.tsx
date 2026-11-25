@@ -10,7 +10,7 @@ import {
   type AuthEnvironmentDraft,
 } from "@/models/authEnvironment";
 import { SettingsRow } from "./SettingsRow";
-import { useAuthLoginDialog } from "./useAuthLoginDialog";
+import { useAuthLoginDialog } from "@/hooks/workspace/useAuthLoginDialog";
 import styles from "../SettingsPage.module.css";
 import accountSectionStyles from "./AccountSection.module.css";
 

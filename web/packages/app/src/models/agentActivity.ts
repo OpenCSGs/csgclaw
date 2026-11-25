@@ -189,6 +189,19 @@ export function pendingQuestionActivities(messages: readonly IMMessage[]): Agent
     );
 }
 
+export function isHiddenQuestionTranscript(message: IMMessage, settled: ReadonlySet<string>): boolean {
+  const transcript = recordValue(recordValue(message.metadata?.csgclaw)?.request_user_input);
+  if (transcript?.kind === "answer") return true;
+
+  const activity = parseAgentActivity(message);
+  const question = activity?.content.question;
+  return Boolean(
+    activity?.content.msgtype === AgentActivityMsgTypes.question &&
+    question &&
+    (question.status !== "pending" || settled.has(question.id)),
+  );
+}
+
 function agentActivityValue(value: unknown): unknown {
   if (isRecord(value) && ("metadata" in value || typeof value.content === "string")) {
     const metadata = recordValue(value.metadata);
