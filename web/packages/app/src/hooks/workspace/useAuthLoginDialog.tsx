@@ -5,7 +5,10 @@ import { authEnvironmentDraftFromStatus, defaultAuthEnvironmentDraft } from "@/m
 import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import { readStoredAuthEnvironmentDraft, writeStoredAuthEnvironmentDraft } from "@/shared/storage/authEnvironment";
 
-export function useAuthLoginDialog() {
+export function useAuthLoginDialog({
+  closeOnConnect = true,
+  onCancel,
+}: { closeOnConnect?: boolean; onCancel?: () => void } = {}) {
   const controller = useWorkspaceControllerContext();
   const sidebar = controller.sidebarProps;
   const [connectionOpen, setConnectionOpen] = useState(false);
@@ -24,7 +27,7 @@ export function useAuthLoginDialog() {
   function handleLogin(environment: AuthEnvironmentDraft) {
     writeStoredAuthEnvironmentDraft(environment);
     sidebar?.onAuthEnvironmentChange?.(environment);
-    setConnectionOpen(false);
+    if (closeOnConnect) setConnectionOpen(false);
     void sidebar?.onLogin(environment);
   }
 
@@ -32,13 +35,17 @@ export function useAuthLoginDialog() {
     <OpenCSGConnectionDialog
       busy={sidebar.authBusy}
       environment={connectionDraft}
+      error={closeOnConnect ? undefined : sidebar.authError}
       locale={sidebar.locale}
       open={connectionOpen}
       t={sidebar.t}
       onConnect={handleLogin}
-      onOpenChange={setConnectionOpen}
+      onOpenChange={(open) => {
+        setConnectionOpen(open);
+        if (!open) onCancel?.();
+      }}
     />
   ) : null;
 
-  return { loginDialog, openLoginDialog, setConnectionOpen };
+  return { loginDialog, openLoginDialog };
 }

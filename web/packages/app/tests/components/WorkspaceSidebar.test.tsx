@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { fetchTaskConversations } from "@/api/taskConversations";
@@ -43,6 +43,7 @@ const labels: Record<string, string> = {
   directMessagesSection: "Direct messages",
   expandSidebar: "Expand sidebar",
   humanSection: "Human",
+  iaUserMenuLabel: "User menu",
   localAgentConsole: "Local agent console",
   messagesTab: "Messages",
   modelProviderAdd: "Add model provider",
@@ -273,7 +274,7 @@ describe("WorkspaceSidebar", () => {
     const user = userEvent.setup();
     const { props } = renderSidebar({ taskEntry: taskEntry() });
 
-    await user.click(screen.getByRole("button", { name: "iaUserMenuLabel" }));
+    await user.click(screen.getByRole("button", { name: "User menu" }));
     await user.click(screen.getByRole("menuitem", { name: "Settings" }));
 
     expect(props.onOpenSettings).toHaveBeenCalledOnce();
@@ -612,9 +613,10 @@ describe("WorkspaceSidebar", () => {
       workspaceTab: WorkspaceTabs.agents,
     });
 
-    expect(document.querySelector('[data-workspace-section="humans"]')).toBeInTheDocument();
+    const humans = document.querySelector<HTMLElement>('[data-workspace-section="humans"]');
+    expect(humans).toBeInTheDocument();
     expect(document.querySelector('button[aria-controls="workspace-group-items-humans"]')).not.toBeInTheDocument();
-    expect(screen.getByText("User One")).toBeInTheDocument();
+    expect(within(humans!).getByText("User One")).toBeInTheDocument();
   });
 
   it("opens the notification section when there are no notification bots", () => {
@@ -649,13 +651,15 @@ describe("WorkspaceSidebar", () => {
     expect(onSelectTeam).not.toHaveBeenCalled();
   });
 
-  it("opens the settings page from the bottom settings entry without changing workspace tabs", () => {
+  it("opens settings from the sidebar user menu without changing workspace tabs", async () => {
     const onOpenSettings = vi.fn();
     const onWorkspaceTabChange = vi.fn();
 
     renderSidebar({ onOpenSettings, onWorkspaceTabChange });
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "User menu" }));
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
 
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(onWorkspaceTabChange).not.toHaveBeenCalled();

@@ -1030,6 +1030,15 @@ export const messages = {
 
     feedbackWrite: "填写反馈",
     feedbackTitle: "意见反馈",
+    sidebarAppearanceLanguage: "外观与语言",
+    sidebarNewVersion: "新版本 {version} 可用",
+    feedbackMenuAction: "提交反馈",
+    feedbackChooseAttachments: "添加附件",
+    feedbackAttachmentHint: "可粘贴截图，或将图片和诊断压缩包拖到这里。",
+    feedbackArchiveLimit: "最多 3 个压缩包，每个不超过 10 MB，支持 ZIP、RAR、7Z、TAR、GZ。",
+    feedbackAttachmentsRejected: "无法添加以下附件，请检查格式、大小和数量：{files}",
+    feedbackUnnamedAttachment: "未命名附件",
+    feedbackRemoveAttachment: "移除 {file}",
     feedbackImages: "上传图片",
     feedbackChooseImages: "选择文件",
     feedbackImageLimitReached: "已达到图片上传上限，请删除图片后再上传。",
@@ -3439,7 +3448,8 @@ export const messages = {
 
       feedback_access_denied: "无法验证本地服务访问权限，请通过本机页面或 CSGClaw App 提交反馈。",
       feedback_login_required: "请登录 OpenCSG 后提交反馈。",
-      feedback_invalid: "请检查反馈文字和图片的格式、数量及大小。",
+      feedback_invalid: "请检查反馈文字及附件的格式、数量和大小。",
+      feedback_upload_failed: "附件上传失败，反馈尚未提交。已保留填写内容和附件，可以重试。",
       feedback_unavailable: "暂时无法确认提交结果，已保留填写内容。重新提交可能产生重复反馈。",
       knowledge_base_sign_in_required: "请先登录 OpenCSG，再访问远端知识库。",
       knowledge_base_unavailable: "该知识库当前不可用。",
@@ -4641,6 +4651,15 @@ export const messages = {
 
     feedbackWrite: "Write feedback",
     feedbackTitle: "Feedback",
+    sidebarAppearanceLanguage: "Appearance and language",
+    sidebarNewVersion: "New version {version} available",
+    feedbackMenuAction: "Submit feedback",
+    feedbackChooseAttachments: "Add attachments",
+    feedbackAttachmentHint: "Paste screenshots or drop images and diagnostic archives here.",
+    feedbackArchiveLimit: "Up to 3 ZIP, RAR, 7Z, TAR, or GZ archives, 10 MB each.",
+    feedbackAttachmentsRejected: "Could not add these attachments. Check the format, size, and count: {files}",
+    feedbackUnnamedAttachment: "Unnamed attachment",
+    feedbackRemoveAttachment: "Remove {file}",
     feedbackImages: "Upload images",
     feedbackChooseImages: "Choose files",
     feedbackImageLimitReached: "The image upload limit has been reached. Remove an image to upload another.",
@@ -7173,7 +7192,9 @@ export const messages = {
       feedback_access_denied:
         "Local service access could not be verified. Submit feedback from the local page or CSGClaw App.",
       feedback_login_required: "Sign in to OpenCSG to submit feedback.",
-      feedback_invalid: "Check the feedback text and image format, count, and size.",
+      feedback_invalid: "Check the feedback text and the attachment formats, counts, and sizes.",
+      feedback_upload_failed:
+        "Attachment upload failed before the feedback was submitted. Your text and attachments are still available to retry.",
       feedback_unavailable:
         "Unable to confirm submission. Your content is retained; resubmitting may create duplicate feedback.",
       knowledge_base_sign_in_required: "Sign in to OpenCSG to access remote knowledge bases.",

@@ -138,3 +138,15 @@
     text-align: left;
   }
 }
+
+.highlighted {
+  box-sizing: border-box;
+  width: calc(100% + 24px);
+  margin: -12px;
+  padding: 12px;
+  border: 0;
+  outline: 1.5px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  outline-offset: -1.5px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+}

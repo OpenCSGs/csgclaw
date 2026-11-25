@@ -2,9 +2,16 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui";
-import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
+import {
+  WorkspaceControllerProvider,
+  useWorkspaceControllerContext,
+  type WorkspaceController,
+} from "@/hooks/workspace";
 import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { WorkspaceFeedback } from "@/components/business/Feedback";
+import { WorkspaceAccountFooter } from "@/pages/WorkspacePage/components/WorkspaceUserMenu";
+import { normalizeUpgradeStatus } from "@/models/upgradeStatus";
 import { emptyAuthStatus } from "@/models/auth";
 import { defaultAuthEnvironmentDraft } from "@/models/authEnvironment";
 
@@ -69,4 +76,93 @@ it("opens Settings over the current page and closes it without changing its tab 
   await user.keyboard("{Escape}");
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   await waitFor(() => expect(screen.getByRole("button", { name: "Open settings" })).toHaveFocus());
+});
+
+function EntryHarness() {
+  const { sidebarProps } = useWorkspaceControllerContext();
+  const { openSettings } = useWorkspaceDialogs();
+  if (!sidebarProps) return null;
+  return (
+    <>
+      <WorkspaceAccountFooter {...sidebarProps} onOpenSettings={() => openSettings()} />
+      <SettingsPage />
+      <WorkspaceFeedback />
+    </>
+  );
+}
+
+function renderEntryHarness(updateAvailable: boolean) {
+  const t = (key: string) => key;
+  const apply = vi.fn();
+  const controller = {
+    ready: true,
+    t,
+    sidebarProps: {
+      t,
+      authStatus: { ...emptyAuthStatus(), authenticated: true },
+      authEnvironment: defaultAuthEnvironmentDraft(),
+      theme: "light",
+      locale: "zh",
+      currentUserID: "local",
+      usersById: new Map(),
+      showUpgradeControls: true,
+      upgradeStatus: normalizeUpgradeStatus({
+        current_version: "v0.12.0",
+        latest_version: "v0.13.0",
+        update_available: updateAvailable,
+      }),
+      upgradePhase: "idle",
+      onOpenUpgrade: apply,
+      onRefreshUpgradeStatus: vi.fn().mockResolvedValue(null),
+    },
+  } as unknown as WorkspaceController;
+  render(
+    <MemoryRouter initialEntries={["/agents/agent-1?tab=connectors"]}>
+      <TooltipProvider>
+        <WorkspaceControllerProvider controller={controller}>
+          <EntryHarness />
+        </WorkspaceControllerProvider>
+      </TooltipProvider>
+    </MemoryRouter>,
+  );
+  return apply;
+}
+
+it("opens version settings with a highlight and clears it on leaving the section", async () => {
+  const apply = renderEntryHarness(true);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "sidebarNewVersion" }));
+  expect(screen.getByRole("heading", { name: /versionInfo/ }).closest("section")?.className).toContain("highlighted");
+  expect(apply).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: /iaSettingsCardAppearance/ }));
+  await user.click(screen.getByRole("button", { name: /iaSettingsCardVersion/ }));
+  expect(screen.getByRole("heading", { name: /versionInfo/ }).closest("section")?.className).not.toContain(
+    "highlighted",
+  );
+});
+
+it("groups menu items and opens the same feedback draft from Settings", async () => {
+  renderEntryHarness(false);
+  const user = userEvent.setup();
+  expect(screen.queryByRole("button", { name: "sidebarNewVersion" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "iaUserMenuLabel" }));
+  expect(
+    screen
+      .getAllByRole("menuitem")
+      .slice(-4)
+      .map((item) => item.textContent),
+  ).toEqual(["iaUserMenuProfileLocal", "settings", "sidebarAppearanceLanguage", "feedbackMenuAction"]);
+  await user.click(screen.getByRole("menuitem", { name: "feedbackMenuAction" }));
+  await user.type(screen.getByRole("textbox", { name: "settingsFeedbackLabel" }), "Shared draft");
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  await user.click(screen.getByRole("button", { name: "iaUserMenuLabel" }));
+  await user.click(screen.getByRole("menuitem", { name: "settings" }));
+  await user.click(screen.getByRole("button", { name: /iaSettingsCardFeedback/ }));
+  const trigger = screen.getByRole("button", { name: "feedbackWrite" });
+  await user.click(trigger);
+  expect(screen.getByRole("textbox", { name: "settingsFeedbackLabel" })).toHaveValue("Shared draft");
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.getByRole("dialog", { name: "settings" })).toBeInTheDocument());
+  await waitFor(() => expect(trigger).toHaveFocus());
 });

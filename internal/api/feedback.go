@@ -37,7 +37,8 @@ func (h *Handler) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	defer r.MultipartForm.RemoveAll()
 	description := r.FormValue("problem_description")
 	files := r.MultipartForm.File["images"]
-	if parseErr := feedback.ValidateContent(description, len(files)); parseErr != nil {
+	archiveFiles := r.MultipartForm.File["archives"]
+	if parseErr := feedback.ValidateContent(description, len(files), len(archiveFiles)); parseErr != nil {
 		writeCodedAPIError(w, http.StatusBadRequest, "feedback_invalid", parseErr.Error())
 		return
 	}
@@ -57,15 +58,43 @@ func (h *Handler) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		}
 		images = append(images, image)
 	}
+	archives := make([]feedback.Archive, 0, len(archiveFiles))
+	for _, file := range archiveFiles {
+		source, openErr := file.Open()
+		if openErr != nil {
+			writeCodedAPIError(w, http.StatusBadRequest, "feedback_invalid", "Unable to read archive")
+			return
+		}
+		data, readErr := io.ReadAll(io.LimitReader(source, feedback.MaxArchiveBytes+1))
+		source.Close()
+		archive, parseErr := feedback.ParseArchive(data)
+		if readErr != nil || parseErr != nil {
+			writeCodedAPIError(w, http.StatusBadRequest, "feedback_invalid", "Invalid archive format or size")
+			return
+		}
+		archives = append(archives, archive)
+	}
 	currentVersion := version.Current()
 	result, err := client.Submit(r.Context(), feedback.Submission{Description: description, UserID: status.UserUUID, UserName: status.UserID,
-		SiteURL: environment.OpenCSGBaseURL, Version: currentVersion, Channel: string(upgrade.InferChannelFromVersion(currentVersion)), Images: images})
+		SiteURL: environment.OpenCSGBaseURL, Version: currentVersion, Channel: string(upgrade.InferChannelFromVersion(currentVersion)), Images: images, Archives: archives})
 	if err != nil {
-		slog.WarnContext(r.Context(), "feedback request failed", "error", err)
 		statusCode := http.StatusBadGateway
 		code := "feedback_unavailable"
+		stage := "issue_submission"
+		var uploadErr *feedback.UploadError
+		if errors.As(err, &uploadErr) {
+			code = "feedback_upload_failed"
+			stage = uploadErr.Kind + "_upload"
+		}
+		attrs := []slog.Attr{slog.String("stage", stage), slog.Any("error", err)}
 		var upstream *feedback.HTTPError
 		if errors.As(err, &upstream) {
+			attrs = append(attrs,
+				slog.Int("upstream_status", upstream.Status),
+				slog.Any("upstream_response_headers", upstream.ResponseHeaders),
+				slog.String("upstream_response_body", upstream.ResponseBody),
+				slog.Bool("upstream_response_body_truncated", upstream.ResponseBodyTruncated),
+			)
 			switch upstream.Status {
 			case 401, 403:
 				statusCode = http.StatusUnauthorized
@@ -75,6 +104,7 @@ func (h *Handler) handleFeedback(w http.ResponseWriter, r *http.Request) {
 				code = "feedback_invalid"
 			}
 		}
+		slog.LogAttrs(r.Context(), slog.LevelWarn, "feedback request failed", attrs...)
 		writeCodedAPIError(w, statusCode, code, "Unable to complete feedback request")
 		return
 	}
