@@ -24,7 +24,7 @@ import {
   Video,
 } from "lucide-react";
 import { errorMessage } from "@/api/client";
-import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
+import { deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
 import { StatusDot, InlineError, Field, TextInput, Select } from "@/components/ui";
 import {
@@ -93,7 +93,7 @@ function providerToCheckState(
 
 export function ModelProviderSettings({ embedded = false }: { embedded?: boolean }) {
   const controller = useWorkspaceControllerContext();
-  const { activePane, modelProviders, refreshWorkspaceModelProviders, t } = controller;
+  const { activePane, modelProviders, refreshWorkspaceModelProviders, checkWorkspaceModelProvider, t } = controller;
   const [localProviderID, setLocalProviderID] = useState("");
   const providerID = embedded
     ? localProviderID || modelProviders?.providers[0]?.id || ""
@@ -164,19 +164,19 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
       try {
         const previewConnection =
           baseURL.trim() !== providerBaseURL || Boolean(apiKey) || apiProtocol !== persistedProtocol;
-        const result = await checkModelProvider(providerID, {
+        const { check, savedProvider } = await checkWorkspaceModelProvider(providerID, {
           connect: options.showError || undefined,
           api_protocol: apiProtocol,
           base_url: baseURL,
           api_key: apiKey,
         });
-        if (result.provider || !previewConnection) {
-          await refreshWorkspaceModelProviders(result.provider);
+        if (!check.provider && !previewConnection) {
+          await refreshWorkspaceModelProviders();
         }
-        const checked = result.provider ?? result;
-        if (draftSourceKeyRef.current !== draftSourceKey) return;
+        if (draftSourceKeyRef.current !== draftSourceKey || (check.provider && !savedProvider)) return;
+        const checked = savedProvider ?? check;
         setCheckState(providerToCheckState(checked));
-        if (result.base_url || result.status === "connected") {
+        if (checked.base_url || checked.status === "connected") {
           setDraft((current) => {
             if (
               current.baseURL.trim() !== baseURL.trim() ||
@@ -187,7 +187,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             }
             return {
               ...current,
-              baseURL: result.base_url || current.baseURL,
+              baseURL: checked.base_url || current.baseURL,
               modelsText: checked.status === "connected" ? (checked.models ?? []).join("\n") : current.modelsText,
             };
           });
@@ -203,7 +203,16 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         }
       }
     },
-    [draftSourceKey, persistedProtocol, providerBaseURL, providerID, providerRegion, refreshWorkspaceModelProviders, t],
+    [
+      draftSourceKey,
+      persistedProtocol,
+      providerBaseURL,
+      providerID,
+      providerRegion,
+      checkWorkspaceModelProvider,
+      refreshWorkspaceModelProviders,
+      t,
+    ],
   );
 
   useEffect(() => {

@@ -113,6 +113,7 @@ export function useWorkspaceController(): WorkspaceController {
     refreshWorkspaceManagerProfile,
     refreshWorkspaceAgents,
     refreshWorkspaceModelProviders,
+    checkWorkspaceModelProvider,
     refreshWorkspaceHubTemplates,
   } = useWorkspaceData();
   const t = useMemo(() => createTranslator(locale), [locale]);
@@ -896,6 +897,7 @@ export function useWorkspaceController(): WorkspaceController {
       modelProviders,
       modelProvidersLoaded,
       refreshWorkspaceModelProviders,
+      checkWorkspaceModelProvider,
       t,
     };
   }
@@ -926,6 +928,7 @@ export function useWorkspaceController(): WorkspaceController {
     modelProviders,
     modelProvidersLoaded,
     refreshWorkspaceModelProviders,
+    checkWorkspaceModelProvider,
     floatingChatProps: {
       avatar: floatingChatAvatar,
       avatarFallback: floatingChatAvatarFallback,

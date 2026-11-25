@@ -122,6 +122,10 @@ function renderModelProviderPage(
   controllerOverrides: Record<string, unknown> = {},
 ) {
   const refreshWorkspaceModelProviders = vi.fn().mockResolvedValue(null);
+  const checkWorkspaceModelProvider = vi.fn(async (...args: Parameters<typeof checkModelProvider>) => {
+    const check = await checkModelProvider(...args);
+    return { check, savedProvider: check.provider };
+  });
   const renderPage = (nextCatalog = catalog) => (
     <WorkspaceControllerProvider
       controller={
@@ -130,6 +134,7 @@ function renderModelProviderPage(
           modelProviders: nextCatalog,
           ready: true,
           refreshWorkspaceModelProviders,
+          checkWorkspaceModelProvider,
           sidebarProps: {
             authBusy: false,
             authPending: false,
@@ -669,7 +674,7 @@ describe("ModelProviderPage", () => {
     const catalog = createCatalog({ id: "opencsg", display_name: "OpenCSG", models: ["stage-model"] });
     const provider = catalog.providers[0];
     vi.mocked(checkModelProvider).mockResolvedValueOnce({ ...provider, provider });
-    const { container, refreshWorkspaceModelProviders, rerenderWithCatalog } = renderModelProviderPage(
+    const { container, rerenderWithCatalog } = renderModelProviderPage(
       normalizeModelProviderCatalog({
         providers: [
           {
@@ -695,11 +700,6 @@ describe("ModelProviderPage", () => {
       },
     );
 
-    refreshWorkspaceModelProviders.mockImplementation((updated) => {
-      if (updated === provider) rerenderWithCatalog(catalog);
-      return Promise.resolve(catalog);
-    });
-
     await waitFor(() =>
       expect(checkModelProvider).toHaveBeenCalledWith(
         "opencsg",
@@ -709,8 +709,8 @@ describe("ModelProviderPage", () => {
         }),
       ),
     );
+    rerenderWithCatalog(catalog);
     expect(await screen.findByText("stage-model")).toBeInTheDocument();
-    expect(refreshWorkspaceModelProviders).toHaveBeenCalledWith(provider);
     expect(within(container).getByText("1 models")).toBeInTheDocument();
   });
 
