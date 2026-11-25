@@ -536,3 +536,28 @@
   display: inline-flex;
   flex: 0 0 auto;
 }
+
+@container chat-tools-layout (max-width: 440px) {
+  .chat-header .chat-title-bar {
+    flex-wrap: nowrap;
+  }
+  .chat-header .chat-title-row {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .chat-header .chat-title-actions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    margin-left: auto;
+    gap: 4px;
+  }
+  .chat-header [data-chat-tools] {
+    gap: 4px;
+  }
+  .chat-header .chat-title-actions :global(.csg-icon-button) {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+  }
+}

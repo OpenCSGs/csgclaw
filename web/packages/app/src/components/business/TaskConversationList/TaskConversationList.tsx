@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Archive, MoreHorizontal, Pin, PinOff, Search, X } from "lucide-react";
+import { Archive, MoreHorizontal, Pin, PinOff, Search, Filter, ChevronDown, X } from "lucide-react";
 import {
   Button,
   Tooltip,
@@ -77,6 +77,8 @@ type Props = {
   authStatus?: AuthStatus;
   archived?: boolean;
   compact?: boolean;
+  collapsed?: boolean;
+  onExpand?: () => void;
   directories?: { path: string; agentIDs: string[] }[];
   entry: TaskEntryController;
   activeID?: string;
@@ -93,6 +95,8 @@ export function TaskConversationList({
   authStatus,
   archived = false,
   compact = false,
+  collapsed = false,
+  onExpand,
   directories = [],
   entry,
   activeID,
@@ -195,8 +199,28 @@ export function TaskConversationList({
   }
 
   return (
-    <div className={`${styles.root} ${compact ? styles.compact : ""} ${archived ? styles.archived : ""}`}>
-      <div ref={searchBarRef} className={styles.searchBar}>
+    <div
+      className={`${styles.root} ${compact ? styles.compact : ""} ${archived ? styles.archived : ""} ${collapsed ? styles.collapsed : ""}`}
+    >
+      {collapsed ? (
+        <div className={styles.railControls}>
+          <Tooltip content={t("taskEntrySearchHistory")} contentProps={{ side: "right" }}>
+            <button type="button" aria-label={t("taskEntrySearchHistory")} onClick={onExpand}>
+              <Search size={18} aria-hidden="true" />
+            </button>
+          </Tooltip>
+          {directory || query ? (
+            <Tooltip content={directory || query} contentProps={{ side: "right" }}>
+              <button type="button" aria-label={t("iaSessionDirectoryFilter")} onClick={onExpand}>
+                <span className={styles.railFilter}>
+                  <Filter size={13} aria-hidden="true" />
+                </span>
+              </button>
+            </Tooltip>
+          ) : null}
+        </div>
+      ) : null}
+      <div hidden={collapsed} ref={searchBarRef} className={styles.searchBar}>
         <div className={styles.searchField}>
           <Search size={15} aria-hidden="true" />
           <TextInput
@@ -269,6 +293,11 @@ export function TaskConversationList({
       ) : null}
       <div
         className={styles.list}
+        onPointerOver={(event) => event.currentTarget.classList.add(styles.pointerOver)}
+        onPointerOut={(event) => {
+          if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget))
+            event.currentTarget.classList.remove(styles.pointerOver);
+        }}
         onScroll={(event) => {
           const node = event.currentTarget;
           if (
@@ -311,9 +340,10 @@ export function TaskConversationList({
                   type="button"
                   className={styles.open}
                   aria-current={activeID === room.id ? "page" : undefined}
+                  aria-label={collapsed ? room.title || t("taskEntryUntitled") : undefined}
                   onClick={() => onSelect(room.id, searchMatch)}
                 >
-                  {!managerDM ? (
+                  {!managerDM || collapsed ? (
                     <span className={styles.avatar} aria-hidden="true">
                       {room.cloud_agent ? (
                         <AgentAvatarContent
@@ -506,9 +536,10 @@ export function TaskConversationList({
             variant="tertiaryGray"
             size="sm"
             disabled={list.isFetchingNextPage}
+            aria-label={t("taskEntryLoadMore")}
             onClick={() => void list.fetchNextPage()}
           >
-            {t("taskEntryLoadMore")}
+            {collapsed ? <ChevronDown size={16} aria-hidden="true" /> : t("taskEntryLoadMore")}
           </Button>
         ) : null}
       </div>

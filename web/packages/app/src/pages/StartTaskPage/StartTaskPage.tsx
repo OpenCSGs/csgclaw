@@ -1,3 +1,4 @@
+import { useComposerCompact } from "@/shared/layout/useComposerCompact";
 import conversationSendButtonStyles from "@/components/business/ConversationPane/ConversationSendButton.module.css";
 import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
 import { useCloudSendConsent } from "@/hooks/workspace/useCloudSendConsent";
@@ -176,6 +177,9 @@ function StartTaskForm({
   const mentionRetryRef = useRef<HTMLButtonElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const inlineSkillShortcut = useRef("");
+  const composerBoxRef = useRef<HTMLDivElement>(null);
+  const composerRowRef = useRef<HTMLDivElement>(null);
+  useComposerCompact(composerBoxRef, composerRowRef, controller.ready && Boolean(controller.taskEntry));
   const pageRef = useRef<HTMLElement>(null);
   const panelTrigger = useRef<HTMLButtonElement>(null);
   const panelID = useId();
@@ -623,6 +627,7 @@ function StartTaskForm({
             ) : null}
             <div className={styles.composerGroup}>
               <div
+                ref={composerBoxRef}
                 className={styles.composer}
                 onDragOver={(event) => {
                   if (!dataTransferHasFiles(event.dataTransfer)) return;
@@ -866,7 +871,10 @@ function StartTaskForm({
                 <span id={composerHelpId} className="sr-only">
                   {t("composerTip")}
                 </span>
-                <div className={selectedCloud ? `${styles.actions} ${styles.cloudActions}` : styles.actions}>
+                <div
+                  ref={composerRowRef}
+                  className={selectedCloud ? `${styles.actions} ${styles.cloudActions}` : styles.actions}
+                >
                   <input
                     type="file"
                     multiple
@@ -1103,7 +1111,11 @@ function StartTaskForm({
           });
         }}
         onReference={(reference) => {
-          if (pageRef.current?.querySelector(".chat-side-panel:is(.is-overlay, .is-maximized)")) {
+          if (
+            pageRef.current?.querySelector(
+              '[data-chat-side-panel]:is([data-layout="overlay"], [data-layout="maximized"])',
+            )
+          ) {
             sidePanel.patch({ open: false });
             requestAnimationFrame(() => editorRef.current?.focus({ preventScroll: true }));
           }

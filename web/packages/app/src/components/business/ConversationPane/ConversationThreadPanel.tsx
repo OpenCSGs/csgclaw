@@ -1,3 +1,4 @@
+import composerTokenStyles from "./ComposerTokens.module.css";
 import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import conversationSendButtonStyles from "./ConversationSendButton.module.css";
@@ -518,7 +519,7 @@ export function ConversationThreadPanel({
             role="textbox"
             aria-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
             aria-label={t("threadComposerPlaceholder")}
-            className={`thread-composer-editor ${disabled ? "disabled" : ""}`}
+            className={`${composerTokenStyles.editor} thread-composer-editor ${disabled ? "disabled" : ""}`}
             data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
             onInput={(event) => syncThreadDraft(event.currentTarget)}
             onClick={(event) => {

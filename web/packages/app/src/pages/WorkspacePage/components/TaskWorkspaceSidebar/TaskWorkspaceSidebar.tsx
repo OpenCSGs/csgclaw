@@ -155,42 +155,42 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
           t={t}
         />
       ) : null}
-      {!isSidebarCollapsed ? (
-        <div className={styles.history}>
-          <TaskConversationList
-            authStatus={props.authStatus}
-            compact
-            directories={directories}
-            entry={entry}
-            activeID={props.activePane.type === WorkspacePaneTypes.conversation ? props.activePane.id : undefined}
-            currentUserID={currentUserID}
-            usersById={usersById}
-            t={t}
-            onSelect={(id, match) =>
-              selectDestination(() => {
-                if (match?.id && props.onSelectSearchMatch) props.onSelectSearchMatch(id, match);
-                else props.onSelectConversation(id);
-              })
+      <div className={styles.history}>
+        <TaskConversationList
+          collapsed={isSidebarCollapsed}
+          onExpand={props.onExpandSidebar}
+          authStatus={props.authStatus}
+          compact
+          directories={directories}
+          entry={entry}
+          activeID={props.activePane.type === WorkspacePaneTypes.conversation ? props.activePane.id : undefined}
+          currentUserID={currentUserID}
+          usersById={usersById}
+          t={t}
+          onSelect={(id, match) =>
+            selectDestination(() => {
+              if (match?.id && props.onSelectSearchMatch) props.onSelectSearchMatch(id, match);
+              else props.onSelectConversation(id);
+            })
+          }
+          onArchiveCurrent={() => navigate("/new")}
+          onNewWith={(room) => {
+            const agent = agentForRoom(room);
+            if (agent?.id) {
+              const agentID = agent.id;
+              selectDestination(() =>
+                navigate(`/new?agent=${encodeURIComponent(agentID)}`, {
+                  state: { configuration: room.configuration },
+                }),
+              );
             }
-            onArchiveCurrent={() => navigate("/new")}
-            onNewWith={(room) => {
-              const agent = agentForRoom(room);
-              if (agent?.id) {
-                const agentID = agent.id;
-                selectDestination(() =>
-                  navigate(`/new?agent=${encodeURIComponent(agentID)}`, {
-                    state: { configuration: room.configuration },
-                  }),
-                );
-              }
-            }}
-            onEditAgent={(room) => {
-              const agent = agentForRoom(room);
-              if (agent) selectDestination(() => props.onSelectAgent(agent));
-            }}
-          />
-        </div>
-      ) : null}
+          }}
+          onEditAgent={(room) => {
+            const agent = agentForRoom(room);
+            if (agent) selectDestination(() => props.onSelectAgent(agent));
+          }}
+        />
+      </div>
       <footer>
         <WorkspaceAccountFooter {...props} onSelectDestination={selectDestination} />
       </footer>

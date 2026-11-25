@@ -29,7 +29,7 @@ export function useNativeBrowser({
       if (next.id !== id) return;
       if (next.shortcut === "escape") {
         hostRef.current
-          ?.closest(".chat-browser-tab")
+          ?.closest("[data-chat-browser-tab]")
           ?.querySelector<HTMLInputElement>("input")
           ?.focus({ preventScroll: true });
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));

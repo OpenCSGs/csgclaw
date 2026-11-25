@@ -1,3 +1,4 @@
+import { subscribeSidebarAutoCollapse } from "@/shared/layout/sidebarAutoCollapse";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { workspaceHasContextSidebar } from "@/models/routing";
@@ -95,6 +96,10 @@ export function WorkspaceLayout() {
       window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(expandedSidebarWidth));
     }
   }, [expandedSidebarWidth, showSidebarContext]);
+
+  const collapseSidebarRef = useRef(sidebarProps?.onCollapseSidebar);
+  collapseSidebarRef.current = sidebarProps?.onCollapseSidebar;
+  useEffect(() => subscribeSidebarAutoCollapse(() => collapseSidebarRef.current?.()), []);
 
   function setPrimarySidebarUserWidth(width: number) {
     const nextWidth = clampPrimarySidebarWidth(width);

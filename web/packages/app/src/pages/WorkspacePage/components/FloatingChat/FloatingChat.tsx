@@ -197,7 +197,7 @@ export function FloatingChat({
       if (
         !event.defaultPrevented &&
         event.key === "Escape" &&
-        !panelRootRef.current?.querySelector(".chat-side-panel:not([hidden])") &&
+        !panelRootRef.current?.querySelector("[data-chat-side-panel]:not([hidden])") &&
         !document.querySelector('[role="dialog"], [role="menu"][data-state="open"]')
       ) {
         onOpenChange(false);

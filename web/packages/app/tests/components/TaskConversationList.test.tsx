@@ -386,6 +386,48 @@ describe("TaskConversationList archive management", () => {
     expect(screen.getByText("Second project")).toBeInTheDocument();
     expect(screen.queryByText("First project")).not.toBeInTheDocument();
   });
+  it("preserves filtered order and selection through sidebar collapse and expansion", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchTaskConversations).mockResolvedValue({
+      rooms: [
+        { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
+        { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
+      ],
+      total: 2,
+      has_more: false,
+    });
+    function Harness() {
+      const [collapsed, setCollapsed] = useState(false);
+      return (
+        <>
+          <button onClick={() => setCollapsed((value) => !value)}>Toggle sidebar</button>
+          <TaskConversationList
+            compact
+            collapsed={collapsed}
+            entry={{ isWorking: () => false, busyID: "" } as unknown as TaskEntryController}
+            activeID="first"
+            currentUserID="user-admin"
+            usersById={new Map()}
+            t={(key) => key}
+            onSelect={vi.fn()}
+          />
+        </>
+      );
+    }
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    await screen.findByText("Second project");
+    await user.click(screen.getByRole("combobox", { name: "iaSessionDirectoryFilter" }));
+    await user.click(screen.getByRole("option", { name: /first/ }));
+    expect(screen.getByText("First project")).toBeInTheDocument();
+    expect(screen.queryByText("Second project")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(screen.getByRole("button", { name: "First project" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("button", { name: "Second project" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(screen.getByText("First project")).toBeVisible();
+    expect(screen.queryByText("Second project")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "iaSessionDirectoryFilter" })).toHaveTextContent("first");
+  });
   it("offers pin and archive shortcuts without navigating the conversation", async () => {
     const user = userEvent.setup();
     const { patch } = setup(false, false, true);

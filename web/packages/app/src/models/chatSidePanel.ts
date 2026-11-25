@@ -160,6 +160,10 @@ export function restoreChatSideState(value: string | null): ChatSideState {
   }
 }
 
+export const CHAT_SIDE_MIN_WIDTH = 300;
+export const CHAT_CONVERSATION_MIN_WIDTH = 340;
+export const CHAT_OVERLAY_CONTAINER_WIDTH = 560;
+
 export function clampChatSideWidth(width: number, containerWidth: number): number {
-  return Math.max(320, Math.min(width, Math.max(320, containerWidth - 360)));
+  return Math.max(CHAT_SIDE_MIN_WIDTH, Math.min(width, containerWidth - CHAT_CONVERSATION_MIN_WIDTH));
 }
