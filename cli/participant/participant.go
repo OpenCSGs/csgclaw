@@ -171,6 +171,13 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	if err != nil {
 		return err
 	}
+	if req.ReconcilesBinding() {
+		// JSON represents incomplete UTF-8 in a legacy byte-truncated ID as replacement runes.
+		expected := string([]rune(participantpkg.CanonicalID(req.ID)))
+		if created.ID != expected {
+			return fmt.Errorf("unexpected participant in create response: expected %q, got %q", expected, created.ID)
+		}
+	}
 	return command.RenderParticipants(globals.Output, run.Stdout, []participantpkg.Participant{created})
 }
 

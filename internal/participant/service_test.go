@@ -327,6 +327,41 @@ func TestParticipantRetryDuringAgentDeletion(t *testing.T) {
 	})
 }
 
+func TestBindExistingWorkerDuringExecution(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		controller := mustNewAgentService(t)
+		svc := NewService(NewMemoryStore(nil), WithAgentEngine(agentengine.New(controller)))
+		const id, name = "agent-original", "agent-lookup"
+		if _, err := controller.CreateRecord(t.Context(), agent.CreateRequest{Spec: agent.CreateAgentSpec{
+			ID: id, Name: name, Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex, Image: "agent-image:test",
+		}}); err != nil {
+			t.Fatal(err)
+		}
+		release, err := controller.LifecycleCoordinator().Execution(t.Context(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer release()
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		for _, req := range []CreateRequest{
+			{ID: "pt-reuse", Name: "Reuse", AgentBinding: AgentBindingSpec{Mode: BindingModeReuse, AgentID: id}},
+			{Name: "By display name", AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: name}},
+			{ID: "pt-reuse", Name: name, AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: "agent-requested"}},
+		} {
+			req.Channel, req.Type = ChannelCSGClaw, TypeAgent
+			p, err := svc.Create(ctx, req)
+			if err != nil || p.AgentID != id {
+				t.Fatalf("bind %s using %q: worker %q, error %v", req.AgentBinding.Mode, req.AgentBinding.AgentID, p.AgentID, err)
+			}
+		}
+		workers, err := svc.agents.List(ctx, agentengine.AgentListOptions{})
+		if err != nil || len(workers) != 1 || workers[0].ID != id || workers[0].Spec.Name != name {
+			t.Fatalf("unexpected workers after binding: %+v, %v", workers, err)
+		}
+	})
+}
+
 func TestConcurrentCreateWithDifferentWorkerIDs(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		engine := enginetest.NewMemoryClient()
