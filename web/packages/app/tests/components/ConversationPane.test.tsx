@@ -886,12 +886,11 @@ describe("ConversationPane", () => {
       ],
     });
 
-    expect(screen.getAllByText("Choose a color").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Choose a color")).toHaveLength(1);
     const answerMode = within(screen.getByRole("region", { name: "questionAnswerMode" }));
     expect(answerMode.getByRole("heading", { name: "Choose a color" })).toBeInTheDocument();
     expect(screen.getByRole("timer")).toBeInTheDocument();
-    const card = within(screen.getByRole("region", { name: "questionRequest" }));
-    expect(card.getByText("Choose a color")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "questionRequest" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
     expect(
       within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", {
@@ -901,7 +900,7 @@ describe("ConversationPane", () => {
     expect(
       within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", { name: "questionNext" }),
     ).toBeEnabled();
-    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Message")).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Blue/ }));
     await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Choose a color" })).not.toBeInTheDocument());
@@ -937,7 +936,7 @@ describe("ConversationPane", () => {
     expect(
       within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", { name: "questionNext" }),
     ).toBeEnabled();
-    expect(screen.queryByRole("textbox", { name: "Reply in thread" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply in thread" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Blue/ }));
     await user.click(

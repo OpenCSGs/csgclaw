@@ -11,6 +11,8 @@ import conversationThreadsStyles from "./ConversationThreads.module.css";
 import { messageResources } from "@/models/conversationResources";
 import { useEventCallback } from "@/hooks/useEventCallback";
 import { emptyCompletedProgress } from "@/models/turnProgress";
+import { InlineAgentQuestion } from "./InlineAgentQuestion";
+import { useQuestionTranscriptVisibility } from "./useQuestionTranscriptVisibility";
 import { isAutonomousCoordinationNotice } from "@/models/agentActivity";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
@@ -78,7 +80,6 @@ export type ConversationMessageListProps = {
   onFollowLatest?: () => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
-  onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   onCitationSelect?: CitationSelectHandler;
   t: TranslateFn;
   theme: ThemeMode;
@@ -92,7 +93,6 @@ export function ConversationMessageList(props: ConversationMessageListProps) {
   const onPreviewUser = useEventCallback(props.onPreviewUser);
   const onOpenAgentDetail = useEventCallback(props.onOpenAgentDetail);
   const onPreviewAttachment = useEventCallback(props.onPreviewAttachment);
-  const onQuestionSelect = useEventCallback(props.onQuestionSelect);
   const onCitationSelect = useEventCallback(props.onCitationSelect);
   return (
     <MessageListContent
@@ -102,7 +102,6 @@ export function ConversationMessageList(props: ConversationMessageListProps) {
       onPreviewUser={onPreviewUser}
       onOpenAgentDetail={props.onOpenAgentDetail ? onOpenAgentDetail : undefined}
       onPreviewAttachment={props.onPreviewAttachment ? onPreviewAttachment : undefined}
-      onQuestionSelect={props.onQuestionSelect ? onQuestionSelect : undefined}
       onCitationSelect={props.onCitationSelect ? onCitationSelect : undefined}
     />
   );
@@ -132,7 +131,6 @@ const MessageListContent = memo(function MessageListContent({
   onFollowLatest,
   onPreviewUser,
   onPreviewAttachment,
-  onQuestionSelect,
   onCitationSelect,
 }: ConversationMessageListProps) {
   const memory = useConversationMemory(
@@ -146,7 +144,11 @@ const MessageListContent = memo(function MessageListContent({
     () => (collaboration ? collaborationTranscript(visibleMessages) : { messages: visibleMessages, activities: [] }),
     [collaboration, visibleMessages],
   );
-  const { messages: displayMessages } = transcript;
+  const { hideQuestionTranscript, onQuestionSettled } = useQuestionTranscriptVisibility();
+  const displayMessages = useMemo(
+    () => transcript.messages.filter((message) => !hideQuestionTranscript(message)),
+    [transcript.messages, hideQuestionTranscript],
+  );
   const videosByTurn = useMemo(() => indexVideoMessagesByTurn(displayMessages), [displayMessages]);
 
   const timelineItems = useMemo(
@@ -229,7 +231,8 @@ const MessageListContent = memo(function MessageListContent({
             ? resolveAgentAvatarFallback(messageAgent, usersById)
             : avatarFallbackText(user.avatar, user.name, user.id);
           const threadSummary = threadHasReplies(message.thread) ? message.thread : null;
-          const latestThreadReply = threadSummary?.latest_reply;
+          const latestReply = threadSummary?.latest_reply;
+          const latestThreadReply = latestReply && !hideQuestionTranscript(latestReply) ? latestReply : null;
           const messageStateKey = longMessageStateKey(conversation, message, index);
           const turnVideos = message.id ? videosByTurn.get(message.id) || [] : [];
           const isVideoGeneration = Boolean(message.metadata?.video_generation);
@@ -279,34 +282,40 @@ const MessageListContent = memo(function MessageListContent({
                   {(message.content || messageResources(message.metadata).length > 0) &&
                   !message.metadata?.image_generation &&
                   !isVideoGeneration ? (
-                    <div className={`message-bubble ${messageLayoutStyles["message-bubble"]}`}>
-                      <MessageContent
-                        key={`${message.id}:${theme}`}
-                        content={message.content}
-                        message={message}
-                        allowLegacyToolFormat={Boolean(messageAgent)}
-                        showTurnProgress={!collaboration}
-                        progressControls={progressControls}
-                        videoMessages={turnVideos}
-                        actionBusy={messageActionBusy}
-                        actionFeedback={messageActionFeedback}
-                        enableLongMessageCollapse={collapsible}
-                        longMessageExpanded={collapsible ? expandedLongMessages[messageStateKey] === true : undefined}
-                        onAction={onMessageAction}
-                        onLongMessageExpandedChange={
-                          collapsible
-                            ? (expanded) =>
-                                setExpandedLongMessages((current) => ({
-                                  ...current,
-                                  [messageStateKey]: expanded,
-                                }))
-                            : undefined
-                        }
-                        onQuestionSelect={onQuestionSelect}
-                        onCitationSelect={onCitationSelect}
-                        t={t}
-                      />
-                    </div>
+                    <InlineAgentQuestion
+                      message={message}
+                      t={t}
+                      enabled={!conversation.cloud_agent}
+                      onSettled={onQuestionSettled}
+                    >
+                      <div className={`message-bubble ${messageLayoutStyles["message-bubble"]}`}>
+                        <MessageContent
+                          key={`${message.id}:${theme}`}
+                          content={message.content}
+                          message={message}
+                          allowLegacyToolFormat={Boolean(messageAgent)}
+                          showTurnProgress={!collaboration}
+                          progressControls={progressControls}
+                          videoMessages={turnVideos}
+                          actionBusy={messageActionBusy}
+                          actionFeedback={messageActionFeedback}
+                          enableLongMessageCollapse={collapsible}
+                          longMessageExpanded={collapsible ? expandedLongMessages[messageStateKey] === true : undefined}
+                          onAction={onMessageAction}
+                          onLongMessageExpandedChange={
+                            collapsible
+                              ? (expanded) =>
+                                  setExpandedLongMessages((current) => ({
+                                    ...current,
+                                    [messageStateKey]: expanded,
+                                  }))
+                              : undefined
+                          }
+                          onCitationSelect={onCitationSelect}
+                          t={t}
+                        />
+                      </div>
+                    </InlineAgentQuestion>
                   ) : null}
                   <DiagnosticMessageAction metadata={message.metadata} t={t} />
                   {isVideoGeneration && message.metadata?.image_generation ? (
