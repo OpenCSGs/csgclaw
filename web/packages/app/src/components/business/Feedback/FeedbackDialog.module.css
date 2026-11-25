@@ -8,7 +8,42 @@
 }
 .body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
+}
+.footer,
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.inlineActions p,
+.notice p {
+  margin: 0;
+}
+.inlineActions p {
+  flex-basis: 100%;
+}
+.notice,
+.rejections {
+  overflow-wrap: anywhere;
+}
+.submissionStatus {
+  flex-basis: 100%;
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.submissionStatus p + p {
+  margin-top: var(--space-1);
+}
+.rejections {
+  margin-block: var(--space-1);
+  padding-inline-start: 1.25em;
 }
 .label {
   display: grid;
@@ -26,6 +61,7 @@
   color: var(--muted);
   font-size: 12px;
   line-height: 18px;
+  overflow-wrap: anywhere;
 }
 .label textarea {
   width: 100%;

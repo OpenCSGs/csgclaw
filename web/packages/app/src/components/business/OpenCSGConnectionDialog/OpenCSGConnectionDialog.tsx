@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
+  LinkButton,
 } from "@/components/ui";
 import {
   AUTH_ENVIRONMENT_PRESETS,
@@ -57,6 +58,7 @@ export type OpenCSGConnectionDialogProps = {
   open: boolean;
   t: TranslateFn;
   variant?: "connect" | "authentication-required" | "switch-site";
+  feedbackURL?: string;
   onCloseAutoFocus?: (event: Event) => void;
   onConnect: (environment: AuthEnvironmentDraft) => void;
   onOpenChange: (open: boolean) => void;
@@ -70,6 +72,7 @@ export function OpenCSGConnectionDialog({
   open,
   t,
   variant = "connect",
+  feedbackURL,
   onCloseAutoFocus,
   onConnect,
   onOpenChange,
@@ -107,6 +110,11 @@ export function OpenCSGConnectionDialog({
   const switching = variant === "switch-site";
   const sameSite = switching && draftURL === normalizeBaseURL(environment.opencsgBaseURL);
   const authenticationRequired = variant === "authentication-required";
+  const loginTitle = feedbackURL
+    ? "feedbackLoginTitle"
+    : authenticationRequired
+      ? "openCSGLoginRequiredTitle"
+      : "csghubConnectTitle";
   const targetLabel =
     selectedSite?.locales[siteLocale].title || selectedSavedSite?.name || (ready ? new URL(draftURL).host : "");
 
@@ -243,17 +251,17 @@ export function OpenCSGConnectionDialog({
       <DialogContent className={styles.dialog} onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader className={styles.header}>
           <div className={styles.copy}>
-            <DialogTitle>
-              {t(
-                editingURL
-                  ? "csghubSiteEdit"
-                  : authenticationRequired
-                    ? "openCSGLoginRequiredTitle"
-                    : "csghubConnectTitle",
-              )}
-            </DialogTitle>
+            <DialogTitle>{t(editingURL ? "csghubSiteEdit" : loginTitle)}</DialogTitle>
             <DialogDescription>
-              {t(authenticationRequired ? "openCSGLoginRequiredDescription" : "csghubConnectDescription")}
+              {feedbackURL ? (
+                <>
+                  {t("feedbackLoginDescription")}
+                  <br />
+                  {t("feedbackLoginSitePrompt")}
+                </>
+              ) : (
+                t(authenticationRequired ? "openCSGLoginRequiredDescription" : "csghubConnectDescription")
+              )}
             </DialogDescription>
           </div>
           <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly disabled={busy} />
@@ -455,12 +463,30 @@ export function OpenCSGConnectionDialog({
             <p className={styles.returnHint}>
               {ready && !sameSite ? t("csghubLoginTargetHint", { site: targetLabel }) : null}
               {ready && !sameSite ? " " : null}
-              {t(authenticationRequired ? "openCSGLoginRequiredHint" : "csghubConnectReturnHint")}
+              {t(
+                feedbackURL
+                  ? "feedbackLoginReturnHint"
+                  : authenticationRequired
+                    ? "openCSGLoginRequiredHint"
+                    : "csghubConnectReturnHint",
+              )}
             </p>
           ) : null}
           {error ? <InlineError>{error}</InlineError> : null}
         </DialogBody>
         <DialogFooter className={styles.actions}>
+          {feedbackURL && !editingURL ? (
+            <LinkButton
+              className={styles.feedbackAction}
+              href={feedbackURL}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="secondaryGray"
+              size="md"
+            >
+              {t("feedbackContinueOnGitHub")}
+            </LinkButton>
+          ) : null}
           {editingURL ? (
             <>
               <Button
@@ -482,7 +508,7 @@ export function OpenCSGConnectionDialog({
               </Button>
             </>
           ) : (
-            <>
+            <div className={styles.loginActions}>
               <Button variant="secondaryGray" size="md" disabled={busy} onClick={() => handleOpenChange(false)}>
                 {t("cancel")}
               </Button>
@@ -501,7 +527,7 @@ export function OpenCSGConnectionDialog({
                       : "csghubConnectContinue",
                 )}
               </Button>
-            </>
+            </div>
           )}
         </DialogFooter>
       </DialogContent>

@@ -155,7 +155,7 @@ it("accepts window paste and dropped files while the form is open", () => {
   expect(addAttachments).toHaveBeenCalledTimes(2);
 });
 
-it("shows only a confirmation after the feedback is submitted", () => {
+it("shows the issue number and a safe link after feedback is submitted", () => {
   const { rerender } = render(<FeedbackDialog {...props} />);
   const status = screen.getByRole("status");
   expect(status).toBeEmptyDOMElement();
@@ -167,7 +167,16 @@ it("shows only a confirmation after the feedback is submitted", () => {
   );
   expect(screen.getByRole("status")).toBe(status);
   expect(status).toHaveTextContent("feedbackSuccess");
-  expect(screen.queryByRole("link")).not.toBeInTheDocument();
-  expect(screen.queryByText("#123")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "feedbackViewIssue" })).toHaveAttribute(
+    "href",
+    "https://example.test/issues/123",
+  );
+  expect(screen.getByRole("button", { name: "feedbackCopyIssueNumber" })).toBeInTheDocument();
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  rerender(<FeedbackDialog {...props} receipt={{ success: true, issue_id: 123, issue_url: "javascript:alert(1)" }} />);
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "feedbackCopyIssueNumber" })).toBeInTheDocument();
+  rerender(<FeedbackDialog {...props} receipt={{ success: true }} />);
+  expect(screen.getByRole("status")).toHaveTextContent("feedbackSuccess");
+  expect(screen.queryByRole("button", { name: "feedbackCopyIssueNumber" })).not.toBeInTheDocument();
 });

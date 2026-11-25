@@ -1042,6 +1042,7 @@ export function useWorkspaceController(): WorkspaceController {
       onOpenConfigSettings: configSettings.openConfigModal,
       onOpenSettings: selectSettings,
       authStatus: auth.status,
+      authStatusLoading: auth.statusLoading,
       authExpired: auth.status.authenticated === true && !openCSGAuthGuard.authenticated,
       authEnvironment: auth.environment,
       authBusy: auth.busy,

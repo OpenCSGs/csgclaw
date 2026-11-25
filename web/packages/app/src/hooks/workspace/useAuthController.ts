@@ -54,6 +54,7 @@ export type AuthController = {
   pending: boolean;
   setEnvironment: (environment: AuthEnvironmentDraft) => void;
   status: AuthStatus;
+  statusLoading: boolean;
 };
 
 export function useAuthController(t: TranslateFn): AuthController {
@@ -313,6 +314,7 @@ export function useAuthController(t: TranslateFn): AuthController {
     pending: loginPending,
     setEnvironment,
     status,
+    statusLoading: statusQuery.isPending,
   };
 }
 
