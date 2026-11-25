@@ -2023,11 +2023,12 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 	defer s.mu.Unlock()
 
 	id = canonicalIMUserID(id)
-	user, ok := s.users[id]
-	if ok && user.AgentState == "deleted" {
+	previous, existed := s.users[id]
+	user := previous
+	if existed && user.AgentState == "deleted" {
 		return User{}, false, ErrAgentIdentityDeleted
 	}
-	if !ok {
+	if !existed {
 		name := strings.TrimSpace(req.Name)
 		if name == "" {
 			name = strings.TrimSpace(strings.TrimPrefix(id, "user-"))
@@ -2052,18 +2053,16 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 			AccentHex:   accentHexForID(id),
 			CreatedAt:   time.Now().UTC(),
 		}
-		ok = true
 	}
-	if name := strings.TrimSpace(req.Name); name != "" {
+	name := strings.TrimSpace(req.Name)
+	if name != "" {
 		if err := identity.ValidateMentionName(name); err != nil {
 			return User{}, false, err
 		}
 		if existingID, ok := s.byName[strings.ToLower(name)]; ok && s.resolveUserIDLocked(existingID) != id {
-			return User{}, false, fmt.Errorf("name %q already exists", name)
+			return User{}, false, fmt.Errorf("name %q %w", name, identity.ErrNameExists)
 		}
-		delete(s.byName, strings.ToLower(strings.TrimSpace(user.Name)))
 		user.Name = name
-		s.byName[strings.ToLower(name)] = id
 	}
 	if description := strings.TrimSpace(req.Description); description != "" {
 		user.Description = description
@@ -2080,7 +2079,16 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 	}
 	s.users[id] = user
 	if err := s.saveLocked(); err != nil {
+		if existed {
+			s.users[id] = previous
+		} else {
+			delete(s.users, id)
+		}
 		return User{}, false, err
+	}
+	if name != "" {
+		delete(s.byName, strings.ToLower(strings.TrimSpace(previous.Name)))
+		s.byName[strings.ToLower(name)] = id
 	}
 	return user, true, nil
 }

@@ -194,9 +194,34 @@ func TestRetryExplicitParticipantBinding(t *testing.T) {
 	if rec := post(strings.Replace(body, "agent-qa", "agent-other", 1)); rec.Code != http.StatusOK || rec.Body.String() != first.Body.String() {
 		t.Fatalf("historical binding: %d %s", rec.Code, rec.Body)
 	}
+	alias := strings.NewReplacer("pt-qa", "pt-alias", `"name":"QA"`, `"name":"Alias"`).Replace(body)
+	for _, status := range []int{http.StatusCreated, http.StatusOK} {
+		rec := post(alias)
+		var p apitypes.Participant
+		if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil || rec.Code != status ||
+			p.AgentID != "agent-qa" || p.AgentName != "QA" || p.Name != "Alias" || p.UserName != "Alias" {
+			t.Fatalf("shared worker binding: %d %s", rec.Code, rec.Body)
+		}
+	}
 	renamed := strings.Replace(body, `"name":"QA"`, `"name":"Renamed"`, 1)
-	if rec := post(strings.Replace(renamed, `"agent_id":"agent-qa",`, "", 1)); rec.Code != http.StatusOK {
+	rec := post(strings.Replace(renamed, `"agent_id":"agent-qa",`, "", 1))
+	var p apitypes.Participant
+	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil || rec.Code != http.StatusOK ||
+		p.Name != "Renamed" || p.UserName != p.Name || p.AgentName != p.Name || imSvc.ResolveUserID("Renamed") != "user-qa" {
 		t.Fatalf("rename: %d %s", rec.Code, rec.Body)
+	}
+	if rec := post(`{"id":"pt-human","type":"human","name":"Reviewer"}`); rec.Code != http.StatusCreated {
+		t.Fatalf("create human: %d %s", rec.Code, rec.Body)
+	}
+	for _, taken := range []string{"reviewer", "user-human"} {
+		if rec := post(strings.Replace(renamed, "Renamed", taken, 1)); rec.Code != http.StatusConflict ||
+			!strings.Contains(rec.Body.String(), "agent_name_conflict") {
+			t.Fatalf("IM name conflict: %d %s", rec.Code, rec.Body)
+		}
+	}
+	stored, _ := store.Get(participant.ChannelCSGClaw, "pt-qa")
+	if stored.Name != "Renamed" || imSvc.ResolveUserID("reviewer") != "user-human" || imSvc.ResolveUserID("Renamed") != "user-qa" {
+		t.Fatal("name conflict changed the participant or IM name ownership")
 	}
 	if worker, ok := agentSvc.AgentByName("Renamed"); !ok || worker.ID != "agent-qa" {
 		t.Fatal("name does not select the bound worker")
@@ -211,8 +236,38 @@ func TestRetryExplicitParticipantBinding(t *testing.T) {
 	if rec := post(strings.Replace(renamed, "Renamed", "Taken", 1)); rec.Code != http.StatusConflict {
 		t.Fatalf("name conflict: %d %s", rec.Code, rec.Body)
 	}
+	afterConflict, _ := store.Get(participant.ChannelCSGClaw, "pt-qa")
+	if afterConflict.Name != stored.Name || !afterConflict.UpdatedAt.Equal(stored.UpdatedAt) || imSvc.ResolveUserID("Renamed") != "user-qa" {
+		t.Fatal("worker name conflict changed the participant or IM user")
+	}
 	if worker, ok := agentSvc.AgentByName("Renamed"); !ok || worker.ID != "agent-qa" {
 		t.Fatal("conflict changed the bound worker")
+	}
+	worker, err := engine.Agents().Get(t.Context(), p.AgentID, agentengine.AgentGetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Agents().Update(t.Context(), worker.ID, agentengine.AgentUpdateRequest{
+		Spec: agentengine.AgentSpec{Name: "PreviousWorker"}, FieldMask: []string{"name"}, ResourceVersion: worker.ResourceVersion,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if rec := post(renamed); rec.Code != http.StatusOK {
+		t.Fatalf("restore worker name with another participant bound: %d %s", rec.Code, rec.Body)
+	}
+	if _, ok := agentSvc.AgentByName("Renamed"); !ok {
+		t.Fatal("an unrelated alias prevented restoration of the worker name")
+	}
+	// Recover identities left under the old name when the worker already has
+	// the requested name.
+	previous := "Previous"
+	if _, _, err := srv.participant.Update(t.Context(), participant.ChannelCSGClaw, "pt-qa", participant.UpdateRequest{Name: &previous}); err != nil {
+		t.Fatal(err)
+	}
+	rec = post(renamed)
+	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil || rec.Code != http.StatusOK ||
+		p.Name != "Renamed" || p.UserName != p.Name || p.AgentName != p.Name || imSvc.ResolveUserID("Renamed") != "user-qa" {
+		t.Fatalf("repair existing rename: %d %s", rec.Code, rec.Body)
 	}
 	if _, err := engine.Agents().SetArchived(context.Background(), "agent-qa", true); err != nil {
 		t.Fatal(err)

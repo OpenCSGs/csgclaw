@@ -102,6 +102,24 @@ func TestRetireAgentUserSaveFailureRetainsNameReservation(t *testing.T) {
 	}
 }
 
+func TestUpdateAgentUserSaveFailureRetainsNameReservation(t *testing.T) {
+	s := NewServiceFromBootstrap(Bootstrap{Users: []User{{ID: "user-worker", Name: "Original"}}})
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.statePath = filepath.Join(blocker, "state.json")
+	if _, _, err := s.UpdateAgentUser(UpdateAgentUserRequest{ID: "user-worker", Name: "Renamed"}); err == nil {
+		t.Fatal("rename succeeded despite failed persistence")
+	}
+	if original, ok := s.User("Original"); !ok || original.ID != "user-worker" || original.Name != "Original" {
+		t.Fatalf("original identity after failed rename: %+v", original)
+	}
+	if _, ok := s.User("Renamed"); ok {
+		t.Fatal("failed rename reserved the new name")
+	}
+}
+
 func TestAgentArchiveHidesWithoutChangingMembershipOrManualArchive(t *testing.T) {
 	s := NewServiceFromBootstrap(Bootstrap{CurrentUserID: AdminUserID, Users: []User{
 		{ID: AdminUserID, Name: "admin", Role: "admin"}, {ID: "user-worker", Name: "worker", Role: "worker"}, {ID: ManagerUserID, Name: "manager", Role: "manager"},

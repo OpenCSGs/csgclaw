@@ -346,6 +346,7 @@ func TestBindExistingWorkerDuringExecution(t *testing.T) {
 		defer cancel()
 		for _, req := range []CreateRequest{
 			{ID: "pt-reuse", Name: "Reuse", AgentBinding: AgentBindingSpec{Mode: BindingModeReuse, AgentID: id}},
+			{ID: "pt-alias", Name: "Alias", AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: id}},
 			{Name: "By display name", AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: name}},
 			{ID: "pt-reuse", Name: name, AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: "agent-requested"}},
 		} {
