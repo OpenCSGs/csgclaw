@@ -271,6 +271,8 @@ func (h *Handler) clearOpenCSGModelProviderCache(ctx context.Context) error {
 	if h == nil || strings.TrimSpace(h.configPath) == "" {
 		return nil
 	}
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	cfg, path, err := h.loadBootstrapConfig()
 	if err != nil {
 		return err

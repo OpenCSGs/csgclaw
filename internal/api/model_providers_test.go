@@ -295,10 +295,61 @@ func TestOpenCSGModelProviderCheckRecoversCatalogWithDisplayedGatewayURL(t *test
 	if rec.Code != http.StatusOK {
 		t.Fatalf("detail check status = %d: %s", rec.Code, rec.Body.String())
 	}
+	var checked modelProviderCheckResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &checked); err != nil || checked.Provider == nil ||
+		strings.Join(checked.Provider.Models, ",") != "recovered-model,new-model" {
+		t.Fatalf("detail check did not return the saved provider: %s (error %v)", rec.Body.String(), err)
+	}
 	provider := readOpenCSGProvider(t, handler)
 	if provider.Status != agent.ModelProviderStatusConnected || strings.Join(provider.Models, ",") != "recovered-model,new-model" ||
 		provider.LastCheckedAt != "2026-11-19T09:04:12Z" {
 		t.Fatalf("catalog after recovery: status = %q, models = %v, checked at = %q", provider.Status, provider.Models, provider.LastCheckedAt)
+	}
+}
+
+func TestModelProviderCheckPreservesConcurrentCatalogUpdates(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	writeCachedOpenCSGModelsConfig(t, configPath)
+	handler := &Handler{}
+	handler.SetConfigPath(configPath)
+	routes := handler.Routes()
+	request := func(method, path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, httptest.NewRequest(method, "/api/v1/model-providers"+path, strings.NewReader(body)))
+		return rec
+	}
+	if rec := request(http.MethodPost, "", `{"id":"remote","display_name":"Remote","models":["old-remote"]}`); rec.Code != http.StatusCreated {
+		t.Fatalf("create remote: %d %s", rec.Code, rec.Body.String())
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	t.Cleanup(stubModelProviderCheck(func(_ context.Context, input agent.ModelProviderCheckInput) agent.ModelProviderCheckResult {
+		if input.ID == "remote" {
+			close(started)
+			<-release
+		}
+		return agent.ModelProviderCheckResult{
+			ID: input.ID, Status: agent.ModelProviderStatusConnected, Models: []string{"new-" + input.ID},
+		}
+	}))
+	completed := make(chan *httptest.ResponseRecorder, 1)
+	go func() { completed <- request(http.MethodPost, "/remote/check", `{}`) }()
+	<-started
+	opencsg := request(http.MethodPost, "/opencsg/check", `{}`)
+	close(release)
+	remote := <-completed
+	if opencsg.Code != http.StatusOK || remote.Code != http.StatusOK {
+		t.Fatalf("checks OpenCSG = %d %s, Remote = %d %s", opencsg.Code, opencsg.Body, remote.Code, remote.Body)
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"opencsg", "remote"} {
+		models := cfg.Models.Providers[id].Models
+		if len(models) != 1 || models[0] != "new-"+id {
+			t.Errorf("saved %s models = %v, want [new-%s]", id, models, id)
+		}
 	}
 }
 

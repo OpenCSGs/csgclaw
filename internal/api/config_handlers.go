@@ -40,6 +40,8 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
+		h.configMu.Lock()
+		defer h.configMu.Unlock()
 		cfg, path, err := h.loadBootstrapConfig()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
