@@ -75,7 +75,7 @@ export function WorkspaceAccountFooter({ onSelectDestination = (action) => actio
         onOpenProfile={() => onSelectDestination(() => openProfile(props.currentUserID))}
         onOpenCSGLogin={() => onSelectDestination(() => openSettings("account"))}
         onOpenCSGLogout={() => void props.onLogout()}
-        onOpenFeedback={() => onSelectDestination(() => setFeedbackOpen(true))}
+        onOpenFeedback={(trigger) => onSelectDestination(() => setFeedbackOpen(true, trigger))}
       />
     </div>
   );

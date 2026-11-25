@@ -24,6 +24,7 @@ import styles from "./FeedbackDialog.module.css";
 
 type Props = {
   open: boolean;
+  returnFocusTo?: HTMLElement | null;
   busy: boolean;
   description: string;
   images: File[];
@@ -79,7 +80,8 @@ export function FeedbackDialog(props: Props) {
           if (!busy && !receipt) onAddAttachments(Array.from(event.dataTransfer.files));
         }}
         onOpenAutoFocus={() => {
-          triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          triggerRef.current =
+            props.returnFocusTo ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();

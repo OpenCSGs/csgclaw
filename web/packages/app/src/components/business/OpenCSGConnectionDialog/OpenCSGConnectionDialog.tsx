@@ -57,6 +57,7 @@ export type OpenCSGConnectionDialogProps = {
   open: boolean;
   t: TranslateFn;
   variant?: "connect" | "authentication-required" | "switch-site";
+  onCloseAutoFocus?: (event: Event) => void;
   onConnect: (environment: AuthEnvironmentDraft) => void;
   onOpenChange: (open: boolean) => void;
 };
@@ -69,6 +70,7 @@ export function OpenCSGConnectionDialog({
   open,
   t,
   variant = "connect",
+  onCloseAutoFocus,
   onConnect,
   onOpenChange,
 }: OpenCSGConnectionDialogProps) {
@@ -238,7 +240,7 @@ export function OpenCSGConnectionDialog({
 
   return (
     <DialogRoot open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className={styles.dialog}>
+      <DialogContent className={styles.dialog} onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader className={styles.header}>
           <div className={styles.copy}>
             <DialogTitle>

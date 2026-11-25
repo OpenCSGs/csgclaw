@@ -7,8 +7,15 @@ import { readStoredAuthEnvironmentDraft, writeStoredAuthEnvironmentDraft } from 
 
 export function useAuthLoginDialog({
   closeOnConnect = true,
+  enabled = true,
   onCancel,
-}: { closeOnConnect?: boolean; onCancel?: () => void } = {}) {
+  onCloseAutoFocus,
+}: {
+  closeOnConnect?: boolean;
+  enabled?: boolean;
+  onCancel?: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
+} = {}) {
   const controller = useWorkspaceControllerContext();
   const sidebar = controller.sidebarProps;
   const [connectionOpen, setConnectionOpen] = useState(false);
@@ -37,9 +44,10 @@ export function useAuthLoginDialog({
       environment={connectionDraft}
       error={closeOnConnect ? undefined : sidebar.authError}
       locale={sidebar.locale}
-      open={connectionOpen}
+      open={enabled && connectionOpen}
       t={sidebar.t}
       onConnect={handleLogin}
+      onCloseAutoFocus={onCloseAutoFocus}
       onOpenChange={(open) => {
         setConnectionOpen(open);
         if (!open) onCancel?.();

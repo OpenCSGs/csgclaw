@@ -3449,6 +3449,7 @@ export const messages = {
       feedback_access_denied: "无法验证本地服务访问权限，请通过本机页面或 CSGClaw App 提交反馈。",
       feedback_login_required: "请登录 OpenCSG 后提交反馈。",
       feedback_invalid: "请检查反馈文字及附件的格式、数量和大小。",
+      feedback_upload_too_large: "门户拒绝了过大的附件，反馈尚未提交。请移除该附件或换用更小的文件后重试。",
       feedback_upload_failed: "附件上传失败，反馈尚未提交。已保留填写内容和附件，可以重试。",
       feedback_unavailable: "暂时无法确认提交结果，已保留填写内容。重新提交可能产生重复反馈。",
       knowledge_base_sign_in_required: "请先登录 OpenCSG，再访问远端知识库。",
@@ -7193,6 +7194,8 @@ export const messages = {
         "Local service access could not be verified. Submit feedback from the local page or CSGClaw App.",
       feedback_login_required: "Sign in to OpenCSG to submit feedback.",
       feedback_invalid: "Check the feedback text and the attachment formats, counts, and sizes.",
+      feedback_upload_too_large:
+        "The portal rejected an attachment because it was too large. Remove it or choose a smaller file and try again. Your feedback has not been submitted.",
       feedback_upload_failed:
         "Attachment upload failed before the feedback was submitted. Your text and attachments are still available to retry.",
       feedback_unavailable:

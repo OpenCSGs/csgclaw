@@ -91,7 +91,7 @@ function EntryHarness() {
   );
 }
 
-function renderEntryHarness(updateAvailable: boolean) {
+function renderEntryHarness(updateAvailable: boolean, authenticated = true) {
   const t = (key: string) => key;
   const apply = vi.fn();
   const controller = {
@@ -99,7 +99,7 @@ function renderEntryHarness(updateAvailable: boolean) {
     t,
     sidebarProps: {
       t,
-      authStatus: { ...emptyAuthStatus(), authenticated: true },
+      authStatus: { ...emptyAuthStatus(), authenticated },
       authEnvironment: defaultAuthEnvironmentDraft(),
       theme: "light",
       locale: "zh",
@@ -166,3 +166,20 @@ it("groups menu items and opens the same feedback draft from Settings", async ()
   await waitFor(() => expect(screen.getByRole("dialog", { name: "settings" })).toBeInTheDocument());
   await waitFor(() => expect(trigger).toHaveFocus());
 });
+
+it.each([true, false])(
+  "returns keyboard focus to the account menu after feedback (signed in: %s)",
+  async (signedIn) => {
+    renderEntryHarness(false, signedIn);
+    const user = userEvent.setup();
+    const account = screen.getByRole("button", { name: "iaUserMenuLabel" });
+    account.focus();
+    await user.keyboard("{Enter}{End}{Enter}");
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveAccessibleName(signedIn ? "feedbackTitle" : "csghubConnectTitle");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(account).toHaveFocus());
+  },
+);

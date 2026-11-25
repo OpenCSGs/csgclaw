@@ -99,13 +99,27 @@ func (h *Handler) handleFeedback(w http.ResponseWriter, r *http.Request) {
 			case 401, 403:
 				statusCode = http.StatusUnauthorized
 				code = "feedback_login_required"
-			case 400, 413, 422:
+			case http.StatusRequestEntityTooLarge:
+				if uploadErr != nil {
+					statusCode = http.StatusRequestEntityTooLarge
+					code = "feedback_upload_too_large"
+				} else {
+					statusCode = http.StatusBadRequest
+					code = "feedback_invalid"
+				}
+			case http.StatusBadRequest, http.StatusUnprocessableEntity:
 				statusCode = http.StatusBadRequest
-				code = "feedback_invalid"
+				if uploadErr == nil {
+					code = "feedback_invalid"
+				}
 			}
 		}
 		slog.LogAttrs(r.Context(), slog.LevelWarn, "feedback request failed", attrs...)
-		writeCodedAPIError(w, statusCode, code, "Unable to complete feedback request")
+		writeJSON(w, statusCode, map[string]any{
+			"error": map[string]string{
+				"code": code, "message": "Unable to complete feedback request", "stage": stage,
+			},
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, result)

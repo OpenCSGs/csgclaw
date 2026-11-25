@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Check,
   ChevronRight,
@@ -50,7 +50,7 @@ export type WorkspaceUserMenuProps = {
   onOpenCSGLogout: () => void;
   onOpenProfile: () => void;
   onOpenSettings: () => void;
-  onOpenFeedback: () => void;
+  onOpenFeedback: (trigger: HTMLButtonElement | null) => void;
   onThemeChange: (theme: ThemeMode) => void;
 };
 
@@ -75,6 +75,7 @@ export function WorkspaceUserMenu({
   onOpenFeedback,
   onThemeChange,
 }: WorkspaceUserMenuProps) {
+  const accountTrigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const name = currentUser?.name || currentUser?.id || t("localIdentityFallback");
   const role = currentUser?.role || "";
@@ -84,6 +85,7 @@ export function WorkspaceUserMenu({
     <DropdownMenuRoot open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button
+          ref={accountTrigger}
           type="button"
           className={classNames(styles.trigger, iconOnly && styles.triggerIconOnly, open && styles.triggerOpen)}
           aria-label={t("iaUserMenuLabel")}
@@ -230,7 +232,7 @@ export function WorkspaceUserMenu({
         </DropdownMenuSub>
 
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onOpenFeedback}>
+        <DropdownMenuItem onSelect={() => onOpenFeedback(accountTrigger.current)}>
           <span className={styles.menuIcon} aria-hidden="true">
             <MessageCircleMore size={16} />
           </span>

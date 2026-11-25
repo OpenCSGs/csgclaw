@@ -21,7 +21,7 @@ export function FeedbackSection() {
     <>
       <SettingsRow title={t("configSettingsFeedbackSection")} description={t("settingsFeedbackDescription")}>
         <div className={`${styles.formActions} ${styles.spanAll}`}>
-          <Button variant="primary" size="md" onClick={() => setFeedbackOpen(true)}>
+          <Button variant="primary" size="md" onClick={(event) => setFeedbackOpen(true, event.currentTarget)}>
             {t("feedbackWrite")}
           </Button>
           <a className={accountSectionStyles.linkButton} href={feedbackURL} target="_blank" rel="noreferrer">

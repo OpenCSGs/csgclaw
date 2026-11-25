@@ -66,6 +66,7 @@ func TestFeedbackUsesAuthenticatedSiteAndServerVersion(t *testing.T) {
 
 func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
 	var uploads, issues atomic.Int32
+	var rejectUpload atomic.Bool
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/internal_api/upload_with_ext":
@@ -81,6 +82,10 @@ func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
 				t.Errorf("unexpected detected archive name: %s", header.Filename)
 			}
 			uploads.Add(1)
+			if rejectUpload.Load() {
+				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			io.WriteString(w, `{"url":"https://files.example/diagnostic.zip"}`)
 		case "/api/v1/csgbot/user-feedback":
 			var payload struct {
@@ -114,14 +119,17 @@ func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name     string
-		content  []byte
-		wantCode int
+		name         string
+		content      []byte
+		wantCode     int
+		rejectUpload bool
 	}{
-		{"spoofed extension", []byte("fake zip"), http.StatusBadRequest},
-		{"valid archive without description", archive.Bytes(), http.StatusOK},
+		{"spoofed extension", []byte("fake zip"), http.StatusBadRequest, false},
+		{"valid archive without description", archive.Bytes(), http.StatusOK, false},
+		{"valid archive rejected by portal size limit", archive.Bytes(), http.StatusRequestEntityTooLarge, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			rejectUpload.Store(tc.rejectUpload)
 			var body bytes.Buffer
 			writer := multipart.NewWriter(&body)
 			part, err := writer.CreateFormFile("archives", "diagnostics.zip")
@@ -145,9 +153,23 @@ func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
 			if tc.wantCode == http.StatusOK && !strings.Contains(recorder.Body.String(), "https://issues.example/42") {
 				t.Errorf("missing issue URL in %s", recorder.Body)
 			}
+			if tc.rejectUpload {
+				var response struct {
+					Error struct {
+						Code  string
+						Stage string
+					}
+				}
+				if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+					t.Fatal(err)
+				}
+				if response.Error.Code != "feedback_upload_too_large" || response.Error.Stage != "archive_upload" {
+					t.Fatalf("unexpected upload error: %+v", response.Error)
+				}
+			}
 		})
 	}
-	if uploads.Load() != 1 || issues.Load() != 1 {
+	if uploads.Load() != 2 || issues.Load() != 1 {
 		t.Errorf("uploads=%d issues=%d", uploads.Load(), issues.Load())
 	}
 }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useContext, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   closeDialogSearch,
@@ -9,11 +9,14 @@ import {
 } from "@/models/workspaceDialogs";
 import type { WorkspaceDialogName } from "@/models/workspaceDialogs";
 
+import { FeedbackTriggerContext } from "./workspaceControllerContextValue";
+
 export type UseWorkspaceDialogsResult = {
   current: WorkspaceDialogName | "";
   openSettings: (section?: string, highlight?: boolean) => void;
   feedbackOpen: boolean;
-  setFeedbackOpen: (open: boolean) => void;
+  setFeedbackOpen: (open: boolean, trigger?: HTMLElement | null) => void;
+  feedbackTrigger: HTMLElement | null;
   openProfile: (humanID: string) => void;
   close: () => void;
 };
@@ -22,6 +25,7 @@ export function useWorkspaceDialogs(): UseWorkspaceDialogsResult {
   const location = useLocation();
   const navigate = useNavigate();
   const search = location.search;
+  const feedbackTrigger = useContext(FeedbackTriggerContext);
 
   const current = useMemo(() => openWorkspaceDialog(search), [search]);
 
@@ -44,10 +48,11 @@ export function useWorkspaceDialogs(): UseWorkspaceDialogsResult {
   }, [navigate, search]);
 
   const setFeedbackOpen = useCallback(
-    (open: boolean) => {
+    (open: boolean, trigger?: HTMLElement | null) => {
+      if (feedbackTrigger) feedbackTrigger.current = open ? (trigger ?? null) : null;
       navigate({ search: feedbackDialogSearch(search, open) }, { replace: true });
     },
-    [navigate, search],
+    [feedbackTrigger, navigate, search],
   );
 
   return {
@@ -57,5 +62,6 @@ export function useWorkspaceDialogs(): UseWorkspaceDialogsResult {
     close,
     feedbackOpen: new URLSearchParams(search).get("feedback") === "1",
     setFeedbackOpen,
+    feedbackTrigger: feedbackTrigger?.current ?? null,
   };
 }

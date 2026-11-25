@@ -65,6 +65,12 @@ it.each([
   ],
   ["zh", "feedback_login_required", "请登录 OpenCSG 后提交反馈。"],
   ["en", "feedback_login_required", "Sign in to OpenCSG to submit feedback."],
+  ["zh", "feedback_upload_too_large", "门户拒绝了过大的附件，反馈尚未提交。请移除该附件或换用更小的文件后重试。"],
+  [
+    "en",
+    "feedback_upload_too_large",
+    "The portal rejected an attachment because it was too large. Remove it or choose a smaller file and try again. Your feedback has not been submitted.",
+  ],
 ] as const)("shows the %s %s response and preserves feedback for retry", async (locale, code, expected) => {
   vi.stubGlobal(
     "URL",
@@ -100,7 +106,7 @@ it.each([
   await act(async () => {
     respond(
       new Response(JSON.stringify({ error: { code, message: "unauthorized" } }), {
-        status: 401,
+        status: code === "feedback_upload_too_large" ? 413 : 401,
         headers: { "Content-Type": "application/json" },
       }),
     );
