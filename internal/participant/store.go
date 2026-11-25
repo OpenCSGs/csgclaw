@@ -113,8 +113,18 @@ func (s *Store) Save(item apitypes.Participant) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.items[storeKey(item.Channel, item.ID)] = item
-	return s.saveLocked()
+	key := storeKey(item.Channel, item.ID)
+	old, exists := s.items[key]
+	s.items[key] = item
+	if err := s.saveLocked(); err != nil {
+		if exists {
+			s.items[key] = old
+		} else {
+			delete(s.items, key)
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *Store) Delete(channel, id string) (apitypes.Participant, bool, error) {

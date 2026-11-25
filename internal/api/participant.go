@@ -72,11 +72,12 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 		}
 		req.AgentHubService = hubSvc
 		var created apitypes.Participant
+		var inserted bool
 		skippedResources := []mcp.SkippedTemplateResource{}
 		create := func(ctx context.Context) error {
 			var err error
 			ctx = agentengine.WithTemplateMCPAvailability(ctx, h.mcp, &skippedResources)
-			created, err = h.participant.Create(ctx, req)
+			created, inserted, err = h.participant.CreateWithStatus(ctx, req)
 			return err
 		}
 		if channelName == participant.ChannelFeishu && req.Type == participant.TypeAgent {
@@ -126,8 +127,12 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			}
 			presented.Metadata["skipped_resources"] = skippedResources
 		}
-		h.publishParticipantEvent(im.EventTypeParticipantCreated, presented)
-		writeJSON(w, http.StatusCreated, presented)
+		status := http.StatusOK
+		if inserted {
+			h.publishParticipantEvent(im.EventTypeParticipantCreated, presented)
+			status = http.StatusCreated
+		}
+		writeJSON(w, status, presented)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}

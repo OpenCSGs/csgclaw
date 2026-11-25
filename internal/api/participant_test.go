@@ -154,6 +154,55 @@ func TestCreateCSGClawAgentParticipantViaAPIUsesRequestHub(t *testing.T) {
 	}
 }
 
+func TestRetryExplicitParticipantBinding(t *testing.T) {
+	agentSvc, _ := mustNewSeededServiceWithPath(t, nil)
+	store := participant.NewMemoryStore(nil)
+	engine := agentengine.New(agentSvc)
+	imSvc := im.NewService()
+	srv := &Handler{
+		svc: agentSvc, im: imSvc, agentEngine: engine, workspace: agentSvc.Workspace(),
+		agentModels: agentSvc.Models(), agentRuntime: agentSvc,
+		participant: participant.NewService(store, participant.WithAgentEngine(engine), participant.WithIMService(imSvc)),
+		hub: mustNewLocalTemplateHubService(t, "request-worker", hub.Template{
+			ID: "request-worker", Name: "request-worker", Role: hub.TemplateRoleWorker,
+			RuntimeKind: agent.RuntimeNameCodex, Image: "agent-image:test",
+		}),
+	}
+	routes := srv.Routes()
+	body := `{"id":"pt-qa","name":"QA","type":"agent","agent_binding":{"mode":"create","agent_id":"agent-qa","agent":{"from_template":"local.request-worker"}}}`
+	post := func(payload string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(payload)))
+		return rec
+	}
+	results := make(chan *httptest.ResponseRecorder, 2)
+	for range 2 {
+		go func() { results <- post(body) }()
+	}
+	first, second := <-results, <-results
+	if first.Code == http.StatusOK {
+		first, second = second, first
+	}
+	if first.Code != http.StatusCreated || second.Code != http.StatusOK || first.Body.String() != second.Body.String() {
+		t.Fatalf("concurrent create: %d %s; %d %s", first.Code, first.Body, second.Code, second.Body)
+	}
+	if rec := post(strings.Replace(body, "agent-qa", "agent-other", 1)); rec.Code != http.StatusConflict {
+		t.Fatalf("conflict: %d %s", rec.Code, rec.Body)
+	}
+	if _, err := engine.Agents().SetArchived(context.Background(), "agent-qa", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Agents().Delete(context.Background(), "agent-qa"); err != nil {
+		t.Fatal(err)
+	}
+	if rec := post(body); rec.Code != http.StatusOK {
+		t.Fatalf("restore: %d %s", rec.Code, rec.Body)
+	}
+	if _, ok := agentSvc.Agent("agent-qa"); !ok {
+		t.Fatal("worker was not restored")
+	}
+}
+
 func TestCreateCSGClawAgentParticipantViaAPIRequiresAgentBinding(t *testing.T) {
 	agentSvc, _ := mustNewSeededServiceWithPath(t, nil)
 	imSvc := im.NewService()

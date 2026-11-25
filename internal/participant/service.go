@@ -15,14 +15,16 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 )
 
 type Service struct {
-	store  *Store
-	agents agentengine.AgentInterface
-	im     *im.Service
+	creating sync.Map // participant key -> completion channel
+	store    *Store
+	agents   agentengine.AgentInterface
+	im       *im.Service
 }
 
 type Option func(*Service)
@@ -70,16 +72,69 @@ func (s *Service) Get(channel, id string) (apitypes.Participant, bool) {
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Participant, error) {
+	item, _, err := s.CreateWithStatus(ctx, req)
+	return item, err
+}
+
+// CreateWithStatus reports whether the request inserted a new participant.
+func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apitypes.Participant, bool, error) {
 	if s == nil || s.store == nil {
-		return apitypes.Participant{}, fmt.Errorf("participant store is required")
+		return apitypes.Participant{}, false, fmt.Errorf("participant store is required")
 	}
 	normalized, err := s.normalizeCreateRequest(req)
 	if err != nil {
-		return apitypes.Participant{}, err
+		return apitypes.Participant{}, false, err
 	}
-	if _, ok := s.store.Get(normalized.Channel, normalized.ID); ok {
-		return apitypes.Participant{}, fmt.Errorf("participant %s:%s already exists", normalized.Channel, normalized.ID)
+	release, err := s.lockCreate(ctx, storeKey(normalized.Channel, normalized.ID))
+	if err != nil {
+		return apitypes.Participant{}, false, err
 	}
+	defer release()
+	if existing, ok := s.store.Get(normalized.Channel, normalized.ID); ok {
+		explicitBinding := strings.TrimSpace(req.ID) != "" && normalized.AgentBinding.AgentID != ""
+		sameAgent := existing.AgentID == "" || agent.CanonicalID(existing.AgentID) == agent.CanonicalID(normalized.AgentBinding.AgentID)
+		if !explicitBinding || normalized.Channel != ChannelCSGClaw || normalized.Type != TypeAgent ||
+			existing.Type != TypeAgent || normalized.AgentBinding.Mode != BindingModeCreate || !sameAgent {
+			return apitypes.Participant{}, false, fmt.Errorf("participant %s:%s already exists", normalized.Channel, normalized.ID)
+		}
+		normalized.Name = existing.Name
+		agentID, err := s.ensureAgentBinding(ctx, normalized, true)
+		if err != nil {
+			return existing, false, err
+		}
+		if existing.AgentID == "" {
+			existing.AgentID = agentID
+			existing.UpdatedAt = time.Now().UTC()
+			if err := s.store.Save(existing); err != nil {
+				return existing, false, err
+			}
+		}
+		return existing, false, s.syncParticipantChannelUser(existing)
+	}
+	item, err := s.create(ctx, normalized)
+	return item, err == nil, err
+}
+
+// Serialize creation for one participant across the agent and participant stores.
+func (s *Service) lockCreate(ctx context.Context, key string) (func(), error) {
+	done := make(chan struct{})
+	for {
+		active, occupied := s.creating.LoadOrStore(key, done)
+		if !occupied {
+			return func() {
+				s.creating.Delete(key)
+				close(done)
+			}, nil
+		}
+		select {
+		case <-active.(chan struct{}):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+func (s *Service) create(ctx context.Context, normalized normalizedCreateRequest) (apitypes.Participant, error) {
 	if normalized.Channel == ChannelCSGClaw && s.im != nil {
 		if err := s.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: normalized.ChannelUser.Ref, Name: normalized.Name}); err != nil {
 			return apitypes.Participant{}, err
@@ -96,7 +151,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Parti
 	}
 
 	if normalized.Type == TypeAgent {
-		agentID, err := s.ensureAgentBinding(ctx, normalized)
+		agentID, err := s.ensureAgentBinding(ctx, normalized, false)
 		if err != nil {
 			return apitypes.Participant{}, err
 		}
@@ -896,7 +951,7 @@ func trimLocalIdentityPrefixes(id string) string {
 	return strings.TrimSpace(id)
 }
 
-func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRequest) (string, error) {
+func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRequest, restoring bool) (string, error) {
 	switch req.AgentBinding.Mode {
 	case BindingModeNone:
 		return "", nil
@@ -918,6 +973,11 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		}
 		if existing, err := s.agents.Get(ctx, agentID, agentengine.AgentGetOptions{}); err == nil {
 			return existing.ID, nil
+		} else if agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+			return "", err
+		}
+		if restoring && (req.AgentBinding.Agent == nil || strings.TrimSpace(req.AgentBinding.Agent.FromTemplate) == "") {
+			return "", fmt.Errorf("restoring missing agent %q requires a template", agentID)
 		}
 		spec := agent.CreateAgentSpec{}
 		if req.AgentBinding.Agent != nil {
