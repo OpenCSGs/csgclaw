@@ -74,3 +74,18 @@ func TestUserForParticipantResolvesStableHashAliases(t *testing.T) {
 		t.Fatalf("userForParticipantLocked(pt-agent-zaha7h-d59735ad) = %+v, %v; want ux", user, ok)
 	}
 }
+
+func TestUpdateAgentUserUsesBoundID(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{Users: []User{{ID: "user-other", Name: "user-qa", Role: "worker"}}})
+	updated, _, err := svc.UpdateAgentUser(UpdateAgentUserRequest{ID: "user-qa", Name: "QA"})
+	if err != nil || updated.ID != "user-qa" {
+		t.Fatalf("update by bound ID: %+v, %v", updated, err)
+	}
+	if u, ok := svc.LocalUserByID("u-qa"); !ok || u.ID != updated.ID {
+		t.Fatalf("legacy lookup returned %+v", u)
+	}
+	other, ok := svc.LocalUserByID("user-other")
+	if !ok || other.Name != "user-qa" {
+		t.Fatalf("updated the wrong user: %+v", other)
+	}
+}

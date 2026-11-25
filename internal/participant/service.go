@@ -21,7 +21,7 @@ import (
 )
 
 type Service struct {
-	mutations sync.Map // participant key -> completion channel
+	mutations sync.Map // resource key -> completion channel
 	store     *Store
 	agents    agentengine.AgentInterface
 	im        *im.Service
@@ -85,6 +85,19 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 	if err != nil {
 		return apitypes.Participant{}, false, err
 	}
+	// Hold the worker lock through the binding read and all persistence so
+	// deletion cannot retire the identity halfway through a create or retry.
+	if normalized.Type == TypeAgent && (normalized.AgentBinding.Mode == BindingModeCreate || normalized.AgentBinding.Mode == BindingModeReuse) {
+		agentID := normalized.AgentBinding.AgentID
+		if agentID == "" {
+			agentID = defaultAgentID(normalized.ID)
+		}
+		releaseAgent, err := s.lockAgent(ctx, agentID)
+		if err != nil {
+			return apitypes.Participant{}, false, err
+		}
+		defer releaseAgent()
+	}
 	release, err := s.lockParticipant(ctx, normalized.Channel, normalized.ID)
 	if err != nil {
 		return apitypes.Participant{}, false, err
@@ -96,6 +109,15 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 		if !explicitBinding || normalized.Channel != ChannelCSGClaw || normalized.Type != TypeAgent ||
 			existing.Type != TypeAgent || normalized.AgentBinding.Mode != BindingModeCreate || !sameAgent {
 			return apitypes.Participant{}, false, fmt.Errorf("participant %s:%s already exists", normalized.Channel, normalized.ID)
+		}
+		if s.im != nil && existing.ChannelUserKind == ChannelUserKindLocalUserID {
+			user, ok := s.im.LocalUserByID(existing.ChannelUserRef)
+			if !ok {
+				return existing, false, im.ErrUserNotFound
+			}
+			if user.AgentState == "deleted" {
+				return existing, false, im.ErrAgentIdentityDeleted
+			}
 		}
 		normalized.Name = existing.Name
 		agentID, err := s.ensureAgentBinding(ctx, normalized, true)
@@ -117,7 +139,14 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 
 // Serialize changes to the participant and its associated IM user.
 func (s *Service) lockParticipant(ctx context.Context, channel, id string) (func(), error) {
-	key := storeKey(channel, canonicalParticipantID(slugify(id)))
+	return s.lockMutation(ctx, storeKey(channel, canonicalParticipantID(slugify(id))))
+}
+
+func (s *Service) lockAgent(ctx context.Context, id string) (func(), error) {
+	return s.lockMutation(ctx, storeKey("agent", agent.CanonicalID(id)))
+}
+
+func (s *Service) lockMutation(ctx context.Context, key string) (func(), error) {
 	done := make(chan struct{})
 	for {
 		active, occupied := s.mutations.LoadOrStore(key, done)
@@ -596,6 +625,11 @@ func (s *Service) DeleteAgent(ctx context.Context, agentID string) ([]apitypes.P
 		return nil, fmt.Errorf("agent service is required")
 	}
 
+	release, err := s.lockAgent(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	refs := s.store.List(ListOptions{AgentID: agentID})
 	if err := s.agents.Delete(ctx, agentID); err != nil {
 		return nil, err
@@ -645,7 +679,7 @@ func (s *Service) RepairDanglingCSGClawAgentParticipants() ([]apitypes.Participa
 			// A persisted binding with a live local identity can be restored by
 			// participant create even when its worker record is missing.
 			if item.ChannelUserKind == ChannelUserKindLocalUserID {
-				if user, ok := s.im.User(item.ChannelUserRef); ok && user.AgentState != "deleted" {
+				if user, ok := s.im.LocalUserByID(item.ChannelUserRef); ok && user.AgentState != "deleted" {
 					continue
 				}
 			}

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -228,6 +229,99 @@ func TestCreateCSGClawAgentParticipantRequiresAgentBinding(t *testing.T) {
 	if _, ok := imSvc.User("user-gitlab-worker"); ok {
 		t.Fatal("channel user was created despite missing agent binding")
 	}
+}
+
+func TestRecoveryRequiresTheBoundIMUser(t *testing.T) {
+	store := NewMemoryStore([]Participant{{
+		ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent, AgentID: "agent-qa",
+		ChannelUserRef: "user-qa", ChannelUserKind: ChannelUserKindLocalUserID,
+	}})
+	users := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: "user-other", Name: "user-qa", Role: "worker"}}})
+	engine := enginetest.NewMemoryClient()
+	svc := NewService(store, WithAgentEngine(engine), WithIMService(users))
+	_, err := svc.Create(t.Context(), CreateRequest{
+		ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent,
+		AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: "agent-qa", Agent: &agent.CreateAgentSpec{FromTemplate: "local.qa", RuntimeKind: agent.RuntimeKindCodex}},
+	})
+	if !errors.Is(err, im.ErrUserNotFound) {
+		t.Fatalf("retry with a missing bound identity: %v", err)
+	}
+	if _, err := engine.Agents().Get(t.Context(), "agent-qa", agentengine.AgentGetOptions{}); agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+		t.Fatalf("unexpected worker after retry: %v", err)
+	}
+	deleted, err := svc.RepairDanglingCSGClawAgentParticipants()
+	if err != nil || len(deleted) != 1 || deleted[0].ID != "pt-qa" {
+		t.Fatalf("startup repair: %+v, %v", deleted, err)
+	}
+	other, ok := users.LocalUserByID("user-other")
+	if !ok || other.Name != "user-qa" || other.AgentState == "deleted" {
+		t.Fatalf("changed unrelated identity: %+v", other)
+	}
+}
+
+type pausedAgentDeletion struct {
+	agentengine.AgentInterface
+	resume    <-chan struct{}
+	provision <-chan struct{}
+}
+
+func (a pausedAgentDeletion) Delete(ctx context.Context, id string) error {
+	if err := a.AgentInterface.Delete(ctx, id); err != nil {
+		return err
+	}
+	<-a.resume
+	return nil
+}
+
+func (a pausedAgentDeletion) Create(ctx context.Context, req agentengine.AgentCreateRequest) (agentengine.Agent, error) {
+	<-a.provision
+	return a.AgentInterface.Create(ctx, req)
+}
+
+func TestParticipantRetryDuringAgentDeletion(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := NewMemoryStore([]Participant{{
+			ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent, AgentID: "agent-worker",
+			ChannelUserRef: "user-qa", ChannelUserKind: ChannelUserKindLocalUserID,
+		}})
+		users := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: "user-qa", Name: "QA", Role: "worker"}}})
+		engine := enginetest.NewMemoryClient(agentengine.Agent{ID: "agent-worker"})
+		svc := NewService(store, WithIMService(users))
+		resume := make(chan struct{})
+		provision := make(chan struct{})
+		svc.agents = pausedAgentDeletion{AgentInterface: engine.Agents(), resume: resume, provision: provision}
+		removed := make(chan error, 1)
+		go func() { _, err := svc.DeleteAgent(t.Context(), "agent-worker"); removed <- err }()
+		synctest.Wait() // Worker removed; participant and user still exist.
+		retried := make(chan error, 1)
+		go func() {
+			_, err := svc.Create(t.Context(), CreateRequest{
+				ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent,
+				AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: "worker", Agent: &agent.CreateAgentSpec{FromTemplate: "local.qa", RuntimeKind: agent.RuntimeKindCodex}},
+			})
+			retried <- err
+		}()
+		synctest.Wait()
+		close(resume)
+		if err := <-removed; err != nil {
+			t.Fatal(err)
+		}
+		close(provision)
+		if err := <-retried; !errors.Is(err, im.ErrAgentIdentityDeleted) {
+			t.Fatalf("retry after delete: %v", err)
+		}
+		if _, ok := store.Get(ChannelCSGClaw, "pt-qa"); ok {
+			t.Fatal("participant survived deletion")
+		}
+		user, ok := users.LocalUserByID("user-qa")
+		if !ok || user.AgentState != "deleted" {
+			t.Fatalf("expected retired user: %+v", user)
+		}
+		agents, err := engine.Agents().List(t.Context(), agentengine.AgentListOptions{})
+		if err != nil || len(agents) != 0 {
+			t.Fatalf("unexpected workers: %+v, %v", agents, err)
+		}
+	})
 }
 
 func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testing.T) {

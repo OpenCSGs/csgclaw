@@ -2022,8 +2022,12 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	id = s.resolveUserIDLocked(id)
-	user, ok := s.users[id]
+	user, ok := s.userForLocalIDLocked(id)
+	if ok {
+		id = user.ID
+	} else {
+		id = canonicalIMUserID(id)
+	}
 	if ok && user.AgentState == "deleted" {
 		return User{}, false, ErrAgentIdentityDeleted
 	}

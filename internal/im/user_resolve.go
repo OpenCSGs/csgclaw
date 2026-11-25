@@ -133,6 +133,13 @@ func (s *Service) userForParticipantLocked(participantID string) (User, bool) {
 	return s.userForLocalIDLocked(userID)
 }
 
+// LocalUserByID resolves a persisted identity, including legacy ID aliases.
+func (s *Service) LocalUserByID(id string) (User, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.userForLocalIDLocked(id)
+}
+
 func (s *Service) userForLocalIDLocked(id string) (User, bool) {
 	if s == nil {
 		return User{}, false
