@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/identity"
 	"csgclaw/internal/im"
 	"csgclaw/internal/modelprovider"
 	hub "csgclaw/internal/template"
@@ -85,29 +86,34 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 	if err != nil {
 		return apitypes.Participant{}, false, err
 	}
-	// Hold the worker lock through the binding read and all persistence so
-	// deletion cannot retire the identity halfway through a create or retry.
+	release, err := s.lockParticipant(ctx, normalized.Channel, normalized.ID)
+	if err != nil {
+		return apitypes.Participant{}, false, err
+	}
+	defer release()
+	normalized.reconcile = normalized.Channel == ChannelCSGClaw && normalized.Type == TypeAgent &&
+		normalized.AgentBinding.Mode == BindingModeCreate && strings.TrimSpace(req.ID) != ""
 	if normalized.Type == TypeAgent && (normalized.AgentBinding.Mode == BindingModeCreate || normalized.AgentBinding.Mode == BindingModeReuse) {
 		agentID := normalized.AgentBinding.AgentID
+		if normalized.reconcile {
+			if item, ok := s.store.Get(normalized.Channel, normalized.ID); ok && item.AgentID != "" {
+				agentID = item.AgentID
+			}
+		}
 		if agentID == "" {
 			agentID = defaultAgentID(normalized.ID)
 		}
+		normalized.AgentBinding.AgentID = agentID
 		releaseAgent, err := s.lockAgent(ctx, agentID)
 		if err != nil {
 			return apitypes.Participant{}, false, err
 		}
 		defer releaseAgent()
 	}
-	release, err := s.lockParticipant(ctx, normalized.Channel, normalized.ID)
-	if err != nil {
-		return apitypes.Participant{}, false, err
-	}
-	defer release()
 	if existing, ok := s.store.Get(normalized.Channel, normalized.ID); ok {
-		explicitBinding := strings.TrimSpace(req.ID) != "" && normalized.AgentBinding.AgentID != ""
-		sameAgent := existing.AgentID == "" || agent.CanonicalID(existing.AgentID) == agent.CanonicalID(normalized.AgentBinding.AgentID)
-		if !explicitBinding || normalized.Channel != ChannelCSGClaw || normalized.Type != TypeAgent ||
-			existing.Type != TypeAgent || normalized.AgentBinding.Mode != BindingModeCreate || !sameAgent {
+		if !normalized.reconcile || existing.Type != TypeAgent ||
+			(req.ChannelUser.Ref != "" && normalized.ChannelUser.Ref != canonicalUserID(existing.ChannelUserRef)) ||
+			(req.ChannelUser.Kind != "" && normalized.ChannelUser.Kind != existing.ChannelUserKind) {
 			return apitypes.Participant{}, false, fmt.Errorf("participant %s:%s already exists", normalized.Channel, normalized.ID)
 		}
 		if s.im != nil && existing.ChannelUserKind == ChannelUserKindLocalUserID {
@@ -119,7 +125,6 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 				return existing, false, im.ErrAgentIdentityDeleted
 			}
 		}
-		normalized.Name = existing.Name
 		agentID, err := s.ensureAgentBinding(ctx, normalized, true)
 		if err != nil {
 			return existing, false, err
@@ -763,6 +768,7 @@ func (s *Service) deleteUnreferencedCSGClawParticipantUser(deleted apitypes.Part
 }
 
 type normalizedCreateRequest struct {
+	reconcile        bool
 	ID               string
 	Channel          string
 	Type             string
@@ -1001,15 +1007,15 @@ func trimLocalIdentityPrefixes(id string) string {
 }
 
 // Engine Get also accepts display names. Bindings refer to canonical IDs only.
-func (s *Service) boundAgentByID(ctx context.Context, id string) (string, bool, error) {
+func (s *Service) boundAgentByID(ctx context.Context, id string) (agentengine.Agent, bool, error) {
 	selected, err := s.agents.Get(ctx, id, agentengine.AgentGetOptions{})
 	if err != nil {
 		if agentengine.ErrorCodeOf(err) == agentengine.ErrorAgentNotFound {
-			return "", false, nil
+			return agentengine.Agent{}, false, nil
 		}
-		return "", false, err
+		return agentengine.Agent{}, false, err
 	}
-	return selected.ID, selected.ID == agent.CanonicalID(id), nil
+	return selected, selected.ID == agent.CanonicalID(id), nil
 }
 
 func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRequest, restoring bool) (string, error) {
@@ -1032,10 +1038,19 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if agentID == "" {
 			agentID = defaultAgentID(req.ID)
 		}
-		if existingID, found, err := s.boundAgentByID(ctx, agentID); err != nil {
+		if req.reconcile {
+			owner, err := s.agents.Get(ctx, req.Name, agentengine.AgentGetOptions{})
+			if err == nil && owner.ID != agent.CanonicalID(agentID) {
+				return "", fmt.Errorf("agent name %q %w", req.Name, identity.ErrNameExists)
+			}
+			if err != nil && agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+				return "", err
+			}
+		}
+		if existing, found, err := s.boundAgentByID(ctx, agentID); err != nil {
 			return "", err
 		} else if found {
-			return existingID, nil
+			return s.reconcileAgentName(ctx, req, existing)
 		}
 		if restoring && (req.AgentBinding.Agent == nil || strings.TrimSpace(req.AgentBinding.Agent.FromTemplate) == "") {
 			return "", fmt.Errorf("restoring missing agent %q requires a template", agentID)
@@ -1045,7 +1060,7 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 			spec = *req.AgentBinding.Agent
 		}
 		spec.ID = agentID
-		if strings.TrimSpace(spec.Name) == "" {
+		if req.reconcile || strings.TrimSpace(spec.Name) == "" {
 			spec.Name = req.Name
 		}
 		if strings.TrimSpace(spec.Role) == "" {
@@ -1056,10 +1071,32 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if err != nil {
 			return "", err
 		}
-		return created.ID, nil
+		return s.reconcileAgentName(ctx, req, created)
 	default:
 		return "", fmt.Errorf("agent_binding.mode must be one of %q, %q, or %q", BindingModeCreate, BindingModeReuse, BindingModeNone)
 	}
+}
+
+func (s *Service) reconcileAgentName(ctx context.Context, req normalizedCreateRequest, worker agentengine.Agent) (string, error) {
+	if !req.reconcile {
+		return worker.ID, nil
+	}
+	role := agentengine.AgentRoleWorker
+	if req.AgentBinding.Agent != nil && strings.EqualFold(req.AgentBinding.Agent.Role, agent.RoleManager) {
+		role = agentengine.AgentRoleManager
+	}
+	if worker.Spec.Role != role {
+		return "", fmt.Errorf("agent %q already exists with role %q", worker.ID, worker.Spec.Role)
+	}
+	if worker.Spec.Name != req.Name {
+		_, err := s.agents.Update(ctx, worker.ID, agentengine.AgentUpdateRequest{
+			Spec: agentengine.AgentSpec{Name: req.Name}, FieldMask: []string{"name"}, ResourceVersion: worker.ResourceVersion,
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	return worker.ID, nil
 }
 
 func participantEngineCreateRequest(spec agent.CreateAgentSpec) agentengine.AgentCreateRequest {

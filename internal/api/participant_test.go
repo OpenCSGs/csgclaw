@@ -191,8 +191,28 @@ func TestRetryExplicitParticipantBinding(t *testing.T) {
 	if first.Code != http.StatusCreated || second.Code != http.StatusOK || first.Body.String() != second.Body.String() {
 		t.Fatalf("concurrent create: %d %s; %d %s", first.Code, first.Body, second.Code, second.Body)
 	}
-	if rec := post(strings.Replace(body, "agent-qa", "agent-other", 1)); rec.Code != http.StatusConflict {
-		t.Fatalf("conflict: %d %s", rec.Code, rec.Body)
+	if rec := post(strings.Replace(body, "agent-qa", "agent-other", 1)); rec.Code != http.StatusOK || rec.Body.String() != first.Body.String() {
+		t.Fatalf("historical binding: %d %s", rec.Code, rec.Body)
+	}
+	renamed := strings.Replace(body, `"name":"QA"`, `"name":"Renamed"`, 1)
+	if rec := post(strings.Replace(renamed, `"agent_id":"agent-qa",`, "", 1)); rec.Code != http.StatusOK {
+		t.Fatalf("rename: %d %s", rec.Code, rec.Body)
+	}
+	if worker, ok := agentSvc.AgentByName("Renamed"); !ok || worker.ID != "agent-qa" {
+		t.Fatal("name does not select the bound worker")
+	}
+	otherUser := strings.Replace(body, `"name":"QA"`, `"name":"QA","channel_user":{"ref":"user-other"}`, 1)
+	if rec := post(otherUser); rec.Code != http.StatusConflict {
+		t.Fatalf("identity conflict: %d %s", rec.Code, rec.Body)
+	}
+	if _, err := agentSvc.CreateRecord(t.Context(), agent.CreateRequest{Spec: agent.CreateAgentSpec{ID: "agent-taken", Name: "Taken", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeNameCodex, Image: "agent-image:test"}}); err != nil {
+		t.Fatal(err)
+	}
+	if rec := post(strings.Replace(renamed, "Renamed", "Taken", 1)); rec.Code != http.StatusConflict {
+		t.Fatalf("name conflict: %d %s", rec.Code, rec.Body)
+	}
+	if worker, ok := agentSvc.AgentByName("Renamed"); !ok || worker.ID != "agent-qa" {
+		t.Fatal("conflict changed the bound worker")
 	}
 	if _, err := engine.Agents().SetArchived(context.Background(), "agent-qa", true); err != nil {
 		t.Fatal(err)
@@ -227,7 +247,7 @@ type pausedAgentLookup struct {
 
 func (p pausedAgentLookup) Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error) {
 	<-p.resume
-	return agentengine.Agent{ID: "agent-qa"}, nil
+	return agentengine.Agent{ID: "agent-qa", Spec: agentengine.AgentSpec{Name: "QA", Role: agentengine.AgentRoleWorker}}, nil
 }
 
 func TestRetryAndConcurrentParticipantPatch(t *testing.T) {

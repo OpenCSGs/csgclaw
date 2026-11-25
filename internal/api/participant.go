@@ -152,6 +152,7 @@ func (h *Handler) handleParticipantByIDPath(w http.ResponseWriter, r *http.Reque
 
 	switch r.Method {
 	case http.MethodGet:
+		w.Header().Set("X-CSGClaw-Participant-Create", "reconcile")
 		item, ok := h.participant.Get(channelName, id)
 		if !ok {
 			http.NotFound(w, r)
