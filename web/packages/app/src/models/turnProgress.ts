@@ -1,8 +1,9 @@
-import type { IMMessage, TranslateFn } from "@/models/conversations";
+import type { IMMessage } from "@/models/conversations";
 
 export type ProgressTool = {
   details_version?: number;
   name: string;
+  summary?: string;
   actions: string[];
   status: string;
   input?: string;
@@ -90,22 +91,25 @@ export function progressGroups(items: ProgressItem[]): ProgressGroup[] {
   }
   return result;
 }
-export function toolGroupLabel(items: ProgressItem[], t: TranslateFn): string {
-  const actions = [...new Set(items.flatMap((item) => item.tool?.actions || ["tool"]))];
-  const active = items.some((item) => !terminalTool(item.tool?.status));
-  const failed = items.some((item) => ["failed", "error", "declined"].includes(item.tool?.status || ""));
-  const state = active
-    ? "running"
-    : failed
-      ? "failed"
-      : items.some((item) => item.tool?.status === "interrupted")
-        ? "interrupted"
-        : "completed";
-  const known = new Set(["read", "search", "list", "edit", "execute", "web", "load", "tool"]);
-  const label = actions
-    .map((action) => t(`progressAction_${known.has(action) ? action : "tool"}`))
-    .join(t("progressSeparator"));
-  return t(`progressTools_${state}`, { actions: label, count: items.length });
+export function toolRowPreview(tool: ProgressTool): string {
+  let target = tool.summary || tool.command || "";
+  if (!target && tool.input) {
+    try {
+      const raw = record(JSON.parse(tool.input));
+      for (const fields of [record(raw?.action), record(raw?.arguments), raw]) {
+        const value = [fields?.query, fields?.q, fields?.url, fields?.command].find(
+          (item) => typeof item === "string" && item.trim(),
+        );
+        if (typeof value === "string") {
+          target = value;
+          break;
+        }
+      }
+    } catch {
+      // Old snapshots may have truncated JSON. Their tool name is still available.
+    }
+  }
+  return (target || tool.name).replace(/\s+/g, " ").trim().slice(0, 240);
 }
 export function terminalTool(status?: string): boolean {
   return [
