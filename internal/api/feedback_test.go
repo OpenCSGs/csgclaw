@@ -1,6 +1,7 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -59,6 +61,116 @@ func TestFeedbackUsesAuthenticatedSiteAndServerVersion(t *testing.T) {
 	(&Handler{serverAccessToken: "server-token"}).Routes().ServeHTTP(recorder, request)
 	if recorder.Code != 200 || !called {
 		t.Fatalf("status=%d body=%s called=%v", recorder.Code, recorder.Body, called)
+	}
+}
+
+func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
+	var uploads, issues atomic.Int32
+	var rejectUpload atomic.Bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/internal_api/upload_with_ext":
+			file, header, err := r.FormFile("file")
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			defer r.MultipartForm.RemoveAll()
+			defer file.Close()
+			if header.Filename != "feedback-0.zip" {
+				t.Errorf("unexpected detected archive name: %s", header.Filename)
+			}
+			uploads.Add(1)
+			if rejectUpload.Load() {
+				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			io.WriteString(w, `{"url":"https://files.example/diagnostic.zip"}`)
+		case "/api/v1/csgbot/user-feedback":
+			var payload struct {
+				Description    string   `json:"problem_description"`
+				ScreenshotURLs []string `json:"screenshot_urls"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if len(payload.ScreenshotURLs) != 0 || !strings.Contains(payload.Description, "https://files.example/diagnostic.zip") {
+				t.Errorf("unexpected feedback payload: %+v", payload)
+			}
+			issues.Add(1)
+			io.WriteString(w, `{"success":true,"issue_id":42,"issue_url":"https://issues.example/42"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+	previousStore := auth.Default().Store
+	t.Cleanup(func() { auth.Default().Store = previousStore })
+	auth.Default().Store = auth.NewStore(filepath.Join(t.TempDir(), "auth.json"))
+	if err := auth.Default().Store.Save(auth.Record{Tokens: auth.Tokens{AccessToken: "test-token"}, Account: auth.Account{BaseURL: upstream.URL}}); err != nil {
+		t.Fatal(err)
+	}
+	var archive bytes.Buffer
+	if err := zip.NewWriter(&archive).Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name         string
+		content      []byte
+		wantCode     int
+		rejectUpload bool
+	}{
+		{"spoofed extension", []byte("fake zip"), http.StatusBadRequest, false},
+		{"valid archive without description", archive.Bytes(), http.StatusOK, false},
+		{"valid archive rejected by portal size limit", archive.Bytes(), http.StatusRequestEntityTooLarge, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rejectUpload.Store(tc.rejectUpload)
+			var body bytes.Buffer
+			writer := multipart.NewWriter(&body)
+			part, err := writer.CreateFormFile("archives", "diagnostics.zip")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := part.Write(tc.content); err != nil {
+				t.Fatal(err)
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/feedback", &body)
+			request.Header.Set("Content-Type", writer.FormDataContentType())
+			request.Header.Set("Authorization", "Bearer server-token")
+			recorder := httptest.NewRecorder()
+			(&Handler{serverAccessToken: "server-token"}).Routes().ServeHTTP(recorder, request)
+			if recorder.Code != tc.wantCode {
+				t.Fatalf("got status %d, want %d: %s", recorder.Code, tc.wantCode, recorder.Body)
+			}
+			if tc.wantCode == http.StatusOK && !strings.Contains(recorder.Body.String(), "https://issues.example/42") {
+				t.Errorf("missing issue URL in %s", recorder.Body)
+			}
+			if tc.rejectUpload {
+				var response struct {
+					Error struct {
+						Code  string
+						Stage string
+					}
+				}
+				if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+					t.Fatal(err)
+				}
+				if response.Error.Code != "feedback_upload_too_large" || response.Error.Stage != "archive_upload" {
+					t.Fatalf("unexpected upload error: %+v", response.Error)
+				}
+			}
+		})
+	}
+	if uploads.Load() != 2 || issues.Load() != 1 {
+		t.Errorf("uploads=%d issues=%d", uploads.Load(), issues.Load())
 	}
 }
 

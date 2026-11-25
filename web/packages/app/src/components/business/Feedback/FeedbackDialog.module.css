@@ -21,10 +21,6 @@
   justify-self: start;
   width: fit-content;
 }
-.chooseFilesTooltipTarget {
-  display: inline-flex;
-  justify-self: start;
-}
 .imageHint {
   margin: 0;
   color: var(--muted);
@@ -68,4 +64,24 @@
   width: 120px;
   height: 90px;
   object-fit: contain;
+}
+
+.archives {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.archive {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
