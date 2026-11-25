@@ -23,7 +23,9 @@ describe("OutputTokenRate", () => {
   ])("renders %s t/s directly and expires its sample", (rate, tier) => {
     vi.useFakeTimers();
     render(<OutputTokenRate rate={rate} expiresAt={performance.now() + 2500} t={t} />);
-    expect(screen.getByLabelText(t("tokenRateLabel", { rate }))).toHaveAttribute("data-tier", tier);
+    const badge = screen.getByLabelText(t("tokenRateLabel", { rate }));
+    expect(badge).toHaveAttribute("data-tier", tier);
+    expect(badge).toHaveTextContent(new RegExp(`^${rate}t/s$`));
     act(() => vi.advanceTimersByTime(2500));
     expect(screen.queryByLabelText(t("tokenRateLabel", { rate }))).toBeNull();
   });
