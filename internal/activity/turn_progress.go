@@ -30,6 +30,7 @@ type ProgressItem struct {
 type ProgressTool struct {
 	DetailsVersion int      `json:"details_version,omitempty"`
 	Name           string   `json:"name"`
+	Summary        string   `json:"summary,omitempty"`
 	Actions        []string `json:"actions"`
 	Status         string   `json:"status"`
 	Input          string   `json:"input,omitempty"`

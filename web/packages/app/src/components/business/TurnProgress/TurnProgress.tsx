@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ChevronDown, ChevronRight, Clock3 } from "lucide-react";
 import { ToolOutput } from "@/components/business/ToolOutput";
 import { Button } from "@/components/ui";
-import { progressActive, progressDuration, progressGroups, toolGroupLabel, terminalTool } from "@/models/turnProgress";
+import { progressActive, progressDuration, progressGroups, toolRowPreview, terminalTool } from "@/models/turnProgress";
 import type { ProgressGroup, ProgressTool, TurnProgress as Progress } from "@/models/turnProgress";
 import { videoProgressTiming } from "@/models/videoGeneration";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
@@ -265,25 +265,22 @@ const Group = memo(
           {renderText(group.items[0].text || "")}
         </div>
       );
+    if (group.kind === "tool") {
+      return (
+        <ol className={styles.toolList} start={group.firstToolNumber} aria-label={t("progressToolList")}>
+          {group.items.map((item, index) =>
+            item.tool ? <ToolRow key={item.id} tool={item.tool} number={group.firstToolNumber + index} t={t} /> : null,
+          )}
+        </ol>
+      );
+    }
     return (
       <div className={styles.group}>
         <div className={styles.summary}>
-          {group.kind === "tool" ? <GroupToolIcon items={group.items} /> : <Clock3 size={15} aria-hidden="true" />}
-          <span>{group.kind === "tool" ? toolGroupLabel(group.items, t) : t("progressReasoning")}</span>
+          <Clock3 size={15} aria-hidden="true" />
+          <span>{t("progressReasoning")}</span>
         </div>
-        <div className={styles.details}>
-          {group.kind === "reasoning" ? (
-            renderText(group.items[0].text || "")
-          ) : (
-            <ol className={styles.toolList} start={group.firstToolNumber} aria-label={t("progressToolList")}>
-              {group.items.map((item, index) =>
-                item.tool ? (
-                  <ToolRow key={item.id} tool={item.tool} number={group.firstToolNumber + index} t={t} />
-                ) : null,
-              )}
-            </ol>
-          )}
-        </div>
+        <div className={styles.details}>{renderText(group.items[0].text || "")}</div>
       </div>
     );
   },
@@ -296,12 +293,6 @@ const Group = memo(
     previous.group.items.every((item, index) => item === next.group.items[index]),
 );
 
-function GroupToolIcon({ items }: { items: ProgressGroup["items"] }) {
-  const action = items.find((item) => item.tool?.actions?.[0])?.tool?.actions[0] || "tool";
-  const Icon = toolIcon(action);
-  return <Icon size={15} aria-hidden="true" />;
-}
-
 const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool; number: number; t: TranslateFn }) {
   const [open, setOpen] = useState(false);
   const toggleLabels = { expand: t("messageLongExpand"), collapse: t("messageLongCollapse") };
@@ -312,8 +303,11 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
   const failed = ["failed", "error", "declined"].includes(tool.status);
   const label = t(`progressToolStatus_${tool.status}`);
   const status = label.startsWith("progressToolStatus_") ? t("progressToolStatus_running") : label;
-  const preview = (tool.command || tool.input || tool.name).replace(/\s+/g, " ").trim().slice(0, 240);
-  const Icon = toolIcon(tool.actions[0] || (tool.command ? "execute" : "tool"));
+  const preview = toolRowPreview(tool);
+  const action = tool.actions[0] || (tool.command ? "execute" : "tool");
+  const Icon = toolIcon(action);
+  const actionLabel = t(`progressAction_${action}`);
+  const displaysMetadata = tool.exit_code != null || tool.duration_ms != null || Boolean(tool.cwd);
   return (
     <li className={styles.tool} data-failed={failed || undefined}>
       <Button
@@ -332,6 +326,9 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
           {number}
         </span>
         <Icon size={15} aria-hidden="true" />
+        <span className={styles.toolAction}>
+          {actionLabel.startsWith("progressAction_") ? t("progressAction_tool") : actionLabel}
+        </span>
         <span className={styles.commandPreview} title={preview}>
           {preview}
         </span>
@@ -357,18 +354,20 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
             )}
             {tool.truncated ? <small>{t("progressTruncated")}</small> : null}
           </div>
-          <div className={styles.toolMeta}>
-            {tool.exit_code != null ? <span>{t("progressExitCode", { code: tool.exit_code })}</span> : null}
-            {tool.duration_ms != null ? (
-              <span>{t("progressToolDuration", { seconds: (tool.duration_ms / 1000).toFixed(1) })}</span>
-            ) : null}
-            {tool.cwd ? (
-              <span className={styles.directory} title={tool.cwd}>
-                <ListActionIcon size={13} aria-hidden="true" />
-                <span>{t("progressDirectory", { path: tool.cwd })}</span>
-              </span>
-            ) : null}
-          </div>
+          {displaysMetadata ? (
+            <div className={styles.toolMeta}>
+              {tool.exit_code != null ? <span>{t("progressExitCode", { code: tool.exit_code })}</span> : null}
+              {tool.duration_ms != null ? (
+                <span>{t("progressToolDuration", { seconds: (tool.duration_ms / 1000).toFixed(1) })}</span>
+              ) : null}
+              {tool.cwd ? (
+                <span className={styles.directory} title={tool.cwd}>
+                  <ListActionIcon size={13} aria-hidden="true" />
+                  <span>{t("progressDirectory", { path: tool.cwd })}</span>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </li>

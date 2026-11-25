@@ -74,51 +74,58 @@ describe("TurnProgress", () => {
     );
     expect(screen.queryByRole("button")).toBeNull();
   });
-  it("lists commands separately and only reveals the selected command details", async () => {
-    const user = userEvent.setup();
-    const items: Progress["items"] = [
-      {
-        id: "one",
-        kind: "tool",
-        tool: {
-          name: "Run shell command",
-          actions: ["execute"],
-          status: "completed",
-          command: "cat README.md",
-          output: "first output",
-          cwd: "/workspace/project",
-          exit_code: 0,
+  it.each(["/workspace/project", String.raw`C:\Users\Alice\My Project`])(
+    "lists commands separately and preserves the selected command directory %s",
+    async (cwd) => {
+      const user = userEvent.setup();
+      const items: Progress["items"] = [
+        {
+          id: "one",
+          kind: "tool",
+          tool: {
+            name: "Run shell command",
+            actions: ["execute"],
+            status: "completed",
+            command: "cat README.md",
+            output: "first output",
+            cwd,
+            exit_code: 0,
+            duration_ms: 100,
+          },
         },
-      },
-      {
-        id: "two",
-        kind: "tool",
-        tool: {
-          name: "Run shell command",
-          actions: ["execute"],
-          status: "failed",
-          command: "rg missing",
-          output: "second output",
-          exit_code: 1,
+        {
+          id: "two",
+          kind: "tool",
+          tool: {
+            name: "Run shell command",
+            actions: ["execute"],
+            status: "failed",
+            command: "rg missing",
+            output: "second output",
+            exit_code: 1,
+          },
         },
-      },
-    ];
-    render(<TurnProgress progress={{ ...progress, items }} t={t} renderText={renderText} />);
-    const list = screen.getByRole("list", { name: "工具调用" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(list).getByText("失败")).toBeTruthy();
-    expect(screen.queryByText("first output")).toBeNull();
-    expect(screen.queryByText(/工作目录/)).toBeNull();
-    const first = within(list).getByRole("button", { name: /第 1 条：cat README.md/ });
-    first.focus();
-    await user.keyboard("{Enter}");
-    expect(first.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByText("first output")).toBeTruthy();
-    expect(screen.queryByText("second output")).toBeNull();
-    expect(screen.getByText("工作目录：/workspace/project")).toBeTruthy();
-    await user.click(first);
-    expect(screen.queryByText("first output")).toBeNull();
-  });
+      ];
+      render(<TurnProgress progress={{ ...progress, items }} t={t} renderText={renderText} />);
+      const list = screen.getByRole("list", { name: "工具调用" });
+      expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+      expect(screen.queryByText(/次调用/)).toBeNull();
+      expect(within(list).getByText("失败")).toBeTruthy();
+      expect(screen.queryByText("first output")).toBeNull();
+      expect(screen.queryByText(/工作目录/)).toBeNull();
+      const first = within(list).getByRole("button", { name: /第 1 条：cat README.md/ });
+      first.focus();
+      await user.keyboard("{Enter}");
+      expect(first.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getByText("first output")).toBeTruthy();
+      expect(screen.queryByText("second output")).toBeNull();
+      expect(screen.getByText(`工作目录：${cwd}`)).toBeTruthy();
+      expect(screen.getByText("退出码：0")).toBeTruthy();
+      expect(screen.getByText("用时 0.1 秒")).toBeTruthy();
+      await user.click(first);
+      expect(screen.queryByText("first output")).toBeNull();
+    },
+  );
   it("preserves manual collapse during a run and allows reopening after completion", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
