@@ -203,10 +203,9 @@ export function ConversationThreadPanel({
     [transcript, root, replies],
   );
   const { hideQuestionTranscript, onQuestionSettled } = useQuestionTranscriptVisibility();
+  const rootTranscriptHidden = Boolean(root && hideQuestionTranscript(root));
   const visibleRoot =
-    (!publicRoot || !hideQuestionTranscript(publicRoot)) &&
-    !emptyCompletedProgress(publicRoot) &&
-    (showToolCalls || !isToolCallMessage(publicRoot))
+    !rootTranscriptHidden && !emptyCompletedProgress(publicRoot) && (showToolCalls || !isToolCallMessage(publicRoot))
       ? publicRoot
       : null;
   const visibleReplies = (
@@ -376,7 +375,9 @@ export function ConversationThreadPanel({
     <aside className="thread-panel" aria-label={t("threadPanelTitle")}>
       <div className={conversationThreadsStyles["thread-panel-header"]}>
         <div>
-          <div className={conversationThreadsStyles["thread-panel-kicker"]}>{t("threadPanelTitle")}</div>
+          {!rootTranscriptHidden ? (
+            <div className={conversationThreadsStyles["thread-panel-kicker"]}>{t("threadPanelTitle")}</div>
+          ) : null}
           <div className={`${conversationThreadsStyles["thread-panel-title"]} truncate`}>
             {visibleRoot ? (
               <MessagePreviewText
@@ -388,7 +389,7 @@ export function ConversationThreadPanel({
                 }
               />
             ) : (
-              t("noVisibleMessages")
+              t(rootTranscriptHidden ? "threadPanelTitle" : "noVisibleMessages")
             )}
           </div>
         </div>

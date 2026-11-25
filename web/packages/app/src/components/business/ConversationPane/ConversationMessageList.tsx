@@ -145,15 +145,28 @@ const MessageListContent = memo(function MessageListContent({
     [collaboration, visibleMessages],
   );
   const { hideQuestionTranscript, onQuestionSettled } = useQuestionTranscriptVisibility();
-  const displayMessages = useMemo(
-    () => transcript.messages.filter((message) => !hideQuestionTranscript(message)),
+  const hiddenTranscripts = useMemo(
+    () => new Set(transcript.messages.filter(hideQuestionTranscript)),
     [transcript.messages, hideQuestionTranscript],
+  );
+  const displayMessages = useMemo(
+    () =>
+      transcript.messages.filter(
+        (message) => !hiddenTranscripts.has(message) || (!conversation.cloud_agent && threadHasReplies(message.thread)),
+      ),
+    [transcript.messages, hiddenTranscripts, conversation.cloud_agent],
   );
   const videosByTurn = useMemo(() => indexVideoMessagesByTurn(displayMessages), [displayMessages]);
 
   const timelineItems = useMemo(
-    () => buildMessageTimelineItems(displayMessages, agents, usersById, t("attachment")),
-    [displayMessages, agents, usersById, t],
+    () =>
+      buildMessageTimelineItems(
+        displayMessages.filter((message) => !hiddenTranscripts.has(message)),
+        agents,
+        usersById,
+        t("attachment"),
+      ),
+    [displayMessages, hiddenTranscripts, agents, usersById, t],
   );
 
   return (
@@ -201,6 +214,19 @@ const MessageListContent = memo(function MessageListContent({
           const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
           const previousMessage = displayMessages[index - 1];
           const showDivider = shouldShowMessageDateDivider(previousMessage, message);
+
+          if (hiddenTranscripts.has(message)) {
+            return (
+              <Fragment key={message.id}>
+                {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
+                <div className="message-row" data-message-id={message.id || undefined}>
+                  <div className="message-thread-actions has-thread-summary">
+                    <ThreadReplyCountButton message={message} onOpenThread={onOpenThread} t={t} />
+                  </div>
+                </div>
+              </Fragment>
+            );
+          }
 
           const compaction = messageCompaction(message);
           if (compaction) return <ContextCompactionCard key={message.id} operation={compaction} t={t} />;
@@ -342,14 +368,7 @@ const MessageListContent = memo(function MessageListContent({
                   )}
                   {!conversation.cloud_agent && threadSummary ? (
                     <div className="message-thread-actions has-thread-summary">
-                      <button
-                        type="button"
-                        className={conversationThreadsStyles["thread-action-button"]}
-                        onClick={() => onOpenThread(message)}
-                      >
-                        <span aria-hidden="true">{IconImage("rooms")}</span>
-                        <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
-                      </button>
+                      <ThreadReplyCountButton message={message} onOpenThread={onOpenThread} t={t} />
                       {latestThreadReply && !isAutonomousCoordinationNotice(latestThreadReply) ? (
                         <button
                           type="button"
@@ -410,6 +429,27 @@ const MessageListContent = memo(function MessageListContent({
     </div>
   );
 });
+
+function ThreadReplyCountButton({
+  message,
+  onOpenThread,
+  t,
+}: {
+  message: IMMessage;
+  onOpenThread: ConversationMessageListProps["onOpenThread"];
+  t: TranslateFn;
+}) {
+  return (
+    <button
+      type="button"
+      className={conversationThreadsStyles["thread-action-button"]}
+      onClick={() => onOpenThread(message)}
+    >
+      <span aria-hidden="true">{IconImage("rooms")}</span>
+      <span>{formatThreadReplyCount(message.thread?.reply_count, t)}</span>
+    </button>
+  );
+}
 
 function longMessageStateKey(conversation: IMConversation, message: IMMessage, index: number): string {
   const conversationKey = String(conversation.id || "conversation");

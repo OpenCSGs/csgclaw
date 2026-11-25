@@ -332,7 +332,10 @@ function renderThreadPane({
         onApplyMention={onApplyMention}
         onClearRoomMessages={onClearRoomMessages}
         onClearMemberActionError={onClearMemberActionError}
-        onCloseThread={onCloseThread}
+        onCloseThread={() => {
+          if (statefulThreads) setThreadRootID("");
+          onCloseThread();
+        }}
         onComposerCompositionEnd={() => {}}
         onComposerCompositionStart={() => {}}
         onComposerKeyDown={() => {}}
@@ -948,6 +951,37 @@ describe("ConversationPane", () => {
     expect(selectedOption).toHaveAttribute("aria-checked", "true");
     await user.click(selectedOption);
     expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
+  });
+
+  it("reopens a discussion from a settled question without showing the question transcript", async () => {
+    const user = userEvent.setup();
+    const content = JSON.parse(questionActivityContent());
+    content.content.question.status = "answered";
+    const reply: IMMessage = {
+      id: "layout-reply",
+      content: "Use blue for the sidebar",
+      sender_id: "u-admin",
+      relates_to: { rel_type: "m.thread", event_id: "msg-root" },
+    };
+    const question: IMMessage = {
+      id: "msg-root",
+      sender_id: "u-manager",
+      content: "## Questions\n\nChoose a color",
+      metadata: { csgclaw: { agent_activity: content } },
+      thread: { root_id: "msg-root", reply_count: 1, latest_reply: reply },
+    };
+    renderThreadPane({ statefulThreads: true, messages: [question], replies: [reply] });
+
+    const threadPanel = () => screen.getByRole("complementary", { name: "Thread" });
+    expect(within(threadPanel()).getByText(reply.content)).toBeInTheDocument();
+    expect(screen.queryByText("Choose a color")).not.toBeInTheDocument();
+    expect(within(threadPanel()).queryByText("noVisibleMessages")).not.toBeInTheDocument();
+    await user.click(within(threadPanel()).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("complementary", { name: "Thread" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "1 replies" }));
+    expect(within(threadPanel()).getByText(reply.content)).toBeInTheDocument();
+    expect(screen.queryByText("Choose a color")).not.toBeInTheDocument();
   });
 
   it("hides legacy zero-reply thread summaries from the timeline", () => {
