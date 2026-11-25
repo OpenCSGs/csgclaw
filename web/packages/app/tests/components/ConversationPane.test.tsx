@@ -332,7 +332,10 @@ function renderThreadPane({
         onApplyMention={onApplyMention}
         onClearRoomMessages={onClearRoomMessages}
         onClearMemberActionError={onClearMemberActionError}
-        onCloseThread={onCloseThread}
+        onCloseThread={() => {
+          if (statefulThreads) setThreadRootID("");
+          onCloseThread();
+        }}
         onComposerCompositionEnd={() => {}}
         onComposerCompositionStart={() => {}}
         onComposerKeyDown={() => {}}
@@ -886,12 +889,11 @@ describe("ConversationPane", () => {
       ],
     });
 
-    expect(screen.getAllByText("Choose a color").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Choose a color")).toHaveLength(1);
     const answerMode = within(screen.getByRole("region", { name: "questionAnswerMode" }));
     expect(answerMode.getByRole("heading", { name: "Choose a color" })).toBeInTheDocument();
     expect(screen.getByRole("timer")).toBeInTheDocument();
-    const card = within(screen.getByRole("region", { name: "questionRequest" }));
-    expect(card.getByText("Choose a color")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "questionRequest" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
     expect(
       within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", {
@@ -901,7 +903,7 @@ describe("ConversationPane", () => {
     expect(
       within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", { name: "questionNext" }),
     ).toBeEnabled();
-    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Message")).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Blue/ }));
     await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Choose a color" })).not.toBeInTheDocument());
@@ -937,7 +939,7 @@ describe("ConversationPane", () => {
     expect(
       within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", { name: "questionNext" }),
     ).toBeEnabled();
-    expect(screen.queryByRole("textbox", { name: "Reply in thread" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply in thread" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Blue/ }));
     await user.click(
@@ -949,6 +951,37 @@ describe("ConversationPane", () => {
     expect(selectedOption).toHaveAttribute("aria-checked", "true");
     await user.click(selectedOption);
     expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
+  });
+
+  it("reopens a discussion from a settled question without showing the question transcript", async () => {
+    const user = userEvent.setup();
+    const content = JSON.parse(questionActivityContent());
+    content.content.question.status = "answered";
+    const reply: IMMessage = {
+      id: "layout-reply",
+      content: "Use blue for the sidebar",
+      sender_id: "u-admin",
+      relates_to: { rel_type: "m.thread", event_id: "msg-root" },
+    };
+    const question: IMMessage = {
+      id: "msg-root",
+      sender_id: "u-manager",
+      content: "## Questions\n\nChoose a color",
+      metadata: { csgclaw: { agent_activity: content } },
+      thread: { root_id: "msg-root", reply_count: 1, latest_reply: reply },
+    };
+    renderThreadPane({ statefulThreads: true, messages: [question], replies: [reply] });
+
+    const threadPanel = () => screen.getByRole("complementary", { name: "Thread" });
+    expect(within(threadPanel()).getByText(reply.content)).toBeInTheDocument();
+    expect(screen.queryByText("Choose a color")).not.toBeInTheDocument();
+    expect(within(threadPanel()).queryByText("noVisibleMessages")).not.toBeInTheDocument();
+    await user.click(within(threadPanel()).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("complementary", { name: "Thread" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "1 replies" }));
+    expect(within(threadPanel()).getByText(reply.content)).toBeInTheDocument();
+    expect(screen.queryByText("Choose a color")).not.toBeInTheDocument();
   });
 
   it("hides legacy zero-reply thread summaries from the timeline", () => {

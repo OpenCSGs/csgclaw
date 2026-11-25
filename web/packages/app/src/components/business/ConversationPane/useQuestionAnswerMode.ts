@@ -32,11 +32,13 @@ export type QuestionAnswerMode = {
 
 export function useQuestionAnswerMode({
   messages,
+  onSettled,
   t,
 }: {
   messages: readonly IMMessage[];
-  responderID: string;
-  roomID: string;
+  onSettled?: (id: string) => void;
+  responderID?: string;
+  roomID?: string;
   t: TranslateFn;
 }): QuestionAnswerMode {
   const allPending = useMemo(() => pendingQuestionActivities(messages), [messages]);
@@ -97,6 +99,7 @@ export function useQuestionAnswerMode({
           setQuestionIndex(0);
           setAnswers({});
           setTexts({});
+          onSettled?.(snapshot.id);
         }
       } catch (err) {
         setError(errorMessage(err, t("questionResponseFailed")));
@@ -104,7 +107,7 @@ export function useQuestionAnswerMode({
         setBusy(false);
       }
     },
-    [busy, t],
+    [busy, onSettled, t],
   );
 
   const previousQuestion = useCallback(() => {

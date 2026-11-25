@@ -6,10 +6,8 @@ import type { ReactNode } from "react";
 import { errorMessage } from "@/api/client";
 import {
   Conversation,
-  AgentQuestionComposer,
   type ConversationMessageListProps,
   type ConversationPaneProps,
-  useQuestionAnswerMode,
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
@@ -138,26 +136,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   const { openPreview, openActivity, openSources } = tools;
   const { openTab, closeTab, state: sideState } = tools.controller;
   const composerDisabled = Boolean(composerDisabledReason);
-  const mainMessages = useMemo(
-    () => conversation.messages.filter((message) => !message.relates_to),
-    [conversation.messages],
-  );
-  const threadMessages = useMemo(
-    () => (activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : []),
-    [activeThreadView],
-  );
-  const questionMode = useQuestionAnswerMode({
-    messages: mainMessages,
-    responderID: currentUserID,
-    roomID: conversation.id,
-    t,
-  });
-  const threadQuestionMode = useQuestionAnswerMode({
-    messages: threadMessages,
-    responderID: currentUserID,
-    roomID: conversation.id,
-    t,
-  });
   const floatingConversationMessages = useMemo(
     () => conversation.messages.filter((message) => !isManagerBootstrapNotice(message)),
     [conversation.messages],
@@ -264,8 +242,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       onPreviewUser={onPreviewUser}
       onPreviewAttachment={handlePreviewAttachment}
       onCitationSelect={openSources}
-      onQuestionSelect={threadQuestionMode.select}
-      questionMode={threadQuestionMode}
       onSend={onSendThreadReply}
     />
   ) : null;
@@ -324,59 +300,54 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         onPreviewUser={onPreviewUser}
         onPreviewAttachment={handlePreviewAttachment}
         onCitationSelect={openSources}
-        onQuestionSelect={questionMode.select}
       />
-      {questionMode.pending.length > 0 ? (
-        <AgentQuestionComposer mode={questionMode} t={floatingComposerT} usersById={usersById} />
-      ) : (
-        <Conversation.Composer
-          resourceAgentID={resourceAgentID}
-          onPickResources={onPickResources}
-          fileScope={tools.fileScope}
-          authBusyProvider={authBusyProvider}
-          authStatuses={authStatuses}
-          composerDisabled={composerDisabled}
-          composerDisabledReason={composerDisabledReason}
-          composerError={composerError}
-          draftSegments={draftSegments}
-          draftText={draftText}
-          attachmentDrafts={attachmentDrafts}
-          removedAttachmentCount={removedAttachmentCount}
-          removedAttachmentName={removedAttachmentName}
-          sendError={sendError}
-          sendProgress={sendProgress}
-          sendStatus={sendStatus}
-          editorRef={editorRef}
-          managerProfile={managerProfile}
-          managerProvider={managerProvider}
-          mentionCandidates={mentionCandidates}
-          mentionIndex={mentionIndex}
-          mentionableUsersByName={mentionableUsersByName}
-          slashCandidates={slashCandidates}
-          slashIndex={slashIndex}
-          slashContinuation={slashContinuation}
-          slashPickerLoading={slashPickerLoading}
-          slashPickerOpen={slashPickerOpen}
-          t={floatingComposerT}
-          workingParticipants={workingParticipants}
-          onApplyMention={onApplyMention}
-          onApplySlashCandidate={onApplySlashCandidate}
-          onAddAttachments={onAddAttachments}
-          onComposerCompositionEnd={onComposerCompositionEnd}
-          onComposerCompositionStart={onComposerCompositionStart}
-          onComposerKeyDown={onComposerKeyDown}
-          onProviderLogin={onProviderLogin}
-          onPreviewAttachment={handlePreviewAttachment}
-          onRetrySend={onRetrySend}
-          onSendMessage={onSendMessage}
-          onStopSend={onStopSend}
-          onUndoRemoveAttachment={onUndoRemoveAttachment}
-          onWorkingAction={(participant) => openActivity(participant?.activity?.entryID)}
-          onStopWorkingTurn={onStopWorkingTurn}
-          onRemoveAttachment={onRemoveAttachment}
-          onSyncComposer={onSyncComposer}
-        />
-      )}
+      <Conversation.Composer
+        resourceAgentID={resourceAgentID}
+        onPickResources={onPickResources}
+        fileScope={tools.fileScope}
+        authBusyProvider={authBusyProvider}
+        authStatuses={authStatuses}
+        composerDisabled={composerDisabled}
+        composerDisabledReason={composerDisabledReason}
+        composerError={composerError}
+        draftSegments={draftSegments}
+        draftText={draftText}
+        attachmentDrafts={attachmentDrafts}
+        removedAttachmentCount={removedAttachmentCount}
+        removedAttachmentName={removedAttachmentName}
+        sendError={sendError}
+        sendProgress={sendProgress}
+        sendStatus={sendStatus}
+        editorRef={editorRef}
+        managerProfile={managerProfile}
+        managerProvider={managerProvider}
+        mentionCandidates={mentionCandidates}
+        mentionIndex={mentionIndex}
+        mentionableUsersByName={mentionableUsersByName}
+        slashCandidates={slashCandidates}
+        slashIndex={slashIndex}
+        slashContinuation={slashContinuation}
+        slashPickerLoading={slashPickerLoading}
+        slashPickerOpen={slashPickerOpen}
+        t={floatingComposerT}
+        workingParticipants={workingParticipants}
+        onApplyMention={onApplyMention}
+        onApplySlashCandidate={onApplySlashCandidate}
+        onAddAttachments={onAddAttachments}
+        onComposerCompositionEnd={onComposerCompositionEnd}
+        onComposerCompositionStart={onComposerCompositionStart}
+        onComposerKeyDown={onComposerKeyDown}
+        onProviderLogin={onProviderLogin}
+        onPreviewAttachment={handlePreviewAttachment}
+        onRetrySend={onRetrySend}
+        onSendMessage={onSendMessage}
+        onStopSend={onStopSend}
+        onUndoRemoveAttachment={onUndoRemoveAttachment}
+        onWorkingAction={(participant) => openActivity(participant?.activity?.entryID)}
+        onStopWorkingTurn={onStopWorkingTurn}
+        onRemoveAttachment={onRemoveAttachment}
+        onSyncComposer={onSyncComposer}
+      />
       <ChatSidePanel
         key={conversation.id}
         controller={tools.controller}
