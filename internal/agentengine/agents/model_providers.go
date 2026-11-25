@@ -369,7 +369,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 	result := ModelProviderCheckResult{
 		ID:            id,
 		Status:        ModelProviderStatusFailed,
-		LastCheckedAt: time.Now().UTC().Format(time.RFC3339),
+		LastCheckedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	var (
 		models  []string

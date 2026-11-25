@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
@@ -35,6 +36,11 @@ type modelProviderRequest struct {
 	Models          []string                     `json:"models,omitempty"`
 	ImageModels     []string                     `json:"image_models,omitempty"`
 	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
+}
+
+type modelProviderCheckResponse struct {
+	agent.ModelProviderCheckResult
+	Provider *agent.ModelProviderSummary `json:"provider,omitempty"`
 }
 
 func (h *Handler) handleModelProviders(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +88,8 @@ func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request_error", "message": err.Error()}})
 		return
 	}
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	cfg, path, err := h.loadBootstrapConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -150,6 +158,8 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request_error", "message": err.Error()}})
 		return
 	}
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	cfg, path, err := h.loadBootstrapConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -222,6 +232,8 @@ func (h *Handler) deleteModelProvider(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "builtin model providers cannot be deleted", http.StatusBadRequest)
 		return
 	}
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	cfg, path, err := h.loadBootstrapConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -258,7 +270,9 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	cfg, path, err := h.loadBootstrapConfig()
+	h.configMu.Lock()
+	cfg, _, err := h.loadBootstrapConfig()
+	h.configMu.Unlock()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -274,23 +288,57 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 		}
 		checkConfig = providerConfigFromRequest(existing, req, true).Resolved()
 	}
-	result := appCheckModelProvider(r.Context(), providerCheckInput(id, checkConfig, req.Connect))
-	if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed &&
-		!modelProviderTransportChanged(existing, checkConfig) && slices.Equal(existing.ImageModels, checkConfig.ImageModels) {
-		cfg.Models = updated
-		if err := h.saveModelProvidersConfig(r.Context(), path, cfg); err != nil {
+	response := modelProviderCheckResponse{
+		ModelProviderCheckResult: appCheckModelProvider(r.Context(), providerCheckInput(id, checkConfig, req.Connect)),
+	}
+	if sameModelProviderCheckConnection(existing, checkConfig) {
+		response.Provider, err = h.persistModelProviderCheck(r.Context(), id, existing, response.ModelProviderCheckResult)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, response)
+}
+
+func sameModelProviderCheckConnection(a, b config.ProviderConfig) bool {
+	return !modelProviderTransportChanged(a, b) && a.Preset == b.Preset && slices.Equal(a.ImageModels, b.ImageModels)
+}
+
+func (h *Handler) persistModelProviderCheck(ctx context.Context, id string, checked config.ProviderConfig, result agent.ModelProviderCheckResult) (*agent.ModelProviderSummary, error) {
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
+	// Discovery runs outside the lock. Re-read the catalog so a slow check
+	// cannot overwrite updates made while it was querying the upstream service.
+	cfg, path, err := h.loadBootstrapConfig()
+	if err != nil {
+		return nil, err
+	}
+	current, exists := cfg.Models.Providers[id]
+	if (!exists && !agent.IsBuiltinModelProviderID(id)) || !sameModelProviderCheckConnection(current, checked) {
+		return nil, nil
+	}
+	lastCheck, _ := time.Parse(time.RFC3339Nano, current.LastCheckedAt)
+	thisCheck, _ := time.Parse(time.RFC3339Nano, result.LastCheckedAt)
+	if current.LastCheckedAt == checked.LastCheckedAt || !lastCheck.After(thisCheck) {
+		if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed {
+			cfg.Models = updated
+			if err := h.saveModelProvidersConfig(ctx, path, cfg); err != nil {
+				return nil, err
+			}
+		}
+	}
+	provider := findProviderSummary(agent.ModelProviderCatalogFromLLM(cfg.Models), id)
+	return &provider, nil
 }
 
 func (h *Handler) refreshOpenCSGModelProvider(ctx context.Context) error {
 	if h == nil || strings.TrimSpace(h.configPath) == "" {
 		return nil
 	}
-	cfg, path, err := h.loadBootstrapConfig()
+	h.configMu.Lock()
+	cfg, _, err := h.loadBootstrapConfig()
+	h.configMu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -303,6 +351,12 @@ func (h *Handler) refreshOpenCSGModelProvider(ctx context.Context) error {
 		Headers: existing.Headers,
 		Models:  existing.Models,
 	})
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
+	cfg, path, err := h.loadBootstrapConfig()
+	if err != nil {
+		return err
+	}
 	models, cleared := agent.ClearModelProviderCachedState(cfg.Models, agent.ModelProviderIDOpenCSG)
 	models, applied := agent.ApplyModelProviderCheckResult(models, agent.ModelProviderIDOpenCSG, result)
 	if !cleared && !applied {

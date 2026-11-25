@@ -666,13 +666,10 @@ describe("ModelProviderPage", () => {
   });
 
   it("loads OpenCSG models automatically after authentication", async () => {
-    vi.mocked(checkModelProvider).mockResolvedValueOnce({
-      id: "opencsg",
-      last_checked_at: "2026-07-16T09:00:00Z",
-      models: ["stage-model"],
-      status: "connected",
-    });
-    renderModelProviderPage(
+    const catalog = createCatalog({ id: "opencsg", display_name: "OpenCSG", models: ["stage-model"] });
+    const provider = catalog.providers[0];
+    vi.mocked(checkModelProvider).mockResolvedValueOnce({ ...provider, provider });
+    const { container, refreshWorkspaceModelProviders, rerenderWithCatalog } = renderModelProviderPage(
       normalizeModelProviderCatalog({
         providers: [
           {
@@ -698,6 +695,11 @@ describe("ModelProviderPage", () => {
       },
     );
 
+    refreshWorkspaceModelProviders.mockImplementation((updated) => {
+      if (updated === provider) rerenderWithCatalog(catalog);
+      return Promise.resolve(catalog);
+    });
+
     await waitFor(() =>
       expect(checkModelProvider).toHaveBeenCalledWith(
         "opencsg",
@@ -708,6 +710,8 @@ describe("ModelProviderPage", () => {
       ),
     );
     expect(await screen.findByText("stage-model")).toBeInTheDocument();
+    expect(refreshWorkspaceModelProviders).toHaveBeenCalledWith(provider);
+    expect(within(container).getByText("1 models")).toBeInTheDocument();
   });
 
   it("clears rendered OpenCSG models when the provider catalog is cleared", async () => {

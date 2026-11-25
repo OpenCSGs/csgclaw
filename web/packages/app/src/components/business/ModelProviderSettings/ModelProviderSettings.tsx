@@ -81,7 +81,9 @@ function providerToDraft(provider: ModelProvider | null | undefined): ProviderDr
   };
 }
 
-function providerToCheckState(provider: ModelProvider | null | undefined): ProviderCheckState {
+function providerToCheckState(
+  provider: Pick<ModelProvider, "last_checked_at" | "message" | "status"> | null | undefined,
+): ProviderCheckState {
   return {
     lastCheckedAt: provider?.last_checked_at,
     message: provider?.message,
@@ -160,21 +162,25 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         setSaveStatus("");
       }
       try {
+        const previewConnection =
+          baseURL.trim() !== providerBaseURL || Boolean(apiKey) || apiProtocol !== persistedProtocol;
         const result = await checkModelProvider(providerID, {
           connect: options.showError || undefined,
           api_protocol: apiProtocol,
           base_url: baseURL,
           api_key: apiKey,
         });
-        setCheckState({
-          lastCheckedAt: result.last_checked_at,
-          message: result.message || result.status,
-          status: result.status,
-        });
+        if (result.provider || !previewConnection) {
+          await refreshWorkspaceModelProviders(result.provider);
+        }
+        const checked = result.provider ?? result;
+        if (draftSourceKeyRef.current !== draftSourceKey) return;
+        setCheckState(providerToCheckState(checked));
         if (result.base_url || result.status === "connected") {
           setDraft((current) => {
             if (
               current.baseURL.trim() !== baseURL.trim() ||
+              current.apiKey.trim() !== apiKey.trim() ||
               resolveModelProviderProtocol(current.apiProtocol, providerRegion, current.baseURL) !== apiProtocol
             ) {
               return current;
@@ -182,12 +188,11 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             return {
               ...current,
               baseURL: result.base_url || current.baseURL,
-              modelsText: result.status === "connected" ? (result.models ?? []).join("\n") : current.modelsText,
+              modelsText: checked.status === "connected" ? (checked.models ?? []).join("\n") : current.modelsText,
             };
           });
         }
-        await refreshWorkspaceModelProviders();
-        return result;
+        return checked;
       } catch (err) {
         if (options.showError) {
           setError(errorMessage(err, t("modelProviderCheckFailed")));
@@ -198,7 +203,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         }
       }
     },
-    [providerID, providerRegion, refreshWorkspaceModelProviders, t],
+    [draftSourceKey, persistedProtocol, providerBaseURL, providerID, providerRegion, refreshWorkspaceModelProviders, t],
   );
 
   useEffect(() => {
@@ -323,7 +328,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const imageModels = new Set(provider.imageModels || []);
   const videoModels = new Set(provider.videoModels || []);
   const modelList = mergeModelProviderModelIDs(
-    parseModelProviderModelsText(draft.modelsText),
+    isOpenCSG || isBuiltinCLI ? provider.models : parseModelProviderModelsText(draft.modelsText),
     provider.imageModels,
     provider.videoModels,
   );

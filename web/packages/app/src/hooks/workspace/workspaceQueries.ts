@@ -267,7 +267,7 @@ export function useWorkspaceAgentsQuery(): UseQueryResult<AgentLike[]> {
 export function useWorkspaceModelProvidersQuery(): UseQueryResult<ModelProviderCatalog> {
   return useQuery<ModelProviderCatalog>({
     queryKey: workspaceQueryKeys.modelProviders(),
-    queryFn: fetchModelProviders,
+    queryFn: ({ signal }) => fetchModelProviders(signal),
   });
 }
 

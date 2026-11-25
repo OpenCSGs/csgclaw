@@ -207,7 +207,7 @@ export function modelProviderCatalogForOpenCSGState(
   };
 }
 
-function normalizeModelProvider(raw: unknown): ModelProvider {
+export function normalizeModelProvider(raw: unknown): ModelProvider {
   const record = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const id = normalizeModelProviderID(record.id);
   const kind = String(record.kind ?? "").trim();
