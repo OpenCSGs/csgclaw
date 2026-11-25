@@ -331,6 +331,69 @@ func TestStandaloneWorkerAliasReplay(t *testing.T) {
 	}
 }
 
+func TestRecoverWorkerAfterAgentPatch(t *testing.T) {
+	controller, _ := mustNewSeededServiceWithPath(t, nil)
+	engine, users := agentengine.New(controller), im.NewService()
+	path := filepath.Join(t.TempDir(), "participants.json")
+	h := &Handler{
+		svc: controller, im: users, agentEngine: engine, workspace: controller.Workspace(),
+		agentModels: controller.Models(), agentRuntime: controller,
+		hub: mustNewLocalTemplateHubService(t, "request-worker", hub.Template{
+			ID: "request-worker", Name: "request-worker", Role: hub.TemplateRoleWorker,
+			RuntimeKind: agent.RuntimeNameCodex, Image: "agent-image:test",
+		}),
+	}
+	openStore := func() {
+		t.Helper()
+		store, err := participant.NewStore(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.participant = participant.NewService(store, participant.WithAgentEngine(engine), participant.WithIMService(users))
+	}
+	openStore()
+	routes := h.Routes()
+	request := func(method, path, body string, status int) []byte {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
+		if rec.Code != status {
+			t.Fatalf("%s %s: %d %s", method, path, rec.Code, rec.Body)
+		}
+		return rec.Body.Bytes()
+	}
+	const collection = "/api/v1/channels/csgclaw/participants"
+	const primary = `{"id":"pt-worker","type":"agent","name":"Original","agent_binding":{"mode":"create","agent_id":"agent-worker","agent":{"from_template":"local.request-worker"}}}`
+	alias := strings.NewReplacer("pt-worker", "pt-alias", "Original", "Alias").Replace(primary)
+	request(http.MethodPost, collection, primary, http.StatusCreated)
+	request(http.MethodPost, collection, alias, http.StatusCreated)
+	request(http.MethodPatch, "/api/v1/agents/agent-worker", `{"name":"Renamed"}`, http.StatusOK)
+	for _, tc := range []struct{ body, name string }{
+		{strings.NewReplacer("Original", "Renamed", "agent-worker", "agent-expected").Replace(primary), "Renamed"},
+		{alias, "Alias"},
+	} {
+		if _, err := engine.Agents().SetArchived(t.Context(), "agent-worker", true); err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.Agents().Delete(t.Context(), "agent-worker"); err != nil {
+			t.Fatal(err)
+		}
+		openStore()
+		var item apitypes.Participant
+		body := request(http.MethodPost, collection, tc.body, http.StatusOK)
+		if err := json.Unmarshal(body, &item); err != nil || item.AgentID != "agent-worker" || item.AgentName != "Renamed" ||
+			item.Name != tc.name || item.UserName != tc.name {
+			t.Fatalf("recovered binding for %q: %s", tc.name, body)
+		}
+	}
+	if worker, ok := controller.AgentByName("Renamed"); !ok || worker.ID != "agent-worker" {
+		t.Fatal("renamed worker is not selectable by name")
+	}
+	if _, ok := controller.Agent("agent-expected"); ok {
+		t.Fatal("retry created another worker")
+	}
+}
+
 type pausedNameConflictLookup struct {
 	agentengine.AgentInterface
 	resume chan struct{}
@@ -384,6 +447,47 @@ func TestParticipantRenameRetainsOldIMNameUntilCommit(t *testing.T) {
 		}
 		if rec := post(human); rec.Code != http.StatusCreated {
 			t.Fatalf("old name after commit: %d %s", rec.Code, rec.Body)
+		}
+	})
+}
+
+func TestConcurrentParticipantDeleteDuringRetryRollback(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		controller, _ := mustNewSeededServiceWithPath(t, []agent.Agent{
+			{ID: "agent-worker", Name: "Original", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex},
+			{ID: "agent-other", Name: "Taken", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex},
+		})
+		resume := make(chan struct{})
+		engine := getErrorEngine{agents: pausedNameConflictLookup{agentengine.New(controller).Agents(), resume}}
+		users := im.NewService()
+		svc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(engine), participant.WithIMService(users))
+		routes := (&Handler{svc: controller, participant: svc, im: users, agentEngine: engine}).Routes()
+		const collection = "/api/v1/channels/csgclaw/participants"
+		const original = `{"id":"pt-worker","type":"agent","name":"Original","agent_binding":{"mode":"create","agent_id":"agent-worker"}}`
+		request := func(method, path, body string) int {
+			rec := httptest.NewRecorder()
+			routes.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
+			return rec.Code
+		}
+		if got := request(http.MethodPost, collection, original); got != http.StatusCreated {
+			t.Fatalf("initial POST: %d", got)
+		}
+		retry, deletion := make(chan int, 1), make(chan int, 1)
+		go func() {
+			retry <- request(http.MethodPost, collection, strings.Replace(original, "Original", "Taken", 1))
+		}()
+		synctest.Wait()
+		go func() { deletion <- request(http.MethodDelete, collection+"/pt-worker", "") }()
+		synctest.Wait()
+		close(resume)
+		if post, del := <-retry, <-deletion; post != http.StatusConflict || del != http.StatusNoContent {
+			t.Fatalf("POST: %d, DELETE: %d", post, del)
+		}
+		if got := request(http.MethodGet, collection+"/pt-worker", ""); got != http.StatusNotFound {
+			t.Fatalf("GET after DELETE: %d", got)
+		}
+		if user, ok := users.LocalUserByID("user-worker"); !ok || user.Name != "Original" {
+			t.Fatalf("retained IM user: %+v", user)
 		}
 	})
 }

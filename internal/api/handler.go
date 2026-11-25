@@ -1192,8 +1192,13 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		serviceUpdated := serviceAgentFromEngine(updated)
-		h.publishUpdatedAgentUser(serviceUpdated)
+		if h.participant != nil && agentUpdateIncludes(update, "name") {
+			if err := h.participant.SyncAgentName(r.Context(), updated.ID, current.Spec.Name, updated.Spec.Name); err != nil {
+				writeAgentOperationError(w, err, http.StatusInternalServerError)
+				return
+			}
+		}
+		h.publishUpdatedAgentUser(serviceAgentFromEngine(updated))
 		writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, updated))
 	case http.MethodDelete:
 		h.agentArchiveMu.Lock()
@@ -1269,32 +1274,18 @@ func (h *Handler) publishUpdatedAgentUser(updated agent.Agent) {
 	if h == nil || h.im == nil {
 		return
 	}
-	user, ok, err := h.im.UpdateAgentUser(im.UpdateAgentUserRequest{
-		ID:          updated.ID,
-		Name:        updated.Name,
-		Description: updated.Description,
-		Role:        updated.Role,
-	})
-	if err != nil || !ok {
-		return
+	profile := im.UpdateAgentUserRequest{Description: updated.Description, Role: updated.Role}
+	ids, bound := h.boundAgentChatUserIDs(updated.ID)
+	if !bound {
+		ids = []string{updated.ID}
+		profile.Name = updated.Name
 	}
-	if h.participant != nil {
-		name := updated.Name
-		for _, item := range h.participant.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, AgentID: updated.ID}) {
-			if strings.TrimSpace(item.ID) == "" {
-				continue
-			}
-			_, _, _ = h.participant.Update(context.Background(), participant.ChannelCSGClaw, item.ID, participant.UpdateRequest{
-				Name: &name,
-			})
+	// Explicit bindings own their IM names, including aliases.
+	for _, id := range ids {
+		profile.ID = id
+		if user, ok, err := h.im.UpdateAgentUser(profile); err == nil && ok {
+			h.publishUserEvent(im.EventTypeUserUpdated, user)
 		}
-	}
-	if h.imBus != nil {
-		userCopy := user
-		h.imBus.Publish(im.Event{
-			Type: im.EventTypeUserUpdated,
-			User: &userCopy,
-		})
 	}
 }
 

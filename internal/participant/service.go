@@ -682,6 +682,59 @@ func (s *Service) Update(ctx context.Context, channel, id string, req UpdateRequ
 	return item, true, nil
 }
 
+// SyncAgentName records the current worker name for recovery. Participants
+// that followed the worker's name follow its rename; aliases keep theirs.
+func (s *Service) SyncAgentName(ctx context.Context, agentID, previousName, name string) error {
+	release, err := s.lifecycle.Read(ctx, agent.CanonicalID(agentID))
+	if err != nil {
+		return err
+	}
+	defer release()
+	// Another PATCH can finish before its predecessor starts synchronizing.
+	if s.agents != nil {
+		current, err := s.agents.Get(ctx, agentID, agentengine.AgentGetOptions{})
+		if err != nil {
+			return err
+		}
+		name = current.Spec.Name
+	}
+	for _, ref := range s.store.List(ListOptions{Channel: ChannelCSGClaw, Type: TypeAgent, AgentID: agentID}) {
+		if err := s.syncBoundAgentName(ctx, ref, previousName, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) syncBoundAgentName(ctx context.Context, ref apitypes.Participant, previousName, name string) error {
+	release, err := s.lockParticipant(ctx, ref.Channel, ref.ID)
+	if err != nil {
+		return err
+	}
+	defer release()
+	item, ok := s.store.Get(ref.Channel, ref.ID)
+	if !ok || item.AgentID != ref.AgentID {
+		return nil
+	}
+	oldName := item.AgentName
+	if oldName == "" {
+		oldName = previousName
+	}
+	rename := item.Name == oldName && item.Name != name
+	if rename {
+		item.Name = name
+		item.UpdatedAt = time.Now().UTC()
+		if err := s.syncParticipantChannelUser(item); err != nil {
+			return err
+		}
+	}
+	if item.AgentName == name && !rename {
+		return nil
+	}
+	item.AgentName = name
+	return s.store.Save(item)
+}
+
 func (s *Service) syncParticipantChannelUser(item apitypes.Participant) error {
 	if s == nil || s.im == nil {
 		return nil
@@ -724,13 +777,39 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 		return apitypes.Participant{}, false, fmt.Errorf("channel and id are required")
 	}
 
+	deleteAgentMode := strings.TrimSpace(opts.DeleteAgent)
+	// Optional worker deletion uses the same acquisition order as create.
+	// Hold the worker lease through the reference check and deletion.
+	var pinnedAgentID string
+	if deleteAgentMode == DeleteAgentIfUnreferenced {
+		target, _, found := s.getByID(channel, id)
+		if !found {
+			return apitypes.Participant{}, false, nil
+		}
+		pinnedAgentID = target.AgentID
+	}
+	if pinnedAgentID != "" {
+		lease, release, err := s.lifecycle.Mutation(ctx, agent.CanonicalID(pinnedAgentID))
+		if err != nil {
+			return apitypes.Participant{}, false, err
+		}
+		defer release()
+		ctx = lease
+	}
+	release, err := s.lockParticipant(ctx, channel, id)
+	if err != nil {
+		return apitypes.Participant{}, false, err
+	}
+	defer release()
 	existing, deleteID, ok := s.getByID(channel, id)
 	if !ok {
 		return apitypes.Participant{}, false, nil
 	}
-	deleteAgentMode := strings.TrimSpace(opts.DeleteAgent)
 	if deleteAgentMode != "" && deleteAgentMode != DeleteAgentIfUnreferenced {
 		return apitypes.Participant{}, false, fmt.Errorf("delete_agent must be %q", DeleteAgentIfUnreferenced)
+	}
+	if deleteAgentMode == DeleteAgentIfUnreferenced && existing.AgentID != pinnedAgentID {
+		return apitypes.Participant{}, false, fmt.Errorf("participant binding changed during deletion")
 	}
 	if deleteAgentMode == DeleteAgentIfUnreferenced && strings.TrimSpace(existing.AgentID) != "" {
 		if s.agents == nil {
