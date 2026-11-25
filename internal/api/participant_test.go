@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -217,6 +218,58 @@ func TestRetryExplicitParticipantBinding(t *testing.T) {
 	if _, ok := agentSvc.Agent("agent-qa"); !ok {
 		t.Fatal("worker was not restored")
 	}
+}
+
+type pausedAgentLookup struct {
+	agentengine.AgentInterface
+	resume chan struct{}
+}
+
+func (p pausedAgentLookup) Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error) {
+	<-p.resume
+	return agentengine.Agent{ID: "agent-qa"}, nil
+}
+
+func TestRetryAndConcurrentParticipantPatch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := participant.NewMemoryStore([]apitypes.Participant{{
+			ID: "pt-qa", Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent, Name: "QA",
+			AgentID: "agent-qa", ChannelUserRef: "user-qa", ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		}})
+		imSvc := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: "user-qa", Name: "QA", Role: "worker"}}})
+		resume := make(chan struct{})
+		engine := getErrorEngine{agents: pausedAgentLookup{resume: resume}}
+		svc := participant.NewService(store, participant.WithAgentEngine(engine), participant.WithIMService(imSvc))
+		routes := (&Handler{im: imSvc, participant: svc}).Routes()
+		const collection = "/api/v1/channels/csgclaw/participants"
+		request := func(method, path, body string) *httptest.ResponseRecorder {
+			rec := httptest.NewRecorder()
+			routes.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
+			return rec
+		}
+		responses := make(chan *httptest.ResponseRecorder, 2)
+		go func() {
+			responses <- request(http.MethodPost, collection, `{"id":"pt-qa","type":"agent","name":"QA","agent_binding":{"mode":"create","agent_id":"agent-qa"}}`)
+		}()
+		synctest.Wait() // The retry is waiting for the worker lookup.
+		go func() { responses <- request(http.MethodPatch, collection+"/pt-qa", `{"name":"QA-Renamed"}`) }()
+		synctest.Wait()
+		close(resume)
+		for range 2 {
+			if rec := <-responses; rec.Code != http.StatusOK {
+				t.Fatalf("status %d: %s", rec.Code, rec.Body)
+			}
+		}
+		rec := request(http.MethodGet, collection+"/pt-qa", "")
+		var item apitypes.Participant
+		if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+			t.Fatal(err)
+		}
+		user, ok := imSvc.User("user-qa")
+		if rec.Code != http.StatusOK || item.Name != "QA-Renamed" || !ok || user.Name != item.Name {
+			t.Fatalf("GET status %d, participant %q, IM user %q", rec.Code, item.Name, user.Name)
+		}
+	})
 }
 
 func TestParticipantCreatedEventOnPublicationRetry(t *testing.T) {

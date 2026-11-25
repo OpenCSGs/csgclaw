@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"testing/synctest"
 	"time"
 )
 
@@ -229,50 +228,6 @@ func TestCreateCSGClawAgentParticipantRequiresAgentBinding(t *testing.T) {
 	if _, ok := imSvc.User("user-gitlab-worker"); ok {
 		t.Fatal("channel user was created despite missing agent binding")
 	}
-}
-
-type pausedAgentLookup struct {
-	agentengine.AgentInterface
-	resume chan struct{}
-}
-
-func (p pausedAgentLookup) Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error) {
-	<-p.resume
-	return agentengine.Agent{ID: "agent-qa"}, nil
-}
-
-func TestRetryAndConcurrentParticipantRename(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		store := NewMemoryStore([]Participant{{ID: "pt-qa", Name: "QA", Type: TypeAgent, Channel: ChannelCSGClaw,
-			AgentID: "agent-qa", ChannelUserRef: "user-qa", ChannelUserKind: ChannelUserKindLocalUserID}})
-		imSvc := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: "user-qa", Name: "QA", Role: "worker"}}})
-		svc := NewService(store, WithIMService(imSvc))
-		resume := make(chan struct{})
-		svc.agents = pausedAgentLookup{resume: resume}
-		results := make(chan error, 2)
-		go func() {
-			_, err := svc.Create(t.Context(), CreateRequest{ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent, AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: "agent-qa"}})
-			results <- err
-		}()
-		synctest.Wait()
-		name := "QA-Renamed"
-		go func() {
-			_, _, err := svc.Update(t.Context(), ChannelCSGClaw, "qa", UpdateRequest{Name: &name})
-			results <- err
-		}()
-		synctest.Wait()
-		close(resume)
-		for range 2 {
-			if err := <-results; err != nil {
-				t.Fatal(err)
-			}
-		}
-		item, _ := store.Get(ChannelCSGClaw, "pt-qa")
-		user, _ := imSvc.User("user-qa")
-		if item.Name != name || user.Name != name {
-			t.Fatalf("participant %q, IM user %q; want %q", item.Name, user.Name, name)
-		}
-	})
 }
 
 func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testing.T) {
