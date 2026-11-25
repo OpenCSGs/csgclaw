@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentengine/lifecycle"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/identity"
 	"csgclaw/internal/im"
@@ -22,7 +23,8 @@ import (
 )
 
 type Service struct {
-	mutations sync.Map // resource key -> completion channel
+	mutations sync.Map // participant key -> completion channel
+	lifecycle *lifecycle.Coordinator
 	store     *Store
 	agents    agentengine.AgentInterface
 	im        *im.Service
@@ -34,7 +36,7 @@ func NewService(store *Store, opts ...Option) *Service {
 	if store == nil {
 		store = NewMemoryStore(nil)
 	}
-	s := &Service{store: store}
+	s := &Service{store: store, lifecycle: &lifecycle.Coordinator{}}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(s)
@@ -47,6 +49,9 @@ func WithAgentEngine(engine agentengine.Interface) Option {
 	return func(s *Service) {
 		if engine != nil {
 			s.agents = engine.Agents()
+			if owner, ok := s.agents.(interface{ LifecycleCoordinator() *lifecycle.Coordinator }); ok {
+				s.lifecycle = owner.LifecycleCoordinator()
+			}
 		}
 	}
 }
@@ -86,30 +91,13 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 	if err != nil {
 		return apitypes.Participant{}, false, err
 	}
-	release, err := s.lockParticipant(ctx, normalized.Channel, normalized.ID)
+	normalized.reconcile = normalized.Channel == ChannelCSGClaw && normalized.Type == TypeAgent &&
+		normalized.AgentBinding.Mode == BindingModeCreate && strings.TrimSpace(req.ID) != ""
+	ctx, release, err := s.lockCreate(ctx, &normalized)
 	if err != nil {
 		return apitypes.Participant{}, false, err
 	}
 	defer release()
-	normalized.reconcile = normalized.Channel == ChannelCSGClaw && normalized.Type == TypeAgent &&
-		normalized.AgentBinding.Mode == BindingModeCreate && strings.TrimSpace(req.ID) != ""
-	if normalized.Type == TypeAgent && (normalized.AgentBinding.Mode == BindingModeCreate || normalized.AgentBinding.Mode == BindingModeReuse) {
-		agentID := normalized.AgentBinding.AgentID
-		if normalized.reconcile {
-			if item, ok := s.store.Get(normalized.Channel, normalized.ID); ok && item.AgentID != "" {
-				agentID = item.AgentID
-			}
-		}
-		if agentID == "" {
-			agentID = defaultAgentID(normalized.ID)
-		}
-		normalized.AgentBinding.AgentID = agentID
-		releaseAgent, err := s.lockAgent(ctx, agentID)
-		if err != nil {
-			return apitypes.Participant{}, false, err
-		}
-		defer releaseAgent()
-	}
 	if existing, ok := s.store.Get(normalized.Channel, normalized.ID); ok {
 		if !normalized.reconcile || existing.Type != TypeAgent ||
 			(req.ChannelUser.Ref != "" && normalized.ChannelUser.Ref != canonicalUserID(existing.ChannelUserRef)) ||
@@ -142,16 +130,55 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 	return item, err == nil, err
 }
 
+// Agent lifecycle mutations precede participant writes, including Feishu calls
+// that already hold the same lease. Recheck the binding after both locks: a
+// concurrent first create may have selected a different worker for this ID.
+func (s *Service) lockCreate(ctx context.Context, req *normalizedCreateRequest) (context.Context, func(), error) {
+	if req.Type != TypeAgent || req.AgentBinding.Mode == BindingModeNone {
+		release, err := s.lockParticipant(ctx, req.Channel, req.ID)
+		return ctx, release, err
+	}
+	id := req.AgentBinding.AgentID
+	if id == "" {
+		id = defaultAgentID(req.ID)
+	}
+	boundID := func() string {
+		if !req.reconcile {
+			return ""
+		}
+		item, _ := s.store.Get(req.Channel, req.ID)
+		return item.AgentID
+	}
+	if bound := boundID(); bound != "" {
+		id = bound
+	}
+	for {
+		lease, releaseAgent, err := s.lifecycle.Mutation(ctx, agent.CanonicalID(id))
+		if err != nil {
+			return ctx, nil, err
+		}
+		releaseParticipant, err := s.lockParticipant(lease, req.Channel, req.ID)
+		if err != nil {
+			releaseAgent()
+			return ctx, nil, err
+		}
+		release := func() {
+			releaseParticipant()
+			releaseAgent()
+		}
+		if bound := boundID(); bound != "" && agent.CanonicalID(bound) != agent.CanonicalID(id) {
+			release()
+			id = bound
+			continue
+		}
+		req.AgentBinding.AgentID = id
+		return lease, release, nil
+	}
+}
+
 // Serialize changes to the participant and its associated IM user.
 func (s *Service) lockParticipant(ctx context.Context, channel, id string) (func(), error) {
-	return s.lockMutation(ctx, storeKey(channel, canonicalParticipantID(slugify(id))))
-}
-
-func (s *Service) lockAgent(ctx context.Context, id string) (func(), error) {
-	return s.lockMutation(ctx, storeKey("agent", agent.CanonicalID(id)))
-}
-
-func (s *Service) lockMutation(ctx context.Context, key string) (func(), error) {
+	key := storeKey(channel, canonicalParticipantID(slugify(id)))
 	done := make(chan struct{})
 	for {
 		active, occupied := s.mutations.LoadOrStore(key, done)
@@ -630,7 +657,7 @@ func (s *Service) DeleteAgent(ctx context.Context, agentID string) ([]apitypes.P
 		return nil, fmt.Errorf("agent service is required")
 	}
 
-	release, err := s.lockAgent(ctx, agentID)
+	ctx, release, err := s.lifecycle.Mutation(ctx, agent.CanonicalID(agentID))
 	if err != nil {
 		return nil, err
 	}

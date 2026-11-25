@@ -234,9 +234,12 @@ func TestCreateCSGClawAgentParticipantRequiresAgentBinding(t *testing.T) {
 func TestRecoveryRequiresTheBoundIMUser(t *testing.T) {
 	store := NewMemoryStore([]Participant{{
 		ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent, AgentID: "agent-qa",
-		ChannelUserRef: "user-qa", ChannelUserKind: ChannelUserKindLocalUserID,
+		ChannelUserRef: "user-qa-1a2b3c4d", ChannelUserKind: ChannelUserKindLocalUserID,
 	}})
-	users := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: "user-other", Name: "user-qa", Role: "worker"}}})
+	users := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{
+		{ID: "user-other", Name: "user-qa-1a2b3c4d", Role: "worker"},
+		{ID: "user-qa", Name: "Original", Role: "worker"},
+	}})
 	engine := enginetest.NewMemoryClient()
 	svc := NewService(store, WithAgentEngine(engine), WithIMService(users))
 	_, err := svc.Create(t.Context(), CreateRequest{
@@ -254,7 +257,7 @@ func TestRecoveryRequiresTheBoundIMUser(t *testing.T) {
 		t.Fatalf("startup repair: %+v, %v", deleted, err)
 	}
 	other, ok := users.LocalUserByID("user-other")
-	if !ok || other.Name != "user-qa" || other.AgentState == "deleted" {
+	if !ok || other.Name != "user-qa-1a2b3c4d" || other.AgentState == "deleted" {
 		t.Fatalf("changed unrelated identity: %+v", other)
 	}
 }
@@ -320,6 +323,77 @@ func TestParticipantRetryDuringAgentDeletion(t *testing.T) {
 		agents, err := engine.Agents().List(t.Context(), agentengine.AgentListOptions{})
 		if err != nil || len(agents) != 0 {
 			t.Fatalf("unexpected workers: %+v, %v", agents, err)
+		}
+	})
+}
+
+func TestConcurrentCreateWithDifferentWorkerIDs(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		engine := enginetest.NewMemoryClient()
+		svc := NewService(NewMemoryStore(nil), WithAgentEngine(engine))
+		release, err := svc.lockParticipant(t.Context(), ChannelCSGClaw, "pt-qa")
+		if err != nil {
+			t.Fatal(err)
+		}
+		results := make(chan Participant, 2)
+		for _, id := range []string{"agent-first", "agent-second"} {
+			go func() {
+				item, err := svc.Create(t.Context(), CreateRequest{
+					ID: "pt-qa", Channel: ChannelCSGClaw, Type: TypeAgent, Name: "QA",
+					AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: id, Agent: &agent.CreateAgentSpec{RuntimeKind: agent.RuntimeKindCodex}},
+				})
+				if err != nil {
+					t.Errorf("create with %s: %v", id, err)
+				}
+				results <- item
+			}()
+		}
+		synctest.Wait()
+		release()
+		first, second := <-results, <-results
+		workers, err := engine.Agents().List(t.Context(), agentengine.AgentListOptions{})
+		if err != nil || len(workers) != 1 || first.AgentID != workers[0].ID || second.AgentID != first.AgentID {
+			t.Fatalf("returned %q and %q with workers %+v: %v", first.AgentID, second.AgentID, workers, err)
+		}
+	})
+}
+
+func TestFeishuBindingDuringAgentDeletion(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		controller := mustNewAgentService(t)
+		engine := agentengine.New(controller)
+		const id = "agent-qa"
+		if _, err := controller.CreateRecord(t.Context(), agent.CreateRequest{Spec: agent.CreateAgentSpec{
+			ID: id, Name: "QA", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex, Image: "agent-image:test",
+		}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := engine.Agents().SetArchived(t.Context(), id, true); err != nil {
+			t.Fatal(err)
+		}
+		svc := NewService(NewMemoryStore(nil), WithAgentEngine(engine))
+		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+		defer cancel()
+		deleted := make(chan error, 1)
+		err := controller.WithAgentLifecycle(ctx, id, func(lease context.Context) error {
+			go func() { _, err := svc.DeleteAgent(ctx, id); deleted <- err }()
+			synctest.Wait()
+			_, err := svc.Create(lease, CreateRequest{
+				ID: "pt-qa", Channel: ChannelFeishu, Type: TypeAgent, Name: "QA",
+				ChannelUser:      ChannelUserSpec{Kind: ChannelUserKindAppID},
+				ChannelAppConfig: map[string]any{"app_id": "test-app", "app_secret": "test-secret"},
+				AgentBinding:     AgentBindingSpec{Mode: BindingModeReuse, AgentID: id},
+			})
+			return err
+		})
+		if err != nil {
+			t.Fatalf("Feishu binding under lifecycle lease: %v", err)
+		}
+		if err := <-deleted; err != nil {
+			t.Fatalf("delete after binding: %v", err)
+		}
+		if _, ok := svc.Get(ChannelFeishu, "pt-qa"); ok {
+			t.Fatal("deleted worker still has a Feishu participant")
 		}
 	})
 }

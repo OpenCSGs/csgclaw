@@ -89,3 +89,17 @@ func TestUpdateAgentUserUsesBoundID(t *testing.T) {
 		t.Fatalf("updated the wrong user: %+v", other)
 	}
 }
+
+func TestUpdateAgentUserPreservesIDSuffix(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{Users: []User{{ID: "user-qa", Name: "Original", Role: "worker"}}})
+	if user, ok := svc.LocalUserByID("u-qa-1a2b3c4d"); ok {
+		t.Fatalf("missing identity resolved to %+v", user)
+	}
+	updated, _, err := svc.UpdateAgentUser(UpdateAgentUserRequest{ID: "u-qa-1a2b3c4d", Name: "New"})
+	if err != nil || updated.ID != "user-qa-1a2b3c4d" {
+		t.Fatalf("update with full ID: %+v, %v", updated, err)
+	}
+	if other, ok := svc.LocalUserByID("user-qa"); !ok || other.Name != "Original" {
+		t.Fatalf("changed unrelated user: %+v", other)
+	}
+}
