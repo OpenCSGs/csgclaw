@@ -113,6 +113,7 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 
 func (s *Service) reconcileBinding(ctx context.Context, existing apitypes.Participant, req normalizedCreateRequest) (_ apitypes.Participant, err error) {
 	item := existing
+	item.AgentName = req.workerName
 	if req.reconcileBoundName {
 		item.Name = req.Name
 	}
@@ -130,8 +131,11 @@ func (s *Service) reconcileBinding(ctx context.Context, existing apitypes.Partic
 			}
 		}
 		if user.Name != item.Name {
-			// Claim the IM name before updating the worker. A competing user
-			// can acquire it between a read-only availability check and a write.
+			release, holdErr := s.im.HoldAgentUserName(user.ID, user.Name)
+			if holdErr != nil {
+				return existing, holdErr
+			}
+			defer release()
 			if err := s.syncParticipantChannelUser(item); err != nil {
 				return existing, err
 			}
@@ -146,6 +150,8 @@ func (s *Service) reconcileBinding(ctx context.Context, existing apitypes.Partic
 	}
 	if item.Name != existing.Name {
 		item.UpdatedAt = time.Now().UTC()
+	}
+	if item.Name != existing.Name || item.AgentName != existing.AgentName {
 		if err := s.store.Save(item); err != nil {
 			return existing, err
 		}
@@ -227,7 +233,7 @@ func (s *Service) lockCreate(ctx context.Context, req *normalizedCreateRequest) 
 		}
 		if req.AgentBinding.Mode == BindingModeCreate {
 			req.AgentBinding.AgentID = target.id
-			req.reconcileBoundName = current.reconcileBoundName
+			req.bindingTarget = current
 		}
 		return lease, release, nil
 	}
@@ -237,30 +243,43 @@ type bindingTarget struct {
 	id                 string
 	readOnly           bool
 	reconcileBoundName bool
+	workerName         string
 }
 
 func (s *Service) bindingTarget(ctx context.Context, req *normalizedCreateRequest, requested string) (bindingTarget, error) {
+	target := bindingTarget{id: requested, readOnly: req.AgentBinding.Mode == BindingModeReuse}
 	var bound apitypes.Participant
 	if req.reconcile {
 		bound, _ = s.store.Get(req.Channel, req.ID)
 		if bound.AgentID != "" {
-			requested = bound.AgentID
+			target.id = bound.AgentID
+			target.reconcileBoundName = true
+		}
+		target.workerName = req.Name
+		// The stored worker name distinguishes an alias from a worker whose
+		// own name has changed since this participant was bound.
+		if bound.AgentName != "" && bound.AgentName != bound.Name && bound.Name == req.Name {
+			target.workerName = bound.AgentName
+			target.reconcileBoundName = false
 		}
 	}
-	target := bindingTarget{id: requested, readOnly: req.AgentBinding.Mode == BindingModeReuse, reconcileBoundName: bound.AgentID != ""}
 	// Historical selectors also match worker names. Pin the selected worker
 	// until the participant is saved, including when deletion races the lookup.
 	if s.agents != nil {
-		selected, err := s.agents.Get(ctx, requested, agentengine.AgentGetOptions{})
+		selected, err := s.agents.Get(ctx, target.id, agentengine.AgentGetOptions{})
 		if err == nil {
 			if !req.reconcile {
 				return bindingTarget{id: selected.ID, readOnly: true}, nil
 			}
-			if selected.ID == agent.CanonicalID(requested) {
+			if selected.ID == agent.CanonicalID(target.id) {
 				nameMatches := selected.Spec.Name == req.Name
-				// Replaying the creation of an alias must keep the shared worker's name.
-				if target.reconcileBoundName && !nameMatches && bound.Name == req.Name && s.isSharedWorkerAlias(bound, selected.Spec.Name) {
-					target.reconcileBoundName = false
+				if bound.AgentName == "" && target.reconcileBoundName && !nameMatches && bound.Name == req.Name {
+					// An exact replay of an older binding has no recorded worker name.
+					// Keep the current one when the stored identities already satisfy it.
+					target.reconcileBoundName = agent.CanonicalID(requested) != selected.ID && !s.isSharedWorkerAlias(bound, selected.Spec.Name)
+				}
+				if !target.reconcileBoundName {
+					target.workerName = selected.Spec.Name
 				}
 				target.readOnly = nameMatches || !target.reconcileBoundName
 			}
@@ -338,6 +357,7 @@ func (s *Service) create(ctx context.Context, normalized normalizedCreateRequest
 		ChannelAppRef:    normalized.ChannelAppRef,
 		ChannelAppConfig: cloneMap(normalized.ChannelAppConfig),
 		AgentID:          normalized.AgentID,
+		AgentName:        normalized.workerName,
 		LifecycleStatus:  LifecycleStatusActive,
 		Mentionable:      true,
 		Metadata:         cloneMetadata(normalized.Metadata),
@@ -898,20 +918,20 @@ func (s *Service) deleteUnreferencedCSGClawParticipantUser(deleted apitypes.Part
 }
 
 type normalizedCreateRequest struct {
-	reconcile          bool
-	reconcileBoundName bool
-	ID                 string
-	Channel            string
-	Type               string
-	Name               string
-	Avatar             string
-	ChannelAppRef      string
-	ChannelAppConfig   map[string]any
-	ChannelUser        ChannelUserSpec
-	AgentBinding       AgentBindingSpec
-	AgentHubService    *hub.Service
-	AgentID            string
-	Metadata           map[string]any
+	bindingTarget
+	reconcile        bool
+	ID               string
+	Channel          string
+	Type             string
+	Name             string
+	Avatar           string
+	ChannelAppRef    string
+	ChannelAppConfig map[string]any
+	ChannelUser      ChannelUserSpec
+	AgentBinding     AgentBindingSpec
+	AgentHubService  *hub.Service
+	AgentID          string
+	Metadata         map[string]any
 }
 
 func (s *Service) normalizeCreateRequest(req CreateRequest) (normalizedCreateRequest, error) {
@@ -1191,7 +1211,9 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 			spec = *req.AgentBinding.Agent
 		}
 		spec.ID = agentID
-		if req.reconcile || strings.TrimSpace(spec.Name) == "" {
+		if req.reconcile {
+			spec.Name = req.workerName
+		} else if strings.TrimSpace(spec.Name) == "" {
 			spec.Name = req.Name
 		}
 		if strings.TrimSpace(spec.Role) == "" {

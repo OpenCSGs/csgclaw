@@ -197,6 +197,7 @@ type Service struct {
 	currentUserID        string
 	users                map[string]User
 	byName               map[string]string
+	heldNames            map[string]string
 	rooms                map[string]*Room
 	taskTitleClaims      map[string]string // Room ID to source message ID. Survives Reload.
 	sessionRooms         map[string]string
@@ -2059,7 +2060,7 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 		if err := identity.ValidateMentionName(name); err != nil {
 			return User{}, false, err
 		}
-		if existingID, ok := s.byName[strings.ToLower(name)]; ok && s.resolveUserIDLocked(existingID) != id {
+		if existingID, ok := s.nameOwnerLocked(name); ok && s.resolveUserIDLocked(existingID) != id {
 			return User{}, false, fmt.Errorf("name %q %w", name, identity.ErrNameExists)
 		}
 		user.Name = name
@@ -2115,7 +2116,7 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 		if err := identity.ValidateMentionName(name); err != nil {
 			return User{}, false, err
 		}
-		if existingID, ok := s.byName[strings.ToLower(name)]; ok && s.resolveUserIDLocked(existingID) != id {
+		if existingID, ok := s.nameOwnerLocked(name); ok && s.resolveUserIDLocked(existingID) != id {
 			return User{}, false, fmt.Errorf("name %q already exists", name)
 		}
 		delete(s.byName, strings.ToLower(strings.TrimSpace(user.Name)))

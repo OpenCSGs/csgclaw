@@ -443,6 +443,7 @@ func presentParticipants(items []apitypes.Participant) []apitypes.Participant {
 }
 
 func presentParticipant(item apitypes.Participant) apitypes.Participant {
+	item.AgentName = "" // The response uses the current worker name.
 	if len(item.ChannelAppConfig) == 0 {
 		return item
 	}
