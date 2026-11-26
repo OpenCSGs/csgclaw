@@ -248,7 +248,8 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	ownedTelemetry = true
 	go m.waitAppServerSession(spec.RuntimeID, live, stdout)
 
-	if err := m.initializeHandshake(ctx, live); err != nil {
+	var timing initializeTiming
+	if err := m.initializeHandshake(ctx, live, &timing); err != nil {
 		_ = m.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID})
 		return nil, m.wrapStartupError(spec, "initialize codex app-server", err)
 	}
@@ -286,6 +287,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	appClient.logInfo("Codex app-server ready", "runtime_id", spec.RuntimeID,
 		"total_ms", time.Since(startedAt).Milliseconds())
 
+	telemetry.logInitializeAsync(appClient.logger, timing, live.done)
 	return live.snapshot(), nil
 }
 
@@ -904,12 +906,12 @@ func (m *appServerManager) liveSession(runtimeID string) *liveSession {
 // and capabilities, (2) server responds with its capabilities, (3) client
 // sends "initialized" notification. Without this handshake, the server
 // rejects subsequent requests with "Not initialized (code=-32600)".
-func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSession) (handshakeErr error) {
+func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSession, timing *initializeTiming) (handshakeErr error) {
 	started := time.Now()
 	defer func() {
 		live.appClient.logInfo("Codex handshake finished", "success", handshakeErr == nil, "duration_ms", time.Since(started).Milliseconds())
 	}()
-	serverInfo, err := live.appClient.startupRequest(ctx, "initialize", map[string]any{
+	serverInfo, err := live.appClient.call(ctx, "initialize", map[string]any{
 		"clientInfo": map[string]any{
 			"name":    "csgclaw-agent-sdk",
 			"title":   "CSGClaw Agent SDK",
@@ -918,12 +920,16 @@ func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSe
 		"capabilities": map[string]any{
 			"experimentalApi": true,
 		},
-	})
+	}, nil, true, timing)
 	if err != nil {
 		return fmt.Errorf("codex app-server initialize handshake: %w", err)
 	}
 	live.serverInfo = append(json.RawMessage(nil), serverInfo...)
-	return live.appClient.notify("initialized")
+	if err := live.appClient.notify("initialized"); err != nil {
+		return err
+	}
+	timing.notified = time.Now()
+	return nil
 }
 
 func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string, empty, publishFiles bool) (string, error) {

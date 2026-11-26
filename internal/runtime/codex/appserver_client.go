@@ -28,8 +28,9 @@ type appServerClient struct {
 }
 
 type appServerPendingRequest struct {
-	method string
-	ch     chan appServerRPCResult
+	initialize *initializeTiming
+	method     string
+	ch         chan appServerRPCResult
 }
 
 type appServerRPCResult struct {
@@ -48,11 +49,11 @@ func newAppServerClient(stdin io.Writer, logger *slog.Logger) *appServerClient {
 }
 
 func (c *appServerClient) request(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	return c.call(ctx, method, params, nil, false)
+	return c.call(ctx, method, params, nil, false, nil)
 }
 
 func (c *appServerClient) startupRequest(ctx context.Context, method string, params map[string]any) (json.RawMessage, error) {
-	return c.call(ctx, method, params, nil, true)
+	return c.call(ctx, method, params, nil, true, nil)
 }
 
 // probe skips a busy or non-pollable stdin instead of delaying normal RPCs.
@@ -60,10 +61,10 @@ func (c *appServerClient) probe(ctx context.Context, method string, params any) 
 	if ctx == nil {
 		return nil, fmt.Errorf("codex app-server probe requires a context")
 	}
-	return c.call(ctx, method, params, ctx, false)
+	return c.call(ctx, method, params, ctx, false, nil)
 }
 
-func (c *appServerClient) call(ctx context.Context, method string, params any, probeCtx context.Context, logTiming bool) (_ json.RawMessage, err error) {
+func (c *appServerClient) call(ctx context.Context, method string, params any, probeCtx context.Context, logTiming bool, initialize *initializeTiming) (_ json.RawMessage, err error) {
 	if c == nil || c.stdin == nil {
 		return nil, fmt.Errorf("codex app-server client is not configured")
 	}
@@ -84,8 +85,9 @@ func (c *appServerClient) call(ctx context.Context, method string, params any, p
 	c.nextID++
 	id := c.nextID
 	pending := &appServerPendingRequest{
-		method: method,
-		ch:     make(chan appServerRPCResult, 1),
+		initialize: initialize,
+		method:     method,
+		ch:         make(chan appServerRPCResult, 1),
 	}
 	c.pending[id] = pending
 	c.mu.Unlock()
@@ -111,6 +113,9 @@ func (c *appServerClient) call(ctx context.Context, method string, params any, p
 	}
 	diagnostics.From(ctx).Capture("runtime.rpc_request", msg)
 	if err := c.writeJSONLine(probeCtx, msg, func() {
+		if initialize != nil {
+			initialize.sent = time.Now()
+		}
 		if method == "turn/start" {
 			diagnostics.From(ctx).RuntimeStart()
 		}
@@ -216,6 +221,9 @@ func (c *appServerClient) handleResponse(msg appServerWireMessage) {
 		return
 	}
 	pending := c.removePending(id)
+	if pending != nil && pending.initialize != nil {
+		pending.initialize.reply = time.Now()
+	}
 	result := appServerRPCResult{result: msg.Result}
 	if len(msg.Error) > 0 {
 		method := ""
