@@ -28,6 +28,8 @@ type liveSession struct {
 	mu                    sync.Mutex
 	conversationResumeMu  sync.Mutex
 	conversationPersistMu sync.Mutex
+	// After startup, writers hold both conversationPersistMu and mu. Only unused IDs are recorded.
+	emptyThreads          map[string]bool
 	memoryCheckpointMu    sync.Mutex
 	memoryMaintenanceMu   sync.Mutex
 	mcpReloadMu           sync.Mutex

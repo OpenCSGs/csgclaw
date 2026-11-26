@@ -102,6 +102,7 @@ type SessionHandle struct {
 }
 
 type Session struct {
+	emptyThreads                   map[string]bool
 	PreserveSkills                 bool
 	ExtensionDigests               map[string]string
 	RuntimeID                      string
@@ -794,14 +795,8 @@ func (r *Runtime) sessionManager() Manager {
 				slog.Warn("save Codex exit status failed", "runtime_id", session.RuntimeID, "error", err)
 			}
 		},
-		OnConversationSessionsChange: func(session *Session, conversations map[string]string, filePublishing map[string]bool) error {
-			if session == nil {
-				return nil
-			}
-			meta := sessionToSessionMetadata(session)
-			meta.ConversationSessions = cloneConversationSessions(conversations)
-			meta.FilePublishingConversations = cloneFilePublishingConversations(filePublishing)
-			return writeJSONFile(r.writePrivateFile, filepath.Join(session.RuntimeDir, sessionFileName), meta)
+		SaveSessionMetadata: func(dir string, meta sessionMetadata) error {
+			return writeJSONFile(r.writePrivateFile, filepath.Join(dir, sessionFileName), meta)
 		},
 	})
 	manager.deps.HydrateSession = func(ctx context.Context, handle SessionHandle) (*Session, error) {
@@ -2214,6 +2209,7 @@ type runtimeMetadata struct {
 const engineDynamicToolsVersion = 8
 
 type sessionMetadata struct {
+	EmptyThreads                   map[string]bool   `json:"empty_threads,omitempty"`
 	DynamicToolsVersion            int               `json:"dynamic_tools_version,omitempty"`
 	RuntimeID                      string            `json:"runtime_id"`
 	SessionID                      string            `json:"session_id"`
@@ -2244,6 +2240,7 @@ func sessionToRuntimeMetadata(session *Session) runtimeMetadata {
 func sessionToSessionMetadata(session *Session) sessionMetadata {
 	return normalizeSessionMetadata(sessionMetadata{
 		DynamicToolsVersion:            engineDynamicToolsVersion,
+		EmptyThreads:                   maps.Clone(session.emptyThreads),
 		RuntimeID:                      session.RuntimeID,
 		SessionID:                      session.SessionID,
 		WorkspaceDir:                   session.WorkspaceDir,
@@ -2427,14 +2424,14 @@ func writeJSONFile(writeFile func(string, []byte, os.FileMode) error, path strin
 }
 
 type managerDeps struct {
-	BeforePrompt                 func(context.Context, SessionHandle) error
-	EventSink                    SessionEventSink
-	Permission                   PermissionBroker
-	UserInput                    UserInputBroker
-	OpenFile                     func(string, int, os.FileMode) (*os.File, error)
-	WriteFile                    func(string, []byte, os.FileMode) error
-	ReadFile                     func(string) ([]byte, error)
-	OnExit                       func(*Session, int)
-	HydrateSession               func(context.Context, SessionHandle) (*Session, error)
-	OnConversationSessionsChange func(*Session, map[string]string, map[string]bool) error
+	BeforePrompt        func(context.Context, SessionHandle) error
+	EventSink           SessionEventSink
+	Permission          PermissionBroker
+	UserInput           UserInputBroker
+	OpenFile            func(string, int, os.FileMode) (*os.File, error)
+	WriteFile           func(string, []byte, os.FileMode) error
+	ReadFile            func(string) ([]byte, error)
+	OnExit              func(*Session, int)
+	HydrateSession      func(context.Context, SessionHandle) (*Session, error)
+	SaveSessionMetadata func(string, sessionMetadata) error
 }

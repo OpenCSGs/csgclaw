@@ -6246,6 +6246,36 @@ func TestCreateWorkerUsesDefaultProfileSnapshotForGatewayRuntime(t *testing.T) {
 	}
 }
 
+func TestStartupStageLogsReadinessOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		err         error
+		wantSuccess bool
+		wantState   RuntimeAvailabilityState
+		wantReason  string
+	}{
+		{"ready", nil, true, RuntimeAvailabilityReady, ""},
+		{"unsupported", agentruntime.ErrReadinessNotSupported, true, RuntimeAvailabilityNotApplicable, ""},
+		{"timeout", context.DeadlineExceeded, false, RuntimeAvailabilityUnknown, "probe_timed_out"},
+		{"failed", errors.New("unhealthy"), false, RuntimeAvailabilityDegraded, "readiness_failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			availability := runtimeAvailabilityFromReadinessError(tc.err)
+			agent := Agent{Status: "running", Availability: &availability}
+			fields := map[string]any{}
+			for _, attr := range startupStageOutcome("check_availability", agent, true) {
+				fields[attr.Key] = attr.Value.Any()
+			}
+			if fields["success"] != tc.wantSuccess || fields["availability"] != string(tc.wantState) {
+				t.Fatalf("unexpected readiness outcome: %v", fields)
+			}
+			if reason, _ := fields["availability_reason"].(string); reason != tc.wantReason {
+				t.Fatalf("reason = %q, want %q", reason, tc.wantReason)
+			}
+		})
+	}
+}
+
 func TestStartProvisionsRuntimeBeforeStart(t *testing.T) {
 	var callOrder []string
 	svc, err := NewController(

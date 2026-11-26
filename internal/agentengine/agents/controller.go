@@ -1660,7 +1660,26 @@ func (s *Controller) refreshAgentBoxID(id string, got Agent, resolvedKey string,
 	return s.saveLocked()
 }
 
-func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
+func startupStageOutcome(stage string, result Agent, success bool) []slog.Attr {
+	availability := result.Availability
+	if availability == nil {
+		return []slog.Attr{slog.Bool("success", success)}
+	}
+	if stage == "check_availability" {
+		success = success && (availability.State == RuntimeAvailabilityReady || availability.State == RuntimeAvailabilityNotApplicable)
+	}
+	attrs := []slog.Attr{
+		slog.Bool("success", success), slog.String("state", result.Status),
+		slog.String("availability", string(availability.State)),
+	}
+	if availability.Reason != "" {
+		attrs = append(attrs, slog.String("availability_reason", availability.Reason))
+	}
+	return attrs
+}
+
+func (s *Controller) Start(ctx context.Context, id string) (result Agent, startErr error) {
+	started := time.Now()
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
@@ -1678,10 +1697,27 @@ func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
 	if got.ArchivedAt != nil {
 		return Agent{}, archivedAgentError()
 	}
+	stage := "prepare_runtime"
+	stageStarted := started
+	finishStage := func(success bool) {
+		now := time.Now()
+		attrs := []slog.Attr{
+			slog.String("agent_id", id), slog.String("runtime_id", got.RuntimeID),
+			slog.String("stage", stage),
+			slog.Int64("duration_ms", now.Sub(stageStarted).Milliseconds()),
+			slog.Int64("total_ms", now.Sub(started).Milliseconds()),
+		}
+		attrs = append(attrs, startupStageOutcome(stage, result, success)...)
+		slog.LogAttrs(ctx, slog.LevelInfo, "agent startup stage", attrs...)
+		stageStarted = now
+	}
+	defer func() { finishStage(startErr == nil) }()
 	if got.AgentProfile.EnvRestartRequired && !got.AgentProfile.ImageUpgradeRequired && isHostRuntimeKind(got.RuntimeKind) {
+		stage = "restart_runtime"
 		return s.restartRuntimeLocked(ctx, id)
 	}
 	if got.AgentProfile.EnvRestartRequired || got.AgentProfile.ImageUpgradeRequired {
+		stage = "recreate_runtime"
 		return s.RecreateRecord(ctx, id)
 	}
 	startProfile := s.hydrateProfileFromCatalog(normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil))
@@ -1703,13 +1739,19 @@ func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
 		return Agent{}, err
 	}
 	handle := runtimeHandleForAgent(got)
+	finishStage(true)
+	stage = "start_runtime"
 	state, err := runtimeImpl.Start(ctx, handle)
 	if err != nil {
 		if sandbox.IsNotFound(err) {
+			finishStage(false)
+			stage = "recreate_runtime"
 			return s.RecreateRecord(ctx, id)
 		}
 		return Agent{}, err
 	}
+	finishStage(true)
+	stage = "update_runtime_state"
 	info, err := s.runtimeInfo(ctx, runtimeImpl, handle)
 	if err != nil {
 		return Agent{}, fmt.Errorf("read agent runtime info: %w", err)
@@ -1721,6 +1763,8 @@ func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
+	finishStage(true)
+	stage = "check_availability"
 	if err := s.observeStartedExtensions(ctx, id); err != nil {
 		return Agent{}, err
 	}
@@ -2011,15 +2055,19 @@ func (s *Controller) finishConfiguredAgentsStartup() {
 	s.mu.Unlock()
 }
 
-func (s *Controller) StartConfiguredAgents(ctx context.Context) error {
+func (s *Controller) StartConfiguredAgents(ctx context.Context) (startErr error) {
 	if s == nil {
 		return nil
 	}
+	started := time.Now()
 	s.PrepareConfiguredAgentsStartup()
-	defer s.finishConfiguredAgentsStartup()
 	agents := s.startupAgentCandidates()
+	defer func() {
+		s.finishConfiguredAgentsStartup()
+		slog.InfoContext(ctx, "configured worker startup finished", "candidates", len(agents),
+			"success", startErr == nil, "total_ms", time.Since(started).Milliseconds())
+	}()
 	runningGateways := make([]Agent, 0, len(agents))
-	var startErr error
 	for _, a := range agents {
 		if err := ctx.Err(); err != nil {
 			return err

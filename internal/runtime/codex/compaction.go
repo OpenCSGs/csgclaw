@@ -154,10 +154,10 @@ func (m *appServerManager) resumeCompactionThread(ctx context.Context, live *liv
 	live.conversationResumeMu.Lock()
 	defer live.conversationResumeMu.Unlock()
 	live.conversationPersistMu.Lock()
-	defer live.conversationPersistMu.Unlock()
 	live.mu.Lock()
 	current, loaded := live.conversationSessions[key], live.loadedConversations[key]
 	live.mu.Unlock()
+	live.conversationPersistMu.Unlock()
 	if current != thread {
 		return fmt.Errorf("%w: binding changed", errCompactionIdentityChanged)
 	}
@@ -171,8 +171,13 @@ func (m *appServerManager) resumeCompactionThread(ctx context.Context, live *liv
 	if resumed != thread {
 		return fmt.Errorf("%w: resume returned a different conversation", errCompactionIdentityChanged)
 	}
+	live.conversationPersistMu.Lock()
+	defer live.conversationPersistMu.Unlock()
 	live.mu.Lock()
 	defer live.mu.Unlock()
+	if live.conversationSessions[key] != thread {
+		return fmt.Errorf("%w: binding changed", errCompactionIdentityChanged)
+	}
 	if live.loadedConversations == nil {
 		live.loadedConversations = make(map[string]bool)
 	}

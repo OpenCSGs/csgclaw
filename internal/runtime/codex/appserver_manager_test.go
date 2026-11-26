@@ -59,23 +59,25 @@ func TestAppServerManagerStartFailureIncludesRedactedStderrTail(t *testing.T) {
 	}
 }
 
-func TestAppServerManagerStartFallsBackToThreadStartWhenResumeFails(t *testing.T) {
+func TestRestartPreservesUnknownThreadOnResumeFailure(t *testing.T) {
 	withAppServerHelperCommand(t, "resume-fallback")
-	dir := t.TempDir()
-	spec := testAppServerSessionSpec(dir)
-	if err := os.WriteFile(filepath.Join(spec.RuntimeDir, sessionFileName), []byte(`{"session_id":"old-thread"}`), 0o600); err != nil {
-		t.Fatalf("write session metadata: %v", err)
+	spec := testAppServerSessionSpec(t.TempDir())
+	path := filepath.Join(spec.RuntimeDir, sessionFileName)
+	legacy := []byte(`{"session_id":"old-thread"}`)
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatal(err)
 	}
-
 	manager := newAppServerManager(testAppServerManagerDeps())
-	session, err := manager.Start(context.Background(), spec)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
+	if _, err := manager.Start(t.Context(), spec); err == nil || !strings.Contains(err.Error(), "old-thread") {
+		t.Fatalf("Start() error = %v, want failed restore of old-thread", err)
 	}
-	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
-
-	if got, want := session.SessionID, "new-thread"; got != want {
-		t.Fatalf("SessionID = %q, want %q", got, want)
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != string(legacy) {
+		t.Fatalf("saved session = %s, %v", data, err)
+	}
+	log, err := os.ReadFile(spec.StderrPath)
+	if err != nil || strings.Contains(string(log), "method=thread/start") {
+		t.Fatalf("unexpected replacement request: %s, %v", log, err)
 	}
 }
 
@@ -85,8 +87,8 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	spec := testAppServerSessionSpec(dir)
 	var persisted []map[string]string
 	deps := testAppServerManagerDeps()
-	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string, _ map[string]bool) error {
-		persisted = append(persisted, cloneConversationSessions(conversations))
+	deps.SaveSessionMetadata = func(_ string, meta sessionMetadata) error {
+		persisted = append(persisted, cloneConversationSessions(meta.ConversationSessions))
 		return nil
 	}
 	manager := newAppServerManager(deps)
@@ -148,8 +150,8 @@ func TestAppServerManagerEnsureEngineSessionReplacesLoadedLegacyThread(t *testin
 	spec := testAppServerSessionSpec(t.TempDir())
 	var persistedFilePublishing map[string]bool
 	deps := testAppServerManagerDeps()
-	deps.OnConversationSessionsChange = func(_ *Session, _ map[string]string, filePublishing map[string]bool) error {
-		persistedFilePublishing = cloneFilePublishingConversations(filePublishing)
+	deps.SaveSessionMetadata = func(_ string, meta sessionMetadata) error {
+		persistedFilePublishing = cloneFilePublishingConversations(meta.FilePublishingConversations)
 		return nil
 	}
 	manager := newAppServerManager(deps)
@@ -196,7 +198,7 @@ func TestAppServerManagerRestoresConversationThreadMapping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureSession() error = %v", err)
 	}
-	if got, want := thread, "resumed-thread"; got != want {
+	if got, want := thread, "persisted-room-thread"; got != want {
 		t.Fatalf("EnsureSession() = %q, want restored %q", got, want)
 	}
 	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
@@ -220,9 +222,9 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	var persistedFilePublishing map[string]bool
 	sink := newFilePublicationTestSink(t, spec.WorkspaceDir, "generated-file.txt")
 	deps := testAppServerManagerDepsWithSink(sink)
-	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string, filePublishing map[string]bool) error {
-		persisted = cloneConversationSessions(conversations)
-		persistedFilePublishing = cloneFilePublishingConversations(filePublishing)
+	deps.SaveSessionMetadata = func(_ string, meta sessionMetadata) error {
+		persisted = cloneConversationSessions(meta.ConversationSessions)
+		persistedFilePublishing = cloneFilePublishingConversations(meta.FilePublishingConversations)
 		return nil
 	}
 	manager := newAppServerManager(deps)
@@ -234,7 +236,7 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	if err != nil {
 		t.Fatalf("cold EnsureEngineSession error=%v", err)
 	}
-	if threadID != "resumed-thread" || persisted["conversation-1"] != threadID {
+	if threadID != "cold-thread" || persisted["conversation-1"] != threadID {
 		t.Fatalf("resumed Engine thread=%q persisted=%v", threadID, persisted)
 	}
 	if !persistedFilePublishing["conversation-1"] {
@@ -276,10 +278,15 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	}
 }
 
-func TestAppServerManagerReplacesColdConversationWithoutFilePublishingProvenance(t *testing.T) {
+func TestAppServerManagerReplacesEmptyColdConversationWithoutFilePublishingProvenance(t *testing.T) {
 	withAppServerHelperCommand(t, "conversation-thread")
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.ConversationSessions = map[string]string{"conversation-1": "legacy-thread"}
+	if err := writeJSONFile(os.WriteFile, filepath.Join(spec.RuntimeDir, sessionFileName), sessionMetadata{
+		EmptyThreads: map[string]bool{"legacy-thread": true},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	manager := newAppServerManager(testAppServerManagerDeps())
 	if _, err := manager.Start(context.Background(), spec); err != nil {
 		t.Fatal(err)
@@ -302,7 +309,7 @@ func TestAppServerManagerSerializesConversationPersistence(t *testing.T) {
 	entered := make(chan struct{}, 2)
 	release := make(chan struct{})
 	deps := testAppServerManagerDeps()
-	deps.OnConversationSessionsChange = func(_ *Session, _ map[string]string, _ map[string]bool) error {
+	deps.SaveSessionMetadata = func(_ string, meta sessionMetadata) error {
 		entered <- struct{}{}
 		<-release
 		return nil
@@ -3421,7 +3428,8 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	}
 	mode := args[len(args)-1]
 	switch mode {
-	case "room-configuration":
+	case "room-configuration", "resume-during-turn":
+		var pendingResume any
 		threads := 0
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			params, _ := msg["params"].(map[string]any)
@@ -3432,8 +3440,19 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			case "thread/read":
 				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": params["threadId"]}}), true
 			case "thread/resume":
+				if mode == "resume-during-turn" && params["threadId"] == "cold-thread" {
+					pendingResume = msg["id"]
+					fmt.Fprintln(os.Stderr, "waiting for active turn before resuming cold thread")
+					return nil, false
+				}
 				return rpcResult(msg["id"], map[string]any{"threadId": params["threadId"]}), true
 			case "turn/start":
+				if pendingResume != nil {
+					if err := json.NewEncoder(os.Stdout).Encode(rpcResult(pendingResume, map[string]any{"threadId": "cold-thread"})); err != nil {
+						t.Fatal(err)
+					}
+					pendingResume = nil
+				}
 				threadID := params["threadId"]
 				turnID := fmt.Sprintf("turn-%d", index)
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID}})
@@ -3475,13 +3494,18 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return nil, false
 			}
 		})
-	case "resume-success":
+	case "resume-success", "resume-mismatched-id":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			params, _ := msg["params"].(map[string]any)
+			id := params["threadId"]
+			if mode == "resume-mismatched-id" {
+				id = "resumed-thread"
+			}
 			switch msg["method"] {
 			case "thread/read":
-				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": "resumed-thread", "model": "saved-model", "reasoningEffort": "high"}}), true
+				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": id, "model": "saved-model", "reasoningEffort": "high"}}), true
 			case "thread/resume":
-				return rpcResult(msg["id"], map[string]any{"threadId": "resumed-thread"}), true
+				return rpcResult(msg["id"], map[string]any{"threadId": id}), true
 			case "thread/start":
 				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 			case "turn/start":
