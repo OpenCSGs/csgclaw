@@ -11,6 +11,7 @@ import (
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/turnjournal"
 	"csgclaw/internal/taskconfig"
 )
 
@@ -51,7 +52,7 @@ func TestCodexDefaultThreadAcrossRestart(t *testing.T) {
 	}
 
 	first, h := start()
-	if h.HandleID != spec.RuntimeID {
+	if h.HandleID != "unused" {
 		t.Fatalf("idle handle = %q", h.HandleID)
 	}
 	data, err := os.ReadFile(statePath)
@@ -63,17 +64,14 @@ func TestCodexDefaultThreadAcrossRestart(t *testing.T) {
 	}
 	second, h := start()
 	idle, err := second.readSessionMetadata(spec.RuntimeID)
-	if err != nil || idle.SessionID != "" || len(idle.ConversationSessions) != 1 || idle.ConversationSessions["used"] != "history" {
+	if err != nil || idle.SessionID != "unused" || idle.ConversationSessions["new"] != "idle-room" || idle.ConversationSessions["used"] != "history" {
 		t.Fatalf("idle session after restart = %q, %v", idle.SessionID, err)
-	}
-	if id, ok, err := second.ExistingEngineSession(t.Context(), spec.RuntimeID, ""); err != nil || ok || id != "" {
-		t.Fatalf("idle default lookup = %q, %v, %v", id, ok, err)
 	}
 	if err := second.Prompt(t.Context(), spec.RuntimeID, h.HandleID, "hello"); err != nil {
 		t.Fatal(err)
 	}
 	used, err := second.readSessionMetadata(spec.RuntimeID)
-	if err != nil || used.SessionID == "" {
+	if err != nil || used.SessionID == "" || used.SessionID == "unused" {
 		t.Fatalf("saved default = %q, %v", used.SessionID, err)
 	}
 	room, err := second.EnsureSession(t.Context(), spec.RuntimeID, "new")
@@ -364,5 +362,140 @@ func TestConcurrentFirstCodexMessagesShareThread(t *testing.T) {
 				t.Fatalf("thread/start = %d, thread/resume = %d for saved %q", starts, resumes, tc.saved)
 			}
 		})
+	}
+}
+
+func TestRestartBetweenBindingAndFirstSend(t *testing.T) {
+	for _, key := range []string{"", "room"} {
+		t.Run("key="+key, func(t *testing.T) {
+			withAppServerHelperCommand(t, "missing-rollout")
+			spec := testAppServerSessionSpec(t.TempDir())
+			path := filepath.Join(spec.RuntimeDir, sessionFileName)
+			h := SessionHandle{RuntimeID: spec.RuntimeID}
+			start := func() *appServerManager {
+				t.Helper()
+				deps := testAppServerManagerDeps()
+				deps.SaveSessionMetadata = func(_ string, meta sessionMetadata) error { return writeJSONFile(os.WriteFile, path, meta) }
+				meta, err := readSavedThreads(os.ReadFile, spec.RuntimeDir)
+				if err != nil && !errors.Is(err, os.ErrNotExist) {
+					t.Fatal(err)
+				}
+				spec.ConversationSessions = meta.ConversationSessions
+				m := newAppServerManager(deps)
+				if _, err := m.Start(t.Context(), spec); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = m.Stop(context.Background(), h) })
+				return m
+			}
+			first := start()
+			unused, err := first.EnsureSession(t.Context(), h, key)
+			if err != nil || unused == "" {
+				t.Fatalf("first binding: %q %v", unused, err)
+			}
+			if err := first.Stop(t.Context(), h); err != nil {
+				t.Fatal(err)
+			}
+			second := start()
+			replacement, err := second.EnsureSession(t.Context(), h, key)
+			if err != nil || replacement == "" || replacement == unused {
+				t.Fatalf("replacement: %q %v", replacement, err)
+			}
+			if _, err := second.Prompt(t.Context(), h, PromptRequest{SessionID: replacement, ConversationKey: key, ClientUserMessageID: "message-1", Prompt: []PromptContentBlock{TextBlock("hello")}}); err != nil {
+				t.Fatal(err)
+			}
+			if err := second.Stop(t.Context(), h); err != nil {
+				t.Fatal(err)
+			}
+			third := start()
+			if _, err := third.EnsureSession(t.Context(), h, key); err == nil {
+				t.Fatal("replaced a thread with an attempted message")
+			}
+			saved, err := readSavedThreads(os.ReadFile, spec.RuntimeDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id := saved.SessionID
+			if key != "" {
+				id = saved.ConversationSessions[key]
+			}
+			if id != replacement {
+				t.Fatalf("lost original message binding: %q", id)
+			}
+		})
+	}
+}
+
+func TestCodexLostStartAcknowledgement(t *testing.T) {
+	for _, mode := range []string{"lost-ack", "lost-ack-active", "lost-ack-missing", "lost-ack-conflict"} {
+		t.Run(mode, func(t *testing.T) {
+			withAppServerHelperCommand(t, mode)
+			spec := testAppServerSessionSpec(t.TempDir())
+			h := SessionHandle{RuntimeID: spec.RuntimeID}
+			start := func() *appServerManager {
+				deps := testAppServerManagerDeps()
+				deps.SaveSessionMetadata = func(dir string, meta sessionMetadata) error {
+					return writeJSONFile(os.WriteFile, filepath.Join(dir, sessionFileName), meta)
+				}
+				m := newAppServerManager(deps)
+				if _, err := m.Start(t.Context(), spec); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = m.Stop(context.Background(), h) })
+				return m
+			}
+			req := PromptRequest{ClientUserMessageID: "shared-id", Prompt: []PromptContentBlock{TextBlock("hello")}}
+			first := start()
+			if _, err := first.Prompt(t.Context(), h, req); !errors.Is(err, turnjournal.ErrUnconfirmed) {
+				t.Fatalf("lost ACK returned %v", err)
+			}
+			second := start()
+			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+			defer cancel()
+			replay, err := second.Prompt(ctx, h, req)
+			switch mode {
+			case "lost-ack":
+				if err != nil || len(replay.history) != 1 || replay.history[0].Text != "original reply" {
+					t.Fatalf("replay=%+v err=%v", replay, err)
+				}
+			case "lost-ack-active":
+				if err != nil || replay.StopReason != StopReasonEndTurn {
+					t.Fatalf("resume active turn=%+v err=%v", replay, err)
+				}
+			default:
+				if !errors.Is(err, turnjournal.ErrUnconfirmed) {
+					t.Fatalf("ambiguous history returned %v", err)
+				}
+			}
+			data, err := os.ReadFile(filepath.Join(spec.WorkspaceDir, "accepted-messages"))
+			if err != nil || string(data) != "shared-id\n" {
+				t.Fatalf("peer received %q, err=%v", data, err)
+			}
+		})
+	}
+}
+
+func TestNativeHistoryOverridesLegacyUnusedMarker(t *testing.T) {
+	withAppServerHelperCommand(t, "missing-rollout")
+	spec := testAppServerSessionSpec(t.TempDir())
+	const id = "legacy-with-history"
+	spec.ConversationSessions = map[string]string{"room": id}
+	if err := os.WriteFile(filepath.Join(spec.RuntimeDir, sessionFileName), []byte(`{"conversation_sessions":{"room":"legacy-with-history"},"empty_threads":{"legacy-with-history":true}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m := newAppServerManager(testAppServerManagerDeps())
+	h := SessionHandle{RuntimeID: spec.RuntimeID}
+	if _, err := m.Start(t.Context(), spec); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = m.Stop(context.Background(), h) })
+	if _, err := m.EnsureSession(t.Context(), h, "room"); err == nil {
+		t.Fatal("replaced native history after a failed resume")
+	}
+	if saved := m.liveSession(h.RuntimeID).conversationSessions["room"]; saved != id {
+		t.Fatalf("saved = %q", saved)
+	}
+	if unused, err := turnjournal.Unused(spec.RuntimeDir, id); unused || err != nil {
+		t.Fatalf("observed history still eligible: %v %v", unused, err)
 	}
 }

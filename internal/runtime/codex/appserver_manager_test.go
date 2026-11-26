@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -287,14 +288,14 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 }
 
 func TestAppServerManagerReplacesEmptyColdConversationWithoutFilePublishingProvenance(t *testing.T) {
-	withAppServerHelperCommand(t, "conversation-thread")
+	withAppServerHelperCommand(t, "room-configuration")
 	spec := testAppServerSessionSpec(t.TempDir())
 	path := filepath.Join(spec.RuntimeDir, sessionFileName)
 	if err := os.WriteFile(path, []byte(`{"session_id":"unused-default","conversation_sessions":{"conversation-1":"legacy-thread","active":"keep"},"empty_threads":{"legacy-thread":true,"unused-default":true}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	saved, err := readSavedThreads(os.ReadFile, spec.RuntimeDir)
-	if err != nil || saved.SessionID != "" || saved.ConversationSessions["active"] != "keep" || len(saved.ConversationSessions) != 1 {
+	if err != nil || saved.SessionID != "unused-default" || saved.ConversationSessions["active"] != "keep" || saved.ConversationSessions["conversation-1"] != "legacy-thread" {
 		t.Fatalf("migrated bindings = %+v, %v", saved, err)
 	}
 	spec.ConversationSessions = saved.ConversationSessions
@@ -3439,7 +3440,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	}
 	mode := args[len(args)-1]
 	switch mode {
-	case "room-configuration", "resume-during-turn":
+	case "room-configuration", "resume-during-turn", "missing-rollout":
 		var pendingResume any
 		threads := 0
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
@@ -3449,8 +3450,15 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				threads++
 				return rpcResult(msg["id"], map[string]any{"threadId": fmt.Sprintf("thread-%d-%d", os.Getpid(), threads)}), true
 			case "thread/read":
-				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": params["threadId"]}}), true
+				turns := []any{}
+				if params["threadId"] == "legacy-with-history" {
+					turns = append(turns, map[string]any{"id": "old-turn"})
+				}
+				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": params["threadId"], "turns": turns}}), true
 			case "thread/resume":
+				if mode == "missing-rollout" || params["threadId"] == "legacy-thread" || params["threadId"] == "unused" || params["threadId"] == "idle-room" {
+					return rpcError(msg["id"], -32600, "no rollout found for thread id "+fmt.Sprint(params["threadId"])), true
+				}
 				if mode == "resume-during-turn" && params["threadId"] == "cold-thread" {
 					pendingResume = msg["id"]
 					fmt.Fprintln(os.Stderr, "waiting for active turn before resuming cold thread")
@@ -3473,6 +3481,54 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			return nil, false
 		})
 
+	case "lost-ack", "lost-ack-active", "lost-ack-missing", "lost-ack-conflict":
+		runAppServerHelper(t, func(_ int, msg map[string]any) (map[string]any, bool) {
+			params, _ := msg["params"].(map[string]any)
+			const thread = "original-thread"
+			const turn = "original-turn"
+			switch msg["method"] {
+			case "thread/start", "thread/resume":
+				return rpcResult(msg["id"], map[string]any{"threadId": thread}), true
+			case "turn/start":
+				// Save evidence on the peer side, then exit before returning an RPC response.
+				f, err := os.OpenFile("accepted-messages", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = fmt.Fprintln(f, params["clientUserMessageId"]); err != nil {
+					t.Fatal(err)
+				}
+				if err = f.Close(); err != nil {
+					t.Fatal(err)
+				}
+				os.Exit(0)
+			case "thread/read":
+				native := map[string]any{"id": thread, "status": map[string]string{"type": "idle"}}
+				if params["includeTurns"] == true {
+					data, err := os.ReadFile("accepted-messages")
+					if err != nil {
+						t.Fatal(err)
+					}
+					item := map[string]any{"id": turn, "status": "completed", "completedAt": 100, "itemsView": "full", "items": []any{map[string]any{"type": "userMessage", "clientId": strings.TrimSpace(string(data))}, map[string]any{"type": "agentMessage", "id": "reply", "text": "original reply", "phase": "final_answer"}}}
+					switch mode {
+					case "lost-ack":
+						native["turns"] = []any{item}
+					case "lost-ack-conflict":
+						other := maps.Clone(item)
+						other["id"] = "another-turn"
+						native["turns"] = []any{item, other}
+					case "lost-ack-active":
+						item["status"] = "inProgress"
+						delete(item, "completedAt")
+						native["status"] = map[string]string{"type": "active"}
+						native["turns"] = []any{item}
+						writeRPCNotification(t, "turn/completed", map[string]any{"threadId": thread, "turn": map[string]any{"id": turn, "status": "completed"}})
+					}
+				}
+				return rpcResult(msg["id"], map[string]any{"thread": native}), true
+			}
+			return nil, false
+		})
 	case "fail-before-handshake":
 		_, _ = fmt.Fprintln(os.Stderr, "login failed")
 		_, _ = fmt.Fprintln(os.Stderr, "api_key = sk-secret")

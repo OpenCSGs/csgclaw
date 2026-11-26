@@ -1,6 +1,7 @@
 package dsh
 
 import (
+	"csgclaw/internal/runtime/turnjournal"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 var recreatePersistentPathPatterns = []string{
 	workspaceDirName,
+	turnjournal.Directory,
 	runtimeFileName,
 	filepath.Join(homeDirName, "AGENTS.md"),
 	filepath.Join(homeDirName, "agents"),

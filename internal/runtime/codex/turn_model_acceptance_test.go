@@ -31,7 +31,7 @@ func newModelAcceptanceFixture(t *testing.T) *modelAcceptanceFixture {
 	live := &liveSession{
 		defaultThreadLoaded: true,
 		session:             &Session{RuntimeID: "runtime", SessionID: "thread"},
-		spec: SessionSpec{RuntimeID: "runtime", Profile: profile, ModelCatalog: []codexmodel.Profile{
+		spec: SessionSpec{RuntimeDir: t.TempDir(), RuntimeID: "runtime", Profile: profile, ModelCatalog: []codexmodel.Profile{
 			{Provider: profile.Provider, ModelID: selected.ModelID, Metadata: selected.Metadata},
 		}},
 		appClient: newAppServerClient(requests, nil), done: make(chan struct{}),

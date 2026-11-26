@@ -8,6 +8,7 @@ import (
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/modelusage"
+	"csgclaw/internal/runtime/turnjournal"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -453,7 +454,19 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	live.mu.Lock()
 	delete(live.unusedThreads, sessionID)
 	live.mu.Unlock()
+	previous, err := turnjournal.Begin(live.spec.RuntimeDir, req.ConversationKey, sessionID, req.ClientUserMessageID)
 	live.conversationPersistMu.Unlock()
+	if err != nil {
+		return PromptResponse{}, err
+	}
+	if previous {
+		resp, err := m.followMessage(turnCtx, live, waiter, req)
+		if err != nil {
+			return resp, err
+		}
+		m.publishAppServerEvent(promptCompletedEvent(runtimeID, sessionID, resp))
+		return resp, nil
+	}
 	turnStartAt := time.Now()
 	live.appClient.logDebugContext(ctx, "codex app-server turn start request",
 		"runtime_id", runtimeID,
@@ -473,11 +486,19 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 			m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, stopErr))
 			return response, stopErr
 		}
+		var nativeErr appServerRPCError
+		if req.ClientUserMessageID != "" && !errors.As(err, &nativeErr) {
+			err = fmt.Errorf("%w: turn/start reply unavailable: %w", turnjournal.ErrUnconfirmed, err)
+		}
 		err = fmt.Errorf("codex turn/start failed: %w", err)
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
-	waiter.setTurnID(appServerTurnIDFromResult(raw))
+	acknowledgedTurn := appServerTurnIDFromResult(raw)
+	waiter.setTurnID(acknowledgedTurn)
+	if err := turnjournal.Confirm(live.spec.RuntimeDir, req.ConversationKey, req.ClientUserMessageID, acknowledgedTurn); err != nil {
+		return PromptResponse{}, fmt.Errorf("%w: record Codex acknowledgement: %w", turnjournal.ErrUnconfirmed, err)
+	}
 	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	live.telemetry.bind(waiter.currentTurnID(), diagnostics.From(ctx))
 	defer live.telemetry.finish(diagnostics.From(ctx))
@@ -540,7 +561,7 @@ func (m *appServerManager) ensureDefaultThread(ctx context.Context, live *liveSe
 	if loaded {
 		return id, nil
 	}
-	release, err := live.lockThreadPreparation(ctx, "")
+	release, err := live.preparations.Acquire(ctx, "")
 	if err != nil {
 		return "", err
 	}
@@ -571,13 +592,38 @@ func (m *appServerManager) ensureDefaultThread(ctx context.Context, live *liveSe
 	return threadID, nil
 }
 
-func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHandle, conversationKey string, publishFiles bool) (string, error) {
+func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHandle, conversationKey string, publishFiles bool) (resolved string, resultErr error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	live, err := m.ensureLiveSession(ctx, handle)
 	if err != nil {
 		return "", err
 	}
 
 	conversationKey = strings.TrimSpace(conversationKey)
+	if message, ok := ctx.Value(preparingMessage{}).(preparingMessage); ok {
+		attempted, err := turnjournal.AttemptedThread(live.spec.RuntimeDir, message.conversationKey, message.messageID)
+		if err != nil {
+			return "", err
+		}
+		if attempted != "" {
+			live.mu.Lock()
+			current := live.conversationSessions[conversationKey]
+			if conversationKey == "" {
+				current = live.session.SessionID
+			}
+			live.mu.Unlock()
+			if current != attempted {
+				return "", fmt.Errorf("%w: original Codex thread %q is no longer bound to this conversation", turnjournal.ErrUnconfirmed, attempted)
+			}
+			defer func() {
+				if resultErr != nil {
+					resultErr = fmt.Errorf("%w: prepare original Codex thread %q: %w", turnjournal.ErrUnconfirmed, attempted, resultErr)
+				}
+			}()
+		}
+	}
 	if conversationKey == "" {
 		return m.ensureDefaultThread(ctx, live)
 	}
@@ -595,7 +641,7 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 		}
 	}
 	live.mu.Unlock()
-	release, err := live.lockThreadPreparation(ctx, conversationKey)
+	release, err := live.preparations.Acquire(ctx, conversationKey)
 	if err != nil {
 		return "", err
 	}
@@ -609,8 +655,15 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 	if loaded && (!publishFiles || withFileTools) {
 		return previous, nil
 	}
-	if previous != "" && publishFiles && !withFileTools && !unused {
-		return "", fmt.Errorf("saved Codex thread %q lacks the required tools; reset the conversation to start with the new tools", previous)
+	needsTools := previous != "" && publishFiles && !withFileTools && !unused
+	if needsTools {
+		eligible, err := turnjournal.Unused(live.spec.RuntimeDir, previous)
+		if err != nil {
+			return "", err
+		}
+		if !eligible {
+			return "", fmt.Errorf("saved Codex thread %q lacks the required tools; reset the conversation to start with the new tools", previous)
+		}
 	}
 	withFileTools = withFileTools || publishFiles
 	threadID, err := m.startOrResumeThread(ctx, live, previous, unused, withFileTools)
@@ -618,6 +671,9 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 		return "", err
 	}
 
+	if needsTools && threadID == previous {
+		return "", fmt.Errorf("restored Codex thread %q lacks the required tools; reset the conversation to start with the new tools", previous)
+	}
 	live.conversationPersistMu.Lock()
 	defer live.conversationPersistMu.Unlock()
 	live.mu.Lock()
@@ -650,37 +706,6 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 		live.unusedThreads[threadID] = true
 	}
 	return threadID, nil
-}
-
-// The empty key identifies the default thread. Other conversations prepare independently.
-func (live *liveSession) lockThreadPreparation(ctx context.Context, key string) (func(), error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	for {
-		live.mu.Lock()
-		pending := live.preparingThreads[key]
-		if pending == nil {
-			if live.preparingThreads == nil {
-				live.preparingThreads = make(map[string]chan struct{})
-			}
-			pending = make(chan struct{})
-			live.preparingThreads[key] = pending
-			live.mu.Unlock()
-			return func() {
-				live.mu.Lock()
-				delete(live.preparingThreads, key)
-				close(pending)
-				live.mu.Unlock()
-			}, nil
-		}
-		live.mu.Unlock()
-		select {
-		case <-pending:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
 }
 
 func (m *appServerManager) ExistingEngineSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, bool, error) {
@@ -927,6 +952,16 @@ func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSe
 	if threadID != "" && !empty {
 		resumed, err := m.resumeThread(ctx, live, threadID)
 		if err != nil {
+			var failure appServerRPCError
+			if errors.As(err, &failure) && failure.Code == appServerRPCInvalidRequest && failure.Message == "no rollout found for thread id "+threadID {
+				replace, stateErr := live.replaceMissingThread(ctx, threadID)
+				if stateErr != nil {
+					return "", stateErr
+				}
+				if replace {
+					return m.startThread(ctx, live, publishFiles)
+				}
+			}
 			return "", fmt.Errorf("resume saved Codex thread %q: %w", threadID, err)
 		}
 		if resumed != threadID {
@@ -934,6 +969,15 @@ func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSe
 		}
 		live.appClient.logInfo("resumed saved Codex thread", "thread_id", threadID)
 		return threadID, nil
+	}
+	if threadID != "" {
+		replace, err := turnjournal.ReplaceUnused(live.spec.RuntimeDir, threadID)
+		if err != nil {
+			return "", err
+		}
+		if !replace {
+			return "", fmt.Errorf("Codex thread %q already has a dispatch attempt", threadID)
+		}
 	}
 	started, err := m.startThread(ctx, live, publishFiles)
 	if err == nil && threadID != "" {
@@ -948,7 +992,11 @@ func (m *appServerManager) startThread(ctx context.Context, live *liveSession, p
 	if err != nil {
 		return "", err
 	}
-	return appServerThreadIDFromResult(raw)
+	id, err := appServerThreadIDFromResult(raw)
+	if err != nil {
+		return "", err
+	}
+	return id, turnjournal.Created(live.spec.RuntimeDir, id)
 }
 
 func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, threadID string) (string, error) {
@@ -2540,7 +2588,7 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			if err := ctx.Err(); err != nil {
 				return PromptResponse{StopReason: StopReasonInterrupted}, err
 			}
-			return PromptResponse{}, fmt.Errorf("codex app-server exited during turn: runtime_id=%s thread_id=%s", live.spec.RuntimeID, waiter.threadID)
+			return PromptResponse{}, fmt.Errorf("%w: codex app-server exited during turn: runtime_id=%s thread_id=%s", turnjournal.ErrUnconfirmed, live.spec.RuntimeID, waiter.threadID)
 		}
 	}
 }

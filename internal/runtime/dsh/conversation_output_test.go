@@ -48,6 +48,7 @@ func TestConversationRequiresVisibleOutput(t *testing.T) {
 				}
 			}
 			proc := &process{
+				root:   t.TempDir(),
 				client: client, workspace: workspace,
 				meta: runtimeMetadata{Sessions: map[string]string{"room-1": "session-1"}},
 				done: make(chan struct{}), active: make(map[string]*activeTurn), ready: map[string]bool{"session-1": true},
@@ -132,5 +133,48 @@ func TestConversationRequiresVisibleOutput(t *testing.T) {
 				t.Fatalf("missing file output: %+v", result.RuntimeFiles)
 			}
 		})
+	}
+}
+
+func TestLostDSHPromptReplyPreservesSessionAcrossRetries(t *testing.T) {
+	root := t.TempDir()
+	start := func() (*Runtime, net.Conn) {
+		host, peer := net.Pipe()
+		t.Cleanup(func() { host.Close(); peer.Close() })
+		client := newACPClient(host, host)
+		proc := &process{root: root, workspace: t.TempDir(), client: client, meta: runtimeMetadata{Sessions: map[string]string{"room": "original"}}, ready: map[string]bool{"original": true}, done: make(chan struct{}), active: make(map[string]*activeTurn)}
+		return &Runtime{processes: map[string]*process{"runtime": proc}}, peer
+	}
+	rt, peer := start()
+	received := make(chan testACPFrame, 1)
+	go func() {
+		var msg testACPFrame
+		if err := json.NewDecoder(peer).Decode(&msg); err != nil {
+			t.Error(err)
+		}
+		received <- msg
+		peer.Close()
+	}()
+	req := contract.TurnRequest{ID: "same-message", ConversationKey: "room", Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "hello"}}}
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	first := rt.Conversation("runtime").Run(ctx, req, nil)
+	if frame := <-received; frame.Method != "session/prompt" || first.Error == nil || first.Error.Code != contract.ErrorDeliveryUnconfirmed {
+		t.Fatalf("frame=%+v result=%+v", frame, first)
+	}
+	restarted, peer := start()
+	for range 2 {
+		result := restarted.Conversation("runtime").Run(ctx, req, nil)
+		if result.Error == nil || result.Error.Code != contract.ErrorDeliveryUnconfirmed || result.Dispatched {
+			t.Fatalf("retry=%+v", result)
+		}
+	}
+	peer.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	var buf [1]byte
+	if n, err := peer.Read(buf[:]); n != 0 || err == nil {
+		t.Fatalf("retry wrote another ACP frame")
+	}
+	if id := restarted.processes["runtime"].meta.Sessions["room"]; id != "original" {
+		t.Fatalf("replaced session: %q", id)
 	}
 }

@@ -333,3 +333,30 @@ func (c sessionInputOnlyConversation) Files() agentengine.FileInterface {
 	c.t.Error("an input-only turn accessed temporary Engine file storage")
 	return nil
 }
+
+func TestKeyedResponseRetryKeepsUploadAndRejectsChangedContent(t *testing.T) {
+	engine := &fakeSessionEngine{run: func(_ context.Context, _ string, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "done", Dispatched: true}
+	}}
+	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+	send := func(data string) *httptest.ResponseRecorder {
+		body := sessionInlineFileRequest(false, sessionInlineFilePart("report.txt", "text/plain", []byte(data)))
+		body["client_message_id"] = "client-key"
+		return performAgentSessionRequest(t, handler, "Alpha", "session-A", body)
+	}
+	var id string
+	for range 2 {
+		w := send("original")
+		var result agentSessionResponse
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil || len(result.InputAttachments) != 1 {
+			t.Fatalf("request: %s", w.Body.String())
+		}
+		if id != "" && result.InputAttachments[0].ID != id {
+			t.Fatal("retry saved a second upload")
+		}
+		id = result.InputAttachments[0].ID
+	}
+	if w := send("modified"); w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "message_id_conflict") {
+		t.Fatalf("changed input: %d %s", w.Code, w.Body.String())
+	}
+}

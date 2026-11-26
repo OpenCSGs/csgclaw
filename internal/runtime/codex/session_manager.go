@@ -3,6 +3,7 @@ package codex
 import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/keylock"
 	"csgclaw/internal/modelcap"
 	"encoding/json"
 	"io"
@@ -27,7 +28,7 @@ type liveSession struct {
 	threadModels          map[string]contract.TurnModel
 	mu                    sync.Mutex
 	conversationPersistMu sync.Mutex
-	preparingThreads      map[string]chan struct{}
+	preparations          keylock.Locks
 	defaultThreadLoaded   bool
 	// Only threads created by this process can be replaced when upgrading room tools.
 	unusedThreads         map[string]bool

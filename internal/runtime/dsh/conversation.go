@@ -5,6 +5,7 @@ import (
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelusage"
+	"csgclaw/internal/runtime/turnjournal"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,6 +77,10 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	turn := &activeTurn{ctx: ctx, diagnostic: diagnostics.From(ctx), request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
 	turn.tokenUsage = modelusage.Usage{ModelID: proc.profile.ModelID}
 	proc.mu.Lock()
+	if proc.active[sessionID] != nil {
+		proc.mu.Unlock()
+		return contract.TurnResult{Status: contract.TurnFailed, Error: &contract.TurnError{Code: contract.ErrorConversationBusy, Message: "DSH session already has an active turn"}}
+	}
 	proc.active[sessionID] = turn
 	metadata := proc.profile.ModelMetadata.Normalized()
 	usage, ok := proc.contextUsage[sessionID]
@@ -111,6 +116,13 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	dispatched := false
 	var response struct {
 		StopReason string `json:"stopReason"`
+	}
+	previous, err := turnjournal.Begin(proc.root, string(request.ConversationKey), sessionID, string(request.ID))
+	if err != nil {
+		return failed(err)
+	}
+	if previous {
+		return failed(fmt.Errorf("%w: DSH cannot identify the original prompt %q after restart", turnjournal.ErrUnconfirmed, request.ID))
 	}
 	err = proc.client.callRetainingOnCancel(ctx, "session/prompt", map[string]any{
 		"sessionId": sessionID,
@@ -149,6 +161,10 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 				message = fmt.Sprintf("%s; stop unresponsive DSH process: %v", message, cancellationCleanupErr)
 			}
 			return contract.TurnResult{Status: contract.TurnCanceled, Output: output, Dispatched: dispatched, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: message}}
+		}
+		var nativeError *rpcError
+		if !errors.As(err, &nativeError) {
+			err = fmt.Errorf("%w: DSH prompt reply unavailable: %w", turnjournal.ErrUnconfirmed, err)
 		}
 		result := failed(err)
 		if contextErr != nil {
@@ -200,6 +216,18 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 
 func (c *conversation) ensureSession(ctx context.Context, proc *process, request contract.TurnRequest) (string, *contract.TurnError) {
 	key := contract.RuntimeSessionKey(request)
+	attempted, err := turnjournal.AttemptedThread(proc.root, string(request.ConversationKey), string(request.ID))
+	if err != nil {
+		return "", failed(err).Error
+	}
+	if attempted != "" {
+		return "", &contract.TurnError{Code: contract.ErrorDeliveryUnconfirmed, Message: fmt.Sprintf("DSH cannot identify the original prompt %q in native session %q", request.ID, attempted)}
+	}
+	release, err := proc.preparations.Acquire(ctx, key)
+	if err != nil {
+		return "", &contract.TurnError{Code: contract.ErrorCanceled, Message: err.Error()}
+	}
+	defer release()
 	proc.mu.Lock()
 	sessionID, exists := proc.meta.Sessions[key]
 	ready := proc.ready[sessionID]
@@ -217,16 +245,27 @@ func (c *conversation) ensureSession(ctx context.Context, proc *process, request
 	mcpServers, token := proc.sessionMCPServers()
 	if exists {
 		var resumed sessionResult
-		if err := proc.client.call(ctx, "session/resume", map[string]any{"sessionId": sessionID, "cwd": proc.workspace, "mcpServers": mcpServers}, &resumed, nil); err != nil {
+		err := proc.client.call(ctx, "session/resume", map[string]any{"sessionId": sessionID, "cwd": proc.workspace, "mcpServers": mcpServers}, &resumed, nil)
+		if err == nil {
+			if err := configureSession(ctx, proc, sessionID, resumed.ConfigOptions); err != nil {
+				return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
+			}
+			proc.mu.Lock()
+			proc.markSessionReadyLocked(sessionID, token)
+			proc.mu.Unlock()
+			return sessionID, nil
+		}
+		var nativeErr *rpcError
+		if !errors.As(err, &nativeErr) || ctx.Err() != nil {
 			return "", &contract.TurnError{Code: contract.ErrorConversationNotResumable, Message: fmt.Sprintf("resume DSH session: %v", err)}
 		}
-		if err := configureSession(ctx, proc, sessionID, resumed.ConfigOptions); err != nil {
-			return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
+		replace, stateErr := turnjournal.ReplaceUnused(proc.root, sessionID)
+		if stateErr != nil {
+			return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: stateErr.Error()}
 		}
-		proc.mu.Lock()
-		proc.markSessionReadyLocked(sessionID, token)
-		proc.mu.Unlock()
-		return sessionID, nil
+		if !replace {
+			return "", &contract.TurnError{Code: contract.ErrorConversationNotResumable, Message: fmt.Sprintf("resume DSH session: %v", err)}
+		}
 	}
 	var created sessionResult
 	if err := proc.client.call(ctx, "session/new", map[string]any{"cwd": proc.workspace, "mcpServers": mcpServers}, &created, nil); err != nil {
@@ -238,13 +277,31 @@ func (c *conversation) ensureSession(ctx context.Context, proc *process, request
 	if err := configureSession(ctx, proc, created.SessionID, created.ConfigOptions); err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
-	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
-		meta.Sessions[key] = created.SessionID
-		proc.markSessionReadyLocked(created.SessionID, token)
-	}); err != nil {
+	if err := turnjournal.Created(proc.root, created.SessionID); err != nil {
+		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
+	}
+	if err := proc.bindSession(key, created.SessionID, token); err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
 	return created.SessionID, nil
+}
+
+// Publish the new native ID to other callers only after the binding is saved.
+func (p *process) bindSession(key, id, token string) error {
+	p.metadataMu.Lock()
+	defer p.metadataMu.Unlock()
+	p.mu.Lock()
+	meta := cloneRuntimeMetadata(p.meta)
+	p.mu.Unlock()
+	meta.Sessions[key] = id
+	if err := writeMetadata(p.root, meta); err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.meta.Sessions = meta.Sessions
+	p.markSessionReadyLocked(id, token)
+	return nil
 }
 
 func (p *process) markSessionReadyLocked(sessionID, token string) {
@@ -449,5 +506,8 @@ func (r *Runtime) cancelPendingPermissions(runtimeID string, key contract.Conver
 }
 
 func failed(err error) contract.TurnResult {
+	if errors.Is(err, turnjournal.ErrUnconfirmed) {
+		return contract.TurnResult{Status: contract.TurnFailed, Error: &contract.TurnError{Code: contract.ErrorDeliveryUnconfirmed, Message: err.Error()}}
+	}
 	return contract.TurnResult{Status: contract.TurnFailed, Error: &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}}
 }

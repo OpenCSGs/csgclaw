@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"csgclaw/internal/runtime/conversationconfig"
+	"csgclaw/internal/runtime/turnjournal"
 	skill "csgclaw/internal/skill/state"
 	"csgclaw/internal/taskconfig"
 	"encoding/json"
@@ -1768,13 +1769,18 @@ func readSavedThreads(read func(string) ([]byte, error), dir string) (sessionMet
 			return sessionMetadata{}, err
 		}
 	}
-	if saved.EmptyThreads[meta.SessionID] {
-		meta.SessionID = ""
-	}
-	for key, id := range meta.ConversationSessions {
+	// Import only evidence for an actual binding. Keep its native ID until
+	// first use establishes whether Codex has recoverable history.
+	for _, id := range meta.ConversationSessions {
 		if saved.EmptyThreads[id] {
-			delete(meta.ConversationSessions, key)
-			delete(meta.FilePublishingConversations, key)
+			if err := turnjournal.Created(dir, id); err != nil {
+				return sessionMetadata{}, err
+			}
+		}
+	}
+	if meta.SessionID != "" && saved.EmptyThreads[meta.SessionID] {
+		if err := turnjournal.Created(dir, meta.SessionID); err != nil {
+			return sessionMetadata{}, err
 		}
 	}
 	return normalizeSessionMetadata(meta), nil

@@ -123,6 +123,7 @@ const (
 	ErrorAgentNotFound               = contract.ErrorAgentNotFound
 	ErrorAgentUnavailable            = contract.ErrorAgentUnavailable
 	ErrorRuntimeAdapterUnavailable   = contract.ErrorRuntimeAdapterUnavailable
+	ErrorDeliveryUnconfirmed         = contract.ErrorDeliveryUnconfirmed
 	ErrorConversationBusy            = contract.ErrorConversationBusy
 	ErrorConversationNotResumable    = contract.ErrorConversationNotResumable
 	ErrorFileUnavailable             = contract.ErrorFileUnavailable

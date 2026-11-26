@@ -45,6 +45,7 @@ func TestConversationCancellationWaitsForPromptTerminalResponse(t *testing.T) {
 	}()
 
 	proc := &process{
+		root:      t.TempDir(),
 		client:    client,
 		workspace: t.TempDir(),
 		meta: runtimeMetadata{

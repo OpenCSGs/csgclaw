@@ -2,6 +2,7 @@ package dsh
 
 import (
 	"context"
+	"fmt"
 
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/dshcli"
@@ -39,8 +40,10 @@ func TestRoomConfigurationDSHPersistsAndIsolatesPermissionAndDirectory(t *testin
 		_ = os.WriteFile(filepath.Join(dir, "index.html"), []byte("hello"), 0600)
 	}
 	identities := map[string]string{}
+	var message int
 	run := func(key, dir, mode, wantMethod string) {
-		request := contract.TurnRequest{ID: "turn", ConversationKey: contract.ConversationKey(key), Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "hello"}}, RoomConfiguration: &contract.RoomConfiguration{RoomID: key, Configuration: taskconfig.Config{WorkspaceDir: dir, ExecutionMode: mode}}}
+		message++
+		request := contract.TurnRequest{ID: contract.TurnID(fmt.Sprintf("turn-%d", message)), ConversationKey: contract.ConversationKey(key), Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "hello"}}, RoomConfiguration: &contract.RoomConfiguration{RoomID: key, Configuration: taskconfig.Config{WorkspaceDir: dir, ExecutionMode: mode}}}
 		result := rt.Conversation(ref.RuntimeID).Run(context.Background(), request, contract.EventSinkFunc(func(context.Context, contract.TurnEvent) error { return nil }))
 		for _, file := range result.RuntimeFiles {
 			file.Cleanup()
