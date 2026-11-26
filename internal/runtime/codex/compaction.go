@@ -151,8 +151,11 @@ func (r *Runtime) CompactConversation(ctx context.Context, runtimeID string, req
 // Manual compaction may resume a saved thread, but must never create a
 // replacement or rewrite the binding when history is unavailable.
 func (m *appServerManager) resumeCompactionThread(ctx context.Context, live *liveSession, key, thread string) error {
-	live.conversationResumeMu.Lock()
-	defer live.conversationResumeMu.Unlock()
+	release, err := live.lockThreadPreparation(ctx, key)
+	if err != nil {
+		return err
+	}
+	defer release()
 	live.conversationPersistMu.Lock()
 	live.mu.Lock()
 	current, loaded := live.conversationSessions[key], live.loadedConversations[key]

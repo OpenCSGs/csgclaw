@@ -68,8 +68,13 @@ func TestRestartPreservesUnknownThreadOnResumeFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager := newAppServerManager(testAppServerManagerDeps())
-	if _, err := manager.Start(t.Context(), spec); err == nil || !strings.Contains(err.Error(), "old-thread") {
-		t.Fatalf("Start() error = %v, want failed restore of old-thread", err)
+	h := SessionHandle{RuntimeID: spec.RuntimeID}
+	if _, err := manager.Start(t.Context(), spec); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), h) })
+	if _, err := manager.Prompt(t.Context(), h, PromptRequest{Prompt: []PromptContentBlock{TextBlock("hello")}}); err == nil || !strings.Contains(err.Error(), "old-thread") {
+		t.Fatalf("Prompt() error = %v, want failed restore of old-thread", err)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil || string(data) != string(legacy) {
@@ -78,6 +83,9 @@ func TestRestartPreservesUnknownThreadOnResumeFailure(t *testing.T) {
 	log, err := os.ReadFile(spec.StderrPath)
 	if err != nil || strings.Contains(string(log), "method=thread/start") {
 		t.Fatalf("unexpected replacement request: %s, %v", log, err)
+	}
+	if id, err := manager.EnsureSession(t.Context(), h, "unrelated-room"); err != nil || id == "" {
+		t.Fatalf("new room after failed default restore = %q, %v", id, err)
 	}
 }
 
@@ -102,8 +110,8 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureSession(main) error = %v", err)
 	}
-	if mainThread != session.SessionID {
-		t.Fatalf("main thread = %q, want %q", mainThread, session.SessionID)
+	if mainThread == "" || session.SessionID != "" {
+		t.Fatalf("idle default = %q, first resolved default = %q", session.SessionID, mainThread)
 	}
 
 	thread, err := manager.EnsureSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
@@ -131,16 +139,16 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	if threadAfterReset == thread {
 		t.Fatalf("conversation thread after reset = %q, want a new thread", threadAfterReset)
 	}
-	if len(persisted) != 3 {
-		t.Fatalf("persisted conversation snapshots = %#v, want create/reset/recreate", persisted)
+	if len(persisted) != 4 || len(persisted[0]) != 0 {
+		t.Fatalf("persisted conversation snapshots = %#v, want default/create/reset/recreate", persisted)
 	}
-	if got := persisted[0]["room-1"]; got != thread {
+	if got := persisted[1]["room-1"]; got != thread {
 		t.Fatalf("first persisted room thread = %q, want %q", got, thread)
 	}
-	if len(persisted[1]) != 0 {
-		t.Fatalf("reset persisted conversations = %#v, want empty", persisted[1])
+	if len(persisted[2]) != 0 {
+		t.Fatalf("reset persisted conversations = %#v, want empty", persisted[2])
 	}
-	if got := persisted[2]["room-1"]; got != threadAfterReset {
+	if got := persisted[3]["room-1"]; got != threadAfterReset {
 		t.Fatalf("recreated persisted room thread = %q, want %q", got, threadAfterReset)
 	}
 }
@@ -281,12 +289,15 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 func TestAppServerManagerReplacesEmptyColdConversationWithoutFilePublishingProvenance(t *testing.T) {
 	withAppServerHelperCommand(t, "conversation-thread")
 	spec := testAppServerSessionSpec(t.TempDir())
-	spec.ConversationSessions = map[string]string{"conversation-1": "legacy-thread"}
-	if err := writeJSONFile(os.WriteFile, filepath.Join(spec.RuntimeDir, sessionFileName), sessionMetadata{
-		EmptyThreads: map[string]bool{"legacy-thread": true},
-	}); err != nil {
+	path := filepath.Join(spec.RuntimeDir, sessionFileName)
+	if err := os.WriteFile(path, []byte(`{"session_id":"unused-default","conversation_sessions":{"conversation-1":"legacy-thread","active":"keep"},"empty_threads":{"legacy-thread":true,"unused-default":true}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
+	saved, err := readSavedThreads(os.ReadFile, spec.RuntimeDir)
+	if err != nil || saved.SessionID != "" || saved.ConversationSessions["active"] != "keep" || len(saved.ConversationSessions) != 1 {
+		t.Fatalf("migrated bindings = %+v, %v", saved, err)
+	}
+	spec.ConversationSessions = saved.ConversationSessions
 	manager := newAppServerManager(testAppServerManagerDeps())
 	if _, err := manager.Start(context.Background(), spec); err != nil {
 		t.Fatal(err)
@@ -361,8 +372,8 @@ func TestAppServerManagerEnsureSessionHandlesThreadNotificationBeforeResponse(t 
 	if err != nil {
 		t.Fatalf("EnsureSession(conversation) error = %v", err)
 	}
-	if thread != "conversation-thread-2" {
-		t.Fatalf("conversation thread = %q, want conversation-thread-2", thread)
+	if thread != "conversation-thread-1" {
+		t.Fatalf("conversation thread = %q, want conversation-thread-1", thread)
 	}
 }
 
@@ -480,7 +491,7 @@ func TestAppServerManagerPromptCompletesTurn(t *testing.T) {
 	if len(events) != 2 ||
 		events[0].Kind != SessionEventTextDelta ||
 		events[1].Kind != SessionEventPromptCompleted ||
-		events[1].SessionID != session.SessionID {
+		events[1].SessionID != "main-thread" {
 		t.Fatalf("events = %#v, want text delta then prompt completed event", events)
 	}
 }
@@ -1156,7 +1167,7 @@ func TestConversationStructuredQuestionPolicy(t *testing.T) {
 					break
 				}
 				live := manager.liveSession(spec.RuntimeID)
-				waiter := live.appServerTurnWaiter(session.SessionID)
+				waiter := live.appServerTurnWaiter("main-thread")
 				if waiter == nil {
 					t.Fatal("question finished the turn before the model completed")
 				}
@@ -1207,7 +1218,7 @@ func TestAppServerManagerPromptCancellationReturnsConfirmedStop(t *testing.T) {
 		if live == nil {
 			return false
 		}
-		waiter := live.appServerTurnWaiter(session.SessionID)
+		waiter := live.appServerTurnWaiter("main-thread")
 		return waiter != nil && waiter.currentTurnID() == "turn-cancel"
 	})
 	cancel()
@@ -1323,7 +1334,7 @@ func TestAppServerManagerSilentTurnWaitsForCallerCancellation(t *testing.T) {
 				promptDone <- err
 			}()
 			waitForRuntime(t, func() bool {
-				waiter := manager.liveSession(spec.RuntimeID).appServerTurnWaiter(session.SessionID)
+				waiter := manager.liveSession(spec.RuntimeID).appServerTurnWaiter("main-thread")
 				return waiter != nil && waiter.currentTurnID() != ""
 			})
 			select {
@@ -1340,7 +1351,7 @@ func TestAppServerManagerSilentTurnWaitsForCallerCancellation(t *testing.T) {
 			case <-time.After(3 * time.Second):
 				t.Fatal("silent turn did not cancel")
 			}
-			if manager.liveSession(spec.RuntimeID).appServerTurnWaiter(session.SessionID) != nil {
+			if manager.liveSession(spec.RuntimeID).appServerTurnWaiter("main-thread") != nil {
 				t.Fatal("canceled turn retained waiter")
 			}
 		})
@@ -3537,9 +3548,6 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			if msg["method"] != "thread/start" {
 				return nil, false
 			}
-			if index == 1 {
-				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
-			}
 			threadID := fmt.Sprintf("conversation-thread-%d", index)
 			writeRPCNotification(t, "thread/started", map[string]any{"threadId": threadID})
 			return rpcResult(msg["id"], map[string]any{"threadId": threadID}), true
@@ -3574,9 +3582,9 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			switch msg["method"] {
 			case "thread/start":
 				threadStarts++
-				threadID := "main-thread"
+				threadID := "room-thread"
 				if threadStarts > 1 {
-					threadID = "room-thread"
+					threadID = "main-thread"
 				}
 				return rpcResult(msg["id"], map[string]any{"threadId": threadID}), true
 			case "thread/fork":
@@ -3644,7 +3652,6 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 		})
 	case "prompt-publish-file":
 		awaitingTool := false
-		threadStarts := 0
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			if awaitingTool {
 				assertServerRequestResponse(t, msg, 9010, func(result map[string]any) {
@@ -3665,13 +3672,6 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			case "thread/start":
 				params, _ := msg["params"].(map[string]any)
 				tools, _ := params["dynamicTools"].([]any)
-				if threadStarts == 0 {
-					threadStarts++
-					if len(tools) != 0 {
-						t.Fatalf("primary thread dynamicTools = %#v, want none", params["dynamicTools"])
-					}
-					return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
-				}
 				if len(tools) != 4 {
 					t.Fatalf("thread/start dynamicTools = %#v", params["dynamicTools"])
 				}
