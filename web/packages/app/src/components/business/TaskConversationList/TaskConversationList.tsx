@@ -53,9 +53,7 @@ import { MANAGER_AGENT_ID, MANAGER_PARTICIPANT_ID } from "@/shared/constants/age
 import { localizeAPIError } from "@/shared/i18n";
 import {
   collaborationConversationOwner,
-  conversationDirectory,
   conversationFilterOptions,
-  conversationOwner,
   emptyConversationFilters,
   type ConversationFilters,
 } from "@/models/conversationAgentFilter";
@@ -192,9 +190,19 @@ export function TaskConversationList({
     const timer = window.setTimeout(() => setQuery(search), 250);
     return () => window.clearTimeout(timer);
   }, [search]);
-  const list = useTaskConversationPages(archived, query);
+  const legacyPeers = directory
+    ? Array.from(directoriesByPeer, ([peer, path]) => (path === directory ? peer : ""))
+        .filter(Boolean)
+        .sort()
+    : [];
+  const list = useTaskConversationPages(
+    archived,
+    query,
+    true,
+    filtering ? { owner, directory, legacyPeers } : undefined,
+  );
   const deletingID = dialog?.kind === "delete" && entry.busyID === dialog.room.id ? dialog.room.id : "";
-  const allRooms = uniqueTaskConversations(list.data?.pages ?? []).filter((room) => room.id !== deletingID);
+  const rooms = uniqueTaskConversations(list.data?.pages ?? []).filter((room) => room.id !== deletingID);
   const cloudCatalog = useCloudAgentAvatarMetadata(authStatus);
   const filterGroups = useQuery({
     queryKey: ["task-conversations", archived, "", "filters"],
@@ -213,18 +221,6 @@ export function TaskConversationList({
   }, [filterGroups.data, owner, directory, currentUserID, usersById, directoriesByPeer, t]);
   const optionsPending = filterGroups.isPending;
   const optionsError = filterGroups.isError;
-  const rooms = allRooms.filter(
-    (room) =>
-      (!owner || conversationOwner(room, currentUserID) === owner) &&
-      (!directory || conversationDirectory(room, currentUserID, directoriesByPeer) === directory),
-  );
-  const lookingForMatches = filtering && !rooms.length && Boolean(list.hasNextPage) && !list.isFetchNextPageError;
-  const fetchNextPage = list.fetchNextPage;
-  useEffect(() => {
-    if (filtering && rooms.length < 20 && list.hasNextPage && !list.isFetching && !list.isFetchNextPageError)
-      void fetchNextPage();
-  }, [filtering, rooms.length, list.hasNextPage, list.isFetching, list.isFetchNextPageError, fetchNextPage]);
-
   async function run(action: () => Promise<unknown>) {
     setError("");
     try {
@@ -655,7 +651,7 @@ export function TaskConversationList({
             </div>
           );
         })}
-        {list.isPending || lookingForMatches ? <p role="status">{t("loading")}</p> : null}
+        {list.isPending ? <p role="status">{t("loading")}</p> : null}
         {list.isError ? (
           <p role="alert">
             {localizeAPIError(list.error, t, errorMessage(list.error, t("taskEntryRequestFailed")))}
@@ -664,7 +660,7 @@ export function TaskConversationList({
             </Button>
           </p>
         ) : null}
-        {!list.isPending && !lookingForMatches && !list.isError && !rooms.length ? (
+        {!list.isPending && !list.isError && !rooms.length ? (
           <p className={styles.empty}>
             {t(archived ? "archivedEmpty" : filtering ? "iaSessionNoFilterMatches" : "taskEntryNoHistory")}
           </p>

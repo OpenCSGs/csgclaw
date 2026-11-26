@@ -1,6 +1,11 @@
 import { useComposerCompact } from "@/shared/layout/useComposerCompact";
 import { usePersistedComposerDraft } from "@/hooks/usePersistedComposerDraft";
-import { getComposerDraft, startTaskDraftKey, subscribeToComposerDraft } from "@/shared/storage/composerDrafts";
+import {
+  getComposerDraft,
+  saveComposerDraft,
+  startTaskDraftKey,
+  subscribeToComposerDraft,
+} from "@/shared/storage/composerDrafts";
 import { isResourceSnapshot } from "@/models/agentResources";
 import { isStoredTaskPromptMention, type TaskPromptMention } from "./taskPromptMentions";
 import conversationSendButtonStyles from "@/components/business/ConversationPane/ConversationSendButton.module.css";
@@ -14,8 +19,8 @@ import {
   supportsTaskConfiguration,
   type TaskConfiguration,
 } from "@/models/taskConfiguration";
-import { useId, useMemo, useRef, useState } from "react";
-import { useSearchParams, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUp,
   Eraser,
@@ -153,8 +158,8 @@ export function StartTaskPage() {
   return (
     <StartTaskForm
       key={JSON.stringify([location.pathname, initialTarget, location.state?.configuration?.workspace_dir])}
-      initialTarget={initialTarget}
-      initialConfiguration={location.state?.configuration}
+      initialTarget={location.state?.draftSelection?.target ?? initialTarget}
+      initialConfiguration={location.state?.draftSelection?.configuration ?? location.state?.configuration}
     />
   );
 }
@@ -167,10 +172,25 @@ function StartTaskForm({
   initialConfiguration?: TaskConfiguration;
 }) {
   const controller = useWorkspaceControllerContext();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const rememberSelection = useCallback(
+    (target: string, configuration: TaskConfiguration) => {
+      void navigate(
+        { pathname: location.pathname, search: location.search, hash: location.hash },
+        {
+          replace: true,
+          state: { ...location.state, draftSelection: { target, configuration } },
+        },
+      );
+    },
+    [location, navigate],
+  );
   const cloud = useCloudAgents(controller.sidebarProps?.authStatus);
   const { openSettings } = useWorkspaceDialogs();
   const [configuration, setConfiguration] = useState<TaskConfiguration>(initialConfiguration || {});
-  const [{ target, revision }, setTarget] = useState({ target: initialTarget, revision: 0 });
+  const [{ target: targetOverride, revision }, setTarget] = useState({ target: initialTarget, revision: 0 });
+  const target = targetOverride || location.state?.draftSelection?.target || "";
   const [collaborationMode, setCollaborationMode] = useState<keyof typeof collaborationModes>(RoomTypes.onDemand);
   const collaborationModeID = useId();
   const { title: modeTitle, hint: modeHint, icon: ModeIcon } = collaborationModes[collaborationMode];
@@ -230,20 +250,36 @@ function StartTaskForm({
   const automaticWorkspace = !cloudTarget && !selectedAgent && !workspaceDir;
   const workspaceAgent = cloudTarget || automaticWorkspace ? undefined : (selectedAgent ?? manager);
   const workspaceAgentID = workspaceAgent?.id || "";
+  const userID = sidebar?.currentUserID ?? "";
+  const awaitingAgent = selected.startsWith("agent:") && !selectedAgent;
+  const pendingDraftKey = startTaskDraftKey(userID, `pending:${target || "default"}`);
   const draftKey =
     createdDraftKey.current ??
-    startTaskDraftKey(
-      sidebar?.currentUserID ?? "",
-      selected,
-      selectedCloud?.connectionID ?? "",
-      workspaceDir || (selectedAgent ? String(agentRuntimeOptions(selectedAgent).local_workspace_dir || "") : ""),
-    );
+    (awaitingAgent
+      ? pendingDraftKey
+      : startTaskDraftKey(
+          userID,
+          selected,
+          selectedCloud?.connectionID ?? "",
+          workspaceDir || (selectedAgent ? String(agentRuntimeOptions(selectedAgent).local_workspace_dir || "") : ""),
+        ));
   const removedAttachments = removed?.key === draftKey ? removed.attachments : [];
   const { draft: startDraft, update: updateStartDraft } = usePersistedComposerDraft(
     draftKey,
     readStartDraft,
     serializeStartDraft,
   );
+  useEffect(() => {
+    if (!selectedAgent || !pendingDraftKey || createdDraftKey.current) return;
+    const pending = readStartDraft(getComposerDraft(pendingDraftKey).content);
+    if (!pending.text) return;
+    const current = getComposerDraft(draftKey);
+    const content = readStartDraft(current.content);
+    const text = content.text ? `${content.text}\n\n${pending.text}` : pending.text;
+    saveComposerDraft(draftKey, { ...content, text }, current.attachments);
+    saveComposerDraft(pendingDraftKey, null, []);
+    if (!target) rememberSelection(selected, configuration);
+  }, [configuration, draftKey, pendingDraftKey, rememberSelection, selected, selectedAgent, target]);
   const {
     content: { text: draft, resources, mentions },
     attachments,
@@ -253,6 +289,7 @@ function StartTaskForm({
 
   function setDraft(text: string, mentions: TaskPromptMention[] = []) {
     updateStartDraft(draftKey, (current) => ({ ...current, content: { ...current.content, text, mentions } }));
+    if (text && !target && selectedAgent) rememberSelection(selected, configuration);
   }
 
   function setResources(change: ResourceSnapshot[] | ((current: ResourceSnapshot[]) => ResourceSnapshot[])) {
@@ -267,6 +304,7 @@ function StartTaskForm({
 
   function setAttachments(attachments: ComposerAttachmentDraft[]) {
     updateStartDraft(draftKey, (current) => ({ ...current, attachments }));
+    if (attachments.length && !target && selectedAgent) rememberSelection(selected, configuration);
   }
 
   const mentionMembers = useMemo(() => {
@@ -371,6 +409,7 @@ function StartTaskForm({
   const cloudOffline = Boolean(selectedCloud && selectedCloud.status !== "online");
   const cannotSend =
     busy ||
+    (awaitingAgent && !target) ||
     cloudRecipientUnavailable ||
     cloudOffline ||
     missingAttachments ||
@@ -464,7 +503,7 @@ function StartTaskForm({
   }
 
   function addAttachments(files: File[]) {
-    if (busy || cloudRecipientUnavailable || !files.length) return;
+    if (busy || awaitingAgent || cloudRecipientUnavailable || !files.length) return;
     const selection = selectComposerAttachmentFiles(files, attachments);
     setAttachmentWarning(attachmentSelectionError(selection, t));
     if (!selection.files.length) return;
@@ -494,6 +533,7 @@ function StartTaskForm({
     const fileReferences = selectedCloud ? [] : promptMentions.fileReferences(prompt);
     if (
       inFlight.current ||
+      (awaitingAgent && !target) ||
       cloudRecipientUnavailable ||
       cloudOffline ||
       (!empty &&
@@ -685,10 +725,9 @@ function StartTaskForm({
                 setAttachmentWarning("");
                 setUploadFailed(false);
                 setSlashQuery(null);
-                setTarget({
-                  target: value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`,
-                  revision: targetRevision.current,
-                });
+                const nextTarget = value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`;
+                setTarget({ target: nextTarget, revision: targetRevision.current });
+                rememberSelection(nextTarget, {});
                 setConfiguration({});
               }}
               locked={busy || Boolean(created.current)}
@@ -967,7 +1006,7 @@ function StartTaskForm({
                     ref={fileInput}
                     className="sr-only"
                     aria-label={t("addAttachment")}
-                    disabled={busy || cloudRecipientUnavailable}
+                    disabled={busy || awaitingAgent || cloudRecipientUnavailable}
                     onChange={(event) => {
                       addAttachments(Array.from(event.currentTarget.files ?? []));
                       event.currentTarget.value = "";
@@ -975,7 +1014,7 @@ function StartTaskForm({
                   />
                   <ComposerAddMenu
                     onOpenResourcePicker={resourcePicker.open}
-                    disabled={busy || cloudRecipientUnavailable}
+                    disabled={busy || awaitingAgent || cloudRecipientUnavailable}
                     t={t}
                     buttonClassName={`composer-add-button ${styles.addButton}`}
                     onAddFiles={() => fileInput.current?.click()}
@@ -997,6 +1036,7 @@ function StartTaskForm({
                             setSlashQuery(null);
                           }
                           setConfiguration(value);
+                          if (!created.current) rememberSelection(awaitingAgent ? target : selected, value);
                         }}
                         directoryLocked={Boolean(created.current)}
                         directoryMode={selectedAgent ? "agent" : "collaboration"}

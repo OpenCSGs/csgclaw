@@ -4,8 +4,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { fetchConversationResourceBatch } from "@/api/agentResources";
-import { MemoryRouter, useNavigate } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
+import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
 import { sendMessageRequest } from "@/api/im";
 import { fetchWorkspaceDirectory } from "@/api/chatFiles";
 import { StartTaskPage } from "@/pages/StartTaskPage/StartTaskPage";
@@ -38,11 +39,11 @@ const room: IMConversation = {
   messages: [],
 };
 function DialogButtons() {
-  const navigate = useNavigate();
+  const { openSettings, close } = useWorkspaceDialogs();
   return (
     <>
-      <button onClick={() => navigate({ search: "?dialog=settings" }, { replace: true })}>Open settings</button>
-      <button onClick={() => navigate({ search: "" }, { replace: true })}>Close settings</button>
+      <button onClick={() => openSettings()}>Open settings</button>
+      <button onClick={close}>Close settings</button>
     </>
   );
 }
@@ -56,6 +57,9 @@ function setup(
     managerDirectory?: string;
     locale?: LocaleCode;
     workerName?: string;
+    delayAgents?: boolean;
+    historyState?: unknown;
+    onHistoryState?: (state: unknown) => void;
   } = {},
 ) {
   const create = vi.fn().mockResolvedValue(room);
@@ -92,6 +96,7 @@ function setup(
           user_id: "worker",
           model_id: model,
           model_provider_id: options.provider,
+          runtime_kind: "codex",
         },
         { id: "u-outsider", name: "Outside team", user_id: "outsider", model_id: model },
       ],
@@ -102,24 +107,49 @@ function setup(
       onSelectAgent: vi.fn(),
     },
   } as unknown as WorkspaceController;
-  const view = render(
-    <MemoryRouter
-      initialEntries={[
-        {
-          pathname: path.split("?")[0],
-          search: path.includes("?") ? `?${path.split("?")[1]}` : "",
-          state: { configuration: options.configuration },
-        },
-      ]}
-    >
-      <WorkspaceControllerProvider controller={controller}>
-        <StartTaskPage />
-        <DialogButtons />
-      </WorkspaceControllerProvider>
-    </MemoryRouter>,
-    { wrapper: createQueryWrapper().wrapper },
-  );
-  return { create, open, onMessage, onCreateAgent, requireAuth, unmount: view.unmount };
+  function HistoryState() {
+    const location = useLocation();
+    options.onHistoryState?.(location.state);
+    return null;
+  }
+  function renderPage(loaded: boolean) {
+    return (
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: path.split("?")[0],
+            search: path.includes("?") ? `?${path.split("?")[1]}` : "",
+            state: options.historyState ?? { configuration: options.configuration },
+          },
+        ]}
+      >
+        <WorkspaceControllerProvider
+          controller={
+            loaded
+              ? controller
+              : ({
+                  ...controller,
+                  sidebarProps: { ...controller.sidebarProps!, workerAgentItems: [] },
+                } as WorkspaceController)
+          }
+        >
+          <StartTaskPage />
+          <DialogButtons />
+          <HistoryState />
+        </WorkspaceControllerProvider>
+      </MemoryRouter>
+    );
+  }
+  const view = render(renderPage(!options.delayAgents), { wrapper: createQueryWrapper().wrapper });
+  return {
+    create,
+    open,
+    onMessage,
+    onCreateAgent,
+    requireAuth,
+    unmount: view.unmount,
+    loadAgents: () => view.rerender(renderPage(true)),
+  };
 }
 
 describe("task example visibility", () => {
@@ -1031,6 +1061,43 @@ it("shows pasted and dropped attachment drafts and sends restored files only onc
 
 describe("start composer drafts", () => {
   const key = startTaskDraftKey("user-admin", "agent:u-manager");
+
+  it("keeps early input when the default Agent and its directory finish loading", async () => {
+    const { loadAgents } = setup("/new", "test-model", { delayAgents: true, managerDirectory: "/default" });
+    const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    fireEvent.change(editor, { target: { value: "Typed before agents loaded" } });
+    loadAgents();
+    await waitFor(() => expect(editor).toHaveValue("Typed before agents loaded"));
+    window.dispatchEvent(new Event("pagehide"));
+    expect(localStorage.getItem(startTaskDraftKey("user-admin", "agent:u-manager", "", "/default"))).toContain(
+      "Typed before agents loaded",
+    );
+  });
+
+  it("restores the recipient and directory recorded in the current history entry", async () => {
+    let historyState: unknown;
+    const user = userEvent.setup();
+    const first = setup("/new", "test-model", {
+      onHistoryState: (state) => {
+        historyState = state;
+      },
+    });
+    await user.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
+    await user.click(screen.getByRole("button", { name: /^Worker/ }));
+    await user.click(screen.getByRole("combobox", { name: "iaWorkdirTitle" }));
+    await user.click(screen.getByRole("button", { name: "iaWorkdirManual" }));
+    await user.type(screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" }), "/work/other");
+    await user.click(screen.getByRole("button", { name: "taskConfigurationApply" }));
+    await user.type(screen.getByRole("textbox", { name: "taskEntryPrompt" }), "Worker draft");
+    await user.click(screen.getByRole("button", { name: "Open settings" }));
+    await user.click(screen.getByRole("button", { name: "Close settings" }));
+    window.dispatchEvent(new Event("pagehide"));
+    first.unmount();
+
+    setup("/new", "test-model", { historyState });
+    expect(screen.getByRole("button", { name: /iaTargetLabel.*Worker/ })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("Worker draft");
+  });
 
   it("saves the last edit on pagehide, restores it on return, and clears it explicitly", () => {
     const first = setup();

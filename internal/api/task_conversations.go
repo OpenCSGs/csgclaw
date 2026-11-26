@@ -145,8 +145,27 @@ func (h *Handler) listTaskConversations(w http.ResponseWriter, r *http.Request) 
 	}
 	archived := query.Get("archived") == "true"
 	terms := strings.Fields(strings.ToLower(query.Get("q")))
+	owner, directory := query.Get("owner"), query.Get("directory")
+	currentUserID := taskConversationLocalUser(h.im.CurrentUserID())
+	legacyPeers := make(map[string]bool)
+	if directory != "" {
+		for _, peer := range query["legacy_peer"] {
+			if id := taskConversationLocalUser(peer); id != "" {
+				legacyPeers[id] = true
+			}
+		}
+	}
 	rooms := make([]im.Room, 0)
 	h.visitTaskConversations(archived, func(room im.Room) {
+		if owner != "" || directory != "" {
+			key := taskConversationDimensions(room, currentUserID)
+			if owner != "" && owner != key.owner() {
+				return
+			}
+			if directory != "" && !key.matchesDirectory(directory, legacyPeers) {
+				return
+			}
+		}
 		if conversationMatches(room, terms) {
 			rooms = append(rooms, room)
 		}
@@ -197,28 +216,10 @@ func (h *Handler) listTaskConversationFilters(w http.ResponseWriter, r *http.Req
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	type filterKey struct {
-		direct, cloud, configured  bool
-		peer, cloudUser, directory string
-	}
-	currentUserID := h.im.CurrentUserID()
-	counts := make(map[filterKey]int)
+	currentUserID := taskConversationLocalUser(h.im.CurrentUserID())
+	counts := make(map[taskConversationFilterKey]int)
 	h.visitTaskConversations(r.URL.Query().Get("archived") == "true", func(room im.Room) {
-		key := filterKey{direct: room.IsDirect}
-		if room.CloudAgent != nil {
-			key.cloud, key.cloudUser = true, room.CloudAgent.UserID
-		} else if room.IsDirect {
-			for _, member := range room.Members {
-				if member != "" && member != currentUserID {
-					key.peer = member
-					break
-				}
-			}
-		}
-		if room.Configuration != nil {
-			key.configured, key.directory = true, room.Configuration.WorkspaceDir
-		}
-		counts[key]++
+		counts[taskConversationDimensions(room, currentUserID)]++
 	})
 	groups := make([]taskConversationFilterGroup, 0, len(counts))
 	for key, count := range counts {
@@ -234,9 +235,71 @@ func (h *Handler) listTaskConversationFilters(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, groups)
 }
 
+type taskConversationFilterKey struct {
+	direct, cloud, configured  bool
+	peer, cloudUser, directory string
+}
+
+func taskConversationDimensions(room im.Room, currentUserID string) taskConversationFilterKey {
+	key := taskConversationFilterKey{direct: room.IsDirect}
+	if room.CloudAgent != nil {
+		key.cloud, key.cloudUser = true, room.CloudAgent.UserID
+	} else if room.IsDirect {
+		for _, member := range room.Members {
+			if id := taskConversationLocalUser(member); id != "" && id != currentUserID {
+				key.peer = member
+				break
+			}
+		}
+	}
+	if room.Configuration != nil {
+		key.configured, key.directory = true, room.Configuration.WorkspaceDir
+	}
+	return key
+}
+
+func (key taskConversationFilterKey) owner() string {
+	switch {
+	case key.cloud && key.cloudUser != "":
+		return "cloud:" + key.cloudUser
+	case key.cloud:
+		return ""
+	case !key.direct:
+		return "collaboration"
+	case key.peer != "":
+		return "direct:" + taskConversationLocalUser(key.peer)
+	default:
+		return ""
+	}
+}
+
+func (key taskConversationFilterKey) matchesDirectory(directory string, legacyPeers map[string]bool) bool {
+	if key.configured {
+		return key.directory == directory
+	}
+	// The sidebar resolves legacy directories from the current Agent catalog.
+	return !key.cloud && legacyPeers[taskConversationLocalUser(key.peer)]
+}
+
+// Keep local owner IDs aligned with the sidebar's legacy identity aliases.
+func taskConversationLocalUser(id string) string {
+	id = localIdentitySuffix(id)
+	for {
+		index := strings.LastIndexByte(id, '-')
+		if index <= 0 || len(id)-index-1 != 8 || strings.Trim(id[index+1:], "0123456789abcdef") != "" {
+			break
+		}
+		id = localIdentitySuffix(id[:index])
+	}
+	if id == "" {
+		return ""
+	}
+	return "user-" + id
+}
+
 func (h *Handler) visitTaskConversations(archived bool, visit func(im.Room)) {
 	currentUserID := h.im.CurrentUserID()
-	for _, room := range h.im.ListRoomsWithOptions(im.ListMessagesOptions{IncludeThreadReplies: true}) {
+	for _, room := range h.im.ListUnsortedRooms(im.ListMessagesOptions{IncludeThreadReplies: true}) {
 		if room.Archived != archived || !slices.Contains(room.Members, currentUserID) {
 			continue
 		}

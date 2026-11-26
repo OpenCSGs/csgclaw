@@ -113,7 +113,7 @@ export function useTaskEntry({ currentUserID, rooms, onUpdate, onMessage, onDele
       const historyQueries = { queryKey: ["task-conversations"] };
       await client.cancelQueries(historyQueries);
       client.setQueriesData<InfiniteData<TaskConversationPage>>(
-        { ...historyQueries, predicate: (query) => query.queryKey.length === 3 },
+        { ...historyQueries, predicate: (query) => query.queryKey[3] !== "filters" },
         (data) => {
           if (!data?.pages.some((page) => page.rooms.some((room) => room.id === id))) return data;
           return {

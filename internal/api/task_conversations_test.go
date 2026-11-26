@@ -58,6 +58,47 @@ func TestTaskConversationSearchPaginationAndArchive(t *testing.T) {
 	}
 }
 
+func TestTaskConversationFiltersApplyBeforePagination(t *testing.T) {
+	members := []string{"user-admin", "user-worker"}
+	rooms := []im.Room{
+		{ID: "other", Pinned: true, Members: []string{"user-admin"}, Configuration: &taskconfig.Config{WorkspaceDir: "/project"}},
+		{ID: "wrong-directory", Pinned: true, IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{WorkspaceDir: "/other"}},
+		{ID: "explicit-empty", Pinned: true, IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{}},
+		{ID: "legacy", Title: "needle", IsDirect: true, TaskSession: true, Members: members},
+		{ID: "configured", Title: "needle", IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{WorkspaceDir: "/project"}},
+		{ID: "archived", Archived: true, IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{WorkspaceDir: "/project"}},
+	}
+	h := &Handler{im: im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "user-admin",
+		Users:         []im.User{{ID: "user-admin", Role: "admin"}, {ID: "user-worker", Role: "worker"}},
+		Rooms:         rooms,
+	})}
+	for _, tc := range []struct {
+		query, id string
+		total     int
+		more      bool
+	}{
+		{"", "configured", 1, false},
+		{"&legacy_peer=user-worker", "configured", 2, true},
+		{"&legacy_peer=user-worker&offset=1", "legacy", 2, false},
+		{"&archived=true", "archived", 1, false},
+	} {
+		rec := httptest.NewRecorder()
+		url := "/api/v1/conversations?owner=direct:user-worker&directory=%2Fproject&limit=1" + tc.query
+		h.listTaskConversations(rec, httptest.NewRequest(http.MethodGet, url, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d: %s", url, rec.Code, rec.Body.String())
+		}
+		var page taskConversationPage
+		if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Rooms) != 1 || page.Rooms[0].ID != tc.id || page.Total != tc.total || page.HasMore != tc.more {
+			t.Fatalf("%s: unexpected page %+v", url, page)
+		}
+	}
+}
+
 func TestTaskConversationFilterGroups(t *testing.T) {
 	members := []string{"user-admin", "user-worker"}
 	config := &taskconfig.Config{WorkspaceDir: "/project"}

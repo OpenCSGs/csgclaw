@@ -356,20 +356,24 @@ describe("TaskConversationList archive management", () => {
         { is_direct: true, peer: "manager", workspace_dir: "/projects/second", count: 1 },
         { is_direct: false, workspace_dir: "/projects/shared", count: 1 },
       ]);
-    vi.mocked(fetchTaskConversations).mockResolvedValue({
-      rooms: [
-        { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
-        { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
-        {
-          ...room,
-          id: "space",
-          is_direct: false,
-          title: "Shared project",
-          configuration: { workspace_dir: "/projects/shared" },
-        },
-      ],
-      total: 3,
-      has_more: false,
+    const rooms = [
+      { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
+      { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
+      {
+        ...room,
+        id: "space",
+        is_direct: false,
+        title: "Shared project",
+        configuration: { workspace_dir: "/projects/shared" },
+      },
+    ];
+    vi.mocked(fetchTaskConversations).mockImplementation(async (_q, _archived, _offset, filters) => {
+      const matches = rooms.filter(
+        (item) =>
+          (!filters?.directory || filters.directory === item.configuration.workspace_dir) &&
+          (!filters?.owner || filters.owner === (item.is_direct ? "direct:user-manager" : "collaboration")),
+      );
+      return { rooms: matches, total: matches.length, has_more: false };
     });
     vi.mocked(fetchTaskConversations).mockResolvedValueOnce({ rooms: [room], total: 1002, has_more: true });
     function FilteredList({ collapsed }: { collapsed: boolean }) {
@@ -410,8 +414,14 @@ describe("TaskConversationList archive management", () => {
     expect(screen.getByText("iaSessionNoFilterMatches")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "iaSessionClearFilters" }));
-    expect(screen.getByText("Shared project")).toBeVisible();
     await user.click(directories.getByRole("button", { name: /second 1/ }));
+    expect(await screen.findByText("Second project")).toBeVisible();
+    expect(fetchTaskConversations).toHaveBeenLastCalledWith("", false, 0, {
+      owner: "",
+      directory: "/projects/second",
+      legacyPeers: [],
+    });
+    expect(vi.mocked(fetchTaskConversations).mock.calls.every(([, , offset]) => offset === 0)).toBe(true);
     await user.keyboard("{Escape}");
     rerender(<FilteredList collapsed />);
     expect(screen.getByRole("button", { name: "Second project" })).toBeVisible();
@@ -425,13 +435,15 @@ describe("TaskConversationList archive management", () => {
       { is_direct: true, peer: "manager", workspace_dir: "/projects/first", count: 1 },
       { is_direct: true, peer: "manager", workspace_dir: "/projects/second", count: 1 },
     ]);
-    vi.mocked(fetchTaskConversations).mockResolvedValue({
-      rooms: [
-        { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
-        { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
-      ],
-      total: 2,
-      has_more: false,
+    const rooms = [
+      { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
+      { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
+    ];
+    vi.mocked(fetchTaskConversations).mockImplementation(async (_q, _archived, _offset, filters) => {
+      const matches = rooms.filter(
+        (item) => !filters?.directory || filters.directory === item.configuration.workspace_dir,
+      );
+      return { rooms: matches, total: matches.length, has_more: false };
     });
     function Harness() {
       const [collapsed, setCollapsed] = useState(false);
