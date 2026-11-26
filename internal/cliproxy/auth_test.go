@@ -539,6 +539,29 @@ func TestImportExistingAuthRefreshesClaudeKeychainWhenExisting(t *testing.T) {
 	}
 }
 
+func TestAutomaticKeychainImportUsesOneDeadline(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	t.Setenv(autoLoginEnv, "true")
+	t.Setenv(disableKeychainEnv, "false")
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	calls := 0
+	defer stubKeychain(t, func(probeCtx context.Context, _, _ string) ([]byte, error) {
+		calls++
+		if _, ok := probeCtx.Deadline(); !ok {
+			t.Error("automatic Keychain import has no deadline")
+		}
+		cancel()
+		return nil, probeCtx.Err()
+	})()
+
+	importExistingAuth(ctx, t.TempDir())
+	if calls != 1 {
+		t.Fatalf("Keychain probes after cancellation = %d, want 1 total", calls)
+	}
+}
+
 func testJWT(t *testing.T, claims string) string {
 	t.Helper()
 	return "e30." + base64.RawURLEncoding.EncodeToString([]byte(claims)) + ".sig"

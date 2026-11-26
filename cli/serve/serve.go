@@ -645,7 +645,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	}
 	restoreAuthDetect := applyNoAuthDetectEnv(serveOpts.NoAuthDetect)
 	defer restoreAuthDetect()
-	_ = EnsureCLIProxy(ctx)
+	// The desktop can serve local state before any provider needs CLIProxy.
+	if serveOpts.Distribution != "electron" {
+		_ = EnsureCLIProxy(ctx)
+	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

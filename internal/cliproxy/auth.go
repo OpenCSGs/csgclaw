@@ -27,7 +27,8 @@ const (
 	noBrowserEnv       = "CSGCLAW_CLIPROXY_NO_BROWSER"
 	disableKeychainEnv = "CSGCLAW_CLIPROXY_DISABLE_KEYCHAIN"
 
-	authProviderClaude = "claude"
+	authProviderClaude             = "claude"
+	automaticKeychainImportTimeout = 3 * time.Second
 )
 
 type AuthStatus struct {
@@ -202,9 +203,11 @@ func importExistingAuth(ctx context.Context, authDir string) {
 	if !autoAuthImportEnabled() {
 		return
 	}
-	for _, provider := range []string{ProviderCodex, authProviderClaude} {
-		_, _ = importExternalAuth(ctx, authDir, provider)
-	}
+	_, _ = importExternalAuth(ctx, authDir, ProviderCodex)
+	// Opportunistic startup import must yield if Keychain is waiting for access.
+	probeCtx, cancel := context.WithTimeout(ctx, automaticKeychainImportTimeout)
+	defer cancel()
+	_, _ = importExternalAuth(probeCtx, authDir, authProviderClaude)
 }
 
 func importExternalAuth(ctx context.Context, authDir, provider string) (authImportResult, error) {
@@ -252,6 +255,9 @@ func importClaudeKeychainAuth(ctx context.Context, authDir string) (authImportRe
 		return authImportResult{message: "Claude Keychain probing is disabled. Run csgclaw model auth login claude-code."}, nil
 	}
 	for _, candidate := range claudeKeychainCandidates {
+		if err := ctx.Err(); err != nil {
+			return authImportResult{}, err
+		}
 		raw, err := claudeKeychainReader(ctx, candidate.service, candidate.account)
 		if err != nil || len(strings.TrimSpace(string(raw))) == 0 {
 			continue

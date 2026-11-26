@@ -1135,6 +1135,33 @@ func TestServeForegroundReportsListeningBeforeStartingAgents(t *testing.T) {
 	}
 }
 
+func TestServeForegroundDesktopDoesNotWarmCLIProxyBeforeListening(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	EnsureCLIProxy = func(context.Context) error {
+		t.Error("desktop startup should leave CLIProxy initialization to its callers")
+		return nil
+	}
+	listening := false
+	RunServer = func(opts server.Options) error {
+		opts.OnListening()
+		return nil
+	}
+	err := serveForegroundWithConfigPath(t.Context(), testContext(), config.Config{
+		Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"},
+	}, "", "", serveOptions{
+		Distribution: "electron",
+		OnListening:  func() { listening = true },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !listening {
+		t.Fatal("desktop listener was not reported ready")
+	}
+}
+
 func TestServeForegroundRestoresConfiguredAgentsDuringManagerStartup(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()

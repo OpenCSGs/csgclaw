@@ -49,6 +49,7 @@ const (
 )
 
 const agentListRuntimeProbeConcurrency = 4
+const configuredHostAgentStartupConcurrency = 4
 
 const stopRunningSandboxAgentsConcurrency = 4
 
@@ -2067,30 +2068,51 @@ func (s *Controller) StartConfiguredAgents(ctx context.Context) (startErr error)
 		slog.InfoContext(ctx, "configured worker startup finished", "candidates", len(agents),
 			"success", startErr == nil, "total_ms", time.Since(started).Milliseconds())
 	}()
-	runningGateways := make([]Agent, 0, len(agents))
-	for _, a := range agents {
-		if err := ctx.Err(); err != nil {
-			return err
+	startErrors := make([]error, len(agents))
+	startAgent := func(index int, live Agent) {
+		if _, err := s.Start(ctx, live.ID); err != nil {
+			startErrors[index] = fmt.Errorf("%s: %w", live.Name, err)
 		}
-		live := s.hydrateAgentStatus(ctx, a)
-		if isHostRuntimeKind(live.RuntimeKind) {
-			if !shouldRestoreConfiguredHostRuntime(live) {
+	}
+	var hostStarts sync.WaitGroup
+	hostSlots := make(chan struct{}, configuredHostAgentStartupConcurrency)
+	runningGateways := make([]Agent, 0, len(agents))
+	for index, a := range agents {
+		if ctx.Err() != nil {
+			break
+		}
+		if isHostRuntimeKind(a.RuntimeKind) {
+			select {
+			case hostSlots <- struct{}{}:
+			case <-ctx.Done():
 				continue
 			}
-		} else if isRuntimeRunning(live) {
+			hostStarts.Go(func() {
+				defer func() { <-hostSlots }()
+				live := s.hydrateAgentStatus(ctx, a)
+				if shouldRestoreConfiguredHostRuntime(live) {
+					startAgent(index, live)
+				}
+			})
+			continue
+		}
+		live := s.hydrateAgentStatus(ctx, a)
+		if isRuntimeRunning(live) {
 			runningGateways = append(runningGateways, live)
 			continue
 		}
-		if _, err := s.Start(ctx, live.ID); err != nil {
-			startErr = errors.Join(startErr, fmt.Errorf("%s: %w", live.Name, err))
-		}
+		startAgent(index, live)
+	}
+	hostStarts.Wait()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	// Readiness observations are intentionally not persisted. Prime the running
 	// gateway workers after a process restart so an already-dead gateway does
 	// not look healthy until a user opens its detail endpoint. Each probe has a
 	// deadline while the startup marker keeps the roster fresh.
 	s.primeUnknownGatewayRuntimeAvailability(ctx, runningGateways)
-	return startErr
+	return errors.Join(startErrors...)
 }
 
 // StopRunningSandboxAgents stops every registered sandbox agent whose runtime

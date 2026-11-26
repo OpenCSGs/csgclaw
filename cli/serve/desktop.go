@@ -77,7 +77,9 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 			return err
 		}
 	}
-	if err := ensureServeBootstrapState(ctx, configPath, false); err != nil {
+	// Bootstrap only local state before the renderer can connect. The serving
+	// manager still detects providers after the listeners are ready.
+	if err := ensureServeBootstrapState(ctx, configPath, true); err != nil {
 		return err
 	}
 	cfg, err := loadConfig(configPath)

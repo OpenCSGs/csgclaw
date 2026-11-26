@@ -7636,6 +7636,73 @@ func TestStartConfiguredAgentsRestoresRunningCodexWorker(t *testing.T) {
 	}
 }
 
+func TestStartConfiguredAgentsRestoresHealthyWorkerWhileAnotherStarts(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	slowStarted := make(chan struct{})
+	releaseSlow := make(chan struct{})
+	fastStarted := make(chan struct{})
+	rt := fakeAgentRuntime{
+		kind: RuntimeKindCodex,
+		start: func(ctx context.Context, h agentruntime.Handle) (agentruntime.State, error) {
+			if h.RuntimeID == runtimeIDForAgentID("agent-slow") {
+				close(slowStarted)
+				select {
+				case <-releaseSlow:
+				case <-ctx.Done():
+					return agentruntime.StateStopped, ctx.Err()
+				}
+			} else if h.RuntimeID == runtimeIDForAgentID("agent-fast") {
+				close(fastStarted)
+			} else {
+				return agentruntime.StateStopped, fmt.Errorf("unexpected runtime %s", h.RuntimeID)
+			}
+			return agentruntime.StateRunning, nil
+		},
+		info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+			return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+		},
+	}
+	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "", "", WithRuntime(rt))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, name := range []string{"slow", "fast"} {
+		id := "agent-" + name
+		svc.agents[id] = Agent{
+			ID: id, Name: name, Role: RoleWorker,
+			RuntimeKind: RuntimeKindCodex, RuntimeID: runtimeIDForAgentID(id), BoxID: "sess-" + name,
+			Status: string(agentruntime.StateRunning), CreatedAt: time.Unix(int64(index), 0),
+			AgentProfile:    AgentProfile{Name: name, Provider: ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
+			ProfileComplete: true,
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- svc.StartConfiguredAgents(ctx) }()
+	select {
+	case <-slowStarted:
+	case err := <-done:
+		t.Fatalf("worker restoration returned before starting the first worker: %v", err)
+	case <-ctx.Done():
+		<-done
+		t.Fatal("the first worker did not begin restoring")
+	}
+	select {
+	case <-fastStarted:
+	case err := <-done:
+		t.Fatalf("worker restoration returned before starting the healthy worker: %v", err)
+	case <-ctx.Done():
+		<-done
+		t.Fatal("the healthy worker waited for the slow worker")
+	}
+	close(releaseSlow)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStartConfiguredAgentsRestoresDesiredRunningDSHWorker(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	startCalls := 0
