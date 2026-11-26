@@ -2,6 +2,7 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { createTranslator } from "@/shared/i18n";
 import { MessageContent } from "./MessageContent";
 
 function questionMessage(status: "pending" | "answered") {
@@ -44,6 +45,19 @@ function questionMessage(status: "pending" | "answered") {
     },
   };
 }
+
+it("localizes recorded stop notices when the language changes and preserves ordinary messages", () => {
+  const content = "Conversation interrupted";
+  const message = { metadata: { csgclaw: { delivery_kind: "turn_stopped" } } };
+  const { rerender } = render(<MessageContent content={content} message={message} t={createTranslator("en")} />);
+  expect(screen.getByText(content)).toBeVisible();
+
+  rerender(<MessageContent content={content} message={message} t={createTranslator("zh")} />);
+  expect(screen.getByText("会话已中断")).toBeVisible();
+
+  rerender(<MessageContent content={content} t={createTranslator("zh")} />);
+  expect(screen.getByText(content)).toBeVisible();
+});
 
 describe("MessageContent question transcripts", () => {
   it("highlights both tagged and plain mentions resolved by the server", () => {

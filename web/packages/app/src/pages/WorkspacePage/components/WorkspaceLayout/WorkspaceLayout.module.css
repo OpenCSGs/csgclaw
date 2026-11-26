@@ -127,7 +127,8 @@
 .sidebarResizer::before {
   content: "";
   position: absolute;
-  inset: 0 auto 0 11px;
+  inset-block: var(--workspace-resizer-block-inset, 0px);
+  left: 11px;
   width: 2px;
   border-radius: 999px;
   background: transparent;

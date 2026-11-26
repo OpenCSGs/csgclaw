@@ -10,7 +10,9 @@
   --desktop-titlebar-height: 48px;
   --desktop-workspace-inset: 8px;
   --workspace-divider-color: color-mix(in srgb, var(--line) 65%, transparent);
+  --workspace-sidebar-edge-color: transparent;
   --workspace-resizer-rest-color: transparent;
+  --workspace-resizer-block-inset: calc(var(--radius-xl) + 2px);
   --app-ui-viewport-height: calc(100dvh - var(--desktop-titlebar-height) - var(--desktop-workspace-inset));
   display: grid;
   grid-template-rows: var(--desktop-titlebar-height) minmax(0, 1fr);
@@ -80,9 +82,8 @@
   overflow: hidden;
 }
 .frame .content :global(main.chat-panel) {
+  border: 1px solid var(--workspace-divider-color);
   border-radius: var(--radius-xl);
-  border-color: var(--workspace-divider-color);
-  border-left-color: transparent;
 }
 .frame .content [data-chat-side-panel] {
   border-left-color: var(--workspace-divider-color);

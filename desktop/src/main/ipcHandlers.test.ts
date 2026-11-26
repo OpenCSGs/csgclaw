@@ -9,6 +9,7 @@ import type { registerIPCHandlers } from "./ipcHandlers";
 function createHarness(response = 0) {
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
   const opened: string[] = [];
+  const locales: string[] = [];
   const confirmations: unknown[] = [];
   const origin = "http://127.0.0.1:18080";
   const frame = { url: origin + "/" };
@@ -60,6 +61,7 @@ function createHarness(response = 0) {
     async () => {},
     () => {},
     () => {},
+    (locale) => locales.push(locale),
   );
   const event = { sender: contents, senderFrame: frame };
   const invokeChannel = async (
@@ -69,8 +71,18 @@ function createHarness(response = 0) {
   ) => handlers.get(channel)!(sender, input);
   const invoke = async (input: unknown, sender: unknown = event) =>
     invokeChannel(DesktopIPC.openOAuth, input, sender);
-  return { invoke, invokeChannel, opened, confirmations };
+  return { invoke, invokeChannel, opened, confirmations, locales };
 }
+
+test("locale IPC accepts supported locales only from the trusted main frame", async () => {
+  const { invokeChannel, locales } = createHarness();
+
+  await invokeChannel(DesktopIPC.setLocale, "zh");
+  await invokeChannel(DesktopIPC.setLocale, "en");
+  await assert.rejects(invokeChannel(DesktopIPC.setLocale, "fr"), /Unsupported desktop locale/);
+  await assert.rejects(invokeChannel(DesktopIPC.setLocale, "zh", {}), /sender was rejected/);
+  assert.deepEqual(locales, ["zh", "en"]);
+});
 
 test("focus recovery IPC accepts only the trusted main frame", async () => {
   const { invokeChannel } = createHarness();

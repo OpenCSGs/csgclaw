@@ -31,6 +31,7 @@ const DesktopIPC = {
   showTurnNotification: "csgclaw:desktop:show-turn-notification",
   turnNotificationClick: "csgclaw:desktop:turn-notification-click",
   setThemeSource: "csgclaw:desktop:set-theme-source",
+  setLocale: "csgclaw:desktop:set-locale",
   setWindowChromeAppearance: "csgclaw:desktop:set-window-chrome-appearance",
   setUpdateChannel: "csgclaw:desktop:set-update-channel",
   updateStatus: "csgclaw:desktop:update-status",
@@ -75,6 +76,7 @@ const bridge: DesktopBridge = Object.freeze({
     return () =>
       ipcRenderer.removeListener(DesktopIPC.turnNotificationClick, handler);
   },
+  setLocale: (locale: "zh" | "en") => ipcRenderer.invoke(DesktopIPC.setLocale, locale),
   setThemeSource: (theme: DesktopThemeSource) =>
     ipcRenderer.invoke(DesktopIPC.setThemeSource, theme),
   setWindowChromeAppearance: (appearance: DesktopWindowChromeAppearance) =>
