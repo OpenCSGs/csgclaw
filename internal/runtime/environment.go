@@ -20,8 +20,8 @@ func IsManagedAgentEnvironmentKey(key string) bool {
 }
 
 // WithLocalProxyBypass keeps same-host callbacks out of outbound proxies used
-// by the runtime process. Preserve existing exclusions and their casing, as
-// HTTP clients can give different precedence to NO_PROXY and no_proxy.
+// by the runtime process. Preserve configured exclusions when HTTP clients
+// give different precedence to NO_PROXY and no_proxy.
 func WithLocalProxyBypass(environment []string, callbackURL string) []string {
 	hosts := []string{"127.0.0.1", "localhost", "::1", "[::1]"}
 	if callback, err := url.Parse(callbackURL); err == nil && callback.Scheme == "http" {
@@ -34,29 +34,46 @@ func WithLocalProxyBypass(environment []string, callbackURL string) []string {
 		}
 	}
 
+	var fallback string
+	for _, entry := range environment {
+		key, value, ok := strings.Cut(entry, "=")
+		if ok && isProxyBypassEnvironmentKey(key) && strings.TrimSpace(value) != "" {
+			fallback = value
+			break
+		}
+	}
+
 	hasBypass := false
 	for i, entry := range environment {
 		key, value, ok := strings.Cut(entry, "=")
-		if !ok || (key != "NO_PROXY" && key != "no_proxy" &&
-			(stdruntime.GOOS != "windows" || !strings.EqualFold(key, "NO_PROXY"))) {
+		if !ok || !isProxyBypassEnvironmentKey(key) {
 			continue
 		}
 		hasBypass = true
-		if strings.TrimSpace(value) == "*" {
-			continue
+		// Populating an empty alias changes which value some clients select.
+		if strings.TrimSpace(value) == "" {
+			value = fallback
 		}
-		rules := strings.FieldsFunc(value, func(r rune) bool { return r == ',' })
-		for _, host := range hosts {
-			if !slices.ContainsFunc(rules, func(rule string) bool {
-				return strings.EqualFold(strings.TrimSpace(rule), host)
-			}) {
-				rules = append(rules, host)
+		if strings.TrimSpace(value) != "*" {
+			rules := strings.FieldsFunc(value, func(r rune) bool { return r == ',' })
+			for _, host := range hosts {
+				if !slices.ContainsFunc(rules, func(rule string) bool {
+					return strings.EqualFold(strings.TrimSpace(rule), host)
+				}) {
+					rules = append(rules, host)
+				}
 			}
+			value = strings.Join(rules, ",")
 		}
-		environment[i] = key + "=" + strings.Join(rules, ",")
+		environment[i] = key + "=" + value
 	}
 	if !hasBypass {
 		environment = append(environment, "NO_PROXY="+strings.Join(hosts, ","))
 	}
 	return environment
+}
+
+func isProxyBypassEnvironmentKey(key string) bool {
+	return key == "NO_PROXY" || key == "no_proxy" ||
+		(stdruntime.GOOS == "windows" && strings.EqualFold(key, "NO_PROXY"))
 }

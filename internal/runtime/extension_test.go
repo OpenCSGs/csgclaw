@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,35 @@ func TestMergeExtensionEnvironmentRejectsCaseInsensitiveProfileConflict(t *testi
 	}})
 	if err == nil || !strings.Contains(err.Error(), "conflicts with the Agent profile") {
 		t.Fatalf("MergeExtensionEnvironment() error = %v", err)
+	}
+}
+
+func TestMergeExtensionEnvironmentPreservesNonemptyProxyBypass(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		base []string
+		want string
+	}{
+		{
+			name: "empty lowercase",
+			base: []string{"NO_PROXY=fixture.invalid", "no_proxy="},
+			want: "NO_PROXY=fixture.invalid",
+		},
+		{
+			name: "empty uppercase",
+			base: []string{"no_proxy=fixture.invalid", "NO_PROXY="},
+			want: "no_proxy=fixture.invalid",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			environment, _, err := MergeExtensionEnvironment(tc.base, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(environment, []string{tc.want}) {
+				t.Fatalf("environment = %q, want %q", environment, tc.want)
+			}
+		})
 	}
 }
 

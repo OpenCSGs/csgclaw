@@ -30,6 +30,21 @@ func TestWithLocalProxyBypass(t *testing.T) {
 			want:        []string{"no_proxy=*"},
 		},
 		{
+			name:        "empty lowercase falls back to uppercase",
+			environment: []string{"NO_PROXY=fixture.invalid", "no_proxy="},
+			want:        []string{"NO_PROXY=fixture.invalid,127.0.0.1,localhost,::1,[::1]", "no_proxy=fixture.invalid,127.0.0.1,localhost,::1,[::1]"},
+		},
+		{
+			name:        "empty uppercase falls back to lowercase",
+			environment: []string{"NO_PROXY=", "no_proxy=fixture.invalid"},
+			want:        []string{"NO_PROXY=fixture.invalid,127.0.0.1,localhost,::1,[::1]", "no_proxy=fixture.invalid,127.0.0.1,localhost,::1,[::1]"},
+		},
+		{
+			name:        "empty lowercase falls back to wildcard",
+			environment: []string{"NO_PROXY=*", "no_proxy="},
+			want:        []string{"NO_PROXY=*", "no_proxy=*"},
+		},
+		{
 			name:        "IPv6 listener",
 			environment: []string{"no_proxy="},
 			callbackURL: "http://[fd00::1]:18080",

@@ -119,6 +119,11 @@ func MergeExtensionEnvironment(base []string, profile map[string]string, project
 		if found {
 			canonical := CanonicalEnvironmentKey(key)
 			if previous := effectiveKeys[canonical]; previous != "" && previous != key {
+				// An empty proxy bypass alias falls back to the configured spelling.
+				if isProxyBypassEnvironmentKey(key) && isProxyBypassEnvironmentKey(previous) &&
+					strings.TrimSpace(value) == "" && strings.TrimSpace(values[previous]) != "" {
+					continue
+				}
 				delete(values, previous)
 			}
 			values[key] = value
