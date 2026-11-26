@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -87,6 +88,26 @@ func TestVideoDeliveryFailureReplacesDownloadingStatus(t *testing.T) {
 	}
 	if failed.State != "delivery_failed" || failed.Error != "video_delivery_failed" || failed.File != nil || failed.ErrorDetails == nil || failed.ErrorDetails.Stage != "attachment" {
 		t.Fatalf("failed task = %#v", failed)
+	}
+}
+
+func TestVideoGenerationDeadlineEmitsTimeoutStatus(t *testing.T) {
+	engine := &Engine{generateVideo: func(context.Context, *modelprovider.VideoGenerationConfig, string, modelprovider.VideoGenerationOptions) (modelprovider.GeneratedVideo, error) {
+		return modelprovider.GeneratedVideo{}, fmt.Errorf("poll video: %w", context.DeadlineExceeded)
+	}}
+	conversation := &conversations{engine: engine, agentID: "agent-video"}
+	turn := &activeTurn{agentID: "agent-video", request: TurnRequest{ID: "turn-video", ConversationKey: "room-video"}}
+	var task contract.VideoGenerationTask
+	sink := contract.MediaGenerationSink{EventSink: EventSinkFunc(func(_ context.Context, event TurnEvent) error {
+		task = event.Output.Payload.(contract.VideoGenerationTask)
+		return nil
+	})}
+	err := conversation.generateVideo(context.Background(), turn, sink, contract.VideoGenerationTask{ID: "video-call", Prompt: "kitten"}, nil)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v, want deadline exceeded", err)
+	}
+	if task.State != "failed" || task.Error != "video_generation_timeout" {
+		t.Fatalf("failed task = %#v", task)
 	}
 }
 

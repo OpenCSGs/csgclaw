@@ -308,6 +308,7 @@ func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sin
 		}
 		result, err := c.engine.generateVideo(videoCtx, task.Model, task.Prompt, options)
 		if err != nil {
+			timedOut := errors.Is(videoCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded)
 			cancel()
 			task.State, task.Error = "failed", "video_generation_failed"
 			if err.Error() == "video_model_not_configured" || err.Error() == "video_model_unavailable" {
@@ -321,8 +322,10 @@ func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sin
 					task.Error = "video_generation_blocked"
 				}
 			}
-			if ctx.Err() != nil {
+			if errors.Is(ctx.Err(), context.Canceled) {
 				task.Error = "video_generation_canceled"
+			} else if timedOut {
+				task.Error = "video_generation_timeout"
 			}
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cleanupCancel()

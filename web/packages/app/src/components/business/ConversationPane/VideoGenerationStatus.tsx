@@ -28,11 +28,6 @@ export function VideoGenerationStatus({
     in_progress: t("videoGenerating"),
     downloading: t("videoDownloading"),
   };
-  const errorDetails =
-    task.error_details && typeof task.error_details === "object" && !Array.isArray(task.error_details)
-      ? (task.error_details as Record<string, unknown>)
-      : null;
-  const errorMessage = String(errorDetails?.message ?? "").trim();
   return (
     <MediaGeneration
       kind="video"
@@ -49,7 +44,6 @@ export function VideoGenerationStatus({
       result={result}
       promptDisclosureLabel={t("videoViewPrompt")}
       prompt={String(task.prompt ?? message.content ?? "")}
-      failureMessage={errorMessage}
     />
   );
 }
