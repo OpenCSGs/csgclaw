@@ -404,6 +404,7 @@ describe("TaskConversationList archive management", () => {
           <TaskConversationList
             compact
             collapsed={collapsed}
+            onExpand={() => setCollapsed(false)}
             entry={{ isWorking: () => false, busyID: "" } as unknown as TaskEntryController}
             activeID="first"
             currentUserID="user-admin"
@@ -416,6 +417,11 @@ describe("TaskConversationList archive management", () => {
     }
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });
     await screen.findByText("Second project");
+    await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(screen.queryByRole("button", { name: "taskEntrySearchHistory" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "taskEntrySearchHistory" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "iaSessionDirectoryFilter" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
     await user.click(screen.getByRole("combobox", { name: "iaSessionDirectoryFilter" }));
     await user.click(screen.getByRole("option", { name: /first/ }));
     expect(screen.getByText("First project")).toBeInTheDocument();
@@ -423,7 +429,8 @@ describe("TaskConversationList archive management", () => {
     await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
     expect(screen.getByRole("button", { name: "First project" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("button", { name: "Second project" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(screen.queryByRole("button", { name: "taskEntrySearchHistory" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "iaSessionDirectoryFilter" }));
     expect(screen.getByText("First project")).toBeVisible();
     expect(screen.queryByText("Second project")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "iaSessionDirectoryFilter" })).toHaveTextContent("first");
