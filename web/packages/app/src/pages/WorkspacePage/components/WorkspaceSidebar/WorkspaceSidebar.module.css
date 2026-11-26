@@ -572,8 +572,16 @@
 :global(:root[data-theme="dark"]) .mainColumn,
 :global(:root[data-theme="dark"]) .contextHeader,
 :global(:root[data-theme="dark"]) .contextSearch {
-  border-color: var(--workspace-divider-color, var(--line));
   background: var(--surface);
+}
+
+:global(:root[data-theme="dark"]) .contextSearch {
+  border-color: var(--workspace-divider-color, var(--line));
+}
+
+.noContextSidebar > .primarySidebar,
+.mainColumn {
+  border-right-color: var(--workspace-sidebar-edge-color, var(--workspace-divider-color, var(--line)));
 }
 
 :global(:root[data-theme="dark"]) .primaryNav,
@@ -694,6 +702,7 @@
   .primarySidebarCollapsed {
     width: var(--workspace-primary-sidebar-collapsed-width);
     min-width: var(--workspace-primary-sidebar-collapsed-width);
+    border-right-color: var(--workspace-sidebar-edge-color, var(--workspace-divider-color, var(--line)));
   }
 
   .primarySidebarCollapsed + .mainColumn {

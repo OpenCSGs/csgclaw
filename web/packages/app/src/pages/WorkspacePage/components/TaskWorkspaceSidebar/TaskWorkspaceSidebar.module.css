@@ -8,7 +8,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--sidebar);
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--workspace-sidebar-edge-color, var(--line));
   color: var(--text);
 }
 

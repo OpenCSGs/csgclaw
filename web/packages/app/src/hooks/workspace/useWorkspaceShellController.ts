@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { messages } from "@/shared/i18n/messages";
+import { getDesktopBridge } from "@/shared/platform/desktopBridge";
 import { writeWorkspacePreference } from "@/shared/storage/workspacePreferences";
 import {
   HUB_NEW_BADGE_SEEN_STORAGE_KEY,
@@ -103,9 +104,12 @@ export function useWorkspaceShellController({
 
   useEffect(() => {
     const messageLocale = locale === "zh" ? "zh" : "en";
-    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    document.documentElement.lang = messageLocale === "zh" ? "zh-CN" : "en";
     document.title = messages[messageLocale].pageTitle;
     writeWorkspacePreference(LOCALE_STORAGE_KEY, locale);
+    void getDesktopBridge()
+      ?.setLocale?.(messageLocale)
+      .catch(() => {});
   }, [locale]);
 
   useEffect(() => {

@@ -32,6 +32,7 @@ const desktopThemePreferenceWriteDelayMs = 150;
 const windowsTrayIconSettleDelayMs = 16;
 
 export class AppLifecycle {
+  private locale: "zh" | "en" | undefined;
   private cleanupIPC: (() => void) | null = null;
   private cleanupThemeIcons: (() => void) | null = null;
   private desktopThemePreferenceWriteTimer: ReturnType<typeof setTimeout> | null = null;
@@ -94,6 +95,9 @@ export class AppLifecycle {
       () => this.restartSidecar(),
       () => this.show(),
       (theme) => this.setThemeSource(theme),
+      (locale) => {
+        this.locale = locale;
+      },
     );
 
     this.configureThemeIcons();
@@ -538,14 +542,24 @@ export class AppLifecycle {
   }
 
   private async confirmQuit(): Promise<boolean> {
+    const useChinese = this.locale ? this.locale === "zh" : /^zh(?:[-_]|$)/i.test(app.getLocale());
+    const copy = useChinese
+      ? {
+          title: "退出 CSGClaw？",
+          message: "退出后，本地 CSGClaw 服务和所有正在运行的智能体都会停止。",
+          buttons: ["退出 CSGClaw", "继续运行"],
+        }
+      : {
+          title: "Quit CSGClaw?",
+          message: "Quitting stops the local CSGClaw service and any running agents.",
+          buttons: ["Quit CSGClaw", "Keep Running"],
+        };
     const options: Electron.MessageBoxOptions = {
+      ...copy,
       type: "warning",
-      buttons: ["Quit CSGClaw", "Keep Running"],
       defaultId: 1,
       cancelId: 1,
       noLink: true,
-      title: "Quit CSGClaw?",
-      message: "Quitting stops the local CSGClaw service and any running agents.",
     };
     const window = this.windowManager?.window;
     const result = window ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options);

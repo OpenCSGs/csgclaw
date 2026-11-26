@@ -94,7 +94,13 @@ function MessageBody({
     () => (activity || slashCommandText ? null : parseStructuredMessage(content)),
     [activity, content, slashCommandText],
   );
-  const displayContent = String(content ?? "");
+  const delivery = message?.metadata?.csgclaw;
+  const interrupted =
+    delivery &&
+    typeof delivery === "object" &&
+    "delivery_kind" in delivery &&
+    delivery.delivery_kind === "turn_stopped";
+  const displayContent = interrupted && t ? t("conversationInterrupted") : String(content ?? "");
   const rendered = useMemo(
     () =>
       renderMarkdownWithCitations(

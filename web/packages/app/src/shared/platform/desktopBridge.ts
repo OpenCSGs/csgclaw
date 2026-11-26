@@ -60,6 +60,8 @@ export type DesktopBridge = {
   setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
   // Optional so newer Web UIs remain compatible with older desktop shells.
+  setLocale?(locale: "zh" | "en"): Promise<void>;
+  // Optional so newer Web UIs remain compatible with older desktop shells.
   setWindowChromeAppearance?(appearance: DesktopWindowChromeAppearance): Promise<void>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 };

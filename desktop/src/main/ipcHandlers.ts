@@ -34,6 +34,7 @@ export function registerIPCHandlers(
   restartSidecar: () => Promise<void>,
   showWindow: () => void,
   setThemeSource: (theme: DesktopThemeSource) => void,
+  setLocale: (locale: "zh" | "en") => void,
 ): () => void {
   const notifications = new TurnNotifications((roomID) => {
     showWindow();
@@ -106,6 +107,13 @@ export function registerIPCHandlers(
     assertSender(event);
     setThemeSource(parseDesktopThemeSource(input));
   });
+  ipcMain.handle(DesktopIPC.setLocale, (event, input: unknown) => {
+    assertSender(event);
+    if (input !== "zh" && input !== "en") {
+      throw new Error("Unsupported desktop locale.");
+    }
+    setLocale(input);
+  });
   ipcMain.handle(DesktopIPC.setUpdateChannel, async (event, input: unknown) => {
     assertSender(event);
     await updater.setChannel(parseUpdateChannel(input));
@@ -123,6 +131,7 @@ export function registerIPCHandlers(
     ipcMain.removeHandler(DesktopIPC.restartSidecar);
     ipcMain.removeHandler(DesktopIPC.showWindow);
     ipcMain.removeHandler(DesktopIPC.setThemeSource);
+    ipcMain.removeHandler(DesktopIPC.setLocale);
     ipcMain.removeHandler(DesktopIPC.setUpdateChannel);
   };
 }
