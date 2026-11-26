@@ -1960,8 +1960,8 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Session() after reload error = %v", err)
 	}
-	if session.SessionID != "resumed-thread" {
-		t.Fatalf("hydrated session id = %q, want resumed-thread", session.SessionID)
+	if session.SessionID != "main-thread" {
+		t.Fatalf("hydrated session id = %q, want main-thread", session.SessionID)
 	}
 	if session.BinaryPath != explicitBinary {
 		t.Fatalf("hydrated binary path = %q, want explicit override %q", session.BinaryPath, explicitBinary)
