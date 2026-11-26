@@ -331,9 +331,31 @@ func TestStandaloneWorkerAliasReplay(t *testing.T) {
 	}
 }
 
-func TestRecoverWorkerAfterAgentPatch(t *testing.T) {
+type failAfterWorkerRename struct {
+	agentengine.AgentInterface
+	failed bool
+}
+
+func (a *failAfterWorkerRename) Update(ctx context.Context, id string, req agentengine.AgentUpdateRequest) (agentengine.Agent, error) {
+	updated, err := a.AgentInterface.Update(ctx, id, req)
+	if err == nil && !a.failed && req.Spec.Name == "Partial" {
+		a.failed = true
+		return agentengine.Agent{}, errors.New("runtime update failed after persisting the name")
+	}
+	return updated, err
+}
+
+func TestWorkerRename(t *testing.T) {
+	for _, entry := range []string{"agent-patch", "participant-post"} {
+		t.Run(entry, func(t *testing.T) { testWorkerRename(t, entry) })
+	}
+}
+
+func testWorkerRename(t *testing.T, entry string) {
 	controller, _ := mustNewSeededServiceWithPath(t, nil)
-	engine, users := agentengine.New(controller), im.NewService()
+	realEngine := agentengine.New(controller)
+	engine := getErrorEngine{Interface: realEngine, agents: &failAfterWorkerRename{AgentInterface: realEngine.Agents()}}
+	users := im.NewService()
 	path := filepath.Join(t.TempDir(), "participants.json")
 	h := &Handler{
 		svc: controller, im: users, agentEngine: engine, workspace: controller.Workspace(),
@@ -367,10 +389,79 @@ func TestRecoverWorkerAfterAgentPatch(t *testing.T) {
 	alias := strings.NewReplacer("pt-worker", "pt-alias", "Original", "Alias").Replace(primary)
 	request(http.MethodPost, collection, primary, http.StatusCreated)
 	request(http.MethodPost, collection, alias, http.StatusCreated)
-	request(http.MethodPatch, "/api/v1/agents/agent-worker", `{"name":"Renamed"}`, http.StatusOK)
+	rename := func(name string) *httptest.ResponseRecorder {
+		method, path, body := http.MethodPatch, "/api/v1/agents/agent-worker", `{"name":"`+name+`","description":"Profile update"}`
+		if entry == "participant-post" {
+			method, path, body = http.MethodPost, collection, strings.Replace(primary, "Original", name, 1)
+		}
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
+		return rec
+	}
+	checkOriginal := func() {
+		t.Helper()
+		worker, _ := controller.Agent("agent-worker")
+		if worker.Name != "Original" || worker.Description == "Profile update" {
+			t.Fatalf("worker changed after rejected rename: %q, %q", worker.Name, worker.Description)
+		}
+		for id, display := range map[string]string{"pt-worker": "Original", "pt-alias": "Alias"} {
+			p, _ := h.participant.Get(participant.ChannelCSGClaw, id)
+			if p.AgentName != "Original" || p.Name != display || users.ResolveUserID(display) != p.ChannelUserRef {
+				t.Fatalf("binding changed after rejected rename: %+v", p)
+			}
+		}
+	}
+	request(http.MethodPost, collection, `{"id":"pt-human","type":"human","name":"Taken"}`, http.StatusCreated)
+	if rec := rename("taken"); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "agent_name_conflict") ||
+		users.ResolveUserID("Taken") != "user-human" {
+		t.Errorf("IM name conflict: HTTP %d %s", rec.Code, rec.Body)
+	}
+	checkOriginal()
+
+	// Fail the participant snapshot write after the IM rename has been staged.
+	backup := path + ".backup"
+	if err := os.Rename(path, backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if rec := rename("Unavailable"); rec.Code < 400 || (entry == "agent-patch" && rec.Code != http.StatusInternalServerError) {
+		t.Fatalf("unwritable participant store: HTTP %d %s", rec.Code, rec.Body)
+	}
+	checkOriginal()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(backup, path); err != nil {
+		t.Fatal(err)
+	}
+	openStore()
+	checkOriginal()
+	if rec := rename("Partial"); rec.Code < 400 {
+		t.Fatalf("partial engine update: HTTP %d %s", rec.Code, rec.Body)
+	}
+	openStore()
+	for id, display := range map[string]string{"pt-worker": "Partial", "pt-alias": "Alias"} {
+		p, _ := h.participant.Get(participant.ChannelCSGClaw, id)
+		if p.AgentName != "Partial" || p.Name != display || users.ResolveUserID(display) != p.ChannelUserRef {
+			t.Fatalf("binding after partial engine update: %+v", p)
+		}
+	}
+	if rec := rename("Partial"); rec.Code != http.StatusOK {
+		t.Fatalf("retry partial update: HTTP %d %s", rec.Code, rec.Body)
+	}
+	if rec := rename("Renamed"); rec.Code != http.StatusOK {
+		t.Fatalf("rename: HTTP %d %s", rec.Code, rec.Body)
+	}
+	if entry == "agent-patch" {
+		if worker, _ := controller.Agent("agent-worker"); worker.Description != "Profile update" {
+			t.Fatal("rename lost a field from the same PATCH")
+		}
+	}
 	for _, tc := range []struct{ body, name string }{
-		{strings.NewReplacer("Original", "Renamed", "agent-worker", "agent-expected").Replace(primary), "Renamed"},
 		{alias, "Alias"},
+		{strings.NewReplacer("Original", "Renamed", "agent-worker", "agent-expected").Replace(primary), "Renamed"},
 	} {
 		if _, err := engine.Agents().SetArchived(t.Context(), "agent-worker", true); err != nil {
 			t.Fatal(err)
@@ -406,49 +497,71 @@ func (a pausedNameConflictLookup) Get(ctx context.Context, selector string, opts
 	return a.AgentInterface.Get(ctx, selector, opts)
 }
 
-func TestParticipantRenameRetainsOldIMNameUntilCommit(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		controller, _ := mustNewSeededServiceWithPath(t, []agent.Agent{
-			{ID: "agent-worker", Name: "Original", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex},
-			{ID: "agent-other", Name: "Taken", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex},
+func (a pausedNameConflictLookup) Update(ctx context.Context, id string, update agentengine.AgentUpdateRequest) (agentengine.Agent, error) {
+	if update.Spec.Name == "Taken" {
+		<-a.resume
+	}
+	return a.AgentInterface.Update(ctx, id, update)
+}
+
+func TestWorkerRenameRetainsIMNamesUntilCommit(t *testing.T) {
+	for _, method := range []string{http.MethodPost, http.MethodPatch} {
+		t.Run(method, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) { testConcurrentRenameClaims(t, method) })
 		})
-		resume := make(chan struct{})
-		engine := getErrorEngine{agents: pausedNameConflictLookup{agentengine.New(controller).Agents(), resume}}
-		users := im.NewService()
-		svc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(engine), participant.WithIMService(users))
-		routes := (&Handler{svc: controller, participant: svc, im: users, agentEngine: engine}).Routes()
-		post := func(body string) *httptest.ResponseRecorder {
-			rec := httptest.NewRecorder()
-			routes.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(body)))
-			return rec
-		}
-		const original = `{"id":"pt-worker","type":"agent","name":"Original","agent_binding":{"mode":"create","agent_id":"agent-worker"}}`
-		const human = `{"id":"pt-human","type":"human","name":"oRiginal"}`
-		if rec := post(original); rec.Code != http.StatusCreated {
-			t.Fatalf("initial binding: %d %s", rec.Code, rec.Body)
-		}
-		result := make(chan *httptest.ResponseRecorder, 1)
-		go func() { result <- post(strings.Replace(original, "Original", "Taken", 1)) }()
-		synctest.Wait()
-		competing := post(human)
-		close(resume)
-		failed := <-result
-		if competing.Code != http.StatusConflict || failed.Code != http.StatusConflict {
-			t.Fatalf("competing claim: %d %s; rename: %d %s", competing.Code, competing.Body, failed.Code, failed.Body)
-		}
-		p, _ := svc.Get(participant.ChannelCSGClaw, "pt-worker")
-		worker, _ := controller.Agent("agent-worker")
-		user, _ := users.LocalUserByID("user-worker")
-		if p.Name != "Original" || worker.Name != p.Name || user.Name != p.Name || users.ResolveUserID("@Original") != user.ID {
-			t.Fatalf("identities after rollback: %q, %q, %q", p.Name, worker.Name, user.Name)
-		}
-		if rec := post(strings.Replace(original, "Original", "Available", 1)); rec.Code != http.StatusOK {
-			t.Fatalf("valid rename: %d %s", rec.Code, rec.Body)
-		}
-		if rec := post(human); rec.Code != http.StatusCreated {
-			t.Fatalf("old name after commit: %d %s", rec.Code, rec.Body)
-		}
+	}
+}
+
+func testConcurrentRenameClaims(t *testing.T, method string) {
+	controller, _ := mustNewSeededServiceWithPath(t, []agent.Agent{
+		{ID: "agent-worker", Name: "Original", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex},
+		{ID: "agent-other", Name: "Taken", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex},
 	})
+	resume := make(chan struct{})
+	engine := getErrorEngine{agents: pausedNameConflictLookup{agentengine.New(controller).Agents(), resume}}
+	users := im.NewService()
+	svc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(engine), participant.WithIMService(users))
+	routes := (&Handler{svc: controller, participant: svc, im: users, agentEngine: engine}).Routes()
+	post := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(body)))
+		return rec
+	}
+	const original = `{"id":"pt-worker","type":"agent","name":"Original","agent_binding":{"mode":"create","agent_id":"agent-worker"}}`
+	const human = `{"id":"pt-human","type":"human","name":"oRiginal"}`
+	if rec := post(original); rec.Code != http.StatusCreated {
+		t.Fatalf("initial binding: %d %s", rec.Code, rec.Body)
+	}
+	result := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		if method == http.MethodPost {
+			result <- post(strings.Replace(original, "Original", "Taken", 1))
+			return
+		}
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, httptest.NewRequest(method, "/api/v1/agents/agent-worker", strings.NewReader(`{"name":"Taken"}`)))
+		result <- rec
+	}()
+	synctest.Wait()
+	oldClaim := post(human)
+	newClaim := post(strings.Replace(human, "oRiginal", "Taken", 1))
+	close(resume)
+	failed := <-result
+	if oldClaim.Code != http.StatusConflict || newClaim.Code != http.StatusConflict || failed.Code < 400 {
+		t.Fatalf("old name claim: %d; new name claim: %d; worker conflict: %d %s", oldClaim.Code, newClaim.Code, failed.Code, failed.Body)
+	}
+	p, _ := svc.Get(participant.ChannelCSGClaw, "pt-worker")
+	worker, _ := controller.Agent("agent-worker")
+	user, _ := users.LocalUserByID("user-worker")
+	if p.Name != "Original" || worker.Name != p.Name || user.Name != p.Name || users.ResolveUserID("@Original") != user.ID {
+		t.Fatalf("identities after rollback: %q, %q, %q", p.Name, worker.Name, user.Name)
+	}
+	if rec := post(strings.Replace(original, "Original", "Available", 1)); rec.Code != http.StatusOK {
+		t.Fatalf("valid rename: %d %s", rec.Code, rec.Body)
+	}
+	if rec := post(human); rec.Code != http.StatusCreated {
+		t.Fatalf("old name after commit: %d %s", rec.Code, rec.Body)
+	}
 }
 
 func TestConcurrentParticipantDeleteDuringRetryRollback(t *testing.T) {

@@ -27,8 +27,31 @@ func (s *Service) HoldAgentUserName(id, name string) (func(), error) {
 		return nil, ErrAgentIdentityDeleted
 	}
 	key := strings.ToLower(strings.TrimSpace(name))
-	if user.Name != name || s.heldNames[key] != "" {
-		return nil, fmt.Errorf("IM user %q name changed or is being renamed", id)
+	if user.Name != name {
+		return nil, fmt.Errorf("IM user %q name changed", id)
+	}
+	return s.holdNameLocked(id, key)
+}
+
+// ReserveAgentUserName protects a worker name while updating a standalone
+// worker or one with only aliases. An empty ID reserves an unowned name.
+func (s *Service) ReserveAgentUserName(id, name string) (func(), error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id = canonicalIMUserID(id)
+	if user, ok := s.users[s.resolveUserIDLocked(name)]; ok && user.ID != id {
+		return nil, fmt.Errorf("name %q %w", name, identity.ErrNameExists)
+	}
+	key := strings.ToLower(strings.TrimSpace(name))
+	if owner, ok := s.byName[key]; ok && owner != id {
+		return nil, fmt.Errorf("name %q %w", name, identity.ErrNameExists)
+	}
+	return s.holdNameLocked(id, key)
+}
+
+func (s *Service) holdNameLocked(id, key string) (func(), error) {
+	if _, held := s.heldNames[key]; held {
+		return nil, fmt.Errorf("name %q %w", key, identity.ErrNameExists)
 	}
 	if s.heldNames == nil {
 		s.heldNames = make(map[string]string)

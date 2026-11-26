@@ -13,7 +13,6 @@ import (
 	hub "csgclaw/internal/template"
 	"csgclaw/internal/utils"
 	"encoding/base32"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -111,66 +110,33 @@ func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apit
 	return item, err == nil, err
 }
 
-func (s *Service) reconcileBinding(ctx context.Context, existing apitypes.Participant, req normalizedCreateRequest) (_ apitypes.Participant, err error) {
+func (s *Service) reconcileBinding(ctx context.Context, existing apitypes.Participant, req normalizedCreateRequest) (apitypes.Participant, error) {
 	item := existing
 	item.AgentName = req.workerName
 	if req.reconcileBoundName {
 		item.Name = req.Name
 	}
-	if s.im != nil && existing.ChannelUserKind == ChannelUserKindLocalUserID {
-		user, ok := s.im.LocalUserByID(existing.ChannelUserRef)
-		if !ok {
-			return existing, im.ErrUserNotFound
-		}
-		if user.AgentState == "deleted" {
-			return existing, im.ErrAgentIdentityDeleted
-		}
-		if req.reconcileBoundName {
-			if owner, ok := s.im.User(item.Name); ok && owner.ID != user.ID {
-				return existing, fmt.Errorf("name %q %w", item.Name, identity.ErrNameExists)
-			}
-		}
-		if user.Name != item.Name {
-			release, holdErr := s.im.HoldAgentUserName(user.ID, user.Name)
-			if holdErr != nil {
-				return existing, holdErr
-			}
-			defer release()
-			if err := s.syncParticipantChannelUser(item); err != nil {
-				return existing, err
-			}
-			defer func() {
-				if err != nil {
-					previous := existing
-					previous.Name = user.Name
-					err = errors.Join(err, s.syncParticipantChannelUser(previous))
-				}
-			}()
-		}
+	if item.AgentID == "" {
+		item.AgentID = agent.CanonicalID(req.AgentBinding.AgentID)
 	}
-	if item.Name != existing.Name {
+	if item.Name != existing.Name || item.AgentID != existing.AgentID {
 		item.UpdatedAt = time.Now().UTC()
 	}
-	if item.Name != existing.Name || item.AgentName != existing.AgentName {
-		if err := s.store.Save(item); err != nil {
-			return existing, err
-		}
-		defer func() {
-			if err != nil {
-				err = errors.Join(err, s.store.Save(existing))
-			}
-		}()
+	change := bindingNameChange{before: existing, after: item, syncUser: true}
+	apply := func() (bool, error) {
+		id, err := s.ensureAgentBinding(ctx, req, true)
+		return id != "", err
 	}
-	agentID, err := s.ensureAgentBinding(ctx, req, true)
+	// An exact replay can share the worker lease with other participants.
+	// Only a worker rename or restoration needs the other recovery records.
+	var err error
+	if req.readOnly {
+		err = s.applyBindingNames([]bindingNameChange{change}, apply)
+	} else {
+		err = s.withWorkerNames(ctx, item.AgentID, "", req.workerName, &change, apply)
+	}
 	if err != nil {
 		return existing, err
-	}
-	if item.AgentID == "" {
-		item.AgentID = agentID
-		item.UpdatedAt = time.Now().UTC()
-		if err := s.store.Save(item); err != nil {
-			return existing, err
-		}
 	}
 	return item, nil
 }
@@ -680,59 +646,6 @@ func (s *Service) Update(ctx context.Context, channel, id string, req UpdateRequ
 		}
 	}
 	return item, true, nil
-}
-
-// SyncAgentName records the current worker name for recovery. Participants
-// that followed the worker's name follow its rename; aliases keep theirs.
-func (s *Service) SyncAgentName(ctx context.Context, agentID, previousName, name string) error {
-	release, err := s.lifecycle.Read(ctx, agent.CanonicalID(agentID))
-	if err != nil {
-		return err
-	}
-	defer release()
-	// Another PATCH can finish before its predecessor starts synchronizing.
-	if s.agents != nil {
-		current, err := s.agents.Get(ctx, agentID, agentengine.AgentGetOptions{})
-		if err != nil {
-			return err
-		}
-		name = current.Spec.Name
-	}
-	for _, ref := range s.store.List(ListOptions{Channel: ChannelCSGClaw, Type: TypeAgent, AgentID: agentID}) {
-		if err := s.syncBoundAgentName(ctx, ref, previousName, name); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *Service) syncBoundAgentName(ctx context.Context, ref apitypes.Participant, previousName, name string) error {
-	release, err := s.lockParticipant(ctx, ref.Channel, ref.ID)
-	if err != nil {
-		return err
-	}
-	defer release()
-	item, ok := s.store.Get(ref.Channel, ref.ID)
-	if !ok || item.AgentID != ref.AgentID {
-		return nil
-	}
-	oldName := item.AgentName
-	if oldName == "" {
-		oldName = previousName
-	}
-	rename := item.Name == oldName && item.Name != name
-	if rename {
-		item.Name = name
-		item.UpdatedAt = time.Now().UTC()
-		if err := s.syncParticipantChannelUser(item); err != nil {
-			return err
-		}
-	}
-	if item.AgentName == name && !rename {
-		return nil
-	}
-	item.AgentName = name
-	return s.store.Save(item)
 }
 
 func (s *Service) syncParticipantChannelUser(item apitypes.Participant) error {
@@ -1321,12 +1234,10 @@ func (s *Service) reconcileAgentName(ctx context.Context, req normalizedCreateRe
 		return "", fmt.Errorf("agent %q already exists with role %q", worker.ID, worker.Spec.Role)
 	}
 	if req.reconcileBoundName && worker.Spec.Name != req.Name {
-		_, err := s.agents.Update(ctx, worker.ID, agentengine.AgentUpdateRequest{
+		updated, err := updateWorkerName(ctx, s.agents, worker, agentengine.AgentUpdateRequest{
 			Spec: agentengine.AgentSpec{Name: req.Name}, FieldMask: []string{"name"}, ResourceVersion: worker.ResourceVersion,
 		})
-		if err != nil {
-			return "", err
-		}
+		return updated.ID, err
 	}
 	return worker.ID, nil
 }

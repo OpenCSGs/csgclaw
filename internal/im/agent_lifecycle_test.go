@@ -1,6 +1,7 @@
 package im
 
 import (
+	"csgclaw/internal/identity"
 	"errors"
 	"os"
 	"path/filepath"
@@ -8,6 +9,27 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestReserveWorkerNameWithoutPrimaryParticipant(t *testing.T) {
+	s := NewServiceFromBootstrap(Bootstrap{Users: []User{{ID: "user-human", Name: "Taken"}}})
+	for _, name := range []string{"taken", "user-human"} {
+		if _, err := s.ReserveAgentUserName("", name); !errors.Is(err, identity.ErrNameExists) {
+			t.Fatalf("reserve %q: %v", name, err)
+		}
+	}
+	release, err := s.ReserveAgentUserName("", "Available")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim := EnsureAgentUserRequest{ID: "user-other", Name: "available"}
+	if _, _, err := s.EnsureAgentUser(claim); !errors.Is(err, identity.ErrNameExists) {
+		t.Fatalf("competing name claim: %v", err)
+	}
+	release()
+	if _, _, err := s.EnsureAgentUser(claim); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestDeletedAgentIdentityReleasesNameButPreservesHistoryAfterRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "im", "state.json")

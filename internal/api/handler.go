@@ -21,6 +21,7 @@ import (
 	"csgclaw/internal/connectors"
 	"csgclaw/internal/conversationresource"
 	"csgclaw/internal/dshcli"
+	"csgclaw/internal/identity"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/mcp"
@@ -1182,21 +1183,29 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			billingModel = update.Spec.Model
 		}
 		billingProfile := serviceProfileFromEngine(agentengine.ModelView{ModelSpec: billingModel})
-		updated, err := agents.Update(r.Context(), id, update)
+		var updated agentengine.Agent
+		if h.participant != nil && agentUpdateIncludes(update, "name") {
+			updated, err = h.participant.UpdateNamedAgent(r.Context(), agents, current, update)
+		} else {
+			updated, err = agents.Update(r.Context(), id, update)
+		}
+		if errors.Is(err, identity.ErrNameExists) {
+			writeCodedAPIError(w, http.StatusConflict, "agent_name_conflict", err.Error())
+			return
+		}
 		if err != nil {
+			status := http.StatusBadRequest
+			var pathErr *os.PathError
+			if agentUpdateIncludes(update, "name") && errors.As(err, &pathErr) {
+				status = http.StatusInternalServerError
+			}
 			writeAgentOperationErrorWithBillingURL(
 				w,
 				err,
-				http.StatusBadRequest,
+				status,
 				llm.OpenCSGBillingURL(billingProfile),
 			)
 			return
-		}
-		if h.participant != nil && agentUpdateIncludes(update, "name") {
-			if err := h.participant.SyncAgentName(r.Context(), updated.ID, current.Spec.Name, updated.Spec.Name); err != nil {
-				writeAgentOperationError(w, err, http.StatusInternalServerError)
-				return
-			}
 		}
 		h.publishUpdatedAgentUser(serviceAgentFromEngine(updated))
 		writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, updated))
