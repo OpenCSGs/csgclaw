@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	stdruntime "runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -206,4 +208,43 @@ func buildSessionEnvironment(spec SessionSpec) ([]string, map[string]string, err
 		return nil, nil, err
 	}
 	return agentruntime.MergeExtensionEnvironment(base, spec.Profile.Env, projections)
+}
+
+func codexProxyEnvironment(environment []string, callbackURL string) []string {
+	environment = agentruntime.WithLocalProxyBypass(environment, callbackURL)
+	var bypass string
+	for _, entry := range environment {
+		key, value, _ := strings.Cut(entry, "=")
+		if key == "no_proxy" {
+			bypass = value
+			break
+		}
+		if key == "NO_PROXY" || (stdruntime.GOOS == "windows" && strings.EqualFold(key, "NO_PROXY")) {
+			bypass = value
+		}
+	}
+	if bypass != "*" {
+		return environment
+	}
+	environment = slices.DeleteFunc(environment, func(entry string) bool {
+		key, _, _ := strings.Cut(entry, "=")
+		switch agentruntime.CanonicalEnvironmentKey(key) {
+		case "NO_PROXY":
+			return true
+		case "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY":
+			// Windows cannot carry separate aliases. Keep curl direct by
+			// withholding the environment proxies when all hosts are excluded.
+			return stdruntime.GOOS == "windows"
+		default:
+			return false
+		}
+	})
+	// Codex's HTTP client matches the wildcard against hostnames. Cover
+	// numeric addresses explicitly, including when the proxy is system-wide.
+	environment = append(environment, "NO_PROXY=*,0.0.0.0/0,::/0")
+	if stdruntime.GOOS != "windows" {
+		// curl requires the literal wildcard and prefers the lowercase alias.
+		environment = append(environment, "no_proxy=*")
+	}
+	return environment
 }

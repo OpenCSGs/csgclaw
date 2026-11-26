@@ -59,6 +59,7 @@ func TestNativeSessionThroughBridgeBypassesLocalProxy(t *testing.T) {
 	}{
 		{name: "configured exclusions", upper: "bypass.example", lower: "bypass.example"},
 		{name: "uppercase wildcard and lowercase whitespace", upper: "*", lower: " "},
+		{name: "wildcard exclusions", upper: "*", lower: "*"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("NO_PROXY", tc.upper)
