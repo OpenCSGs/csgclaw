@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	stdruntime "runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -63,13 +62,8 @@ func TestMergeExtensionEnvironmentPreservesNonemptyProxyBypass(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := []string{tc.want}
-			if stdruntime.GOOS != "windows" {
-				want = slices.Clone(tc.base)
-				slices.Sort(want)
-			}
-			if !slices.Equal(environment, want) {
-				t.Fatalf("environment = %q, want %q", environment, want)
+			if !slices.Equal(environment, []string{tc.want}) {
+				t.Fatalf("environment = %q, want %q", environment, tc.want)
 			}
 		})
 	}

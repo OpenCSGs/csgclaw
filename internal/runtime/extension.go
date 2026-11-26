@@ -118,17 +118,13 @@ func MergeExtensionEnvironment(base []string, profile map[string]string, project
 	for _, entry := range base {
 		key, value, found := strings.Cut(entry, "=")
 		if found {
-			// Preserve both spellings on case-sensitive platforms so each
-			// HTTP client can apply its own precedence.
-			if stdruntime.GOOS != "windows" && isProxyBypassEnvironmentKey(key) {
-				values[key] = value
-				continue
-			}
 			canonical := CanonicalEnvironmentKey(key)
 			if previous := effectiveKeys[canonical]; previous != "" && previous != key {
-				// An empty proxy bypass alias falls back to the configured spelling.
+				// Keep the populated alias. On Unix, prefer a populated lowercase
+				// value so the worker receives the same exclusion list in either order.
 				if isProxyBypassEnvironmentKey(key) && isProxyBypassEnvironmentKey(previous) &&
-					value == "" && values[previous] != "" {
+					values[previous] != "" &&
+					(value == "" || (stdruntime.GOOS != "windows" && previous == "no_proxy")) {
 					continue
 				}
 				delete(values, previous)
@@ -154,10 +150,6 @@ func MergeExtensionEnvironment(base []string, profile map[string]string, project
 			}
 			if previous := effectiveKeys[canonical]; previous != "" && previous != key {
 				delete(values, previous)
-			}
-			if canonical == "NO_PROXY" {
-				delete(values, "NO_PROXY")
-				delete(values, "no_proxy")
 			}
 			contributed[canonical] = value
 			values[key] = value

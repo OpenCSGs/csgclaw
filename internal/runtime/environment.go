@@ -35,17 +35,11 @@ func WithLocalProxyBypass(environment []string, callbackURL string) []string {
 	}
 
 	var fallback string
-	var hasLowercaseOverride bool
 	for _, entry := range environment {
 		key, value, ok := strings.Cut(entry, "=")
-		if !ok || !isProxyBypassEnvironmentKey(key) {
-			continue
-		}
-		if fallback == "" {
+		if ok && isProxyBypassEnvironmentKey(key) && value != "" {
 			fallback = value
-		}
-		if key == "no_proxy" {
-			hasLowercaseOverride = value != "" && strings.TrimSpace(value) != "*"
+			break
 		}
 	}
 
@@ -60,10 +54,7 @@ func WithLocalProxyBypass(environment []string, callbackURL string) []string {
 		if value == "" {
 			value = fallback
 		}
-		// Codex's HTTP client needs explicit IP entries even alongside an
-		// uppercase wildcard. curl still uses the configured lowercase value.
-		expandUppercaseWildcard := stdruntime.GOOS != "windows" && key == "NO_PROXY" && hasLowercaseOverride
-		if strings.TrimSpace(value) != "*" || expandUppercaseWildcard {
+		if strings.TrimSpace(value) != "*" {
 			rules := strings.FieldsFunc(value, func(r rune) bool { return r == ',' })
 			for _, host := range hosts {
 				if !slices.ContainsFunc(rules, func(rule string) bool {

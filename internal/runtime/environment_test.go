@@ -1,13 +1,12 @@
 package runtime
 
 import (
-	"net/url"
+	"net/http"
+	"os"
+	"os/exec"
 	stdruntime "runtime"
 	"slices"
-	"strings"
 	"testing"
-
-	"golang.org/x/net/http/httpproxy"
 )
 
 func TestWithLocalProxyBypass(t *testing.T) {
@@ -16,7 +15,6 @@ func TestWithLocalProxyBypass(t *testing.T) {
 		environment []string
 		callbackURL string
 		want        []string
-		wantWindows []string
 	}{
 		{
 			name:        "no existing exclusions",
@@ -53,8 +51,7 @@ func TestWithLocalProxyBypass(t *testing.T) {
 		{
 			name:        "whitespace lowercase keeps its own exclusions",
 			environment: []string{"NO_PROXY=*", "no_proxy= "},
-			want:        []string{"NO_PROXY=*,127.0.0.1,localhost,::1,[::1]", "no_proxy= ,127.0.0.1,localhost,::1,[::1]"},
-			wantWindows: []string{"NO_PROXY=*", "no_proxy= ,127.0.0.1,localhost,::1,[::1]"},
+			want:        []string{"NO_PROXY=*", "no_proxy= ,127.0.0.1,localhost,::1,[::1]"},
 		},
 		{
 			name:        "IPv6 listener",
@@ -64,16 +61,12 @@ func TestWithLocalProxyBypass(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			want := tc.want
-			if stdruntime.GOOS == "windows" && tc.wantWindows != nil {
-				want = tc.wantWindows
-			}
 			got := WithLocalProxyBypass(tc.environment, tc.callbackURL)
-			if !slices.Equal(got, want) {
-				t.Fatalf("environment = %q, want %q", got, want)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("environment = %q, want %q", got, tc.want)
 			}
-			if again := WithLocalProxyBypass(got, tc.callbackURL); !slices.Equal(again, want) {
-				t.Fatalf("environment after adding exclusions again = %q, want %q", again, want)
+			if again := WithLocalProxyBypass(got, tc.callbackURL); !slices.Equal(again, tc.want) {
+				t.Fatalf("environment after adding exclusions again = %q, want %q", again, tc.want)
 			}
 		})
 	}
@@ -81,46 +74,58 @@ func TestWithLocalProxyBypass(t *testing.T) {
 
 func TestRuntimeProxyBypassKeepsWhitespaceRouting(t *testing.T) {
 	const callbackURL = "http://192.0.2.10:18080"
-	for _, tc := range []struct {
-		key   string
-		alias string
-	}{
-		{key: "no_proxy", alias: "NO_PROXY"},
-		{key: "NO_PROXY", alias: "no_proxy"},
-	} {
-		t.Run(tc.key, func(t *testing.T) {
-			base := []string{tc.alias + "=*", tc.key + "= "}
-			if stdruntime.GOOS != "windows" {
-				// The order of the inherited entries must not select a spelling.
-				slices.Reverse(base)
+	const proxyURL = "http://proxy.example:8080"
+	const childMarker = "CSGCLAW_TEST_PROXY_BYPASS_CHILD"
+	if os.Getenv(childMarker) == "1" {
+		for _, tc := range []struct {
+			target string
+			want   string
+		}{
+			{target: "http://model.example/v1", want: proxyURL},
+			{target: callbackURL},
+		} {
+			request, err := http.NewRequest(http.MethodGet, tc.target, nil)
+			if err != nil {
+				t.Fatal(err)
 			}
+			proxy, err := http.ProxyFromEnvironment(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := ""
+			if proxy != nil {
+				got = proxy.String()
+			}
+			if got != tc.want {
+				t.Errorf("proxy for %s = %q, want %q", tc.target, got, tc.want)
+			}
+		}
+		return
+	}
+
+	type environmentCase struct {
+		name string
+		base []string
+	}
+	cases := []environmentCase{
+		{name: "lowercase last", base: []string{"NO_PROXY=*", "no_proxy= "}},
+	}
+	if stdruntime.GOOS != "windows" {
+		cases = append(cases, environmentCase{name: "lowercase first", base: []string{"no_proxy= ", "NO_PROXY=*"}})
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := append(tc.base, "HTTP_PROXY="+proxyURL)
 			environment, _, err := MergeExtensionEnvironment(base, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			environment = WithLocalProxyBypass(environment, callbackURL)
-			prefix := tc.key + "="
-			index := slices.IndexFunc(environment, func(entry string) bool { return strings.HasPrefix(entry, prefix) })
-			if index < 0 {
-				t.Fatalf("missing %s in %q", tc.key, environment)
-			}
-			config := httpproxy.Config{HTTPProxy: "http://proxy.example:8080", NoProxy: strings.TrimPrefix(environment[index], prefix)}
-			proxyFor := config.ProxyFunc()
-			for _, target := range []struct {
-				url        string
-				wantsProxy bool
-			}{
-				{url: "http://model.example/v1", wantsProxy: true},
-				{url: callbackURL},
-			} {
-				request, err := url.Parse(target.url)
-				if err != nil {
-					t.Fatal(err)
-				}
-				proxy, err := proxyFor(request)
-				if err != nil || (proxy != nil) != target.wantsProxy {
-					t.Errorf("proxy for %s = %v, error = %v, want proxy: %t", target.url, proxy, err, target.wantsProxy)
-				}
+			// net/http caches its environment on first use.
+			child := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRuntimeProxyBypassKeepsWhitespaceRouting$")
+			child.Env = append(environment, childMarker+"=1")
+			if output, err := child.CombinedOutput(); err != nil {
+				t.Fatalf("proxy routing in worker environment %q: %v\n%s", environment, err, output)
 			}
 		})
 	}
