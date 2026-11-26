@@ -129,30 +129,23 @@ export function toolRowSummary(tool: ProgressTool): string {
   const command = tool.command?.replace(/\s+/g, " ").trim();
   return command && summary.includes(command) ? "" : summary.slice(0, 240);
 }
+export function succeededProgressTool(status: string): boolean {
+  return ["completed", "complete", "done", "success", "succeeded"].includes(status);
+}
+
 export function progressToolStatus(rawStatus: string, exitCode?: number | null): string {
   const status = rawStatus.trim().toLowerCase();
-  if (["completed", "complete", "done", "success", "succeeded"].includes(status) && exitCode) return "failed";
+  if (succeededProgressTool(status) && exitCode) return "failed";
   return status;
 }
 export function failedProgressTool(status: string): boolean {
   return ["failed", "error", "declined", "blocked", "timeout"].includes(status);
 }
-export function terminalTool(status?: string): boolean {
-  return [
-    "completed",
-    "complete",
-    "done",
-    "success",
-    "succeeded",
-    "failed",
-    "error",
-    "canceled",
-    "cancelled",
-    "declined",
-    "blocked",
-    "timeout",
-    "interrupted",
-  ].includes(status || "");
+export function terminalTool(status = ""): boolean {
+  return (
+    succeededProgressTool(status) ||
+    ["failed", "error", "canceled", "cancelled", "declined", "blocked", "timeout", "interrupted"].includes(status)
+  );
 }
 
 // The activity inspector reads the same turn projection as the transcript.

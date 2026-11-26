@@ -12,6 +12,7 @@ import {
   progressGroups,
   progressToolAction,
   progressToolStatus,
+  succeededProgressTool,
   terminalTool,
   toolRowSummary,
 } from "@/models/turnProgress";
@@ -487,7 +488,7 @@ const ToolRow = memo(function ToolRow({
           ) : null}
         </span>
         <span className={styles.stepMeta}>
-          {status ? <span className={styles.toolStatus}>{status}</span> : null}
+          {status && !succeededProgressTool(toolStatus) ? <span className={styles.toolStatus}>{status}</span> : null}
           {duration ? <span className={styles.toolDuration}>{duration}</span> : null}
         </span>
         {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}

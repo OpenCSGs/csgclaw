@@ -179,7 +179,8 @@ describe("TurnProgress", () => {
       expect(screen.getByText("工具进度 2/2")).toBeVisible();
       expect(screen.getByText("1 个未成功")).toBeVisible();
       expect(within(list).getByText("失败")).toBeTruthy();
-      expect(screen.getByText("100 毫秒")).toBeVisible();
+      expect(within(list).queryByText("已完成")).not.toBeInTheDocument();
+      expect(screen.getByText("100 ms")).toBeVisible();
       expect(screen.queryByText("cat README.md")).not.toBeInTheDocument();
       expect(screen.queryByText("rg missing")).not.toBeInTheDocument();
       expect(screen.queryByText("first output")).toBeNull();

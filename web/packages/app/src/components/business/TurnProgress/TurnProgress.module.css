@@ -241,7 +241,7 @@
   min-width: 0;
 }
 
-.tool:is(:not(:last-child), :has(> .toolDetails))::before {
+.tool:has(> .toolDetails)::before {
   content: "";
   position: absolute;
   inset-block: 29px 0;
@@ -249,10 +249,6 @@
   width: 1px;
   background: var(--line);
   pointer-events: none;
-}
-
-.tool:not(:last-child)::before {
-  inset-block-end: -5px;
 }
 
 .shell button.toolToggle {

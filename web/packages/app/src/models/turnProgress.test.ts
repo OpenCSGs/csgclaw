@@ -57,8 +57,8 @@ describe("turn progress projection", () => {
   });
   it.each([
     [undefined, "", ""],
-    [0, "不足 1 毫秒", "< 1 ms"],
-    [19, "19 毫秒", "19 ms"],
+    [0, "<1 ms", "<1 ms"],
+    [19, "19 ms", "19 ms"],
     [1350, "1.4 秒", "1.4s"],
   ] as const)("formats tool duration %s without rounding fast commands to zero", (milliseconds, zh, en) => {
     expect(formatProgressToolDuration(milliseconds, createTranslator("zh"))).toBe(zh);
