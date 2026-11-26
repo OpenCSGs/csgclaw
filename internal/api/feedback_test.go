@@ -198,6 +198,93 @@ func TestFeedbackRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestFeedbackReferencePreventsDuplicateIssueRequests(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	var calls atomic.Int32
+	var upstreamStatus atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if code := upstreamStatus.Load(); code != 0 {
+			w.WriteHeader(int(code))
+			return
+		}
+		io.WriteString(w, `{"success":true,"issue_id":42,"issue_url":"https://issues.example/42"}`)
+	}))
+	defer upstream.Close()
+	previousStore := auth.Default().Store
+	t.Cleanup(func() { auth.Default().Store = previousStore })
+	auth.Default().Store = auth.NewStore(filepath.Join(home, "auth.json"))
+	signIn := func(user string) {
+		t.Helper()
+		if err := auth.Default().Store.Save(auth.Record{
+			Tokens:  auth.Tokens{AccessToken: "test-token"},
+			Account: auth.Account{BaseURL: upstream.URL, UserUUID: user},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	signIn("first-account")
+	request := func(id string, check bool) *httptest.ResponseRecorder {
+		t.Helper()
+		var req *http.Request
+		if check {
+			req = httptest.NewRequest(http.MethodPost, "/api/v1/feedback/status", strings.NewReader(`{"request_id":"`+id+`"}`))
+		} else {
+			var body bytes.Buffer
+			writer := multipart.NewWriter(&body)
+			writer.WriteField("problem_description", "Example feedback")
+			writer.WriteField("request_id", id)
+			writer.Close()
+			req = httptest.NewRequest(http.MethodPost, "/api/v1/feedback", &body)
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+		}
+		req.Header.Set("Authorization", "Bearer server-token")
+		recorder := httptest.NewRecorder()
+		(&Handler{serverAccessToken: "server-token"}).Routes().ServeHTTP(recorder, req)
+		return recorder
+	}
+	expect := func(id string, check bool, status int, content string) {
+		t.Helper()
+		response := request(id, check)
+		if response.Code != status || !strings.Contains(response.Body.String(), content) {
+			t.Fatalf("id=%s check=%v status=%d body=%s", id, check, response.Code, response.Body)
+		}
+	}
+
+	const confirmed = "0123456789abcdef0123456789abcdef"
+	expect(confirmed, true, http.StatusOK, `"state":"not_found"`)
+	expect(confirmed, false, http.StatusOK, `"issue_id":42`)
+	expect(confirmed, true, http.StatusOK, `"state":"submitted"`)
+	expect(confirmed, false, http.StatusOK, `"issue_id":42`)
+	signIn("another-account")
+	expect(confirmed, true, http.StatusOK, `"state":"not_found"`)
+	signIn("first-account")
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("confirmed submit sent %d upstream requests", n)
+	}
+
+	const uncertain = "fedcba9876543210fedcba9876543210"
+	upstreamStatus.Store(http.StatusBadGateway)
+	expect(uncertain, false, http.StatusBadGateway, "feedback_unavailable")
+	expect(uncertain, true, http.StatusOK, `"state":"unknown"`)
+	expect(uncertain, false, http.StatusConflict, "feedback_unavailable")
+	if n := calls.Load(); n != 2 {
+		t.Fatalf("unknown attempt did not stay reserved: %d upstream requests", n)
+	}
+
+	const rejected = "01230123012301230123012301230123"
+	upstreamStatus.Store(http.StatusBadRequest)
+	expect(rejected, false, http.StatusBadRequest, "feedback_invalid")
+	expect(rejected, true, http.StatusOK, `"state":"not_found"`)
+	upstreamStatus.Store(0)
+	expect(rejected, false, http.StatusOK, `"issue_id":42`)
+	if n := calls.Load(); n != 4 {
+		t.Fatalf("definitely rejected submission was not retried: %d upstream requests", n)
+	}
+}
+
 func TestFeedbackValidatesServerCredential(t *testing.T) {
 	previousStore := auth.Default().Store
 	t.Cleanup(func() { auth.Default().Store = previousStore })

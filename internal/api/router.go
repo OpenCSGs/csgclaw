@@ -26,6 +26,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Post("/relay/agents/{id}/responses", h.handleRelayChat)
 		r.Get("/relay/agents/{id}/responses/{response_id}", h.handleRelayChat)
 		r.Post("/feedback", h.handleFeedback)
+		r.Post("/feedback/status", h.handleFeedbackStatus)
 		r.Route("/upgrade", func(r chi.Router) {
 			r.Get("/status", h.getUpgradeStatus)
 			r.Put("/channel", h.updateUpgradeChannel)

@@ -176,7 +176,14 @@ it.each([true, false])(
     account.focus();
     await user.keyboard("{Enter}{End}{Enter}");
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveAccessibleName(signedIn ? "feedbackTitle" : "csghubConnectTitle");
+    expect(dialog).toHaveAccessibleName(signedIn ? "feedbackTitle" : "feedbackLoginTitle");
+    if (!signedIn) {
+      expect(screen.getByText("feedbackLoginReturnHint", { exact: false })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "feedbackContinueOnGitHub" })).toHaveAttribute(
+        "href",
+        expect.stringContaining("https://github.com/OpenCSGs/csgclaw/issues/new"),
+      );
+    }
 
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());

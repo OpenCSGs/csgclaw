@@ -10,11 +10,13 @@ export function useAuthLoginDialog({
   enabled = true,
   onCancel,
   onCloseAutoFocus,
+  feedbackURL,
 }: {
   closeOnConnect?: boolean;
   enabled?: boolean;
   onCancel?: () => void;
   onCloseAutoFocus?: (event: Event) => void;
+  feedbackURL?: string;
 } = {}) {
   const controller = useWorkspaceControllerContext();
   const sidebar = controller.sidebarProps;
@@ -46,6 +48,7 @@ export function useAuthLoginDialog({
       locale={sidebar.locale}
       open={enabled && connectionOpen}
       t={sidebar.t}
+      feedbackURL={feedbackURL}
       onConnect={handleLogin}
       onCloseAutoFocus={onCloseAutoFocus}
       onOpenChange={(open) => {
