@@ -141,7 +141,7 @@
       background-size: 230% 100%;
       background-clip: text;
       -webkit-text-fill-color: transparent;
-      animation: progress-title-shimmer 2s linear infinite;
+      animation: progress-title-shimmer 1s linear infinite;
     }
   }
 }
