@@ -19,8 +19,10 @@ export function usePersistedComposerDraft<Content>(
 
   function update(key: string, change: (draft: ComposerDraft<Content>) => ComposerDraft<Content>) {
     if (!key) return;
-    const current = getComposerDraft(key);
-    const next = change({ content: parseContent(current.content), attachments: current.attachments });
+    const snapshot = getComposerDraft(key);
+    const current = { content: parseContent(snapshot.content), attachments: snapshot.attachments };
+    const next = change(current);
+    if (next === current) return;
     saveComposerDraft(key, serializeContent(next.content), next.attachments);
   }
 

@@ -36,6 +36,12 @@ func (m *outputRateMeter) setModel(model string) {
 	m.reset()
 	m.model = model
 	modelName := model[strings.LastIndex(model, "/")+1:]
+	// The gateway's auto route can stream before it identifies the underlying
+	// model. Use the multilingual tokenizer for the live estimate.
+	if modelName == "auto" {
+		m.codec, _ = tokenizer.Get(tokenizer.O200kBase)
+		return
+	}
 	m.codec, _ = tokenizer.ForModel(tokenizer.Model(modelName))
 	if m.codec != nil {
 		return

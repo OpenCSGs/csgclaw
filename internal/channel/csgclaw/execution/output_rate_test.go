@@ -34,13 +34,13 @@ func TestOutputRateMeterCountsAcrossChunksAndResets(t *testing.T) {
 	}
 }
 
-func TestOutputRateReachesWorkStatusAndClearsOnTool(t *testing.T) {
+func TestAutoOutputRateReachesWorkStatusAndClearsOnTool(t *testing.T) {
 	reporter := newRecordingWorkReporter()
 	turn := &activeWorkTurn{statusReporter: reporter, statusStage: apitypes.ParticipantWorkStagePreparingReply}
 	ctx := context.Background()
 	turn.observeEvent(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{
 		Kind:    modelcap.ContextUsageKind,
-		Payload: modelcap.ContextUsage{ModelID: "gpt-4o", ContextWindow: 128000, ContextSource: "catalog"},
+		Payload: modelcap.ContextUsage{ModelID: "auto", ContextWindow: 128000, ContextSource: "catalog"},
 	}})
 	turn.observeEvent(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "hello"})
 	ageRateBaseline(&turn.outputRate)
@@ -63,7 +63,7 @@ func TestOutputRateReachesWorkStatusAndClearsOnTool(t *testing.T) {
 func TestOutputRateMeterEstimatesBuiltInModels(t *testing.T) {
 	for _, model := range []string{
 		"gpt-5.5", "gpt-6.1-sol", "glm-5.3", "mimo-v2.6-flash",
-		"deepseek-v4-pro", "qwen3.7-plus", "OpenCSG/Qwen3.7-Plus",
+		"deepseek-v4-pro", "qwen3.7-plus", "OpenCSG/Qwen3.7-Plus", "auto", "OpenCSG/Auto",
 	} {
 		t.Run(model, func(t *testing.T) {
 			var meter outputRateMeter
@@ -96,7 +96,7 @@ func TestThinkingRateUsesRuntimeTextAndResetsForReply(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			reporter := newRecordingWorkReporter()
 			turn := &activeWorkTurn{statusReporter: reporter, statusStage: apitypes.ParticipantWorkStagePreparingReply}
-			turn.outputRate.setModel("qwen3.7-plus")
+			turn.outputRate.setModel("auto")
 			ctx := context.Background()
 			turn.observeEvent(ctx, event("Inspect"))
 			ageRateBaseline(&turn.outputRate)

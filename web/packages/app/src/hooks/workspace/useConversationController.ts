@@ -1841,7 +1841,9 @@ export function useConversationController({
       return;
     }
     const segments = parseComposerSegments(editor) as ComposerSegment[];
-    updateRoomDraft(roomDraftKey, (current) => ({ ...current, content: segments }));
+    updateRoomDraft(roomDraftKey, (current) =>
+      areComposerSegmentsEqual(current.content, segments) ? current : { ...current, content: segments },
+    );
     setComposerMentionState(getComposerMentionState(editor) as ComposerMentionState | null);
     setComposerSlashQuery(getComposerSlashQueryAtSelection(editor));
   }
