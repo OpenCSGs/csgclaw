@@ -1,5 +1,5 @@
 import { clearTestComposerDrafts } from "../helpers/composerDrafts";
-import { composerDraftKey } from "@/shared/storage/composerDrafts";
+import { startTaskDraftKey } from "@/shared/storage/composerDrafts";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "../helpers/queryClient";
@@ -179,7 +179,12 @@ describe("task presets", () => {
 
     await waitFor(() => expect(open).toHaveBeenCalledWith(room));
     window.dispatchEvent(new Event("pagehide"));
-    expect(localStorage.getItem(composerDraftKey("user-admin"))).toBeNull();
+    const recipient = path.includes("team=")
+      ? "team:team-1"
+      : path.includes("agent=")
+        ? "agent:u-worker"
+        : "agent:u-manager";
+    expect(localStorage.getItem(startTaskDraftKey("user-admin", recipient))).toBeNull();
     expect(prompt).toContain(content);
     expect(sendMessageRequest).toHaveBeenCalledWith(expect.objectContaining({ content: prompt }));
     expect(create).toHaveBeenCalledWith(
@@ -837,6 +842,7 @@ describe("cloud task targets", () => {
       .mockResolvedValue({} as never);
     const { create } = setup("/new?cloud=agt_demo_contract_reviewer", "");
     const user = userEvent.setup();
+    await screen.findByRole("button", { name: /iaTargetLabel.*合同条款审阅/ });
     const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
     const file = new File(["contract"], "contract.txt", { type: "text/plain" });
     fireEvent.paste(editor, { clipboardData: { files: [file], getData: () => "" } });
@@ -1024,7 +1030,7 @@ it("shows pasted and dropped attachment drafts and sends restored files only onc
 });
 
 describe("start composer drafts", () => {
-  const key = composerDraftKey("user-admin");
+  const key = startTaskDraftKey("user-admin", "agent:u-manager");
 
   it("saves the last edit on pagehide, restores it on return, and clears it explicitly", () => {
     const first = setup();
@@ -1042,6 +1048,32 @@ describe("start composer drafts", () => {
     returned.unmount();
     setup();
     expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("");
+  });
+
+  it("isolates prompts and attachments by recipient and workspace when opening a new task", async () => {
+    const user = userEvent.setup();
+    const options = { configuration: { workspace_dir: "/project-a" } };
+    const first = setup("/new?agent=u-manager", "test-model", options);
+    await user.type(screen.getByRole("textbox", { name: "taskEntryPrompt" }), "Private draft");
+    await user.upload(screen.getByLabelText("addAttachment"), new File(["private"], "private.txt"));
+    expect(screen.getByTitle("private.txt")).toBeVisible();
+    first.unmount();
+
+    const otherRecipient = setup("/new?agent=u-worker", "test-model", options);
+    expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("");
+    expect(screen.queryByTitle("private.txt")).not.toBeInTheDocument();
+    otherRecipient.unmount();
+
+    const otherWorkspace = setup("/new?agent=u-manager", "test-model", {
+      configuration: { workspace_dir: "/project-b" },
+    });
+    expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("");
+    expect(screen.queryByTitle("private.txt")).not.toBeInTheDocument();
+    otherWorkspace.unmount();
+
+    setup("/new?agent=u-manager", "test-model", options);
+    expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("Private draft");
+    expect(screen.getByTitle("private.txt")).toBeVisible();
   });
 
   it("shows restored attachment metadata, requires reselection, and clears after a successful send", async () => {

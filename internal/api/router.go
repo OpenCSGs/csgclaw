@@ -245,6 +245,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Get("/attachments/{id}", h.handleAttachmentByID)
 		r.Head("/attachments/{id}", h.handleAttachmentByID)
 		r.Get("/conversations", h.listTaskConversations)
+		r.Get("/conversations/filters", h.listTaskConversationFilters)
 		r.Route("/rooms", func(r chi.Router) {
 			r.Get("/", h.listRooms)
 			r.Post("/", h.createRoom)

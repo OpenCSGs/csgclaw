@@ -104,10 +104,12 @@ describe("Image generation status", () => {
     },
   );
 
-  it("shows configuration guidance for an older failed task without offering regeneration", () => {
+  it("shows configuration guidance and retries an older failed task without a stored model", async () => {
+    vi.mocked(retryImageGenerationRequest).mockResolvedValue({ status: "succeeded" });
     render(
       <ImageGenerationStatus
         t={t}
+        roomID="room-1"
         message={{
           id: "image-1",
           content: "original prompt",
@@ -116,7 +118,8 @@ describe("Image generation status", () => {
       />,
     );
     expect(screen.getByText(t("image_model_not_configured"))).toBeVisible();
-    expect(screen.queryByRole("button", { name: t("imageRegenerate") })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: t("imageRegenerate") }));
+    expect(retryImageGenerationRequest).toHaveBeenCalledWith("image-1", "room-1");
     expect(screen.queryByText("image_model_not_configured")).not.toBeInTheDocument();
   });
 

@@ -43,9 +43,6 @@ export function ImageGenerationStatus({
   const state = String(task.state ?? "");
   const failed = state === "failed" || state === "delivery_failed";
   const errorKey = String(task.error ?? "image_generation_failed");
-  if (state === "failed" && errorKey === "image_model_not_configured") {
-    return result ?? <p>{t(errorKey)}</p>;
-  }
   const label = failed
     ? t(imageErrors.has(errorKey) ? errorKey : "image_generation_failed")
     : t(state === "completed" ? "imageCompleted" : state === "delivering" ? "imageDelivering" : "imageGenerating");

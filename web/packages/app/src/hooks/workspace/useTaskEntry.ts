@@ -112,17 +112,20 @@ export function useTaskEntry({ currentUserID, rooms, onUpdate, onMessage, onDele
 
       const historyQueries = { queryKey: ["task-conversations"] };
       await client.cancelQueries(historyQueries);
-      client.setQueriesData<InfiniteData<TaskConversationPage>>(historyQueries, (data) => {
-        if (!data?.pages.some((page) => page.rooms.some((room) => room.id === id))) return data;
-        return {
-          ...data,
-          pages: data.pages.map((page) => ({
-            ...page,
-            rooms: page.rooms.filter((room) => room.id !== id),
-            total: Math.max(0, page.total - 1),
-          })),
-        };
-      });
+      client.setQueriesData<InfiniteData<TaskConversationPage>>(
+        { ...historyQueries, predicate: (query) => query.queryKey.length === 3 },
+        (data) => {
+          if (!data?.pages.some((page) => page.rooms.some((room) => room.id === id))) return data;
+          return {
+            ...data,
+            pages: data.pages.map((page) => ({
+              ...page,
+              rooms: page.rooms.filter((room) => room.id !== id),
+              total: Math.max(0, page.total - 1),
+            })),
+          };
+        },
+      );
       onDelete(id);
       void client.invalidateQueries(historyQueries);
     } finally {

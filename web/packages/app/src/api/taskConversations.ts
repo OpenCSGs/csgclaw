@@ -15,6 +15,18 @@ export function fetchTaskConversations(q: string, archived = false, offset = 0):
   return get(`/api/v1/conversations?${params}`);
 }
 
+type TaskConversationFilterGroup = {
+  is_direct: boolean;
+  peer?: string;
+  cloud_user?: string;
+  workspace_dir?: string;
+  count: number;
+};
+
+export function fetchTaskConversationFilters(archived: boolean): Promise<TaskConversationFilterGroup[]> {
+  return get(`/api/v1/conversations/filters?archived=${archived}`);
+}
+
 export function updateConversationMetadata(id: string, patch: ConversationMetadataPatch): Promise<IMConversation> {
   return request(`/api/v1/rooms/${encodeURIComponent(id)}`, { method: "PATCH", json: patch });
 }

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
 import { deleteRoomRequest } from "@/api/im";
-import { fetchTaskConversations } from "@/api/taskConversations";
+import { fetchTaskConversationFilters, fetchTaskConversations } from "@/api/taskConversations";
 import { fetchRelayCatalog, type RelayCatalogTarget } from "@/api/relay";
 import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
@@ -16,7 +16,7 @@ import type { CloudAgent } from "@/models/cloudAgents";
 import { createTranslator } from "@/shared/i18n";
 
 vi.mock("@/api/im", () => ({ deleteRoomRequest: vi.fn() }));
-vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
+vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn(), fetchTaskConversationFilters: vi.fn() }));
 vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
 const room = { id: "r1", title: "Review", members: ["user-admin", "manager"], is_direct: true, messages: [] };
 
@@ -348,6 +348,14 @@ describe("TaskConversationList archive management", () => {
 
   it("filters by the session directory instead of another task using the same Agent", async () => {
     const user = userEvent.setup();
+    vi.mocked(fetchTaskConversations).mockClear();
+    vi.mocked(fetchTaskConversationFilters)
+      .mockReset()
+      .mockResolvedValue([
+        { is_direct: true, peer: "manager", workspace_dir: "/projects/first", count: 1000 },
+        { is_direct: true, peer: "manager", workspace_dir: "/projects/second", count: 1 },
+        { is_direct: false, workspace_dir: "/projects/shared", count: 1 },
+      ]);
     vi.mocked(fetchTaskConversations).mockResolvedValue({
       rooms: [
         { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
@@ -363,6 +371,7 @@ describe("TaskConversationList archive management", () => {
       total: 3,
       has_more: false,
     });
+    vi.mocked(fetchTaskConversations).mockResolvedValueOnce({ rooms: [room], total: 1002, has_more: true });
     function FilteredList({ collapsed }: { collapsed: boolean }) {
       const [filters, setFilters] = useState(emptyConversationFilters);
       return (
@@ -380,18 +389,20 @@ describe("TaskConversationList archive management", () => {
       );
     }
     const { rerender } = render(<FilteredList collapsed={false} />, { wrapper: createQueryWrapper().wrapper });
-    await screen.findByText("Second project");
+    await screen.findByText("Review");
     await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));
-    const owners = within(screen.getByRole("group", { name: "iaSessionOwnerFilter" }));
+    const owners = within(await screen.findByRole("group", { name: "iaSessionOwnerFilter" }));
+    expect(fetchTaskConversationFilters).toHaveBeenCalledExactlyOnceWith(false);
+    expect(fetchTaskConversations).toHaveBeenCalledExactlyOnceWith("", false, 0);
     const directories = within(screen.getByRole("group", { name: "iaSessionDirectoryFilter" }));
-    await user.click(directories.getByRole("button", { name: /first 1/ }));
-    expect(owners.getByRole("button", { name: /iaSessionOwnerAll 1/ })).toHaveAttribute("aria-pressed", "true");
-    expect(owners.getByRole("button", { name: "manager 1" })).toBeVisible();
+    await user.click(directories.getByRole("button", { name: /first 1000/ }));
+    expect(owners.getByRole("button", { name: /iaSessionOwnerAll 1000/ })).toHaveAttribute("aria-pressed", "true");
+    expect(owners.getByRole("button", { name: "manager 1000" })).toBeVisible();
     expect(owners.queryByRole("button", { name: /iaRoomsTab/ })).not.toBeInTheDocument();
-    expect(screen.getByText("First project")).toBeInTheDocument();
+    expect(await screen.findByText("First project")).toBeInTheDocument();
     expect(screen.queryByText("Second project")).not.toBeInTheDocument();
 
-    await user.click(owners.getByRole("button", { name: "manager 1" }));
+    await user.click(owners.getByRole("button", { name: "manager 1000" }));
     expect(directories.getByRole("button", { name: /shared 0/ })).toBeVisible();
     await user.click(directories.getByRole("button", { name: /shared 0/ }));
     expect(owners.getByRole("button", { name: "manager 0" })).toHaveAttribute("aria-pressed", "true");
@@ -410,6 +421,10 @@ describe("TaskConversationList archive management", () => {
   });
   it("preserves filtered order and selection through sidebar collapse and expansion", async () => {
     const user = userEvent.setup();
+    vi.mocked(fetchTaskConversationFilters).mockResolvedValue([
+      { is_direct: true, peer: "manager", workspace_dir: "/projects/first", count: 1 },
+      { is_direct: true, peer: "manager", workspace_dir: "/projects/second", count: 1 },
+    ]);
     vi.mocked(fetchTaskConversations).mockResolvedValue({
       rooms: [
         { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
@@ -448,7 +463,7 @@ describe("TaskConversationList archive management", () => {
     expect(screen.queryByRole("button", { name: "iaSessionDirectoryFilter" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
     await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));
-    await user.click(screen.getByRole("button", { name: /first 1/ }));
+    await user.click(await screen.findByRole("button", { name: /first 1/ }));
     await user.keyboard("{Escape}");
     expect(screen.getByText("First project")).toBeInTheDocument();
     expect(screen.queryByText("Second project")).not.toBeInTheDocument();

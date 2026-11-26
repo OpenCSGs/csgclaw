@@ -12,11 +12,16 @@ export const collaborationConversationOwner = "collaboration";
 export type ConversationFilters = { search: string; owner: string; directory: string };
 export const emptyConversationFilters: ConversationFilters = { search: "", owner: "", directory: "" };
 
-export function conversationPeerID(room: IMConversation, currentUserID: string): string {
+type ConversationFilterRoom = Pick<IMConversation, "members" | "is_direct" | "configuration"> & {
+  cloud_agent?: Pick<NonNullable<IMConversation["cloud_agent"]>, "user_id">;
+  count?: number;
+};
+
+export function conversationPeerID(room: ConversationFilterRoom, currentUserID: string): string {
   return room.is_direct ? (room.members.find((id) => id && !localIdentitiesMatch(id, currentUserID)) ?? "") : "";
 }
 
-export function conversationOwner(room: IMConversation, currentUserID: string): string {
+export function conversationOwner(room: ConversationFilterRoom, currentUserID: string): string {
   if (room.cloud_agent) return room.cloud_agent.user_id ? `cloud:${room.cloud_agent.user_id}` : "";
   if (!room.is_direct) return collaborationConversationOwner;
   const peer = userIDForLocalIdentity(conversationPeerID(room, currentUserID));
@@ -24,7 +29,7 @@ export function conversationOwner(room: IMConversation, currentUserID: string): 
 }
 
 export function conversationDirectory(
-  room: IMConversation,
+  room: ConversationFilterRoom,
   currentUserID: string,
   directoriesByPeer: ReadonlyMap<string, string>,
 ): string {
@@ -34,7 +39,7 @@ export function conversationDirectory(
 }
 
 export function conversationFilterOptions(
-  rooms: readonly IMConversation[],
+  rooms: readonly ConversationFilterRoom[],
   filters: Pick<ConversationFilters, "owner" | "directory">,
   currentUserID: string,
   usersById: UsersById,
@@ -46,16 +51,17 @@ export function conversationFilterOptions(
   let ownerTotal = 0;
   let directoryTotal = 0;
   for (const room of rooms) {
+    const count = room.count ?? 1;
     const value = conversationOwner(room, currentUserID);
     const path = conversationDirectory(room, currentUserID, directoriesByPeer);
     const matchesDirectory = !filters.directory || filters.directory === path;
     const matchesOwner = !filters.owner || filters.owner === value;
-    if (matchesDirectory) ownerTotal += 1;
-    if (matchesOwner) directoryTotal += 1;
+    if (matchesDirectory) ownerTotal += count;
+    if (matchesOwner) directoryTotal += count;
     if (value && (matchesDirectory || value === filters.owner)) {
       const existing = owners.get(value);
       if (existing) {
-        existing.count += Number(matchesDirectory);
+        existing.count += matchesDirectory ? count : 0;
       } else {
         const peer = room.cloud_agent?.user_id || conversationPeerID(room, currentUserID);
         const user = room.cloud_agent ? usersById.get(peer) : resolveUserByLocalIdentity(peer, usersById);
@@ -63,11 +69,11 @@ export function conversationFilterOptions(
           value,
           label: value === collaborationConversationOwner ? t("iaRoomsTab") : user?.name || peer,
           avatar: user?.avatar,
-          count: Number(matchesDirectory),
+          count: matchesDirectory ? count : 0,
         });
       }
     }
-    if (path) directories.set(path, (directories.get(path) ?? 0) + Number(matchesOwner));
+    if (path) directories.set(path, (directories.get(path) ?? 0) + (matchesOwner ? count : 0));
   }
   return {
     ownerTotal,

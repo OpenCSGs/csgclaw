@@ -11,6 +11,7 @@ import (
 
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
+	"csgclaw/internal/taskconfig"
 	"csgclaw/internal/worklease"
 )
 
@@ -54,6 +55,61 @@ func TestTaskConversationSearchPaginationAndArchive(t *testing.T) {
 	archived := query("/api/v1/conversations?q=needle&archived=true")
 	if len(archived.Rooms) != 1 || archived.Rooms[0].ID != "archived" {
 		t.Fatalf("archived = %+v", archived)
+	}
+}
+
+func TestTaskConversationFilterGroups(t *testing.T) {
+	members := []string{"user-admin", "user-worker"}
+	config := &taskconfig.Config{WorkspaceDir: "/project"}
+	svc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "user-admin",
+		Users:         []im.User{{ID: "user-admin", Role: "admin"}, {ID: "user-worker", Role: "worker"}},
+		Rooms: []im.Room{
+			{ID: "first", IsDirect: true, TaskSession: true, Members: members, Configuration: config},
+			{ID: "second", IsDirect: true, TaskSession: true, Members: members, Configuration: config},
+			{ID: "legacy", IsDirect: true, TaskSession: true, Members: members},
+			{ID: "explicit-empty", IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{}},
+			{ID: "team", Members: members, Configuration: config},
+			{ID: "archived", IsDirect: true, Archived: true, Members: members, Configuration: config},
+			{ID: "provisioned", IsDirect: true, Members: members},
+			{ID: "not-mine", Members: []string{"user-worker"}, Configuration: config},
+		},
+	})
+	h := &Handler{im: svc}
+	query := func(suffix string) []taskConversationFilterGroup {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.listTaskConversationFilters(rec, httptest.NewRequest(http.MethodGet, "/api/v1/conversations/filters"+suffix, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%d: %s", rec.Code, rec.Body.String())
+		}
+		var groups []taskConversationFilterGroup
+		if err := json.Unmarshal(rec.Body.Bytes(), &groups); err != nil {
+			t.Fatal(err)
+		}
+		return groups
+	}
+	groups := query("?q=ignored&limit=1")
+	if len(groups) != 4 {
+		t.Fatalf("expected four groups, got %+v", groups)
+	}
+	for _, group := range groups {
+		wantCount := 1
+		if group.Direct {
+			if group.Peer != "user-worker" {
+				t.Fatalf("unexpected peer: %+v", group)
+			}
+			if group.WorkspaceDir != nil && *group.WorkspaceDir == "/project" {
+				wantCount = 2
+			}
+		}
+		if group.Count != wantCount {
+			t.Fatalf("expected count %d, got %+v", wantCount, group)
+		}
+	}
+	archived := query("?archived=true")
+	if len(archived) != 1 || archived[0].Count != 1 || !archived[0].Direct {
+		t.Fatalf("unexpected archived groups: %+v", archived)
 	}
 }
 

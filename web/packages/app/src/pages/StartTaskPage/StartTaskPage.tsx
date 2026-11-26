@@ -1,6 +1,6 @@
 import { useComposerCompact } from "@/shared/layout/useComposerCompact";
 import { usePersistedComposerDraft } from "@/hooks/usePersistedComposerDraft";
-import { composerDraftKey, getComposerDraft, subscribeToComposerDraft } from "@/shared/storage/composerDrafts";
+import { getComposerDraft, startTaskDraftKey, subscribeToComposerDraft } from "@/shared/storage/composerDrafts";
 import { isResourceSnapshot } from "@/models/agentResources";
 import { isStoredTaskPromptMention, type TaskPromptMention } from "./taskPromptMentions";
 import conversationSendButtonStyles from "@/components/business/ConversationPane/ConversationSendButton.module.css";
@@ -53,7 +53,12 @@ import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
 import { errorMessage } from "@/api/client";
 import { localizeAPIError } from "@/shared/i18n";
-import { normalizeAuthProviderName, providerNeedsAuth, resolveAgentChannelUserID } from "@/models/agents";
+import {
+  agentRuntimeOptions,
+  normalizeAuthProviderName,
+  providerNeedsAuth,
+  resolveAgentChannelUserID,
+} from "@/models/agents";
 import { modelProviderConfigUsesOpenCSG } from "@/models/modelProviders";
 import { taskConversationTitle } from "@/models/taskConversations";
 import { RoomTypes, type IMConversation } from "@/models/conversations";
@@ -147,7 +152,7 @@ export function StartTaskPage() {
         : "";
   return (
     <StartTaskForm
-      key={`${location.pathname}:${initialTarget}`}
+      key={JSON.stringify([location.pathname, initialTarget, location.state?.configuration?.workspace_dir])}
       initialTarget={initialTarget}
       initialConfiguration={location.state?.configuration}
     />
@@ -169,7 +174,71 @@ function StartTaskForm({
   const [collaborationMode, setCollaborationMode] = useState<keyof typeof collaborationModes>(RoomTypes.onDemand);
   const collaborationModeID = useId();
   const { title: modeTitle, hint: modeHint, icon: ModeIcon } = collaborationModes[collaborationMode];
-  const draftKey = composerDraftKey(controller.sidebarProps?.currentUserID ?? "");
+  const [examplesHidden, setExamplesHidden] = useState(() => {
+    try {
+      return sessionStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [removed, setRemoved] = useState<{
+    key: string;
+    attachments: { draft: ComposerAttachmentDraft; index: number }[];
+  } | null>(null);
+  const [attachmentWarning, setAttachmentWarning] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadFailed, setUploadFailed] = useState(false);
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const created = useRef<IMConversation | null>(null);
+  const createdDraftKey = useRef<string | null>(null);
+  const requestID = useRef(createUUID());
+  const targetRevision = useRef(0);
+  const sendID = useRef({ fingerprint: "", id: "" });
+  const inFlight = useRef(false);
+  const composing = useRef(false);
+  const upload = useRef<AbortController | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const mentionRetryRef = useRef<HTMLButtonElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const inlineSkillShortcut = useRef("");
+  const composerBoxRef = useRef<HTMLDivElement>(null);
+  const composerRowRef = useRef<HTMLDivElement>(null);
+  useComposerCompact(composerBoxRef, composerRowRef, controller.ready && Boolean(controller.taskEntry));
+  const pageRef = useRef<HTMLElement>(null);
+  const panelTrigger = useRef<HTMLButtonElement>(null);
+  const panelID = useId();
+  const sidebar = controller.ready ? controller.sidebarProps : null;
+  const sidePanel = useChatSidePanel(sidebar?.currentUserID ?? "", `start-task-${panelID}`, false);
+  const agents = useMemo(() => sidebar?.workerAgentItems ?? [], [sidebar?.workerAgentItems]);
+  const teams = useMemo(() => sidebar?.teams ?? [], [sidebar?.teams]);
+  const manager = agents.find((agent) => agent.role === "manager");
+  const selected = target || `agent:${manager?.id || agents[0]?.id || ""}`;
+  const consent = useCloudSendConsent(selected);
+  const selectedCloud = cloud.agents.find((agent) => selected === `cloud:${agent.id}`);
+  const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
+  const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
+  const autonomous = !selectedAgent && !selectedCloud && collaborationMode === RoomTypes.autonomous;
+  const cloudTarget = selected.startsWith("cloud:");
+  const cloudRecipientUnavailable = cloudTarget && !selectedCloud;
+  const workspaceDir =
+    !cloudTarget && (!selectedAgent || supportsTaskConfiguration(selectedAgent))
+      ? configuration.workspace_dir
+      : undefined;
+  const automaticWorkspace = !cloudTarget && !selectedAgent && !workspaceDir;
+  const workspaceAgent = cloudTarget || automaticWorkspace ? undefined : (selectedAgent ?? manager);
+  const workspaceAgentID = workspaceAgent?.id || "";
+  const draftKey =
+    createdDraftKey.current ??
+    startTaskDraftKey(
+      sidebar?.currentUserID ?? "",
+      selected,
+      selectedCloud?.connectionID ?? "",
+      workspaceDir || (selectedAgent ? String(agentRuntimeOptions(selectedAgent).local_workspace_dir || "") : ""),
+    );
+  const removedAttachments = removed?.key === draftKey ? removed.attachments : [];
   const { draft: startDraft, update: updateStartDraft } = usePersistedComposerDraft(
     draftKey,
     readStartDraft,
@@ -200,57 +269,6 @@ function StartTaskForm({
     updateStartDraft(draftKey, (current) => ({ ...current, attachments }));
   }
 
-  const [examplesHidden, setExamplesHidden] = useState(() => {
-    try {
-      return sessionStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
-  const [removedAttachments, setRemovedAttachments] = useState<{ draft: ComposerAttachmentDraft; index: number }[]>([]);
-  const [attachmentWarning, setAttachmentWarning] = useState("");
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [uploadFailed, setUploadFailed] = useState(false);
-  const [slashQuery, setSlashQuery] = useState<string | null>(null);
-  const [slashIndex, setSlashIndex] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const created = useRef<IMConversation | null>(null);
-  const requestID = useRef(createUUID());
-  const targetRevision = useRef(0);
-  const sendID = useRef({ fingerprint: "", id: "" });
-  const inFlight = useRef(false);
-  const composing = useRef(false);
-  const upload = useRef<AbortController | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const mentionRetryRef = useRef<HTMLButtonElement>(null);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
-  const inlineSkillShortcut = useRef("");
-  const composerBoxRef = useRef<HTMLDivElement>(null);
-  const composerRowRef = useRef<HTMLDivElement>(null);
-  useComposerCompact(composerBoxRef, composerRowRef, controller.ready && Boolean(controller.taskEntry));
-  const pageRef = useRef<HTMLElement>(null);
-  const panelTrigger = useRef<HTMLButtonElement>(null);
-  const panelID = useId();
-  const sidebar = controller.ready ? controller.sidebarProps : null;
-  const sidePanel = useChatSidePanel(sidebar?.currentUserID ?? "", `start-task-${panelID}`, false);
-  const agents = useMemo(() => sidebar?.workerAgentItems ?? [], [sidebar?.workerAgentItems]);
-  const teams = useMemo(() => sidebar?.teams ?? [], [sidebar?.teams]);
-  const manager = agents.find((agent) => agent.role === "manager");
-  const selected = target || `agent:${manager?.id || agents[0]?.id || ""}`;
-  const consent = useCloudSendConsent(selected);
-  const selectedCloud = cloud.agents.find((agent) => selected === `cloud:${agent.id}`);
-  const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
-  const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
-  const autonomous = !selectedAgent && !selectedCloud && collaborationMode === RoomTypes.autonomous;
-  const cloudTarget = selected.startsWith("cloud:");
-  const workspaceDir =
-    !cloudTarget && (!selectedAgent || supportsTaskConfiguration(selectedAgent))
-      ? configuration.workspace_dir
-      : undefined;
-  const automaticWorkspace = !cloudTarget && !selectedAgent && !workspaceDir;
-  const workspaceAgent = cloudTarget || automaticWorkspace ? undefined : (selectedAgent ?? manager);
-  const workspaceAgentID = workspaceAgent?.id || "";
   const mentionMembers = useMemo(() => {
     const ids = new Set(selectedTeam ? [selectedTeam.lead_agent_id, ...selectedTeam.member_agent_ids] : []);
     return agents
@@ -353,6 +371,7 @@ function StartTaskForm({
   const cloudOffline = Boolean(selectedCloud && selectedCloud.status !== "online");
   const cannotSend =
     busy ||
+    cloudRecipientUnavailable ||
     cloudOffline ||
     missingAttachments ||
     resourcePicker.active ||
@@ -435,7 +454,7 @@ function StartTaskForm({
 
   function clearDraft() {
     updateStartDraft(draftKey, () => ({ content: emptyStartDraft, attachments: [] }));
-    setRemovedAttachments([]);
+    setRemoved(null);
     setAttachmentWarning("");
     setUploadFailed(false);
     setSlashQuery(null);
@@ -445,12 +464,12 @@ function StartTaskForm({
   }
 
   function addAttachments(files: File[]) {
-    if (busy || !files.length) return;
+    if (busy || cloudRecipientUnavailable || !files.length) return;
     const selection = selectComposerAttachmentFiles(files, attachments);
     setAttachmentWarning(attachmentSelectionError(selection, t));
     if (!selection.files.length) return;
     setAttachments(mergeComposerAttachments(attachments, createAttachmentDrafts(selection.files, attachments.length)));
-    setRemovedAttachments([]);
+    setRemoved(null);
     setUploadFailed(false);
   }
 
@@ -458,7 +477,7 @@ function StartTaskForm({
     const index = attachments.findIndex((item) => item.id === id);
     if (busy || index < 0) return;
     setAttachments(attachments.filter((item) => item.id !== id));
-    setRemovedAttachments([...removedAttachments, { draft: attachments[index], index }]);
+    setRemoved({ key: draftKey, attachments: [...removedAttachments, { draft: attachments[index], index }] });
     setAttachmentWarning("");
     setUploadFailed(false);
   }
@@ -467,7 +486,7 @@ function StartTaskForm({
     const next = [...attachments];
     for (const { draft, index } of [...removedAttachments].reverse()) next.splice(index, 0, draft);
     setAttachments(next);
-    setRemovedAttachments([]);
+    setRemoved(null);
   }
 
   async function start(empty = false, prompt = draft, confirmed = false, submittedDraft = getComposerDraft(draftKey)) {
@@ -475,6 +494,7 @@ function StartTaskForm({
     const fileReferences = selectedCloud ? [] : promptMentions.fileReferences(prompt);
     if (
       inFlight.current ||
+      cloudRecipientUnavailable ||
       cloudOffline ||
       (!empty &&
         (missingAttachments ||
@@ -552,6 +572,7 @@ function StartTaskForm({
           locale: readySidebar.locale,
         });
         created.current = room;
+        createdDraftKey.current = draftKey;
         if (room.configuration) {
           if (room.configuration.workspace_dir !== workspaceDir) resetFilePanel();
           setConfiguration(room.configuration);
@@ -658,11 +679,9 @@ function StartTaskForm({
               onChange={(value) => {
                 targetRevision.current++;
                 requestID.current = createUUID();
-                promptMentions.clearFiles(true);
+                promptMentions.reset();
                 resetFilePanel(value.kind === "cloud", true);
-                setResources([]);
-                setAttachments([]);
-                setRemovedAttachments([]);
+                setRemoved(null);
                 setAttachmentWarning("");
                 setUploadFailed(false);
                 setSlashQuery(null);
@@ -804,7 +823,7 @@ function StartTaskForm({
                         syncSlash(event.currentTarget);
                       }
                     }}
-                    disabled={busy}
+                    disabled={busy || cloudRecipientUnavailable}
                     onKeyDown={(event) => {
                       if (composing.current || isComposerKeyboardEventComposing(event)) return;
                       if (event.key === "Tab" && !event.shiftKey && mentionRetryRef.current) {
@@ -948,7 +967,7 @@ function StartTaskForm({
                     ref={fileInput}
                     className="sr-only"
                     aria-label={t("addAttachment")}
-                    disabled={busy}
+                    disabled={busy || cloudRecipientUnavailable}
                     onChange={(event) => {
                       addAttachments(Array.from(event.currentTarget.files ?? []));
                       event.currentTarget.value = "";
@@ -956,7 +975,7 @@ function StartTaskForm({
                   />
                   <ComposerAddMenu
                     onOpenResourcePicker={resourcePicker.open}
-                    disabled={busy}
+                    disabled={busy || cloudRecipientUnavailable}
                     t={t}
                     buttonClassName={`composer-add-button ${styles.addButton}`}
                     onAddFiles={() => fileInput.current?.click()}
@@ -970,8 +989,12 @@ function StartTaskForm({
                           if (created.current) await entry.patch(created.current.id, { configuration: value });
                           else requestID.current = createUUID();
                           if (value.workspace_dir !== configuration.workspace_dir) {
-                            promptMentions.clearFiles();
-                            resetFilePanel();
+                            promptMentions.reset();
+                            resetFilePanel(cloudTarget, true);
+                            setRemoved(null);
+                            setAttachmentWarning("");
+                            setUploadFailed(false);
+                            setSlashQuery(null);
                           }
                           setConfiguration(value);
                         }}
@@ -1099,7 +1122,11 @@ function StartTaskForm({
                 </DismissibleInlineError>
               ) : null}
             </div>
-            {cloudOffline ? <p role="status">{t("cloudChatOffline")}</p> : null}
+            {cloudRecipientUnavailable ? (
+              <p role="status">{t(cloud.loading ? "loading" : "taskEntryMissingTarget")}</p>
+            ) : cloudOffline ? (
+              <p role="status">{t("cloudChatOffline")}</p>
+            ) : null}
             {error ? (
               <p role="alert" className={styles.error}>
                 {error}
@@ -1121,7 +1148,7 @@ function StartTaskForm({
               </div>
             ) : null}
           </div>
-          {!examplesHidden && !modelMissing && (agents.length || selectedCloud) ? (
+          {!examplesHidden && !cloudRecipientUnavailable && !modelMissing && (agents.length || selectedCloud) ? (
             <div className={styles.examples}>
               <span>{t("iaStartExamples")}</span>
               <div className={styles.chips}>

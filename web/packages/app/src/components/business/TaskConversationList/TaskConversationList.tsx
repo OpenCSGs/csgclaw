@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Archive,
@@ -42,6 +43,7 @@ import { useCloudAgentAvatarMetadata } from "@/hooks/workspace/useCloudAgentAvat
 import { cloudAgentAvatar } from "@/models/cloudAgents";
 import type { AuthStatus } from "@/models/auth";
 import { errorMessage } from "@/api/client";
+import { fetchTaskConversationFilters } from "@/api/taskConversations";
 import { taskConversationPreview, uniqueTaskConversations } from "@/models/taskConversations";
 import { resolveConversationUser } from "@/models/conversations";
 import type { IMConversation, IMMessage, TranslateFn, UsersById } from "@/models/conversations";
@@ -194,20 +196,23 @@ export function TaskConversationList({
   const deletingID = dialog?.kind === "delete" && entry.busyID === dialog.room.id ? dialog.room.id : "";
   const allRooms = uniqueTaskConversations(list.data?.pages ?? []).filter((room) => room.id !== deletingID);
   const cloudCatalog = useCloudAgentAvatarMetadata(authStatus);
-  const catalog = useTaskConversationPages(archived, "", filterOpen && Boolean(query));
-  const optionPages = query ? catalog : list;
-  const optionRooms = useMemo(() => uniqueTaskConversations(optionPages.data?.pages ?? []), [optionPages.data]);
-  const options = useMemo(
-    () => conversationFilterOptions(optionRooms, { owner, directory }, currentUserID, usersById, directoriesByPeer, t),
-    [optionRooms, owner, directory, currentUserID, usersById, directoriesByPeer, t],
-  );
-  const optionsPending = optionPages.isPending || Boolean(optionPages.hasNextPage && !optionPages.isFetchNextPageError);
-  const optionsError = optionPages.isError;
-  const fetchOptionsPage = optionPages.fetchNextPage;
-  useEffect(() => {
-    if (filterOpen && optionPages.hasNextPage && !optionPages.isFetching && !optionPages.isFetchNextPageError)
-      void fetchOptionsPage();
-  }, [filterOpen, optionPages.hasNextPage, optionPages.isFetching, optionPages.isFetchNextPageError, fetchOptionsPage]);
+  const filterGroups = useQuery({
+    queryKey: ["task-conversations", archived, "", "filters"],
+    enabled: filterOpen,
+    queryFn: () => fetchTaskConversationFilters(archived),
+  });
+  const options = useMemo(() => {
+    const groups = (filterGroups.data ?? []).map((group) => ({
+      members: group.peer ? [group.peer] : [],
+      is_direct: group.is_direct,
+      cloud_agent: group.cloud_user !== undefined ? { user_id: group.cloud_user } : undefined,
+      configuration: group.workspace_dir !== undefined ? { workspace_dir: group.workspace_dir } : undefined,
+      count: group.count,
+    }));
+    return conversationFilterOptions(groups, { owner, directory }, currentUserID, usersById, directoriesByPeer, t);
+  }, [filterGroups.data, owner, directory, currentUserID, usersById, directoriesByPeer, t]);
+  const optionsPending = filterGroups.isPending;
+  const optionsError = filterGroups.isError;
   const rooms = allRooms.filter(
     (room) =>
       (!owner || conversationOwner(room, currentUserID) === owner) &&
@@ -216,25 +221,9 @@ export function TaskConversationList({
   const lookingForMatches = filtering && !rooms.length && Boolean(list.hasNextPage) && !list.isFetchNextPageError;
   const fetchNextPage = list.fetchNextPage;
   useEffect(() => {
-    if (
-      filtering &&
-      (!filterOpen || query) &&
-      rooms.length < 20 &&
-      list.hasNextPage &&
-      !list.isFetching &&
-      !list.isFetchNextPageError
-    )
+    if (filtering && rooms.length < 20 && list.hasNextPage && !list.isFetching && !list.isFetchNextPageError)
       void fetchNextPage();
-  }, [
-    filtering,
-    filterOpen,
-    query,
-    rooms.length,
-    list.hasNextPage,
-    list.isFetching,
-    list.isFetchNextPageError,
-    fetchNextPage,
-  ]);
+  }, [filtering, rooms.length, list.hasNextPage, list.isFetching, list.isFetchNextPageError, fetchNextPage]);
 
   async function run(action: () => Promise<unknown>) {
     setError("");
@@ -425,11 +414,7 @@ export function TaskConversationList({
               ) : null}
               {optionsPending ? <span role="status">{t("loading")}</span> : null}
               {optionsError ? (
-                <Button
-                  size="sm"
-                  variant="secondaryGray"
-                  onClick={() => void (optionPages.isFetchNextPageError ? fetchOptionsPage() : optionPages.refetch())}
-                >
+                <Button size="sm" variant="secondaryGray" onClick={() => void filterGroups.refetch()}>
                   {t("retry")}
                 </Button>
               ) : null}

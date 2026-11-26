@@ -16,6 +16,10 @@ export function composerDraftKey(userID: string, roomID?: string): string {
     : "";
 }
 
+export function startTaskDraftKey(userID: string, recipient: string, connectionID = "", workspaceDir = "") {
+  return userID ? COMPOSER_DRAFT_STORAGE_PREFIX + JSON.stringify([userID, recipient, connectionID, workspaceDir]) : "";
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object";
 }
