@@ -58,7 +58,7 @@ func TestAppServerManagerHTTPDisconnectKeepsRuntime(t *testing.T) {
 		if live == nil {
 			return false
 		}
-		waiter := live.appServerTurnWaiter(session.SessionID)
+		waiter := live.appServerTurnWaiter("main-thread")
 		return waiter != nil && waiter.currentTurnID() == "turn-cancel"
 	})
 	// Close an unfinished streaming HTTP response: net/http cancels the
@@ -145,7 +145,7 @@ func TestAppServerManagerCancellationInterruptErrorCode(t *testing.T) {
 				if live == nil {
 					return false
 				}
-				waiter := live.appServerTurnWaiter(session.SessionID)
+				waiter := live.appServerTurnWaiter("main-thread")
 				return waiter != nil && waiter.currentTurnID() == "turn-cancel"
 			})
 			cancel()
@@ -173,7 +173,7 @@ func TestAppServerManagerCancellationInterruptErrorCode(t *testing.T) {
 					t.Fatalf("missing interrupt diagnostic: %s err=%v", log, err)
 				}
 				live := manager.liveSession(spec.RuntimeID)
-				if live == nil || live.appServerTurnWaiter(session.SessionID) != nil {
+				if live == nil || live.appServerTurnWaiter("main-thread") != nil {
 					t.Fatal("canceled turn waiter was not released")
 				}
 				nextCtx, cancelNext := context.WithTimeout(context.Background(), 3*time.Second)

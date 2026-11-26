@@ -102,7 +102,6 @@ type SessionHandle struct {
 }
 
 type Session struct {
-	emptyThreads                   map[string]bool
 	PreserveSkills                 bool
 	ExtensionDigests               map[string]string
 	RuntimeID                      string
@@ -458,7 +457,7 @@ func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime
 	}
 	return agentruntime.Handle{
 		RuntimeID: strings.TrimSpace(spec.RuntimeID),
-		HandleID:  strings.TrimSpace(session.SessionID),
+		HandleID:  firstNonEmpty(session.SessionID, session.RuntimeID),
 	}, nil
 }
 
@@ -712,7 +711,7 @@ func (r *Runtime) Info(_ context.Context, h agentruntime.Handle) (agentruntime.I
 	// a missing runtime in the agent roster.
 	if session, err := r.sessionManager().LiveSession(SessionHandle{RuntimeID: strings.TrimSpace(h.RuntimeID)}); err == nil && session != nil && processAlive(session.ProcessID) {
 		return agentruntime.Info{
-			HandleID:  strings.TrimSpace(session.SessionID),
+			HandleID:  firstNonEmpty(session.SessionID, session.RuntimeID),
 			State:     agentruntime.StateRunning,
 			CreatedAt: session.CreatedAt,
 		}, nil
@@ -746,7 +745,7 @@ func (r *Runtime) Info(_ context.Context, h agentruntime.Handle) (agentruntime.I
 		_ = writeJSONFile(r.writePrivateFile, path, meta)
 	}
 	return agentruntime.Info{
-		HandleID:  strings.TrimSpace(meta.SessionID),
+		HandleID:  firstNonEmpty(meta.SessionID, meta.RuntimeID),
 		State:     state,
 		CreatedAt: meta.CreatedAt,
 	}, nil
@@ -1730,14 +1729,43 @@ func (r *Runtime) readSessionMetadata(runtimeID string) (sessionMetadata, error)
 	if err != nil {
 		return sessionMetadata{}, err
 	}
-	var meta sessionMetadata
-	if err := readJSONFile(r.readFile, path, &meta); err != nil {
+	meta, err := readSavedThreads(r.readFile, filepath.Dir(path))
+	if err != nil {
 		return sessionMetadata{}, err
 	}
 	// Native dynamic tools are persisted at thread creation and cannot be added
 	// by thread/resume. Reuse the existing capability-upgrade path for older sets.
 	if meta.DynamicToolsVersion != engineDynamicToolsVersion {
 		meta.FilePublishingConversations = nil
+	}
+	return normalizeSessionMetadata(meta), nil
+}
+
+// Older room imports can omit session_id. An explicit empty ID means that
+// this runtime has no default thread yet, even if runtime.json is stale.
+func readSavedThreads(read func(string) ([]byte, error), dir string) (sessionMetadata, error) {
+	var saved struct {
+		sessionMetadata
+		Primary *string `json:"session_id"`
+	}
+	err := readJSONFile(read, filepath.Join(dir, sessionFileName), &saved)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return sessionMetadata{}, err
+	}
+	meta := saved.sessionMetadata
+	if saved.Primary != nil {
+		meta.SessionID = *saved.Primary
+	} else {
+		var runtime struct {
+			SessionID string `json:"session_id"`
+		}
+		if e := readJSONFile(read, filepath.Join(dir, runtimeFileName), &runtime); e == nil {
+			meta.SessionID = runtime.SessionID
+		} else if !errors.Is(e, os.ErrNotExist) {
+			return sessionMetadata{}, e
+		} else if err != nil {
+			return sessionMetadata{}, err
+		}
 	}
 	return normalizeSessionMetadata(meta), nil
 }
@@ -2209,7 +2237,6 @@ type runtimeMetadata struct {
 const engineDynamicToolsVersion = 8
 
 type sessionMetadata struct {
-	EmptyThreads                   map[string]bool   `json:"empty_threads,omitempty"`
 	DynamicToolsVersion            int               `json:"dynamic_tools_version,omitempty"`
 	RuntimeID                      string            `json:"runtime_id"`
 	SessionID                      string            `json:"session_id"`
@@ -2240,7 +2267,6 @@ func sessionToRuntimeMetadata(session *Session) runtimeMetadata {
 func sessionToSessionMetadata(session *Session) sessionMetadata {
 	return normalizeSessionMetadata(sessionMetadata{
 		DynamicToolsVersion:            engineDynamicToolsVersion,
-		EmptyThreads:                   maps.Clone(session.emptyThreads),
 		RuntimeID:                      session.RuntimeID,
 		SessionID:                      session.SessionID,
 		WorkspaceDir:                   session.WorkspaceDir,

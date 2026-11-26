@@ -26,10 +26,11 @@ type liveSession struct {
 	contextUsage          map[string]modelcap.ContextUsage
 	threadModels          map[string]contract.TurnModel
 	mu                    sync.Mutex
-	conversationResumeMu  sync.Mutex
 	conversationPersistMu sync.Mutex
-	// After startup, writers hold both conversationPersistMu and mu. Only unused IDs are recorded.
-	emptyThreads          map[string]bool
+	preparingThreads      map[string]chan struct{}
+	defaultThreadLoaded   bool
+	// Only threads created by this process can be replaced when upgrading room tools.
+	unusedThreads         map[string]bool
 	memoryCheckpointMu    sync.Mutex
 	memoryMaintenanceMu   sync.Mutex
 	mcpReloadMu           sync.Mutex
@@ -63,7 +64,7 @@ type liveSession struct {
 }
 
 func (s *liveSession) sessionIDs() []string {
-	if s == nil || s.session == nil {
+	if s == nil {
 		return nil
 	}
 	seen := map[string]struct{}{}
@@ -79,9 +80,11 @@ func (s *liveSession) sessionIDs() []string {
 		seen[sessionID] = struct{}{}
 		ids = append(ids, sessionID)
 	}
-	add(s.session.SessionID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.session != nil {
+		add(s.session.SessionID)
+	}
 	for _, sessionID := range s.conversationSessions {
 		add(sessionID)
 	}

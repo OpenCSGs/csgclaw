@@ -1933,8 +1933,8 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	if handle.HandleID != "main-thread" {
-		t.Fatalf("initial handle id = %q, want main-thread", handle.HandleID)
+	if handle.HandleID != handle.RuntimeID {
+		t.Fatalf("idle handle id = %q, want %q", handle.HandleID, handle.RuntimeID)
 	}
 
 	legacyWorkspaceDir := filepath.Join(root, "alice", ".codex", "workspace")

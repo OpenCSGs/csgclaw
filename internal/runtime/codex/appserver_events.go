@@ -1144,7 +1144,12 @@ func (s *liveSession) appServerPublishesFilesForThread(threadID string) bool {
 }
 
 func (m *appServerManager) appServerPrimaryThreadID(live *liveSession) string {
-	if live == nil || live.session == nil {
+	if live == nil {
+		return ""
+	}
+	live.mu.Lock()
+	defer live.mu.Unlock()
+	if live.session == nil {
 		return ""
 	}
 	return strings.TrimSpace(live.session.SessionID)
