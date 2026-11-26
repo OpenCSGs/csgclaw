@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -3480,54 +3479,6 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			return nil, false
 		})
 
-	case "lost-ack", "lost-ack-active", "lost-ack-missing", "lost-ack-conflict":
-		runAppServerHelper(t, func(_ int, msg map[string]any) (map[string]any, bool) {
-			params, _ := msg["params"].(map[string]any)
-			const thread = "original-thread"
-			const turn = "original-turn"
-			switch msg["method"] {
-			case "thread/start", "thread/resume":
-				return rpcResult(msg["id"], map[string]any{"threadId": thread}), true
-			case "turn/start":
-				// Save evidence on the peer side, then exit before returning an RPC response.
-				f, err := os.OpenFile("accepted-messages", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, err = fmt.Fprintln(f, params["clientUserMessageId"]); err != nil {
-					t.Fatal(err)
-				}
-				if err = f.Close(); err != nil {
-					t.Fatal(err)
-				}
-				os.Exit(0)
-			case "thread/read":
-				native := map[string]any{"id": thread, "status": map[string]string{"type": "idle"}}
-				if params["includeTurns"] == true {
-					data, err := os.ReadFile("accepted-messages")
-					if err != nil {
-						t.Fatal(err)
-					}
-					item := map[string]any{"id": turn, "status": "completed", "completedAt": 100, "itemsView": "full", "items": []any{map[string]any{"type": "userMessage", "clientId": strings.TrimSpace(string(data))}, map[string]any{"type": "agentMessage", "id": "reply", "text": "original reply", "phase": "final_answer"}}}
-					switch mode {
-					case "lost-ack":
-						native["turns"] = []any{item}
-					case "lost-ack-conflict":
-						other := maps.Clone(item)
-						other["id"] = "another-turn"
-						native["turns"] = []any{item, other}
-					case "lost-ack-active":
-						item["status"] = "inProgress"
-						delete(item, "completedAt")
-						native["status"] = map[string]string{"type": "active"}
-						native["turns"] = []any{item}
-						writeRPCNotification(t, "turn/completed", map[string]any{"threadId": thread, "turn": map[string]any{"id": turn, "status": "completed"}})
-					}
-				}
-				return rpcResult(msg["id"], map[string]any{"thread": native}), true
-			}
-			return nil, false
-		})
 	case "fail-before-handshake":
 		_, _ = fmt.Fprintln(os.Stderr, "login failed")
 		_, _ = fmt.Fprintln(os.Stderr, "api_key = sk-secret")

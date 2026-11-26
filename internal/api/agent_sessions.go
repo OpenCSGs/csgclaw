@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -49,7 +48,6 @@ var (
 )
 
 type agentSessionResponseRequest struct {
-	ClientMessageID string                       `json:"client_message_id,omitempty"`
 	ResourceRefs    []apitypes.ResourceReference `json:"resource_refs,omitempty"`
 	UserInput       bool                         `json:"user_input,omitempty"`
 	Model           string                       `json:"model,omitempty"`
@@ -145,18 +143,6 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		writeSessionInputError(w, err)
 		return
 	}
-	headerKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
-	if headerKey != "" {
-		if input.clientMessageID != "" && input.clientMessageID != headerKey {
-			writeAgentSessionError(w, http.StatusBadRequest, "invalid_request", "Idempotency-Key and client_message_id must match", "client_message_id")
-			return
-		}
-		input.clientMessageID = headerKey
-	}
-	if len(input.clientMessageID) > 256 {
-		writeAgentSessionError(w, http.StatusBadRequest, "invalid_request", "message ID exceeds 256 bytes", "client_message_id")
-		return
-	}
 	input.reasoningSummary = stream && wantsAgentSessionReasoningSummary(r.Header)
 	if input.userInput && !authorized {
 		writeSessionInputError(w, errSessionAuthorization)
@@ -245,10 +231,6 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 	sessionID := binding.ExternalSession
 	createdAt := time.Now().UTC()
 	responseID := newAgentSessionAPIID("resp")
-	if input.clientMessageID != "" {
-		sum := sha256.Sum256([]byte(binding.ConversationKey + "\x00" + input.clientMessageID))
-		responseID = "resp_" + hex.EncodeToString(sum[:])
-	}
 	response := agentSessionResponse{
 		ID:        responseID,
 		Object:    "response",
@@ -263,11 +245,6 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 		},
 	}
 	turnKey := selected.ID + "\x00" + sessionID
-	// An identified request can be rejoined by a new HTTP connection. The
-	// explicit cancel endpoint still owns a cancellation handle for this turn.
-	if input.clientMessageID != "" {
-		ctx = context.WithoutCancel(ctx)
-	}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	turn := agentSessionTurn{
@@ -277,20 +254,14 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 		turnID:          agentengine.TurnID(responseID),
 		cancel:          cancel,
 	}
-	registration := agentengine.TurnID(newAgentSessionAPIID("request"))
-	h.addSessionTurn(turnKey, registration, turn)
-	defer h.removeSessionTurn(turnKey, registration)
+	h.addSessionTurn(turnKey, turn)
+	defer h.removeSessionTurn(turnKey, turn.turnID)
 
 	conversation := h.agentEngine.Conversations(selected.ID)
-	newUploads, err := h.prepareSessionUploads(runCtx, selected, sessionID, responseID, input)
+	newUploads, err := h.storeSessionUploads(runCtx, selected, sessionID, responseID, input.Files)
 	cleanupMessagePayload(r)
 	r.MultipartForm = nil
 	if err != nil {
-		if errors.Is(err, agentsession.ErrMessageConflict) {
-			return false, func() {
-				writeAgentSessionError(w, http.StatusConflict, "message_id_conflict", err.Error(), "client_message_id")
-			}
-		}
 		slog.Warn("store session input attachments failed", "response_id", response.ID, "error", err)
 		return false, func() {
 			writeAgentSessionError(w, http.StatusServiceUnavailable, "attachment_unavailable", "input attachments could not be saved", "input")
@@ -365,17 +336,6 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 		})
 	}
 
-	if sink != nil && input.clientMessageID != "" {
-		streamSink := sink
-		disconnected := false
-		sink = agentengine.EventSinkFunc(func(ctx context.Context, event agentengine.TurnEvent) error {
-			if !disconnected {
-				disconnected = streamSink.Emit(ctx, event) != nil
-			}
-			return nil
-		})
-	}
-
 	policy := agentengine.InteractionTextOnly
 	if acceptUserInput {
 		policy = agentengine.InteractionUserInputOnly
@@ -437,7 +397,7 @@ func (h *Handler) writeAgentSessionResult(w http.ResponseWriter, r *http.Request
 	response.CompletedAt = &completedAtUnix
 	response.Status = "completed"
 	response.Output = []agentSessionResponseOutput{{
-		ID:          "msg_" + strings.TrimPrefix(response.ID, "resp_"),
+		ID:          newAgentSessionAPIID("msg"),
 		Type:        "message",
 		Status:      "completed",
 		Role:        "assistant",
@@ -518,7 +478,7 @@ func (h *Handler) resolveSessionAgent(selector string) (agentengine.Agent, error
 	return selected, nil
 }
 
-func (h *Handler) addSessionTurn(key string, registration agentengine.TurnID, turn agentSessionTurn) {
+func (h *Handler) addSessionTurn(key string, turn agentSessionTurn) {
 	h.sessionTurnsMu.Lock()
 	defer h.sessionTurnsMu.Unlock()
 	if h.sessionTurns == nil {
@@ -527,7 +487,7 @@ func (h *Handler) addSessionTurn(key string, registration agentengine.TurnID, tu
 	if h.sessionTurns[key] == nil {
 		h.sessionTurns[key] = make(map[agentengine.TurnID]agentSessionTurn)
 	}
-	h.sessionTurns[key][registration] = turn
+	h.sessionTurns[key][turn.turnID] = turn
 }
 
 func (h *Handler) cancelSessionTurns(ctx context.Context, key string, authorized bool) error {
@@ -546,13 +506,6 @@ func (h *Handler) cancelSessionTurns(ctx context.Context, key string, authorized
 		if turn.cancel != nil {
 			turn.cancel()
 		}
-	}
-	canceled := make(map[agentengine.TurnID]bool)
-	for _, turn := range turns {
-		if canceled[turn.turnID] {
-			continue
-		}
-		canceled[turn.turnID] = true
 		if err := h.agentEngine.Conversations(turn.agentID).Cancel(ctx, turn.conversationKey, turn.turnID); err != nil {
 			return err
 		}
@@ -592,8 +545,6 @@ func (h *Handler) writeSessionTurnError(w http.ResponseWriter, ctx context.Conte
 		writeAgentSessionError(w, http.StatusServiceUnavailable, string(err.Code), err.Message, "agent", inputs...)
 	case agentengine.ErrorRuntimeAdapterUnavailable:
 		writeAgentSessionError(w, http.StatusServiceUnavailable, string(err.Code), err.Message, "agent", inputs...)
-	case agentengine.ErrorDeliveryUnconfirmed:
-		writeAgentSessionError(w, http.StatusConflict, string(err.Code), err.Message, nil, inputs...)
 	case agentengine.ErrorConversationBusy:
 		writeAgentSessionError(w, http.StatusConflict, "session_busy", err.Message, "session_id", inputs...)
 	case agentengine.ErrorInteractionUnsupported:
@@ -715,8 +666,6 @@ func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body
 			err = decoder.Decode(&request.Extra)
 		case strings.EqualFold(name, "extra_type"):
 			err = decoder.Decode(&request.ExtraType)
-		case strings.EqualFold(name, "client_message_id"):
-			err = decoder.Decode(&request.ClientMessageID)
 		case strings.EqualFold(name, "model"):
 			err = decoder.Decode(&request.Model)
 		case strings.EqualFold(name, "reasoning_effort"):
@@ -751,7 +700,6 @@ func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInp
 		}
 		input.Files = uploads
 	}
-	input.clientMessageID = strings.TrimSpace(request.ClientMessageID)
 	input.userInput = request.UserInput
 	input.model = strings.TrimSpace(request.Model)
 	input.reasoningEffort = strings.TrimSpace(request.ReasoningEffort)

@@ -716,7 +716,7 @@ func (e *Engine) complete(identity conversationIdentity, turn *activeTurn, resul
 	if e.active[identity] == turn {
 		delete(e.active, identity)
 	}
-	if result.Dispatched && (result.Error == nil || result.Error.Code != ErrorDeliveryUnconfirmed) {
+	if result.Dispatched {
 		e.ensureState()
 		key := turnIdentity{conversationIdentity: identity, id: turn.request.ID}
 		e.completed[key] = completedTurn{request: cloneTurnRequest(turn.request), events: cloneTurnEvents(turn.events), result: cloneTurnResult(result)}

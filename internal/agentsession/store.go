@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync"
 
-	"csgclaw/internal/keylock"
 	"csgclaw/internal/localstore"
 )
 
@@ -45,7 +44,6 @@ type legacyPersistedState struct {
 // agent-specific JSONL file. There is deliberately no lock around persistence:
 // unrelated sessions never wait on each other's disk writes.
 type Store struct {
-	messages  keylock.Locks
 	dir       string
 	items     sync.Map // map[string]Binding
 	pendingMu sync.Mutex

@@ -8,7 +8,6 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelprovider"
-	"csgclaw/internal/runtime/turnjournal"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -94,7 +93,6 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 			Model:                  request.Model,
 			SessionID:              sessionID,
 			ClientUserMessageID:    string(request.ID),
-			ConversationKey:        string(request.ConversationKey),
 			Locale:                 request.Locale,
 			Prompt:                 blocks,
 			TextOnlyUserInput:      request.Interaction == contract.InteractionTextOnly,
@@ -177,11 +175,10 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 
 func (a *ConversationAdapter) session(ctx context.Context, request contract.TurnRequest) (string, *contract.TurnError) {
 	key := contract.RuntimeSessionKey(request)
-	ctx = context.WithValue(ctx, preparingMessage{}, preparingMessage{string(request.ConversationKey), string(request.ID)})
 	if request.Continuation == contract.ContinuationRequireExisting {
 		sessionID, ok, err := a.runtime.ExistingEngineSession(ctx, a.runtimeID, key)
 		if err != nil {
-			return "", resultFromContext(ctx, err).Error
+			return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 		}
 		if !ok {
 			return "", &contract.TurnError{Code: contract.ErrorConversationNotResumable, Message: "conversation has no Runtime-native mapping"}
@@ -190,7 +187,7 @@ func (a *ConversationAdapter) session(ctx context.Context, request contract.Turn
 	}
 	sessionID, err := a.runtime.EnsureEngineSession(ctx, a.runtimeID, key)
 	if err != nil {
-		return "", resultFromContext(ctx, fmt.Errorf("ensure Codex conversation: %w", err)).Error
+		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: fmt.Sprintf("ensure Codex conversation: %v", err)}
 	}
 	return sessionID, nil
 }
@@ -221,9 +218,6 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		if err := output.restoreFailure(ctx, sink, eventErr); err != nil {
 			result := resultFromContext(ctx, err)
 			return &result
-		}
-		if errors.Is(eventErr, turnjournal.ErrUnconfirmed) {
-			code = contract.ErrorDeliveryUnconfirmed
 		}
 		if errors.Is(eventErr, errContextCompaction) {
 			code = contract.ErrorCode("context_compaction_failed")
@@ -725,9 +719,6 @@ func emitTurnEvent(ctx context.Context, sink contract.EventSink, event contract.
 }
 
 func resultFromContext(ctx context.Context, err error) contract.TurnResult {
-	if errors.Is(err, turnjournal.ErrUnconfirmed) {
-		return failedResult(contract.ErrorDeliveryUnconfirmed, err.Error())
-	}
 	if errors.Is(err, errContextCompaction) {
 		return failedResult(contract.ErrorCode("context_compaction_failed"), err.Error())
 	}

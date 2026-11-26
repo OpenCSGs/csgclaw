@@ -27,7 +27,6 @@ import (
 	"csgclaw/internal/modelcap"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/codex"
-	"csgclaw/internal/runtime/turnjournal"
 )
 
 type modelSelection struct{ model, effort string }
@@ -120,7 +119,6 @@ type sessionModelBridgePayload struct {
 type nativeSessionModelBridge struct {
 	t                  *testing.T
 	ctx                context.Context
-	handler            *Handler
 	server             *httptest.Server
 	controller         *agent.Controller
 	runtime            *codex.Runtime
@@ -238,7 +236,6 @@ func newNativeSessionModelBridge(t *testing.T, defaultEffort string) *nativeSess
 	}
 	t.Cleanup(func() { handler.CloseConnectors() })
 	handler.SetAgentEngine(engine, bindings)
-	b.handler = handler
 	routes := handler.Routes()
 	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/llm/") {
@@ -367,71 +364,4 @@ func (b *nativeSessionModelBridge) turn(session string, request modelSelection, 
 		}
 	}
 	b.threads[session] = thread
-}
-
-// Discard the first HTTP reply, then start fresh workers and an empty Engine
-// cache. Remove the optional ACK receipt to exercise native clientId lookup.
-func TestNativeSessionResponseConcurrentRetriesAfterLostReply(t *testing.T) {
-	b := newNativeSessionModelBridge(t, "low")
-	makeRequest := func(body string) *http.Request {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+b.agentID+"/sessions/retry-test/responses", strings.NewReader(body))
-		req.Header.Set("Authorization", "Bearer fixture-token")
-		req.Header.Set("Content-Type", "application/json")
-		return req
-	}
-	req := makeRequest(`{"input":"Reply done.","client_message_id":"message-1"}`)
-	first := httptest.NewRecorder()
-	b.handler.Routes().ServeHTTP(first, req)
-	if first.Code != http.StatusOK {
-		t.Fatalf("first response: %s", first.Body.String())
-	}
-	var original agentSessionResponse
-	if err := json.Unmarshal(first.Body.Bytes(), &original); err != nil {
-		t.Fatal(err)
-	}
-	root, err := b.runtime.RuntimeDir(b.runtimeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := b.controller.Stop(b.ctx, b.agentID); err != nil {
-		t.Fatal(err)
-	}
-	receipts, err := filepath.Glob(filepath.Join(root, turnjournal.Directory, "messages", "*.turn"))
-	if err != nil || len(receipts) != 1 {
-		t.Fatalf("ACK receipts %v: %v", receipts, err)
-	}
-	if err = os.Remove(receipts[0]); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = b.controller.Start(b.ctx, b.agentID); err != nil {
-		t.Fatal(err)
-	}
-	b.handler.SetAgentEngine(agentengine.New(b.controller), b.bindings)
-	routes := b.handler.Routes()
-	const n = 6
-	results := make(chan *httptest.ResponseRecorder, n)
-	start := make(chan struct{})
-	for range n {
-		go func() {
-			req := makeRequest(`{"input":"Reply done."}`)
-			req.Header.Set("Idempotency-Key", "message-1")
-			w := httptest.NewRecorder()
-			<-start
-			routes.ServeHTTP(w, req)
-			results <- w
-		}()
-	}
-	close(start)
-	for range n {
-		w := <-results
-		var replay agentSessionResponse
-		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &replay) != nil || replay.ID != original.ID || !reflect.DeepEqual(replay.Output, original.Output) {
-			t.Fatalf("replay: %d %s; original %s", w.Code, w.Body.String(), first.Body.String())
-		}
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if len(b.upstream) != 1 || len(b.native) != 1 {
-		t.Fatalf("native calls=%d model calls=%d", len(b.native), len(b.upstream))
-	}
 }

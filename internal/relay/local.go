@@ -56,7 +56,7 @@ func (e *LocalExecutor) Execute(ctx context.Context, frame Frame) Frame {
 	var response Response
 	base := "/api/v1/agents/" + url.PathEscape(e.AgentID) + "/sessions/" + session
 	path := base + "/responses"
-	payload := map[string]any{"input": text, "stream": false, "client_message_id": frame.ResponseID}
+	payload := map[string]any{"input": text, "stream": false}
 	if len(frame.ResourceRefs) > 0 {
 		payload["resource_refs"] = frame.ResourceRefs
 	}

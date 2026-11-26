@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"csgclaw/internal/runtime/turnjournal"
 	"errors"
 	"fmt"
 	"os"
@@ -11,7 +10,6 @@ import (
 
 var recreatePersistentPathPatterns = []string{
 	workspaceDirName,
-	turnjournal.Directory,
 	sessionFileName,
 	filepath.Join(homeDirName, "memories"),
 	filepath.Join(homeDirName, "memories_*.sqlite*"),

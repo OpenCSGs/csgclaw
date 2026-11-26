@@ -19,12 +19,11 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/modelcap"
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/runtime/turnjournal"
 )
 
 // Exercises the bundled process, real Responses transport and event subscription.
 func TestContextUsageBundledCodexE2E(t *testing.T) {
-	for _, mode := range []string{"diagnostics", "usage", "unsent_cold_resume", "missing_used_rollout", "native_message_identity", "manual_compact", "auto_compact", "overflow", "cold_resume", "default_cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure", "output_budget"} {
+	for _, mode := range []string{"diagnostics", "usage", "unsent_cold_resume", "missing_used_rollout", "manual_compact", "auto_compact", "overflow", "cold_resume", "default_cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure", "output_budget"} {
 		t.Run(mode, func(t *testing.T) { testContextBundledCodex(t, mode) })
 	}
 }
@@ -198,17 +197,7 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		diagnostic.Running()
 		ctx = diagnostics.WithRecord(ctx, diagnostic)
 	}
-	firstMessage := PromptRequest{SessionID: thread, Prompt: []PromptContentBlock{TextBlock("CSG_CONTEXT_SENTINEL Reply done.")}}
-	if coldResume {
-		firstMessage.ConversationKey = conversationBinding
-		firstMessage.ClientUserMessageID = "retry-original-message"
-	}
-	if mode == "native_message_identity" {
-		firstMessage.ClientUserMessageID = "native-duplicate"
-		firstMessage.ConversationKey = conversationBinding
-		firstMessage.Prompt = []PromptContentBlock{TextBlock("Reply to the native ID test.")}
-	}
-	if err := rt.PromptTurn(ctx, h.RuntimeID, firstMessage); err != nil {
+	if err := rt.Prompt(ctx, h.RuntimeID, thread, "CSG_CONTEXT_SENTINEL Reply done."); err != nil {
 		t.Fatal(err)
 	}
 	if mode == "missing_used_rollout" {
@@ -232,55 +221,6 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		meta, err := rt.readSessionMetadata(h.RuntimeID)
 		if id := meta.ConversationSessions[conversationBinding]; err != nil || id == "" || id == thread {
 			t.Fatalf("replacement binding = %q; old=%q err=%v", id, thread, err)
-		}
-		return
-	}
-	if mode == "native_message_identity" {
-		manager := rt.SessionManager().(*appServerManager)
-		live := manager.liveSession(h.RuntimeID)
-		original, err := turnjournal.ConfirmedTurn(live.spec.RuntimeDir, conversationBinding, firstMessage.ClientUserMessageID)
-		if err != nil || original == "" {
-			t.Fatalf("first native turn: %q %v", original, err)
-		}
-		input, err := appServerPromptInput(firstMessage)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// Probe the native runtime directly with the identical user input and ID.
-		raw, err := live.appClient.request(ctx, "turn/start", appServerTurnStartParamsForContext(ctx, live.spec, thread, input, firstMessage.ClientUserMessageID))
-		duplicate := appServerTurnIDFromResult(raw)
-		if err != nil || duplicate == "" || duplicate == original {
-			t.Fatalf("native duplicate: first=%q second=%q err=%v", original, duplicate, err)
-		}
-		waitForRuntime(t, func() bool { return requests.Load() == 2 })
-		waitForRuntime(t, func() bool {
-			raw, err := live.appClient.request(ctx, "thread/read", map[string]any{"threadId": thread, "includeTurns": true})
-			var history struct {
-				Thread struct {
-					Turns []struct {
-						ID, Status string
-						Items      []struct{ Type, ClientID string }
-					}
-				}
-			}
-			if err != nil || json.Unmarshal(raw, &history) != nil {
-				return false
-			}
-			matches := map[string]bool{}
-			for _, turn := range history.Thread.Turns {
-				for _, item := range turn.Items {
-					if turn.Status == "completed" && item.Type == "userMessage" && item.ClientID == firstMessage.ClientUserMessageID {
-						matches[turn.ID] = true
-					}
-				}
-			}
-			return matches[original] && matches[duplicate]
-		})
-		if err := rt.PromptTurn(ctx, h.RuntimeID, firstMessage); !errors.Is(err, turnjournal.ErrUnconfirmed) {
-			t.Fatalf("conflicting historical matches: %v", err)
-		}
-		if requests.Load() != 2 {
-			t.Fatalf("reconciliation sent another request")
 		}
 		return
 	}
@@ -432,14 +372,6 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	}
 	if (mode == "auto_compact" || mode == "sol61_auto_compact" || mode == "overflow") && (!sawCompaction || requests.Load() < 3) {
 		t.Fatalf("compaction=%v requests=%d", sawCompaction, requests.Load())
-	}
-	if coldResume {
-		before := requests.Load()
-		firstMessage.SessionID = thread
-		replay, err := rt.SessionManager().Prompt(ctx, SessionHandle{RuntimeID: h.RuntimeID}, firstMessage)
-		if err != nil || len(replay.history) == 0 || replay.history[len(replay.history)-1].Text != "done" || requests.Load() != before {
-			t.Fatalf("replay after restart = %+v, error %v, model calls %d -> %d", replay, err, before, requests.Load())
-		}
 	}
 	if coldResume && latest.ContextWindow < 40000 {
 		t.Fatalf("capacity not refreshed: %+v", latest)

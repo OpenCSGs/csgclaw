@@ -291,7 +291,6 @@ const (
 	ErrorAgentNotFound               ErrorCode = "agent_not_found"
 	ErrorAgentUnavailable            ErrorCode = "agent_unavailable"
 	ErrorRuntimeAdapterUnavailable   ErrorCode = "runtime_adapter_unavailable"
-	ErrorDeliveryUnconfirmed         ErrorCode = "delivery_unconfirmed"
 	ErrorConversationBusy            ErrorCode = "conversation_busy"
 	ErrorConversationNotResumable    ErrorCode = "conversation_not_resumable"
 	ErrorFileUnavailable             ErrorCode = "file_unavailable"

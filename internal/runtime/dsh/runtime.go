@@ -3,7 +3,6 @@ package dsh
 import (
 	"context"
 	"csgclaw/internal/diagnostics"
-	"csgclaw/internal/keylock"
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelusage"
 	"csgclaw/internal/runtime/conversationconfig"
@@ -90,7 +89,6 @@ type Runtime struct {
 }
 
 type process struct {
-	preparations         keylock.Locks
 	diagnosticObserver   *diagnostics.RuntimeObserver
 	cleanupErr           error
 	contextUsage         map[string]modelcap.ContextUsage

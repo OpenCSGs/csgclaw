@@ -2,9 +2,7 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +20,6 @@ import (
 )
 
 type agentSessionInput struct {
-	clientMessageID             string
 	resourceRefs                []apitypes.ResourceReference
 	resourcePrompt              string
 	model                       string
@@ -260,71 +257,4 @@ func (h *Handler) sessionWorkspaceRoot(agent agentengine.Agent) (string, error) 
 		return "", err
 	}
 	return filepath.Abs(root)
-}
-
-// Include the caller's normalized input and upload contents. Workspace paths,
-// server-generated attachment IDs and temporary multipart names change on retry.
-func (input agentSessionInput) fingerprint() (string, error) {
-	type fileDigest struct{ Name, MediaType, SHA256 string }
-	var files []fileDigest
-	for _, f := range input.Files {
-		src, err := f.open()
-		if err != nil {
-			return "", err
-		}
-		sum := sha256.New()
-		_, err = io.Copy(sum, src)
-		src.Close()
-		if err != nil {
-			return "", err
-		}
-		files = append(files, fileDigest{f.Name, f.MediaType, hex.EncodeToString(sum.Sum(nil))})
-	}
-	body, err := json.Marshal([]any{input.Text, input.model, input.reasoningEffort, input.userInput, input.preservePendingInteractions, input.respondingTo, input.attachmentIDs, input.resourceRefs, files})
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(body)
-	return hex.EncodeToString(sum[:]), nil
-}
-
-func (h *Handler) prepareSessionUploads(ctx context.Context, agent agentengine.Agent, sessionID, responseID string, input agentSessionInput) ([]im.MessageAttachment, error) {
-	if input.clientMessageID == "" {
-		return h.storeSessionUploads(ctx, agent, sessionID, responseID, input.Files)
-	}
-	fingerprint, err := input.fingerprint()
-	if err != nil {
-		return nil, err
-	}
-	var stored []im.MessageAttachment
-	ids, err := h.sessionBindings.PrepareMessage(ctx, responseID, fingerprint, func() ([]string, error) {
-		var err error
-		stored, err = h.storeSessionUploads(ctx, agent, sessionID, responseID, input.Files)
-		if err != nil {
-			return nil, err
-		}
-		var ids []string
-		for _, file := range stored {
-			ids = append(ids, file.ID)
-		}
-		return ids, nil
-	})
-	if err != nil || len(ids) == 0 || len(stored) > 0 {
-		return stored, err
-	}
-	root, err := h.sessionWorkspaceRoot(agent)
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range ids {
-		file, err := h.im.SessionAttachmentFile(agent.ID, sessionID, id)
-		if err != nil {
-			return nil, err
-		}
-		if !file.WorkspaceMatches(root) {
-			return nil, im.ErrSessionAttachmentNotFound
-		}
-		stored = append(stored, file.Attachment)
-	}
-	return stored, nil
 }

@@ -15,7 +15,6 @@ type PromptRequest struct {
 	Model                  *contract.TurnModel
 	SessionID              string
 	ClientUserMessageID    string
-	ConversationKey        string
 	Locale                 string
 	TextOnlyUserInput      bool
 	StreamReasoningSummary bool

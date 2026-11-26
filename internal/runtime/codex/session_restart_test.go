@@ -11,7 +11,6 @@ import (
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/runtime/turnjournal"
 	"csgclaw/internal/taskconfig"
 )
 
@@ -403,7 +402,7 @@ func TestRestartBetweenBindingAndFirstSend(t *testing.T) {
 			if err != nil || replacement == "" || replacement == unused {
 				t.Fatalf("replacement: %q %v", replacement, err)
 			}
-			if _, err := second.Prompt(t.Context(), h, PromptRequest{SessionID: replacement, ConversationKey: key, ClientUserMessageID: "message-1", Prompt: []PromptContentBlock{TextBlock("hello")}}); err != nil {
+			if _, err := second.Prompt(t.Context(), h, PromptRequest{SessionID: replacement, Prompt: []PromptContentBlock{TextBlock("hello")}}); err != nil {
 				t.Fatal(err)
 			}
 			if err := second.Stop(t.Context(), h); err != nil {
@@ -414,13 +413,9 @@ func TestRestartBetweenBindingAndFirstSend(t *testing.T) {
 			if err != nil || next == "" || next == replacement {
 				t.Fatalf("replacement for used thread = %q, %v", next, err)
 			}
-			req := PromptRequest{SessionID: next, ConversationKey: key, ClientUserMessageID: "message-2", Prompt: []PromptContentBlock{TextBlock("continue")}}
+			req := PromptRequest{SessionID: next, Prompt: []PromptContentBlock{TextBlock("continue")}}
 			if _, err := third.Prompt(t.Context(), h, req); err != nil {
 				t.Fatal(err)
-			}
-			req.ClientUserMessageID = "message-1"
-			if _, err := third.Prompt(t.Context(), h, req); !errors.Is(err, turnjournal.ErrUnconfirmed) {
-				t.Fatalf("previously dispatched message: %v", err)
 			}
 			saved, err := readSavedThreads(os.ReadFile, spec.RuntimeDir)
 			if err != nil {
@@ -432,55 +427,6 @@ func TestRestartBetweenBindingAndFirstSend(t *testing.T) {
 			}
 			if id != next {
 				t.Fatalf("saved binding = %q, want %q", id, next)
-			}
-		})
-	}
-}
-
-func TestCodexLostStartAcknowledgement(t *testing.T) {
-	for _, mode := range []string{"lost-ack", "lost-ack-active", "lost-ack-missing", "lost-ack-conflict"} {
-		t.Run(mode, func(t *testing.T) {
-			withAppServerHelperCommand(t, mode)
-			spec := testAppServerSessionSpec(t.TempDir())
-			h := SessionHandle{RuntimeID: spec.RuntimeID}
-			start := func() *appServerManager {
-				deps := testAppServerManagerDeps()
-				deps.SaveSessionMetadata = func(dir string, meta sessionMetadata) error {
-					return writeJSONFile(os.WriteFile, filepath.Join(dir, sessionFileName), meta)
-				}
-				m := newAppServerManager(deps)
-				if _, err := m.Start(t.Context(), spec); err != nil {
-					t.Fatal(err)
-				}
-				t.Cleanup(func() { _ = m.Stop(context.Background(), h) })
-				return m
-			}
-			req := PromptRequest{ClientUserMessageID: "shared-id", Prompt: []PromptContentBlock{TextBlock("hello")}}
-			first := start()
-			if _, err := first.Prompt(t.Context(), h, req); !errors.Is(err, turnjournal.ErrUnconfirmed) {
-				t.Fatalf("lost ACK returned %v", err)
-			}
-			second := start()
-			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-			defer cancel()
-			replay, err := second.Prompt(ctx, h, req)
-			switch mode {
-			case "lost-ack":
-				if err != nil || len(replay.history) != 1 || replay.history[0].Text != "original reply" {
-					t.Fatalf("replay=%+v err=%v", replay, err)
-				}
-			case "lost-ack-active":
-				if err != nil || replay.StopReason != StopReasonEndTurn {
-					t.Fatalf("resume active turn=%+v err=%v", replay, err)
-				}
-			default:
-				if !errors.Is(err, turnjournal.ErrUnconfirmed) {
-					t.Fatalf("ambiguous history returned %v", err)
-				}
-			}
-			data, err := os.ReadFile(filepath.Join(spec.WorkspaceDir, "accepted-messages"))
-			if err != nil || string(data) != "shared-id\n" {
-				t.Fatalf("peer received %q, err=%v", data, err)
 			}
 		})
 	}

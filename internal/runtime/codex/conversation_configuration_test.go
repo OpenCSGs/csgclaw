@@ -9,7 +9,6 @@ import (
 	skill "csgclaw/internal/skill/state"
 	"csgclaw/internal/taskconfig"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -73,9 +72,7 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 	rt := New(deps)
 	t.Cleanup(func() { _ = rt.Close() })
 	ids := map[string]string{}
-	var message int
 	run := func(agent, room, model string, modes ...string) int {
-		message++
 		mode := ExecutionModeReadOnly
 		if len(modes) > 0 {
 			mode = modes[0]
@@ -83,7 +80,7 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		req := contract.TurnRequest{ID: contract.TurnID(fmt.Sprintf("turn-%d", message)), ConversationKey: contract.ConversationKey(room), Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "hello"}}, RoomConfiguration: &contract.RoomConfiguration{RoomID: room, Configuration: taskconfig.Config{ModelID: model, ExecutionMode: mode}}}
+		req := contract.TurnRequest{ID: "turn", ConversationKey: contract.ConversationKey(room), Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "hello"}}, RoomConfiguration: &contract.RoomConfiguration{RoomID: room, Configuration: taskconfig.Config{ModelID: model, ExecutionMode: mode}}}
 		result := rt.Conversation(agent).Run(ctx, req, contract.EventSinkFunc(func(context.Context, contract.TurnEvent) error { return nil }))
 		if result.Status != contract.TurnSucceeded {
 			t.Fatalf("run %s/%s: %+v", agent, room, result)

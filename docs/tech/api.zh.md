@@ -1554,10 +1554,6 @@ prompt context 使用；它不是 thread reply 列表。Participant client 可�
 服务端按 Agent 和 `session_id` 保存会话绑定，后续请求复用同一会话。直接会话的 `metadata.room_id` 为空字符串。
 Portal 上传和下载都使用当前 CSGClaw 实例的 `endpoint` 和网关登录凭证。
 
-需要在应答丢失后重试时，请在 JSON 中提供 `client_message_id`，或使用 HTTP 请求头 `Idempotency-Key`。每条新消息使用独立的标识，最多 256 个字节。同一条消息重试时沿用原标识、输入和认证凭据。两处都提供标识时，值必须相同。标识在指定 Agent 和外部会话内有效。省略标识时，每次调用都会提交新消息。沿用标识但修改输入或认证身份时，服务返回 HTTP 409 和 `message_id_conflict`。
-
-提供消息标识后，HTTP 连接中断仍会继续执行，并发重试会等待同一个 turn。需要停止执行时，请调用会话取消接口。如果 Codex 在恢复对话时报告会话文件缺失，服务会在同一个外部会话内创建新的 Codex thread，并发送当前的新消息。新 thread 从这条消息开始记录历史。Worker 重启后，Codex 可以继续等待能够唯一识别的活动 turn，也可以读取已完成的文本答复和工具记录。仅凭 Codex 历史无法重建文件交付凭据。重试同一条消息时，如果无法确认原消息的处理结果，服务返回 HTTP 409 和 `delivery_unconfirmed`。已经开启的 SSE 流通过结束事件报告错误。DSH 进程退出后也按待确认处理。后续可以沿用原消息标识重新查询 Codex 历史。
-
 顶层字段 `attachment_ids` 是附件 ID 数组，用于引用同一 Agent、同一会话中已保存的文件。各个 ID 必须互不重复。启用服务认证时，上传文件或引用附件 ID 的请求均需提供有效凭证，认证失败返回 `401`。未知 ID 或其他 Agent、其他会话中的 ID 返回 `404`。JSON 请求可以同时引用已有附件 ID 和传入 Base64 文件，合计最多 10 个。返回的 `input_attachments` 按 `attachment_ids` 的顺序列出已有文件，然后按上传顺序列出新文件。
 
 启用认证时，如果会话没有等待提交的受保护表单，`user_input` 为 `false` 或省略的纯文本 JSON 请求可以使用匿名访问，请求体最多 1 MiB。超过上限返回 `413`。
