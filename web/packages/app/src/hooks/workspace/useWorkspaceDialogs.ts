@@ -24,35 +24,35 @@ export type UseWorkspaceDialogsResult = {
 export function useWorkspaceDialogs(): UseWorkspaceDialogsResult {
   const location = useLocation();
   const navigate = useNavigate();
-  const search = location.search;
+  const { search, state } = location;
   const feedbackTrigger = useContext(FeedbackTriggerContext);
 
   const current = useMemo(() => openWorkspaceDialog(search), [search]);
 
   const openSettings = useCallback(
     (section?: string, highlight?: boolean) => {
-      navigate({ search: settingsDialogSearch(search, section, highlight) }, { replace: true });
+      navigate({ search: settingsDialogSearch(search, section, highlight) }, { replace: true, state });
     },
-    [navigate, search],
+    [navigate, search, state],
   );
 
   const openProfile = useCallback(
     (humanID: string) => {
-      navigate({ search: profileDialogSearch(search, humanID) }, { replace: true });
+      navigate({ search: profileDialogSearch(search, humanID) }, { replace: true, state });
     },
-    [navigate, search],
+    [navigate, search, state],
   );
 
   const close = useCallback(() => {
-    navigate({ search: closeDialogSearch(search) }, { replace: true });
-  }, [navigate, search]);
+    navigate({ search: closeDialogSearch(search) }, { replace: true, state });
+  }, [navigate, search, state]);
 
   const setFeedbackOpen = useCallback(
     (open: boolean, trigger?: HTMLElement | null) => {
       if (feedbackTrigger) feedbackTrigger.current = open ? (trigger ?? null) : null;
-      navigate({ search: feedbackDialogSearch(search, open) }, { replace: true });
+      navigate({ search: feedbackDialogSearch(search, open) }, { replace: true, state });
     },
-    [feedbackTrigger, navigate, search],
+    [feedbackTrigger, navigate, search, state],
   );
 
   return {

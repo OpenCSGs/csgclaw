@@ -4461,6 +4461,35 @@ func TestAppServerCompletedMessageCorrectsStreamedDraft(t *testing.T) {
 	}
 }
 
+func TestGenerateImageToolReportsMissingModelBeforeConfirmation(t *testing.T) {
+	ctx := contract.WithImageGenerationPreflight(context.Background(), func(bool) error {
+		return errors.New("image_model_not_configured")
+	})
+	ctx = contract.WithImageGenerationHandler(ctx, func(context.Context, string, string, []int, modelprovider.ImageGenerationOptions) error {
+		t.Fatal("image handler called after failed preflight")
+		return nil
+	})
+	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
+	sink := &recordingSink{}
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = NewUserInputBroker(sink)
+	manager := newAppServerManager(deps)
+	request := appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
+		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"},
+	})}
+	response, err := manager.handleAppServerServerRequest("runtime-1", live, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := response.(map[string]any)
+	if result["success"] != false || result["contentItems"].([]map[string]any)[0]["text"] != "image_model_not_configured" {
+		t.Fatalf("unexpected tool response: %#v", result)
+	}
+	if events := sink.snapshot(); len(events) != 0 {
+		t.Fatalf("unexpected confirmation or status events: %+v", events)
+	}
+}
+
 func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 	calls := 0
 	ctx := contract.WithImageGenerationHandler(context.Background(), func(context.Context, string, string, []int, modelprovider.ImageGenerationOptions) error {

@@ -198,3 +198,40 @@ function attachmentSignature(name: string, sizeBytes: number): string {
     .trim()
     .toLocaleLowerCase()}:${Math.max(0, Number(sizeBytes || 0))}`;
 }
+
+export type ComposerAttachmentDraft = Omit<AttachmentDraft, "file"> & { file?: File };
+
+export function hasAttachmentFile(draft: ComposerAttachmentDraft): draft is AttachmentDraft {
+  return !!draft.file;
+}
+
+function draftSignature(item: Pick<AttachmentDraft, "name" | "sizeBytes">): string {
+  return attachmentSignature(item.name, item.sizeBytes);
+}
+
+export function selectComposerAttachmentFiles(
+  files: readonly File[],
+  current: ComposerAttachmentDraft[],
+): AttachmentSelectionResult {
+  const incoming = new Set(files.map((file) => attachmentSignature(file.name, file.size)));
+  return selectAttachmentFiles(
+    files,
+    current.filter((item) => item.file || !incoming.has(draftSignature(item))),
+  );
+}
+
+export function mergeComposerAttachments(
+  current: ComposerAttachmentDraft[],
+  added: AttachmentDraft[],
+): ComposerAttachmentDraft[] {
+  const remaining = new Map(added.map((item) => [draftSignature(item), item]));
+  const merged = current.map((item) => {
+    if (item.file) return item;
+    const signature = draftSignature(item);
+    const replacement = remaining.get(signature);
+    if (!replacement) return item;
+    remaining.delete(signature);
+    return { ...replacement, id: item.id };
+  });
+  return [...merged, ...remaining.values()];
+}

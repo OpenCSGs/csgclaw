@@ -80,6 +80,7 @@ export function WorkspaceUserMenu({
   const name = currentUser?.name || currentUser?.id || t("localIdentityFallback");
   const role = currentUser?.role || "";
   const iconOnly = presentation === "icon";
+  const appearanceValue = t(THEME_OPTIONS.find((option) => option.key === theme)?.labelKey ?? "themeSystem");
 
   return (
     <DropdownMenuRoot open={open} onOpenChange={setOpen}>
@@ -188,6 +189,7 @@ export function WorkspaceUserMenu({
               <Monitor />
             </span>
             <span className={styles.menuSubmenuLabel}>{t("sidebarAppearanceLanguage")}</span>
+            <span className={styles.menuValue}>{appearanceValue}</span>
             <ChevronRight size={14} aria-hidden="true" />
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent collisionPadding={12}>

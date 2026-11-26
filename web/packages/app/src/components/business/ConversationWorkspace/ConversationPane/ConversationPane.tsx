@@ -294,6 +294,7 @@ function ConversationPaneContent({
   onUndoRemoveAttachment,
   onAddAttachments,
   onRemoveAttachment,
+  onClearDraft,
   composerError,
   messageActionBusy,
   messageActionFeedback,
@@ -750,6 +751,7 @@ function ConversationPaneContent({
         onUndoRemoveAttachment={onUndoRemoveAttachment}
         onStopWorkingTurn={onStopWorkingTurn}
         onRemoveAttachment={onRemoveAttachment}
+        onClearDraft={onClearDraft}
         onSyncComposer={onSyncComposer}
         onWorkingAction={handleOpenActivityPanel}
       />

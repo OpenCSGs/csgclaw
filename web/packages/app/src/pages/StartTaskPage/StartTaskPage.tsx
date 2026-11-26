@@ -1,4 +1,13 @@
 import { useComposerCompact } from "@/shared/layout/useComposerCompact";
+import { usePersistedComposerDraft } from "@/hooks/usePersistedComposerDraft";
+import {
+  getComposerDraft,
+  saveComposerDraft,
+  startTaskDraftKey,
+  subscribeToComposerDraft,
+} from "@/shared/storage/composerDrafts";
+import { isResourceSnapshot } from "@/models/agentResources";
+import { isStoredTaskPromptMention, type TaskPromptMention } from "./taskPromptMentions";
 import conversationSendButtonStyles from "@/components/business/ConversationPane/ConversationSendButton.module.css";
 import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
 import { useCloudSendConsent } from "@/hooks/workspace/useCloudSendConsent";
@@ -10,10 +19,11 @@ import {
   supportsTaskConfiguration,
   type TaskConfiguration,
 } from "@/models/taskConfiguration";
-import { useId, useMemo, useRef, useState } from "react";
-import { useSearchParams, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUp,
+  Eraser,
   BookOpen,
   ClipboardCheck,
   FileText,
@@ -48,7 +58,12 @@ import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
 import { errorMessage } from "@/api/client";
 import { localizeAPIError } from "@/shared/i18n";
-import { normalizeAuthProviderName, providerNeedsAuth, resolveAgentChannelUserID } from "@/models/agents";
+import {
+  agentRuntimeOptions,
+  normalizeAuthProviderName,
+  providerNeedsAuth,
+  resolveAgentChannelUserID,
+} from "@/models/agents";
 import { modelProviderConfigUsesOpenCSG } from "@/models/modelProviders";
 import { taskConversationTitle } from "@/models/taskConversations";
 import { RoomTypes, type IMConversation } from "@/models/conversations";
@@ -66,8 +81,10 @@ import { isComposerKeyboardEventComposing } from "@/models/composer";
 import {
   attachmentSelectionError,
   createAttachmentDrafts,
-  selectAttachmentFiles,
-  type AttachmentDraft,
+  selectComposerAttachmentFiles,
+  hasAttachmentFile,
+  mergeComposerAttachments,
+  type ComposerAttachmentDraft,
 } from "@/models/attachments";
 import {
   builtinSlashCommandNames,
@@ -114,6 +131,20 @@ const collaborationModes = {
   },
 } as const;
 
+function readStartDraft(stored: Record<string, unknown>) {
+  return {
+    text: typeof stored.text === "string" ? stored.text : "",
+    resources: Array.isArray(stored.resources) ? stored.resources.filter(isResourceSnapshot) : [],
+    mentions: Array.isArray(stored.mentions) ? stored.mentions.filter(isStoredTaskPromptMention) : [],
+  };
+}
+
+const emptyStartDraft = readStartDraft({});
+
+function serializeStartDraft(content: typeof emptyStartDraft) {
+  return content.text || content.resources.length ? content : null;
+}
+
 export function StartTaskPage() {
   const location = useLocation();
   const [params] = useSearchParams();
@@ -126,9 +157,9 @@ export function StartTaskPage() {
         : "";
   return (
     <StartTaskForm
-      key={`${location.pathname}:${initialTarget}`}
-      initialTarget={initialTarget}
-      initialConfiguration={location.state?.configuration}
+      key={JSON.stringify([location.pathname, initialTarget, location.state?.configuration?.workspace_dir])}
+      initialTarget={location.state?.draftSelection?.target ?? initialTarget}
+      initialConfiguration={location.state?.draftSelection?.configuration ?? location.state?.configuration}
     />
   );
 }
@@ -141,14 +172,28 @@ function StartTaskForm({
   initialConfiguration?: TaskConfiguration;
 }) {
   const controller = useWorkspaceControllerContext();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const rememberSelection = useCallback(
+    (target: string, configuration: TaskConfiguration) => {
+      void navigate(
+        { pathname: location.pathname, search: location.search, hash: location.hash },
+        {
+          replace: true,
+          state: { ...location.state, draftSelection: { target, configuration } },
+        },
+      );
+    },
+    [location, navigate],
+  );
   const cloud = useCloudAgents(controller.sidebarProps?.authStatus);
   const { openSettings } = useWorkspaceDialogs();
   const [configuration, setConfiguration] = useState<TaskConfiguration>(initialConfiguration || {});
-  const [{ target, revision }, setTarget] = useState({ target: initialTarget, revision: 0 });
+  const [{ target: targetOverride, revision }, setTarget] = useState({ target: initialTarget, revision: 0 });
+  const target = targetOverride || location.state?.draftSelection?.target || "";
   const [collaborationMode, setCollaborationMode] = useState<keyof typeof collaborationModes>(RoomTypes.onDemand);
   const collaborationModeID = useId();
   const { title: modeTitle, hint: modeHint, icon: ModeIcon } = collaborationModes[collaborationMode];
-  const [resources, setResources] = useState<ResourceSnapshot[]>([]);
   const [examplesHidden, setExamplesHidden] = useState(() => {
     try {
       return sessionStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
@@ -156,9 +201,10 @@ function StartTaskForm({
       return false;
     }
   });
-  const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
-  const [removedAttachments, setRemovedAttachments] = useState<{ draft: AttachmentDraft; index: number }[]>([]);
+  const [removed, setRemoved] = useState<{
+    key: string;
+    attachments: { draft: ComposerAttachmentDraft; index: number }[];
+  } | null>(null);
   const [attachmentWarning, setAttachmentWarning] = useState("");
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadFailed, setUploadFailed] = useState(false);
@@ -167,6 +213,7 @@ function StartTaskForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const created = useRef<IMConversation | null>(null);
+  const createdDraftKey = useRef<string | null>(null);
   const requestID = useRef(createUUID());
   const targetRevision = useRef(0);
   const sendID = useRef({ fingerprint: "", id: "" });
@@ -195,6 +242,7 @@ function StartTaskForm({
   const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
   const autonomous = !selectedAgent && !selectedCloud && collaborationMode === RoomTypes.autonomous;
   const cloudTarget = selected.startsWith("cloud:");
+  const cloudRecipientUnavailable = cloudTarget && !selectedCloud;
   const workspaceDir =
     !cloudTarget && (!selectedAgent || supportsTaskConfiguration(selectedAgent))
       ? configuration.workspace_dir
@@ -202,6 +250,63 @@ function StartTaskForm({
   const automaticWorkspace = !cloudTarget && !selectedAgent && !workspaceDir;
   const workspaceAgent = cloudTarget || automaticWorkspace ? undefined : (selectedAgent ?? manager);
   const workspaceAgentID = workspaceAgent?.id || "";
+  const userID = sidebar?.currentUserID ?? "";
+  const awaitingAgent = selected.startsWith("agent:") && !selectedAgent;
+  const pendingDraftKey = startTaskDraftKey(userID, `pending:${target || "default"}`, "", workspaceDir);
+  const draftKey =
+    createdDraftKey.current ??
+    (awaitingAgent
+      ? pendingDraftKey
+      : startTaskDraftKey(
+          userID,
+          selected,
+          selectedCloud?.connectionID ?? "",
+          workspaceDir || (selectedAgent ? String(agentRuntimeOptions(selectedAgent).local_workspace_dir || "") : ""),
+        ));
+  const removedAttachments = removed?.key === draftKey ? removed.attachments : [];
+  const { draft: startDraft, update: updateStartDraft } = usePersistedComposerDraft(
+    draftKey,
+    readStartDraft,
+    serializeStartDraft,
+  );
+  useEffect(() => {
+    if (!selectedAgent || !pendingDraftKey || createdDraftKey.current) return;
+    const pending = readStartDraft(getComposerDraft(pendingDraftKey).content);
+    if (!pending.text) return;
+    const current = getComposerDraft(draftKey);
+    const content = readStartDraft(current.content);
+    const text = content.text ? `${content.text}\n\n${pending.text}` : pending.text;
+    saveComposerDraft(draftKey, { ...content, text }, current.attachments);
+    saveComposerDraft(pendingDraftKey, null, []);
+    if (!target) rememberSelection(selected, configuration);
+  }, [configuration, draftKey, pendingDraftKey, rememberSelection, selected, selectedAgent, target]);
+  const {
+    content: { text: draft, resources, mentions },
+    attachments,
+  } = startDraft;
+  const selectedAttachments = attachments.filter(hasAttachmentFile);
+  const missingAttachments = attachments.length !== selectedAttachments.length;
+
+  function setDraft(text: string, mentions: TaskPromptMention[] = []) {
+    updateStartDraft(draftKey, (current) => ({ ...current, content: { ...current.content, text, mentions } }));
+    if (text && !target && selectedAgent) rememberSelection(selected, configuration);
+  }
+
+  function setResources(change: ResourceSnapshot[] | ((current: ResourceSnapshot[]) => ResourceSnapshot[])) {
+    updateStartDraft(draftKey, (current) => ({
+      ...current,
+      content: {
+        ...current.content,
+        resources: typeof change === "function" ? change(current.content.resources) : change,
+      },
+    }));
+  }
+
+  function setAttachments(attachments: ComposerAttachmentDraft[]) {
+    updateStartDraft(draftKey, (current) => ({ ...current, attachments }));
+    if (attachments.length && !target && selectedAgent) rememberSelection(selected, configuration);
+  }
+
   const mentionMembers = useMemo(() => {
     const ids = new Set(selectedTeam ? [selectedTeam.lead_agent_id, ...selectedTeam.member_agent_ids] : []);
     return agents
@@ -236,6 +341,7 @@ function StartTaskForm({
   const promptMentions = useTaskPromptMentions({
     value: draft,
     onChange: setDraft,
+    chosen: mentions,
     members: mentionMembers,
     editorRef,
     workspaceAgentID,
@@ -303,7 +409,10 @@ function StartTaskForm({
   const cloudOffline = Boolean(selectedCloud && selectedCloud.status !== "online");
   const cannotSend =
     busy ||
+    (awaitingAgent && !target) ||
+    cloudRecipientUnavailable ||
     cloudOffline ||
+    missingAttachments ||
     resourcePicker.active ||
     !canSendResources(draftInput.content, draftInput.resource_refs, attachments.length + draftFileCount) ||
     Boolean(modelMissing);
@@ -382,13 +491,24 @@ function StartTaskForm({
     return false;
   }
 
+  function clearDraft() {
+    updateStartDraft(draftKey, () => ({ content: emptyStartDraft, attachments: [] }));
+    setRemoved(null);
+    setAttachmentWarning("");
+    setUploadFailed(false);
+    setSlashQuery(null);
+    setError("");
+    promptMentions.reset();
+    resetFilePanel(cloudTarget, true);
+  }
+
   function addAttachments(files: File[]) {
-    if (busy || !files.length) return;
-    const selection = selectAttachmentFiles(files, attachments);
+    if (busy || awaitingAgent || cloudRecipientUnavailable || !files.length) return;
+    const selection = selectComposerAttachmentFiles(files, attachments);
     setAttachmentWarning(attachmentSelectionError(selection, t));
     if (!selection.files.length) return;
-    setAttachments([...attachments, ...createAttachmentDrafts(selection.files, attachments.length)]);
-    setRemovedAttachments([]);
+    setAttachments(mergeComposerAttachments(attachments, createAttachmentDrafts(selection.files, attachments.length)));
+    setRemoved(null);
     setUploadFailed(false);
   }
 
@@ -396,7 +516,7 @@ function StartTaskForm({
     const index = attachments.findIndex((item) => item.id === id);
     if (busy || index < 0) return;
     setAttachments(attachments.filter((item) => item.id !== id));
-    setRemovedAttachments([...removedAttachments, { draft: attachments[index], index }]);
+    setRemoved({ key: draftKey, attachments: [...removedAttachments, { draft: attachments[index], index }] });
     setAttachmentWarning("");
     setUploadFailed(false);
   }
@@ -405,16 +525,20 @@ function StartTaskForm({
     const next = [...attachments];
     for (const { draft, index } of [...removedAttachments].reverse()) next.splice(index, 0, draft);
     setAttachments(next);
-    setRemovedAttachments([]);
+    setRemoved(null);
   }
 
-  async function start(empty = false, prompt = draft, confirmed = false) {
+  async function start(empty = false, prompt = draft, confirmed = false, submittedDraft = getComposerDraft(draftKey)) {
     const input = messageInput(prompt);
     const fileReferences = selectedCloud ? [] : promptMentions.fileReferences(prompt);
     if (
       inFlight.current ||
+      (awaitingAgent && !target) ||
+      cloudRecipientUnavailable ||
       cloudOffline ||
-      (!empty && !canSendResources(input.content, input.resource_refs, attachments.length + fileReferences.length))
+      (!empty &&
+        (missingAttachments ||
+          !canSendResources(input.content, input.resource_refs, attachments.length + fileReferences.length)))
     )
       return;
     if (!selectedCloud && !selectedAgent && !selectedTeam && selected !== "solo") {
@@ -429,12 +553,13 @@ function StartTaskForm({
       !empty &&
       selectedCloud &&
       !confirmed &&
-      consent.request(() => void start(false, prompt, true), attachments.length > 0)
+      consent.request(() => void start(false, prompt, true, submittedDraft), attachments.length > 0)
     )
       return;
     inFlight.current = true;
     setBusy(true);
     setError("");
+    const releaseDraft = subscribeToComposerDraft(draftKey, () => {});
     try {
       if (modelMissing) throw new Error(t("taskEntryModelMissing"));
       if (!empty) {
@@ -487,6 +612,7 @@ function StartTaskForm({
           locale: readySidebar.locale,
         });
         created.current = room;
+        createdDraftKey.current = draftKey;
         if (room.configuration) {
           if (room.configuration.workspace_dir !== workspaceDir) resetFilePanel();
           setConfiguration(room.configuration);
@@ -497,10 +623,10 @@ function StartTaskForm({
           input.content,
           input.resource_refs,
           fileReferences,
-          attachments.map(({ file }) => [file.name, file.size, file.lastModified]),
+          selectedAttachments.map(({ file }) => [file.name, file.size, file.lastModified]),
         ]);
         if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: createUUID() };
-        const messageFiles = attachments.map(({ file }) => file);
+        const messageFiles = selectedAttachments.map(({ file }) => file);
         const payload = {
           room_id: room.id,
           sender_id: readySidebar.currentUserID,
@@ -519,6 +645,7 @@ function StartTaskForm({
         const message = upload.current
           ? await sendMessageRequest(payload, { signal: upload.current.signal, onUploadProgress: setUploadProgress })
           : await sendMessageRequest(payload);
+        if (getComposerDraft(draftKey) === submittedDraft) clearDraft();
         entry.onMessage(room.id, message);
       }
       entry.open(room);
@@ -528,6 +655,7 @@ function StartTaskForm({
         setError(localizeAPIError(cause, t, errorMessage(cause, t("sendFailed"))));
       }
     } finally {
+      releaseDraft();
       upload.current = null;
       setUploadProgress(null);
       inFlight.current = false;
@@ -591,18 +719,15 @@ function StartTaskForm({
               onChange={(value) => {
                 targetRevision.current++;
                 requestID.current = createUUID();
-                promptMentions.clearFiles(true);
+                promptMentions.reset();
                 resetFilePanel(value.kind === "cloud", true);
-                setResources([]);
-                setAttachments([]);
-                setRemovedAttachments([]);
+                setRemoved(null);
                 setAttachmentWarning("");
                 setUploadFailed(false);
                 setSlashQuery(null);
-                setTarget({
-                  target: value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`,
-                  revision: targetRevision.current,
-                });
+                const nextTarget = value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`;
+                setTarget({ target: nextTarget, revision: targetRevision.current });
+                rememberSelection(nextTarget, {});
                 setConfiguration({});
               }}
               locked={busy || Boolean(created.current)}
@@ -737,7 +862,7 @@ function StartTaskForm({
                         syncSlash(event.currentTarget);
                       }
                     }}
-                    disabled={busy}
+                    disabled={busy || cloudRecipientUnavailable}
                     onKeyDown={(event) => {
                       if (composing.current || isComposerKeyboardEventComposing(event)) return;
                       if (event.key === "Tab" && !event.shiftKey && mentionRetryRef.current) {
@@ -881,7 +1006,7 @@ function StartTaskForm({
                     ref={fileInput}
                     className="sr-only"
                     aria-label={t("addAttachment")}
-                    disabled={busy}
+                    disabled={busy || awaitingAgent || cloudRecipientUnavailable}
                     onChange={(event) => {
                       addAttachments(Array.from(event.currentTarget.files ?? []));
                       event.currentTarget.value = "";
@@ -889,7 +1014,7 @@ function StartTaskForm({
                   />
                   <ComposerAddMenu
                     onOpenResourcePicker={resourcePicker.open}
-                    disabled={busy}
+                    disabled={busy || awaitingAgent || cloudRecipientUnavailable}
                     t={t}
                     buttonClassName={`composer-add-button ${styles.addButton}`}
                     onAddFiles={() => fileInput.current?.click()}
@@ -903,10 +1028,15 @@ function StartTaskForm({
                           if (created.current) await entry.patch(created.current.id, { configuration: value });
                           else requestID.current = createUUID();
                           if (value.workspace_dir !== configuration.workspace_dir) {
-                            promptMentions.clearFiles();
-                            resetFilePanel();
+                            promptMentions.reset();
+                            resetFilePanel(cloudTarget, true);
+                            setRemoved(null);
+                            setAttachmentWarning("");
+                            setUploadFailed(false);
+                            setSlashQuery(null);
                           }
                           setConfiguration(value);
+                          if (!created.current) rememberSelection(awaitingAgent ? target : selected, value);
                         }}
                         directoryLocked={Boolean(created.current)}
                         directoryMode={selectedAgent ? "agent" : "collaboration"}
@@ -978,6 +1108,20 @@ function StartTaskForm({
                         : t("sendingWithProgress", { progress: Math.round(uploadProgress) })}
                     </span>
                   ) : null}
+                  {draft || resources.length || attachments.length || removedAttachments.length ? (
+                    <Tooltip content={t("clearDraft")}>
+                      <Button
+                        aria-label={t("clearDraft")}
+                        disabled={busy}
+                        iconOnly
+                        size="sm"
+                        variant="tertiaryGray"
+                        onClick={clearDraft}
+                      >
+                        <Eraser aria-hidden="true" size={16} />
+                      </Button>
+                    </Tooltip>
+                  ) : null}
                   <Tooltip content={sendLabel}>
                     <span>
                       <Button
@@ -1018,7 +1162,11 @@ function StartTaskForm({
                 </DismissibleInlineError>
               ) : null}
             </div>
-            {cloudOffline ? <p role="status">{t("cloudChatOffline")}</p> : null}
+            {cloudRecipientUnavailable ? (
+              <p role="status">{t(cloud.loading ? "loading" : "taskEntryMissingTarget")}</p>
+            ) : cloudOffline ? (
+              <p role="status">{t("cloudChatOffline")}</p>
+            ) : null}
             {error ? (
               <p role="alert" className={styles.error}>
                 {error}
@@ -1040,7 +1188,7 @@ function StartTaskForm({
               </div>
             ) : null}
           </div>
-          {!examplesHidden && !modelMissing && (agents.length || selectedCloud) ? (
+          {!examplesHidden && !cloudRecipientUnavailable && !modelMissing && (agents.length || selectedCloud) ? (
             <div className={styles.examples}>
               <span>{t("iaStartExamples")}</span>
               <div className={styles.chips}>

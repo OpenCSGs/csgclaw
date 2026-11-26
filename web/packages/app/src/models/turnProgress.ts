@@ -85,7 +85,7 @@ export function progressGroups(items: ProgressItem[]): ProgressGroup[] {
   let toolCount = 0;
   for (const item of items) {
     const last = result[result.length - 1];
-    if (item.kind === "tool" && last?.kind === "tool") last.items.push(item);
+    if (item.kind !== "commentary" && last?.kind === item.kind) last.items.push(item);
     else result.push({ id: `${item.kind}:${item.id}`, kind: item.kind, items: [item], firstToolNumber: toolCount + 1 });
     if (item.kind === "tool") toolCount += 1;
   }

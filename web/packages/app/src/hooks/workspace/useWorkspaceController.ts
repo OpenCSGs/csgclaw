@@ -918,7 +918,7 @@ export function useWorkspaceController(): WorkspaceController {
     taskEntry,
     openAgentSettings: agent.openEditAgentModal,
     openWorkspaceSettings: (section = "") =>
-      navigate({ search: settingsDialogSearch(location.search, section) }, { replace: true }),
+      navigate({ search: settingsDialogSearch(location.search, section) }, { replace: true, state: location.state }),
     configSettings: configSettings.settings,
     loadingText: "",
     t,

@@ -1411,6 +1411,15 @@ func (s *Service) ListRooms() []Room {
 }
 
 func (s *Service) ListRoomsWithOptions(opts ListMessagesOptions) []Room {
+	rooms := s.ListUnsortedRooms(opts)
+	slices.SortFunc(rooms, func(a, b Room) int {
+		return latestRoomMessageAt(b).Compare(latestRoomMessageAt(a))
+	})
+	return rooms
+}
+
+// ListUnsortedRooms lets callers filter room snapshots before applying their own ordering.
+func (s *Service) ListUnsortedRooms(opts ListMessagesOptions) []Room {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1426,9 +1435,6 @@ func (s *Service) ListRoomsWithOptions(opts ListMessagesOptions) []Room {
 		}
 		rooms = append(rooms, presented)
 	}
-	slices.SortFunc(rooms, func(a, b Room) int {
-		return latestRoomMessageAt(b).Compare(latestRoomMessageAt(a))
-	})
 	return rooms
 }
 

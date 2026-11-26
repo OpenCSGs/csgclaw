@@ -151,7 +151,7 @@ it("groups menu items and opens the same feedback draft from Settings", async ()
       .getAllByRole("menuitem")
       .slice(-4)
       .map((item) => item.textContent),
-  ).toEqual(["iaUserMenuProfileLocal", "settings", "sidebarAppearanceLanguage", "feedbackMenuAction"]);
+  ).toEqual(["iaUserMenuProfileLocal", "settings", "sidebarAppearanceLanguagethemeLight", "feedbackMenuAction"]);
   await user.click(screen.getByRole("menuitem", { name: "feedbackMenuAction" }));
   await user.type(screen.getByRole("textbox", { name: "settingsFeedbackLabel" }), "Shared draft");
   await user.keyboard("{Escape}");

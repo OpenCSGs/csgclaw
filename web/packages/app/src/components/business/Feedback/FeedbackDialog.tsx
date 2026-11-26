@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { CircleAlert, FileArchive, Info, X } from "lucide-react";
+import { CircleAlert, FileArchive, ImagePlus, Info, Paperclip, X } from "lucide-react";
 import {
   TextArea,
   Button,
@@ -23,9 +23,7 @@ import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import {
   FEEDBACK_ATTACHMENT_ACCEPT,
   MAX_FEEDBACK_ARCHIVES,
-  MAX_FEEDBACK_ARCHIVE_BYTES,
   MAX_FEEDBACK_DESCRIPTION_LENGTH,
-  MAX_FEEDBACK_IMAGE_BYTES,
   MAX_FEEDBACK_IMAGES,
 } from "@/models/feedback";
 import styles from "./FeedbackDialog.module.css";
@@ -268,13 +266,23 @@ export function FeedbackDialog(props: Props) {
                 value={props.description}
                 disabled={busy}
                 readOnly={awaiting}
-                rows={6}
+                rows={5}
                 maxLength={MAX_FEEDBACK_DESCRIPTION_LENGTH}
                 placeholder={t("settingsFeedbackPlaceholder")}
                 onChange={(event) => props.onDescriptionChange(event.target.value)}
               />
             </label>
-            <div className={styles.label}>
+            <div className={styles.attachments}>
+              <div className={styles.attachmentsHead}>
+                <span className={styles.attachmentsTitle}>
+                  <Paperclip size={14} aria-hidden="true" />
+                  {t("feedbackAttachments")}
+                </span>
+                <span className={styles.attachmentsCount} aria-live="polite">
+                  {t("feedbackImageCountLabel")} {images.length}/{MAX_FEEDBACK_IMAGES} ·{" "}
+                  {t("feedbackArchiveCountLabel")} {archives.length}/{MAX_FEEDBACK_ARCHIVES}
+                </span>
+              </div>
               <input
                 ref={attachmentInputRef}
                 className={styles.fileInput}
@@ -289,12 +297,19 @@ export function FeedbackDialog(props: Props) {
                   event.target.value = "";
                 }}
               />
-              <div className={styles.attachmentControls}>
+              <div className={styles.dropzone}>
+                <span className={styles.dropzoneIcon} aria-hidden="true">
+                  <ImagePlus size={18} strokeWidth={1.8} />
+                </span>
+                <div className={styles.dropzoneCopy} id={attachmentHintID}>
+                  <p className={styles.dropzoneTitle}>{t("feedbackDropTitle")}</p>
+                  <p className={styles.dropzoneHint}>{t("feedbackDropHint")}</p>
+                </div>
                 <Tooltip content={attachmentDisabledReason} contentProps={{ side: "top", align: "start" }}>
                   <span
                     className={styles.chooseFilesButton}
                     role={attachmentDisabledReason ? "group" : undefined}
-                    aria-label={attachmentDisabledReason ? t("feedbackChooseAttachments") : undefined}
+                    aria-label={attachmentDisabledReason ? t("feedbackChooseFiles") : undefined}
                     tabIndex={attachmentDisabledReason ? 0 : undefined}
                   >
                     <Button
@@ -305,30 +320,14 @@ export function FeedbackDialog(props: Props) {
                       aria-describedby={`${attachmentHintID} ${attachmentUsageID}`}
                       onClick={() => attachmentInputRef.current?.click()}
                     >
-                      {t("feedbackChooseAttachments")}
+                      {t("feedbackChooseFiles")}
                     </Button>
                   </span>
                 </Tooltip>
-                <p id={attachmentHintID} className={styles.imageHint}>
-                  {t("feedbackAttachmentHint")}
-                </p>
               </div>
-              <div id={attachmentUsageID} className={`${styles.attachmentUsage} ${styles.imageHint}`}>
-                <span>
-                  {t("feedbackImageUsage", {
-                    count: images.length,
-                    limit: MAX_FEEDBACK_IMAGES,
-                    size: MAX_FEEDBACK_IMAGE_BYTES / 1024 ** 2,
-                  })}
-                </span>
-                <span>
-                  {t("feedbackArchiveUsage", {
-                    count: archives.length,
-                    limit: MAX_FEEDBACK_ARCHIVES,
-                    size: MAX_FEEDBACK_ARCHIVE_BYTES / 1024 ** 2,
-                  })}
-                </span>
-              </div>
+              <p id={attachmentUsageID} className={styles.limitHint}>
+                {t("feedbackAttachmentLimits")}
+              </p>
               <details className={`${styles.attachmentFormats} ${styles.imageHint}`}>
                 <summary>{t("feedbackAttachmentFormats")}</summary>
                 <div className={styles.attachmentUsage}>

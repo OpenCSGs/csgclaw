@@ -1,6 +1,11 @@
 import { connectorLogoSource } from "@/shared/connectorLogo";
 import { resourceKey, resourceLabel, isResourceSnapshot, type ResourceSnapshot } from "./agentResources";
-import { fileReferenceKey, type ComposerFileReference, type FileReference } from "./fileReferences";
+import {
+  fileReferenceKey,
+  isComposerFileReference,
+  type ComposerFileReference,
+  type FileReference,
+} from "./fileReferences";
 
 export type ComposerSegment =
   | { type: "resource"; text: string; resource: ResourceSnapshot; agentID?: string }
@@ -288,11 +293,9 @@ export function collectComposerSegments(node: Node, segments: ComposerSegment[])
     }
     if (element.dataset?.composerFile) {
       try {
-        const reference = JSON.parse(element.dataset.composerFile) as ComposerFileReference;
-        if (
-          (reference.source === "workspace" && reference.agent_id && reference.path) ||
-          (reference.source === "attachment" && reference.attachment_id)
-        ) {
+        const token = JSON.parse(element.dataset.composerFile);
+        const reference: unknown = { ...token, name: token?.name ?? token?.label };
+        if (isComposerFileReference(reference)) {
           segments.push({ type: "file", reference, text: `@${reference.label}` });
           return;
         }

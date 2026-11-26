@@ -16,6 +16,8 @@ import {
 export function useTaskPromptMentions({
   value,
   onChange,
+  chosen,
+
   members,
   editorRef,
   workspaceAgentID,
@@ -23,7 +25,8 @@ export function useTaskPromptMentions({
   disabled,
 }: {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, mentions: TaskPromptMention[]) => void;
+  chosen: TaskPromptMention[];
   members: MentionPickerUser[];
   editorRef: RefObject<HTMLTextAreaElement | null>;
   disabled: boolean;
@@ -31,7 +34,6 @@ export function useTaskPromptMentions({
   workspaceDir?: string;
 }) {
   const [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(null);
-  const [chosen, setChosen] = useState<TaskPromptMention[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [directory, setDirectory] = useState("");
   const pendingCaret = useRef<number | null>(null);
@@ -95,8 +97,7 @@ export function useTaskPromptMentions({
 
   function change(editor: HTMLTextAreaElement) {
     const next = editor.value;
-    setChosen((current) => updateTaskPromptMentions(value, next, current));
-    onChange(next);
+    onChange(next, updateTaskPromptMentions(value, next, chosen));
     sync(editor);
   }
 
@@ -120,8 +121,8 @@ export function useTaskPromptMentions({
     editor.setRangeText(pasted, start, end, "end");
     const next = editor.value;
     const shift = pasted.length - (end - start);
-    setChosen((current) => [
-      ...current.flatMap((item) => {
+    onChange(next, [
+      ...chosen.flatMap((item) => {
         if (item.end <= start) return [item];
         if (item.start >= end) return [{ ...item, start: item.start + shift, end: item.end + shift }];
         return [];
@@ -129,7 +130,6 @@ export function useTaskPromptMentions({
       ...inserted,
     ]);
     pendingCaret.current = editor.selectionStart;
-    onChange(next);
     sync(editor);
   }
 
@@ -142,12 +142,8 @@ export function useTaskPromptMentions({
     const text = `@${name}`;
     const next = value.slice(0, selection.start) + prefix + text + " " + value.slice(selection.end);
     const start = selection.start + prefix.length;
-    setChosen((current) => [
-      ...updateTaskPromptMentions(value, next, current),
-      { ...item, start, end: start + text.length },
-    ]);
+    onChange(next, [...updateTaskPromptMentions(value, next, chosen), { ...item, start, end: start + text.length }]);
     pendingCaret.current = start + text.length + 1;
-    onChange(next);
     setMention(null);
     setDirectory("");
   }
@@ -168,13 +164,16 @@ export function useTaskPromptMentions({
     insert({ start: editor.selectionStart, end: editor.selectionEnd }, { reference });
   }
 
+  function reset() {
+    setMention(null);
+    setDirectory("");
+  }
+
   function clearFiles(clearPeople = false) {
     const draft = latestDraft.current;
     const next = withoutTaskPromptFiles(draft.value, draft.chosen);
-    setMention(null);
-    setDirectory("");
-    setChosen(clearPeople ? [] : next.mentions);
-    if (next.text !== draft.value) onChange(next.text);
+    reset();
+    if (draft.chosen.length) onChange(next.text, clearPeople ? [] : next.mentions);
   }
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -262,6 +261,7 @@ export function useTaskPromptMentions({
     choose,
     referenceFile,
     clearFiles,
+    reset,
     fileReferences: (text: string) => taskPromptFileReferences(text, text === value ? scopedMentions : []),
     change,
     pasteText,

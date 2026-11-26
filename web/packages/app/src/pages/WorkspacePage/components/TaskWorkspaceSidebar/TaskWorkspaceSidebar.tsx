@@ -1,8 +1,10 @@
+import { useMemo, useState } from "react";
+import { emptyConversationFilters } from "@/models/conversationAgentFilter";
 import { Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
 import { resolveAgentChannelUserID, agentRuntimeOptions, isManagerAgent } from "@/models/agents";
-import { resolveConversationUser, agentMatchesUser } from "@/models/conversations";
+import { resolveConversationUser, agentMatchesUser, userIDForLocalIdentity } from "@/models/conversations";
 import { pathForPane, WorkspacePaneTypes } from "@/models/routing";
 import { Tooltip } from "@/components/ui";
 import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
@@ -42,21 +44,19 @@ function ScheduledTaskNavigationIcon({ size = 16 }: { size?: number }) {
 export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: TaskEntryController }) {
   const navigate = useNavigate();
   const { t, entry, isSidebarCollapsed, currentUserID, usersById } = props;
-  const directories = props.workerAgentItems.reduce<Array<{ path: string; agentIDs: string[] }>>((items, agent) => {
-    const path = agentRuntimeOptions(agent).local_workspace_dir;
-    if (typeof path !== "string" || !path) return items;
-    let item = items.find((value) => value.path === path);
-    if (!item) {
-      item = { path, agentIDs: [] };
-      items.push(item);
+  const [filters, setFilters] = useState(emptyConversationFilters);
+  const directoriesByPeer = useMemo(() => {
+    const directories = new Map<string, string>();
+    for (const agent of props.workerAgentItems) {
+      const path = agentRuntimeOptions(agent).local_workspace_dir;
+      if (typeof path !== "string" || !path) continue;
+      for (const id of [resolveAgentChannelUserID(agent), agent.id]) {
+        const peer = userIDForLocalIdentity(id);
+        if (peer) directories.set(peer, path);
+      }
     }
-    item.agentIDs.push(resolveAgentChannelUserID(agent), agent.id || "");
-    return items;
-  }, []);
-  for (const room of props.directMessages) {
-    const path = room.configuration?.workspace_dir;
-    if (path && !directories.some((item) => item.path === path)) directories.push({ path, agentIDs: [] });
-  }
+    return directories;
+  }, [props.workerAgentItems]);
   function agentForRoom(room: IMConversation) {
     const other = resolveConversationUser(room, currentUserID, usersById);
     return props.workerAgentItems.find(
@@ -157,11 +157,13 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
       ) : null}
       <div className={styles.history}>
         <TaskConversationList
-          collapsed={isSidebarCollapsed}
           onExpand={props.onExpandSidebar}
           authStatus={props.authStatus}
           compact
-          directories={directories}
+          collapsed={isSidebarCollapsed}
+          filters={filters}
+          onFiltersChange={setFilters}
+          directoriesByPeer={directoriesByPeer}
           entry={entry}
           activeID={props.activePane.type === WorkspacePaneTypes.conversation ? props.activePane.id : undefined}
           currentUserID={currentUserID}
@@ -175,6 +177,11 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
           }
           onArchiveCurrent={() => navigate("/new")}
           onNewWith={(room) => {
+            const cloudID = room.cloud_agent?.agent_id;
+            if (cloudID) {
+              selectDestination(() => navigate(`/new?cloud=${encodeURIComponent(cloudID)}`));
+              return;
+            }
             const agent = agentForRoom(room);
             if (agent?.id) {
               const agentID = agent.id;
@@ -186,6 +193,11 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
             }
           }}
           onEditAgent={(room) => {
+            const cloudID = room.cloud_agent?.agent_id;
+            if (cloudID) {
+              selectDestination(() => navigate(`/agents?cloud=${encodeURIComponent(cloudID)}`));
+              return;
+            }
             const agent = agentForRoom(room);
             if (agent) selectDestination(() => props.onSelectAgent(agent));
           }}
