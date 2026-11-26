@@ -922,8 +922,13 @@ func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSe
 	if err != nil {
 		return fmt.Errorf("codex app-server initialize handshake: %w", err)
 	}
+	reply := time.Now()
 	live.serverInfo = append(json.RawMessage(nil), serverInfo...)
-	return live.appClient.notify("initialized")
+	if err := live.appClient.notify("initialized"); err != nil {
+		return err
+	}
+	live.telemetry.recordHandshake(live.appClient.logger, started, reply, time.Now())
+	return nil
 }
 
 func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string, empty, publishFiles bool) (string, error) {

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -17,12 +18,46 @@ import (
 // Native exports arrive asynchronously, often after turn/completed. Correlation
 // uses the process-owned native turn ID and trace ID, never the latest turn.
 type nativeTelemetry struct {
-	mu       sync.Mutex
-	server   *http.Server
-	endpoint string
-	turns    map[string]nativeDiagnostic
-	traces   map[string]*nativeTrace
+	mu         sync.Mutex
+	server     *http.Server
+	endpoint   string
+	turns      map[string]nativeDiagnostic
+	traces     map[string]*nativeTrace
+	initialize initializeTiming
 }
+
+// Each collector serves one Codex process. Its request span can be exported
+// before or after the client records the successful handshake.
+type initializeTiming struct {
+	start, reply, notified time.Time
+	dispatch, spanEnd      time.Time
+	logger                 *slog.Logger
+	logged                 bool
+}
+
+func (n *nativeTelemetry) recordHandshake(logger *slog.Logger, start, reply, notified time.Time) {
+	if n == nil || logger == nil {
+		return
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	t := &n.initialize
+	t.logger, t.start, t.reply, t.notified = logger, start, reply, notified
+	t.logIfComplete()
+}
+
+func (t *initializeTiming) logIfComplete() {
+	if t.logged || t.logger == nil || t.dispatch.Before(t.start) || t.dispatch.After(t.reply) {
+		return
+	}
+	t.logged = true
+	t.logger.Info("Codex initialize timing",
+		"request_to_dispatch_us", t.dispatch.Sub(t.start).Microseconds(),
+		"dispatch_to_reply_us", t.reply.Sub(t.dispatch).Microseconds(),
+		"reply_to_initialized_us", t.notified.Sub(t.reply).Microseconds(),
+		"native_request_span_us", t.spanEnd.Sub(t.dispatch).Microseconds())
+}
+
 type nativeDiagnostic struct {
 	active bool
 	record *diagnostics.Record
@@ -170,6 +205,14 @@ func (n *nativeTelemetry) receive(w http.ResponseWriter, r *http.Request) {
 				if !validTelemetryID(s.TraceID, 32) || !validTelemetryID(s.SpanID, 16) {
 					continue
 				}
+				if s.Name == "initialize" {
+					start, end, valid := s.times()
+					if valid {
+						n.initialize.dispatch, n.initialize.spanEnd = start, end
+						n.initialize.logIfComplete()
+					}
+					continue
+				}
 				trace := n.traces[s.TraceID]
 				if trace == nil {
 					if len(n.traces) >= 128 {
@@ -190,12 +233,10 @@ func (n *nativeTelemetry) receive(w http.ResponseWriter, r *http.Request) {
 				if !ok || len(trace.spans) >= 512 {
 					continue
 				}
-				start, e1 := strconv.ParseInt(s.Start, 10, 64)
-				end, e2 := strconv.ParseInt(s.End, 10, 64)
-				if e1 != nil || e2 != nil || start <= 0 || end < start {
-					continue
+				start, end, valid := s.times()
+				if valid {
+					trace.spans[s.SpanID] = nativeSpan{s.SpanID, s.ParentID, s.Name, category, start, end}
 				}
-				trace.spans[s.SpanID] = nativeSpan{s.SpanID, s.ParentID, s.Name, category, time.Unix(0, start), time.Unix(0, end)}
 			}
 		}
 	}
@@ -205,6 +246,12 @@ func (n *nativeTelemetry) receive(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{}`))
 }
+func (s otlpSpan) times() (time.Time, time.Time, bool) {
+	start, e1 := strconv.ParseInt(s.Start, 10, 64)
+	end, e2 := strconv.ParseInt(s.End, 10, 64)
+	return time.Unix(0, start), time.Unix(0, end), e1 == nil && e2 == nil && start > 0 && end >= start
+}
+
 func validTelemetryID(value string, size int) bool {
 	if len(value) != size {
 		return false

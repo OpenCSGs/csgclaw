@@ -5,7 +5,9 @@ import (
 	"csgclaw/internal/diagnostics"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -68,5 +70,59 @@ func TestNativeTelemetryLateCorrelationAndIsolation(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 403 {
 		t.Fatal("browser-origin telemetry accepted")
+	}
+}
+
+func TestInitializeTimingPairsNativeAndClientBoundaries(t *testing.T) {
+	for _, order := range []string{"client-first", "span-first"} {
+		t.Run(order, func(t *testing.T) {
+			n, err := newNativeTelemetry()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer n.close()
+			start := time.Unix(10, 0)
+			var log bytes.Buffer
+			record := func() {
+				n.recordHandshake(slog.New(slog.NewTextHandler(&log, nil)), start,
+					start.Add(8100*time.Microsecond), start.Add(8300*time.Microsecond))
+			}
+			post := func(spanStart, spanEnd time.Duration) {
+				t.Helper()
+				span := otlpSpan{Name: "initialize", TraceID: strings.Repeat("a", 32), SpanID: strings.Repeat("b", 16),
+					Start: fmt.Sprint(start.Add(spanStart).UnixNano()), End: fmt.Sprint(start.Add(spanEnd).UnixNano())}
+				body, err := json.Marshal(map[string]any{"resourceSpans": []any{map[string]any{"scopeSpans": []any{map[string]any{"spans": []otlpSpan{span}}}}}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				resp, err := http.Post(n.endpoint, "application/json", bytes.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					t.Fatal(resp.Status)
+				}
+			}
+			if order == "client-first" {
+				record()
+			}
+			post(time.Millisecond, 0) // Invalid native interval.
+			if log.Len() != 0 {
+				t.Fatal(log.String())
+			}
+			post(8*time.Millisecond, 8200*time.Microsecond)
+			if order == "span-first" {
+				if log.Len() != 0 {
+					t.Fatal(log.String())
+				}
+				record()
+			}
+			post(8*time.Millisecond, 8200*time.Microsecond) // Export retry.
+			if strings.Count(log.String(), "Codex initialize timing") != 1 ||
+				!strings.Contains(log.String(), "request_to_dispatch_us=8000 dispatch_to_reply_us=100 reply_to_initialized_us=200 native_request_span_us=200") {
+				t.Fatalf("unexpected initialize timing: %s", log.String())
+			}
+		})
 	}
 }
