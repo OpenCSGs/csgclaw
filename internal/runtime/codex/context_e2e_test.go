@@ -24,7 +24,7 @@ import (
 
 // Exercises the bundled process, real Responses transport and event subscription.
 func TestContextUsageBundledCodexE2E(t *testing.T) {
-	for _, mode := range []string{"diagnostics", "usage", "unsent_cold_resume", "native_message_identity", "manual_compact", "auto_compact", "overflow", "cold_resume", "default_cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure", "output_budget"} {
+	for _, mode := range []string{"diagnostics", "usage", "unsent_cold_resume", "missing_used_rollout", "native_message_identity", "manual_compact", "auto_compact", "overflow", "cold_resume", "default_cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure", "output_budget"} {
 		t.Run(mode, func(t *testing.T) { testContextBundledCodex(t, mode) })
 	}
 }
@@ -86,6 +86,9 @@ func testContextBundledCodex(t *testing.T, mode string) {
 			}
 		}
 		input, _ := json.Marshal(body["input"])
+		if mode == "missing_used_rollout" && n == 2 && strings.Contains(string(input), "CSG_CONTEXT_SENTINEL") {
+			t.Error("replacement thread included input from the missing rollout")
+		}
 		if strings.Count(string(input), "CSG_CONTEXT_SENTINEL") > 1 {
 			t.Errorf("user input duplicated in request: %s", input)
 		}
@@ -207,6 +210,30 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	}
 	if err := rt.PromptTurn(ctx, h.RuntimeID, firstMessage); err != nil {
 		t.Fatal(err)
+	}
+	if mode == "missing_used_rollout" {
+		manager := rt.SessionManager().(*appServerManager)
+		dir := manager.liveSession(h.RuntimeID).spec.CodexHomeDir
+		if _, err := rt.Stop(ctx, h); err != nil {
+			t.Fatal(err)
+		}
+		files, err := filepath.Glob(filepath.Join(dir, "sessions", "*", "*", "*", "rollout-*-"+thread+".jsonl"))
+		if err != nil || len(files) != 1 {
+			t.Fatalf("rollouts for %q: %v %v", thread, files, err)
+		}
+		if err := os.Rename(files[0], filepath.Join(home, "withheld-rollout.jsonl")); err != nil {
+			t.Fatal(err)
+		}
+		key := contract.ConversationKey(conversationBinding)
+		result := rt.Conversation(h.RuntimeID).Run(ctx, contract.TurnRequest{ID: "next-message", ConversationKey: key, Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "Continue in the new thread."}}}, nil)
+		if result.Status != contract.TurnSucceeded || result.Output != "done" || requests.Load() != 2 {
+			t.Fatalf("send after missing rollout: %+v, calls=%d", result, requests.Load())
+		}
+		meta, err := rt.readSessionMetadata(h.RuntimeID)
+		if id := meta.ConversationSessions[conversationBinding]; err != nil || id == "" || id == thread {
+			t.Fatalf("replacement binding = %q; old=%q err=%v", id, thread, err)
+		}
+		return
 	}
 	if mode == "native_message_identity" {
 		manager := rt.SessionManager().(*appServerManager)

@@ -3,7 +3,6 @@ package codex
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"csgclaw/internal/runtime/turnjournal"
@@ -87,39 +86,4 @@ func (m *appServerManager) followMessage(ctx context.Context, live *liveSession,
 	default:
 		return PromptResponse{}, fmt.Errorf("%w: original Codex turn %q has status %q", turnjournal.ErrUnconfirmed, id, status)
 	}
-}
-
-// A legacy unused marker can coexist with recoverable native history. Check
-// Codex before retiring the binding, and let a concurrent sender keep it.
-func (live *liveSession) replaceMissingThread(ctx context.Context, id string) (bool, error) {
-	eligible, err := turnjournal.Unused(live.spec.RuntimeDir, id)
-	if !eligible || err != nil {
-		return false, err
-	}
-	raw, err := live.appClient.startupRequest(ctx, "thread/read", map[string]any{"threadId": id, "includeTurns": true})
-	if err != nil {
-		var failure appServerRPCError
-		if !errors.As(err, &failure) || failure.Code != appServerRPCInvalidRequest || failure.Message != "thread not loaded: "+id {
-			return false, err
-		}
-	} else {
-		var result struct {
-			Thread struct {
-				ID    string
-				Turns []json.RawMessage
-			}
-		}
-		if err := json.Unmarshal(raw, &result); err != nil {
-			return false, err
-		}
-		if result.Thread.ID != id || result.Thread.Turns == nil {
-			return false, fmt.Errorf("unrecognized native history for saved Codex thread %q", id)
-		}
-		if len(result.Thread.Turns) > 0 {
-			// Persist the positive history evidence even if a later read fails.
-			_, err = turnjournal.Begin(live.spec.RuntimeDir, "", id, "")
-			return false, err
-		}
-	}
-	return turnjournal.ReplaceUnused(live.spec.RuntimeDir, id)
 }

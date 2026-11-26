@@ -283,9 +283,11 @@ func TestActiveRoomCanSendDuringColdRoomRestore(t *testing.T) {
 func TestConcurrentFirstCodexMessagesShareThread(t *testing.T) {
 	for _, tc := range []struct {
 		name, room, saved string
+		starts, resumes   int
 	}{
-		{"new_default", "", ""}, {"saved_default", "", "old-default"},
-		{"new_room", "room", ""}, {"saved_room", "room", "old-room"},
+		{"new_default", "", "", 1, 0}, {"saved_default", "", "old-default", 0, 1},
+		{"new_room", "room", "", 1, 0}, {"saved_room", "room", "old-room", 0, 1},
+		{"missing_default", "", "missing-native-id", 1, 1}, {"missing_room", "room", "legacy-thread", 1, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			withAppServerHelperCommand(t, "room-configuration")
@@ -358,7 +360,7 @@ func TestConcurrentFirstCodexMessagesShareThread(t *testing.T) {
 				return strings.Count(log, `"Codex session RPC started" method=`+method+" ")
 			}
 			starts, resumes := countRPC("thread/start"), countRPC("thread/resume")
-			if tc.saved == "" && (starts != 1 || resumes != 0) || tc.saved != "" && (starts != 0 || resumes != 1) {
+			if starts != tc.starts || resumes != tc.resumes {
 				t.Fatalf("thread/start = %d, thread/resume = %d for saved %q", starts, resumes, tc.saved)
 			}
 		})
@@ -408,8 +410,17 @@ func TestRestartBetweenBindingAndFirstSend(t *testing.T) {
 				t.Fatal(err)
 			}
 			third := start()
-			if _, err := third.EnsureSession(t.Context(), h, key); err == nil {
-				t.Fatal("replaced a thread with an attempted message")
+			next, err := third.EnsureEngineSession(t.Context(), h, key)
+			if err != nil || next == "" || next == replacement {
+				t.Fatalf("replacement for used thread = %q, %v", next, err)
+			}
+			req := PromptRequest{SessionID: next, ConversationKey: key, ClientUserMessageID: "message-2", Prompt: []PromptContentBlock{TextBlock("continue")}}
+			if _, err := third.Prompt(t.Context(), h, req); err != nil {
+				t.Fatal(err)
+			}
+			req.ClientUserMessageID = "message-1"
+			if _, err := third.Prompt(t.Context(), h, req); !errors.Is(err, turnjournal.ErrUnconfirmed) {
+				t.Fatalf("previously dispatched message: %v", err)
 			}
 			saved, err := readSavedThreads(os.ReadFile, spec.RuntimeDir)
 			if err != nil {
@@ -419,8 +430,8 @@ func TestRestartBetweenBindingAndFirstSend(t *testing.T) {
 			if key != "" {
 				id = saved.ConversationSessions[key]
 			}
-			if id != replacement {
-				t.Fatalf("lost original message binding: %q", id)
+			if id != next {
+				t.Fatalf("saved binding = %q, want %q", id, next)
 			}
 		})
 	}
@@ -472,30 +483,5 @@ func TestCodexLostStartAcknowledgement(t *testing.T) {
 				t.Fatalf("peer received %q, err=%v", data, err)
 			}
 		})
-	}
-}
-
-func TestNativeHistoryOverridesLegacyUnusedMarker(t *testing.T) {
-	withAppServerHelperCommand(t, "missing-rollout")
-	spec := testAppServerSessionSpec(t.TempDir())
-	const id = "legacy-with-history"
-	spec.ConversationSessions = map[string]string{"room": id}
-	if err := os.WriteFile(filepath.Join(spec.RuntimeDir, sessionFileName), []byte(`{"conversation_sessions":{"room":"legacy-with-history"},"empty_threads":{"legacy-with-history":true}}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	m := newAppServerManager(testAppServerManagerDeps())
-	h := SessionHandle{RuntimeID: spec.RuntimeID}
-	if _, err := m.Start(t.Context(), spec); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = m.Stop(context.Background(), h) })
-	if _, err := m.EnsureSession(t.Context(), h, "room"); err == nil {
-		t.Fatal("replaced native history after a failed resume")
-	}
-	if saved := m.liveSession(h.RuntimeID).conversationSessions["room"]; saved != id {
-		t.Fatalf("saved = %q", saved)
-	}
-	if unused, err := turnjournal.Unused(spec.RuntimeDir, id); unused || err != nil {
-		t.Fatalf("observed history still eligible: %v %v", unused, err)
 	}
 }

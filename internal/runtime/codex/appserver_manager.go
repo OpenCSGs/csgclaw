@@ -656,14 +656,8 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 		return previous, nil
 	}
 	needsTools := previous != "" && publishFiles && !withFileTools && !unused
-	if needsTools {
-		eligible, err := turnjournal.Unused(live.spec.RuntimeDir, previous)
-		if err != nil {
-			return "", err
-		}
-		if !eligible {
-			return "", fmt.Errorf("saved Codex thread %q lacks the required tools; reset the conversation to start with the new tools", previous)
-		}
+	if needsTools && loaded {
+		return "", fmt.Errorf("saved Codex thread %q lacks the required tools; reset the conversation to start with the new tools", previous)
 	}
 	withFileTools = withFileTools || publishFiles
 	threadID, err := m.startOrResumeThread(ctx, live, previous, unused, withFileTools)
@@ -952,15 +946,9 @@ func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSe
 	if threadID != "" && !empty {
 		resumed, err := m.resumeThread(ctx, live, threadID)
 		if err != nil {
-			var failure appServerRPCError
-			if errors.As(err, &failure) && failure.Code == appServerRPCInvalidRequest && failure.Message == "no rollout found for thread id "+threadID {
-				replace, stateErr := live.replaceMissingThread(ctx, threadID)
-				if stateErr != nil {
-					return "", stateErr
-				}
-				if replace {
-					return m.startThread(ctx, live, publishFiles)
-				}
+			if missingSavedThread(err, threadID) {
+				live.appClient.logInfo("creating Codex thread for missing rollout", "old_thread_id", threadID)
+				return m.startThread(ctx, live, publishFiles)
 			}
 			return "", fmt.Errorf("resume saved Codex thread %q: %w", threadID, err)
 		}
@@ -984,6 +972,22 @@ func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSe
 		live.appClient.logInfo("replaced unused Codex thread", "old_thread_id", threadID, "thread_id", started)
 	}
 	return started, err
+}
+
+// Match explicit absence on thread/resume. Other failures can be transient.
+func missingSavedThread(err error, id string) bool {
+	var failure appServerRPCError
+	if !errors.As(err, &failure) {
+		return false
+	}
+	switch failure.Message {
+	case "no rollout found for thread id " + id:
+		return failure.Code == appServerRPCInvalidRequest
+	case "thread not found", "thread not found: " + id:
+		return failure.Code == appServerRPCInvalidRequest || failure.Code == -32000
+	default:
+		return false
+	}
 }
 
 func (m *appServerManager) startThread(ctx context.Context, live *liveSession, publishFiles bool) (string, error) {

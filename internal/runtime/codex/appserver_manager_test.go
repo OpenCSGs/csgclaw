@@ -60,8 +60,8 @@ func TestAppServerManagerStartFailureIncludesRedactedStderrTail(t *testing.T) {
 	}
 }
 
-func TestRestartPreservesUnknownThreadOnResumeFailure(t *testing.T) {
-	withAppServerHelperCommand(t, "resume-fallback")
+func TestRestartPreservesThreadOnPermissionError(t *testing.T) {
+	withAppServerHelperCommand(t, "resume-inaccessible")
 	spec := testAppServerSessionSpec(t.TempDir())
 	path := filepath.Join(spec.RuntimeDir, sessionFileName)
 	legacy := []byte(`{"session_id":"old-thread"}`)
@@ -3450,12 +3450,11 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				threads++
 				return rpcResult(msg["id"], map[string]any{"threadId": fmt.Sprintf("thread-%d-%d", os.Getpid(), threads)}), true
 			case "thread/read":
-				turns := []any{}
-				if params["threadId"] == "legacy-with-history" {
-					turns = append(turns, map[string]any{"id": "old-turn"})
-				}
-				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": params["threadId"], "turns": turns}}), true
+				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": params["threadId"]}}), true
 			case "thread/resume":
+				if params["threadId"] == "missing-native-id" {
+					return rpcError(msg["id"], -32000, "thread not found"), true
+				}
 				if mode == "missing-rollout" || params["threadId"] == "legacy-thread" || params["threadId"] == "unused" || params["threadId"] == "idle-room" {
 					return rpcError(msg["id"], -32600, "no rollout found for thread id "+fmt.Sprint(params["threadId"])), true
 				}
@@ -3550,10 +3549,13 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			}
 			return nil, false
 		})
-	case "resume-fallback":
+	case "resume-fallback", "resume-inaccessible":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {
 			case "thread/read", "thread/resume":
+				if mode == "resume-inaccessible" {
+					return rpcError(msg["id"], -32000, "permission denied reading session"), true
+				}
 				return rpcError(msg["id"], -32000, "thread not found"), true
 			case "thread/start":
 				return rpcResult(msg["id"], map[string]any{"threadId": "new-thread"}), true

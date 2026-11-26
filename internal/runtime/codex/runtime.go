@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"csgclaw/internal/runtime/conversationconfig"
-	"csgclaw/internal/runtime/turnjournal"
 	skill "csgclaw/internal/skill/state"
 	"csgclaw/internal/taskconfig"
 	"encoding/json"
@@ -1747,8 +1746,7 @@ func (r *Runtime) readSessionMetadata(runtimeID string) (sessionMetadata, error)
 func readSavedThreads(read func(string) ([]byte, error), dir string) (sessionMetadata, error) {
 	var saved struct {
 		sessionMetadata
-		Primary      *string         `json:"session_id"`
-		EmptyThreads map[string]bool `json:"empty_threads"`
+		Primary *string `json:"session_id"`
 	}
 	err := readJSONFile(read, filepath.Join(dir, sessionFileName), &saved)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -1766,20 +1764,6 @@ func readSavedThreads(read func(string) ([]byte, error), dir string) (sessionMet
 		} else if !errors.Is(e, os.ErrNotExist) {
 			return sessionMetadata{}, e
 		} else if err != nil {
-			return sessionMetadata{}, err
-		}
-	}
-	// Import only evidence for an actual binding. Keep its native ID until
-	// first use establishes whether Codex has recoverable history.
-	for _, id := range meta.ConversationSessions {
-		if saved.EmptyThreads[id] {
-			if err := turnjournal.Created(dir, id); err != nil {
-				return sessionMetadata{}, err
-			}
-		}
-	}
-	if meta.SessionID != "" && saved.EmptyThreads[meta.SessionID] {
-		if err := turnjournal.Created(dir, meta.SessionID); err != nil {
 			return sessionMetadata{}, err
 		}
 	}

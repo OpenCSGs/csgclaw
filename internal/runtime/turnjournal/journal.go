@@ -137,23 +137,3 @@ func ConfirmedTurn(root, key, message string) (string, error) {
 	}
 	return string(data), err
 }
-
-// Unused checks whether a previously published ID is eligible for a replacement.
-// ReplaceUnused makes the final decision atomically against the first sender.
-func Unused(root, id string) (bool, error) {
-	if root == "" {
-		return false, errors.New("runtime directory is required")
-	}
-	data, err := os.ReadFile(filepath.Join(native(root, id), "created"))
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil || string(data) != "new" {
-		return false, err
-	}
-	action, err := os.ReadFile(filepath.Join(native(root, id), "first"))
-	if errors.Is(err, os.ErrNotExist) {
-		return true, nil
-	}
-	return string(action) == "replace", err
-}
