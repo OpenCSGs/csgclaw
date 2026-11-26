@@ -94,6 +94,28 @@ it("keeps valid files in a mixed batch and sends archives separately", async () 
   expect(result.current.receipt?.issue_id).toBe(42);
 });
 
+it("clears only the count warnings for the attachment type that has room again", () => {
+  const { result } = renderHook(() => useFeedback((key) => key));
+  const images = Array.from({ length: 7 }, (_, index) => new File(["image"], `image-${index}.png`));
+  const archives = Array.from({ length: 4 }, (_, index) => new File(["zip"], `archive-${index}.zip`));
+  const invalid = new File(["text"], "notes.txt", { type: "text/plain" });
+  act(() => result.current.addAttachments([...images, ...archives, invalid]));
+  expect(result.current.rejections.map(({ reason }) => reason)).toEqual([
+    "feedbackImageCount",
+    "feedbackArchiveCount",
+    "feedbackAttachmentFormat",
+  ]);
+  act(() => result.current.removeAttachment("image", 0));
+  expect(result.current.images).toHaveLength(5);
+  expect(result.current.rejections.map(({ reason }) => reason)).toEqual([
+    "feedbackArchiveCount",
+    "feedbackAttachmentFormat",
+  ]);
+  act(() => result.current.removeAttachment("archive", 0));
+  expect(result.current.archives).toHaveLength(2);
+  expect(result.current.rejections).toEqual([{ file: "notes.txt", reason: "feedbackAttachmentFormat" }]);
+});
+
 it("restores a pending draft and checks the receipt without resending", async () => {
   const image = new File(["image"], "feedback.png", { type: "image/png" });
   const requestID = "0123456789abcdef0123456789abcdef";
@@ -131,6 +153,7 @@ it("checks an unknown result and reuses its reference when the attempt was not r
     .mockResolvedValueOnce({ success: true });
   vi.mocked(readFeedbackStatus)
     .mockResolvedValueOnce({ state: "unknown" })
+    .mockRejectedValueOnce(new DOMException("The operation timed out", "TimeoutError"))
     .mockResolvedValueOnce({ state: "not_found" });
   const { result } = renderHook(() => useFeedback((key) => key));
   act(() => result.current.changeDescription("A problem"));
@@ -142,6 +165,13 @@ it("checks an unknown result and reuses its reference when the attempt was not r
     await result.current.checkStatus();
   });
   expect(result.current.awaitingStatus).toBe(true);
+  expect(result.current.error).toBe("feedbackStillUnknown");
+  await act(async () => {
+    await result.current.checkStatus();
+  });
+  expect(result.current.awaitingStatus).toBe(true);
+  expect(result.current.checking).toBe(false);
+  expect(result.current.error).toBe("feedbackStatusFailed");
   await act(async () => {
     await result.current.submit();
   });
