@@ -202,22 +202,15 @@ export function TaskConversationList({
     <div
       className={`${styles.root} ${compact ? styles.compact : ""} ${archived ? styles.archived : ""} ${collapsed ? styles.collapsed : ""}`}
     >
-      {collapsed ? (
+      {collapsed && (directory || query) ? (
         <div className={styles.railControls}>
-          <Tooltip content={t("taskEntrySearchHistory")} contentProps={{ side: "right" }}>
-            <button type="button" aria-label={t("taskEntrySearchHistory")} onClick={onExpand}>
-              <Search size={18} aria-hidden="true" />
+          <Tooltip content={directory || query} contentProps={{ side: "right" }}>
+            <button type="button" aria-label={t("iaSessionDirectoryFilter")} onClick={onExpand}>
+              <span className={styles.railFilter}>
+                <Filter size={13} aria-hidden="true" />
+              </span>
             </button>
           </Tooltip>
-          {directory || query ? (
-            <Tooltip content={directory || query} contentProps={{ side: "right" }}>
-              <button type="button" aria-label={t("iaSessionDirectoryFilter")} onClick={onExpand}>
-                <span className={styles.railFilter}>
-                  <Filter size={13} aria-hidden="true" />
-                </span>
-              </button>
-            </Tooltip>
-          ) : null}
         </div>
       ) : null}
       <div hidden={collapsed} ref={searchBarRef} className={styles.searchBar}>
