@@ -3428,7 +3428,8 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	}
 	mode := args[len(args)-1]
 	switch mode {
-	case "room-configuration":
+	case "room-configuration", "resume-during-turn":
+		var pendingResume any
 		threads := 0
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			params, _ := msg["params"].(map[string]any)
@@ -3439,8 +3440,19 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			case "thread/read":
 				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": params["threadId"]}}), true
 			case "thread/resume":
+				if mode == "resume-during-turn" && params["threadId"] == "cold-thread" {
+					pendingResume = msg["id"]
+					fmt.Fprintln(os.Stderr, "waiting for active turn before resuming cold thread")
+					return nil, false
+				}
 				return rpcResult(msg["id"], map[string]any{"threadId": params["threadId"]}), true
 			case "turn/start":
+				if pendingResume != nil {
+					if err := json.NewEncoder(os.Stdout).Encode(rpcResult(pendingResume, map[string]any{"threadId": "cold-thread"})); err != nil {
+						t.Fatal(err)
+					}
+					pendingResume = nil
+				}
 				threadID := params["threadId"]
 				turnID := fmt.Sprintf("turn-%d", index)
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID}})

@@ -262,7 +262,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	if live.emptyThreads == nil {
 		live.emptyThreads = make(map[string]bool)
 	}
-	threadID, err := m.startOrResumeThread(ctx, live, saved.SessionID, false)
+	threadID, err := m.startOrResumeThread(ctx, live, saved.SessionID, live.emptyThreads[saved.SessionID], false)
 	if err != nil {
 		_ = m.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID})
 		return nil, m.wrapStartupError(spec, "initialize codex app-server thread", err)
@@ -569,7 +569,6 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 	if restoredThreadID != "" {
 		live.conversationResumeMu.Lock()
 		live.conversationPersistMu.Lock()
-
 		live.mu.Lock()
 		if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] {
 			if !publishFiles || live.filePublishingThreads[threadID] {
@@ -581,27 +580,34 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 		}
 		restoredThreadID = strings.TrimSpace(live.conversationSessions[conversationKey])
 		restoredFilePublishing := live.filePublishingThreads[restoredThreadID]
+		empty := live.emptyThreads[restoredThreadID]
 		live.mu.Unlock()
+		live.conversationPersistMu.Unlock()
 		if restoredThreadID == "" {
-			live.conversationPersistMu.Unlock()
 			live.conversationResumeMu.Unlock()
 			return m.ensureSession(ctx, handle, conversationKey, publishFiles)
 		}
 
-		if publishFiles && !restoredFilePublishing && !live.emptyThreads[restoredThreadID] {
-			live.conversationPersistMu.Unlock()
+		if publishFiles && !restoredFilePublishing && !empty {
 			live.conversationResumeMu.Unlock()
 			return "", fmt.Errorf("saved Codex thread %q lacks the required tools; reset the conversation to start with the new tools", restoredThreadID)
 		}
 		withFileTools := restoredFilePublishing || publishFiles
-		threadID, err := m.startOrResumeThread(ctx, live, restoredThreadID, withFileTools)
+		threadID, err := m.startOrResumeThread(ctx, live, restoredThreadID, empty, withFileTools)
 		if err != nil {
-			live.conversationPersistMu.Unlock()
 			live.conversationResumeMu.Unlock()
 			return "", err
 		}
+		live.conversationPersistMu.Lock()
 		live.mu.Lock()
 		previous := live.conversationSessions[conversationKey]
+		// A reset or first turn may have changed the saved binding during the RPC.
+		if previous != restoredThreadID || (empty && !live.emptyThreads[previous]) {
+			live.mu.Unlock()
+			live.conversationPersistMu.Unlock()
+			live.conversationResumeMu.Unlock()
+			return "", fmt.Errorf("Codex conversation %q changed during restore", conversationKey)
+		}
 		previousLoaded := live.loadedConversations[conversationKey]
 		previousFilePublishing := live.filePublishingThreads[previous]
 		live.conversationSessions[conversationKey] = threadID
@@ -610,10 +616,8 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 		if live.emptyThreads[restoredThreadID] {
 			live.emptyThreads[threadID] = true
 		}
-		conversations := cloneConversationSessions(live.conversationSessions)
-		filePublishingConversations := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
 		live.mu.Unlock()
-		if err := m.persistConversationSessions(live, conversations, filePublishingConversations); err != nil {
+		if err := m.persistConversationSessions(live, ""); err != nil {
 			live.mu.Lock()
 			live.conversationSessions[conversationKey] = previous
 			live.loadedConversations[conversationKey] = previousLoaded
@@ -650,10 +654,8 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 	live.loadedConversations[conversationKey] = true
 	live.filePublishingThreads[threadID] = publishFiles
 	live.emptyThreads[threadID] = true
-	conversations := cloneConversationSessions(live.conversationSessions)
-	filePublishingConversations := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
 	live.mu.Unlock()
-	if err := m.persistConversationSessions(live, conversations, filePublishingConversations); err != nil {
+	if err := m.persistConversationSessions(live, ""); err != nil {
 		live.mu.Lock()
 		delete(live.conversationSessions, conversationKey)
 		delete(live.loadedConversations, conversationKey)
@@ -747,10 +749,8 @@ func (m *appServerManager) removeConversationBindings(live *liveSession, logical
 		live.mu.Unlock()
 		return nil
 	}
-	conversations := cloneConversationSessions(live.conversationSessions)
-	filePublishing := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
 	live.mu.Unlock()
-	if err := m.persistConversationSessions(live, conversations, filePublishing); err != nil {
+	if err := m.persistConversationSessions(live, ""); err != nil {
 		live.mu.Lock()
 		for _, item := range removed {
 			live.conversationSessions[item.key] = item.sessionID
@@ -781,26 +781,28 @@ func filePublishingConversationsForThreads(conversations map[string]string, file
 	return cloneFilePublishingConversations(filePublishing)
 }
 
-func (m *appServerManager) persistConversationSessions(
-	live *liveSession,
-	conversations map[string]string,
-	filePublishing map[string]bool,
-) error {
-	if m.deps.SaveSessionMetadata == nil {
-		return nil
-	}
+// The caller holds conversationPersistMu. Publish the new empty markers only after the write succeeds.
+func (m *appServerManager) persistConversationSessions(live *liveSession, firstTurnThread string) error {
+	live.mu.Lock()
 	meta := sessionToSessionMetadata(live.session)
-	meta.EmptyThreads = live.boundEmptyThreads(conversations)
-	meta.ConversationSessions = conversations
-	meta.FilePublishingConversations = filePublishing
-	if err := m.deps.SaveSessionMetadata(live.session.RuntimeDir, meta); err != nil {
-		return err
+	meta.ConversationSessions = cloneConversationSessions(live.conversationSessions)
+	meta.FilePublishingConversations = filePublishingConversationsForThreads(meta.ConversationSessions, live.filePublishingThreads)
+	meta.EmptyThreads = live.boundEmptyThreads(meta.ConversationSessions)
+	delete(meta.EmptyThreads, firstTurnThread)
+	live.mu.Unlock()
+
+	if m.deps.SaveSessionMetadata != nil {
+		if err := m.deps.SaveSessionMetadata(live.session.RuntimeDir, meta); err != nil {
+			return err
+		}
 	}
+	live.mu.Lock()
 	live.emptyThreads = meta.EmptyThreads
+	live.mu.Unlock()
 	return nil
 }
 
-// The caller holds conversationPersistMu. Omit IDs whose bindings have since been reset.
+// The caller holds live.mu. Omit IDs whose bindings have since been reset.
 func (live *liveSession) boundEmptyThreads(conversations map[string]string) map[string]bool {
 	empty := make(map[string]bool)
 	if id := live.session.SessionID; live.emptyThreads[id] {
@@ -816,18 +818,18 @@ func (live *liveSession) boundEmptyThreads(conversations map[string]string) map[
 
 // Persist intent before sending the first turn. A lost RPC response can still mean Codex accepted it.
 func (m *appServerManager) markThreadUsed(live *liveSession, threadID string) error {
+	live.mu.Lock()
+	empty := live.emptyThreads[threadID]
+	live.mu.Unlock()
+	if !empty {
+		return nil
+	}
 	live.conversationPersistMu.Lock()
 	defer live.conversationPersistMu.Unlock()
 	if !live.emptyThreads[threadID] {
 		return nil
 	}
-	delete(live.emptyThreads, threadID)
-	live.mu.Lock()
-	conversations := cloneConversationSessions(live.conversationSessions)
-	publishing := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
-	live.mu.Unlock()
-	if err := m.persistConversationSessions(live, conversations, publishing); err != nil {
-		live.emptyThreads[threadID] = true
+	if err := m.persistConversationSessions(live, threadID); err != nil {
 		return fmt.Errorf("record first turn for thread %q: %w", threadID, err)
 	}
 	return nil
@@ -928,9 +930,9 @@ func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSe
 	return live.appClient.notify("initialized")
 }
 
-func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string, publishFiles bool) (string, error) {
+func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string, empty, publishFiles bool) (string, error) {
 	threadID = strings.TrimSpace(threadID)
-	if threadID != "" && !live.emptyThreads[threadID] {
+	if threadID != "" && !empty {
 		resumed, err := m.resumeThread(ctx, live, threadID)
 		if err != nil {
 			return "", fmt.Errorf("resume saved Codex thread %q: %w", threadID, err)
@@ -1831,14 +1833,17 @@ func (m *appServerManager) savedSession(runtimeDir string) (sessionMetadata, err
 		return meta, nil
 	}
 	err := readJSONFile(m.deps.ReadFile, filepath.Join(runtimeDir, sessionFileName), &meta)
-	if errors.Is(err, os.ErrNotExist) {
-		// A partial restore may retain only runtime.json. Its session ID has unknown history.
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return sessionMetadata{}, err
+	}
+	if strings.TrimSpace(meta.SessionID) == "" {
+		// A legacy import may have written room bindings without the primary ID.
 		var runtime struct {
 			SessionID string `json:"session_id"`
 		}
 		err = readJSONFile(m.deps.ReadFile, filepath.Join(runtimeDir, runtimeFileName), &runtime)
 		if errors.Is(err, os.ErrNotExist) {
-			return meta, nil
+			return normalizeSessionMetadata(meta), nil
 		}
 		meta.SessionID = runtime.SessionID
 	}

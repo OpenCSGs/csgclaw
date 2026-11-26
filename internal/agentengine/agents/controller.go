@@ -1660,6 +1660,24 @@ func (s *Controller) refreshAgentBoxID(id string, got Agent, resolvedKey string,
 	return s.saveLocked()
 }
 
+func startupStageOutcome(stage string, result Agent, success bool) []slog.Attr {
+	availability := result.Availability
+	if availability == nil {
+		return []slog.Attr{slog.Bool("success", success)}
+	}
+	if stage == "check_availability" {
+		success = success && (availability.State == RuntimeAvailabilityReady || availability.State == RuntimeAvailabilityNotApplicable)
+	}
+	attrs := []slog.Attr{
+		slog.Bool("success", success), slog.String("state", result.Status),
+		slog.String("availability", string(availability.State)),
+	}
+	if availability.Reason != "" {
+		attrs = append(attrs, slog.String("availability_reason", availability.Reason))
+	}
+	return attrs
+}
+
 func (s *Controller) Start(ctx context.Context, id string) (result Agent, startErr error) {
 	started := time.Now()
 	id = strings.TrimSpace(id)
@@ -1685,13 +1703,11 @@ func (s *Controller) Start(ctx context.Context, id string) (result Agent, startE
 		now := time.Now()
 		attrs := []slog.Attr{
 			slog.String("agent_id", id), slog.String("runtime_id", got.RuntimeID),
-			slog.String("stage", stage), slog.Bool("success", success),
+			slog.String("stage", stage),
 			slog.Int64("duration_ms", now.Sub(stageStarted).Milliseconds()),
 			slog.Int64("total_ms", now.Sub(started).Milliseconds()),
 		}
-		if result.Availability != nil {
-			attrs = append(attrs, slog.String("state", result.Status), slog.String("availability", string(result.Availability.State)))
-		}
+		attrs = append(attrs, startupStageOutcome(stage, result, success)...)
 		slog.LogAttrs(ctx, slog.LevelInfo, "agent startup stage", attrs...)
 		stageStarted = now
 	}
