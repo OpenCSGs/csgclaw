@@ -9,7 +9,7 @@ export type FeedbackResult = {
 export type FeedbackStatus = { state: "not_found" | "unknown" } | { state: "submitted"; receipt: FeedbackResult };
 
 export function readFeedbackStatus(requestID: string): Promise<FeedbackStatus> {
-  return post("/api/v1/feedback/status", { request_id: requestID });
+  return post("/api/v1/feedback/status", { request_id: requestID }, { signal: AbortSignal.timeout(10_000) });
 }
 
 export function submitFeedback(

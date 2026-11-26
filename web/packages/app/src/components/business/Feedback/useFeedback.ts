@@ -216,7 +216,8 @@ export function useFeedback(t: TranslateFn, accountScope = "") {
       }
     } catch (cause) {
       if (currentGeneration === generation.current) {
-        setError(localizeAPIError(cause, t, t("feedbackStatusFailed")));
+        const failure = t("feedbackStatusFailed");
+        setError(apiErrorCode(cause) ? localizeAPIError(cause, t, failure) : failure);
       }
     } finally {
       if (currentGeneration === generation.current) {
@@ -260,7 +261,13 @@ export function useFeedback(t: TranslateFn, accountScope = "") {
     if (!ready || inFlight.current || draftRef.current.awaitingStatus) return;
     const current = draftRef.current;
     const key = kind === "image" ? "images" : "archives";
-    void updateDraft({ ...current, [key]: current[key].filter((_, position) => position !== index) });
+    const remaining = current[key].filter((_, position) => position !== index);
+    const limit = kind === "image" ? MAX_FEEDBACK_IMAGES : MAX_FEEDBACK_ARCHIVES;
+    const countWarning = kind === "image" ? "feedbackImageCount" : "feedbackArchiveCount";
+    if (remaining.length < limit) {
+      setRejections((previous) => previous.filter(({ reason }) => reason !== countWarning));
+    }
+    void updateDraft({ ...current, [key]: remaining });
   }
 
   function discardDraft() {
@@ -279,6 +286,7 @@ export function useFeedback(t: TranslateFn, accountScope = "") {
     busy,
     checking,
     error,
+    clearError: () => setError(""),
     receipt,
     clearReceipt: () => setReceipt(null),
     submit,

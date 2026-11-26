@@ -65,6 +65,7 @@ export function WorkspaceFeedback() {
         onDescriptionChange={feedback.changeDescription}
         onAddAttachments={feedback.addAttachments}
         onRemoveAttachment={feedback.removeAttachment}
+        onClearError={feedback.clearError}
         onClearRejections={feedback.clearRejections}
         onCheckStatus={feedback.checkStatus}
         onDiscardDraft={feedback.discardDraft}
