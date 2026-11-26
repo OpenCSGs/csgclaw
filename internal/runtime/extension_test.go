@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	stdruntime "runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -62,10 +63,29 @@ func TestMergeExtensionEnvironmentPreservesNonemptyProxyBypass(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !slices.Equal(environment, []string{tc.want}) {
-				t.Fatalf("environment = %q, want %q", environment, tc.want)
+			want := []string{tc.want}
+			if stdruntime.GOOS != "windows" {
+				want = slices.Clone(tc.base)
+				slices.Sort(want)
+			}
+			if !slices.Equal(environment, want) {
+				t.Fatalf("environment = %q, want %q", environment, want)
 			}
 		})
+	}
+}
+
+func TestMergeExtensionEnvironmentProxyBypassOverride(t *testing.T) {
+	environment, _, err := MergeExtensionEnvironment(
+		[]string{"NO_PROXY=*", "no_proxy= "},
+		nil,
+		[]ExtensionProjection{{Name: "proxy", Environment: map[string]string{"NO_PROXY": ".extension.example"}}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(environment, []string{"NO_PROXY=.extension.example"}) {
+		t.Fatalf("environment = %q, want the extension's exclusion list", environment)
 	}
 }
 
