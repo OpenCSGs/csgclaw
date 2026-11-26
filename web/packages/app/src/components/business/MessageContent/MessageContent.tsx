@@ -1,11 +1,12 @@
 import messageContentStyles from "./MessageContent.module.css";
 import { ResourceTag } from "@/components/business/ResourceTag";
 import { messageResources, resourceKey } from "@/models/conversationResources";
-import { TurnProgress } from "@/components/business/TurnProgress";
+import { StandaloneToolStep, TurnProgress } from "@/components/business/TurnProgress";
+import { createTranslator } from "@/shared/i18n";
 import { parseTurnProgress } from "@/models/turnProgress";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionCard } from "./ActionCard";
-import { AgentActivityCard, ToolActivityOutput } from "./AgentActivityCard";
+import { AgentActivityCard } from "./AgentActivityCard";
 import { LongMessageCollapse } from "./LongMessageCollapse";
 import { CitationSources } from "./CitationSources";
 import { renderMarkdownWithCitations } from "./markdown";
@@ -159,9 +160,18 @@ function MessageBody({
 
   const parseCommand = allowLegacyToolFormat ? parseMessageActivityCommand : parseDeliveryCommand;
   const command = message && parseCommand({ content: displayContent, metadata: message.metadata });
-  if (command?.output) {
+  if (command) {
     return (
-      <ToolActivityOutput name={command.command} label={t?.("progressOutput") ?? "Output"} text={command.output} />
+      <StandaloneToolStep
+        tool={{
+          name: "exec",
+          actions: ["execute"],
+          status: command.output ? "completed" : "",
+          command: command.command,
+          output: command.output,
+        }}
+        t={t ?? createTranslator("en")}
+      />
     );
   }
 

@@ -1,4 +1,4 @@
-import type { IMMessage } from "@/models/conversations";
+import type { IMMessage, TranslateFn } from "@/models/conversations";
 
 export type ProgressTool = {
   details_version?: number;
@@ -79,6 +79,13 @@ export function progressDuration(progress: TurnProgress, now: number): string {
   const seconds = Math.max(0, Math.floor(((Number.isFinite(end) ? end : now) - start) / 1000)) || 0;
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
+
+export function formatProgressToolDuration(milliseconds: number | null | undefined, t: TranslateFn): string {
+  if (milliseconds == null || !Number.isFinite(milliseconds) || milliseconds < 0) return "";
+  if (milliseconds === 0) return t("progressToolDurationUnderMillisecond");
+  if (milliseconds < 1000) return t("progressToolDurationMilliseconds", { milliseconds });
+  return t("progressToolDurationSeconds", { seconds: (milliseconds / 1000).toFixed(1) });
+}
 export type ProgressGroup = { id: string; items: ProgressItem[]; kind: ProgressItem["kind"]; firstToolNumber: number };
 export function progressGroups(items: ProgressItem[]): ProgressGroup[] {
   const result: ProgressGroup[] = [];
@@ -91,13 +98,22 @@ export function progressGroups(items: ProgressItem[]): ProgressGroup[] {
   }
   return result;
 }
-export function toolRowPreview(tool: ProgressTool): string {
-  let target = tool.summary || tool.command || "";
+export function isExecutionToolKind(kind?: string): boolean {
+  return /^(bash|command|execute|exec|exec_command|command_execution|shell|terminal)$/.test(kind?.toLowerCase() || "");
+}
+export function progressToolAction(tool: ProgressTool): string {
+  return tool.actions[0] || (tool.command || isExecutionToolKind(tool.name) ? "execute" : "tool");
+}
+export function toolRowSummary(tool: ProgressTool): string {
+  const action = progressToolAction(tool);
+  if (action === "execute") return "";
+
+  let target = tool.summary || "";
   if (!target && tool.input) {
     try {
       const raw = record(JSON.parse(tool.input));
       for (const fields of [record(raw?.action), record(raw?.arguments), raw]) {
-        const value = [fields?.query, fields?.q, fields?.url, fields?.command].find(
+        const value = [fields?.query, fields?.q, fields?.url, fields?.path, fields?.file].find(
           (item) => typeof item === "string" && item.trim(),
         );
         if (typeof value === "string") {
@@ -109,12 +125,23 @@ export function toolRowPreview(tool: ProgressTool): string {
       // Old snapshots may have truncated JSON. Their tool name is still available.
     }
   }
-  return (target || tool.name).replace(/\s+/g, " ").trim().slice(0, 240);
+  const summary = (target || (action === "tool" ? tool.name : "")).replace(/\s+/g, " ").trim();
+  const command = tool.command?.replace(/\s+/g, " ").trim();
+  return command && summary.includes(command) ? "" : summary.slice(0, 240);
+}
+export function progressToolStatus(rawStatus: string, exitCode?: number | null): string {
+  const status = rawStatus.trim().toLowerCase();
+  if (["completed", "complete", "done", "success", "succeeded"].includes(status) && exitCode) return "failed";
+  return status;
+}
+export function failedProgressTool(status: string): boolean {
+  return ["failed", "error", "declined", "blocked", "timeout"].includes(status);
 }
 export function terminalTool(status?: string): boolean {
   return [
     "completed",
     "complete",
+    "done",
     "success",
     "succeeded",
     "failed",
@@ -122,6 +149,8 @@ export function terminalTool(status?: string): boolean {
     "canceled",
     "cancelled",
     "declined",
+    "blocked",
+    "timeout",
     "interrupted",
   ].includes(status || "");
 }
@@ -148,8 +177,9 @@ export function expandProgressMessage(message: IMMessage): IMMessage[] {
             body: tool.name,
             tool: {
               id,
-              kind: tool.actions[0] || "tool",
+              kind: progressToolAction(tool),
               title: tool.name,
+              progress_summary: toolRowSummary(tool),
               status: tool.status,
               command: tool.command,
               cwd: tool.cwd,

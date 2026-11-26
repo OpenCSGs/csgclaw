@@ -4,7 +4,17 @@ import type { ReactNode } from "react";
 import { Brain, ChevronDown, ChevronRight, Clock3 } from "lucide-react";
 import { ToolOutput } from "@/components/business/ToolOutput";
 import { Button } from "@/components/ui";
-import { progressActive, progressDuration, progressGroups, toolRowPreview, terminalTool } from "@/models/turnProgress";
+import {
+  failedProgressTool,
+  formatProgressToolDuration,
+  progressActive,
+  progressDuration,
+  progressGroups,
+  progressToolAction,
+  progressToolStatus,
+  terminalTool,
+  toolRowSummary,
+} from "@/models/turnProgress";
 import type { ProgressGroup, ProgressTool, TurnProgress as Progress } from "@/models/turnProgress";
 import { videoProgressTiming } from "@/models/videoGeneration";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
@@ -181,6 +191,12 @@ export const TurnProgress = memo(function TurnProgress({
   const shell = useRef<HTMLElement>(null);
   const id = useId();
   const groups = useMemo(() => progressGroups(progress.items), [progress.items]);
+  const toolStatuses = useMemo(
+    () => progress.items.flatMap(({ tool }) => (tool ? [progressToolStatus(tool.status, tool.exit_code)] : [])),
+    [progress.items],
+  );
+  const toolCount = toolStatuses.length;
+  const failedCount = toolStatuses.filter(failedProgressTool).length;
   const hasProcess = groups.length > 0 || active || videoTiming !== null || progress.status !== "succeeded";
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const statusLabel =
@@ -223,6 +239,20 @@ export const TurnProgress = memo(function TurnProgress({
               <span>{t(statusLabel)}</span>
               {clockProgress.status !== "succeeded" ? <span aria-hidden="true">·</span> : null}
               <Elapsed progress={clockProgress} />
+              {toolCount ? (
+                <span className={styles.stepCount}>
+                  <span aria-hidden="true">·</span>
+                  {active
+                    ? t("progressToolStepsActive", {
+                        finished: toolStatuses.filter(terminalTool).length,
+                        total: toolCount,
+                      })
+                    : t("progressToolSteps", { count: toolCount })}
+                  {failedCount ? (
+                    <span className={styles.failedCount}>{t("progressToolStepsFailed", { count: failedCount })}</span>
+                  ) : null}
+                </span>
+              ) : null}
               {open ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
             </Button>
             {active && headerControls ? <div className={styles.headerControls}>{headerControls}</div> : null}
@@ -354,6 +384,16 @@ function ReasoningGroup({
   );
 }
 
+export function StandaloneToolStep({ tool, t }: { tool: ProgressTool; t: TranslateFn }) {
+  return (
+    <div className={styles.shell}>
+      <ol className={styles.standaloneStep} aria-label={t("progressToolList")}>
+        <ToolRow tool={tool} number={1} t={t} />
+      </ol>
+    </div>
+  );
+}
+
 const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool; number: number; t: TranslateFn }) {
   const [open, setOpen] = useState(false);
   const toggleLabels = { expand: t("messageLongExpand"), collapse: t("messageLongCollapse") };
@@ -361,14 +401,18 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
   const inputLabel = t(tool.command ? "progressCommand" : "progressInput");
   const outputLabel = t("progressOutput");
   const id = useId();
-  const failed = ["failed", "error", "declined"].includes(tool.status);
-  const label = t(`progressToolStatus_${tool.status}`);
-  const status = label.startsWith("progressToolStatus_") ? t("progressToolStatus_running") : label;
-  const preview = toolRowPreview(tool);
-  const action = tool.actions[0] || (tool.command ? "execute" : "tool");
+  const toolStatus = progressToolStatus(tool.status, tool.exit_code);
+  const failed = failedProgressTool(toolStatus);
+  const label = t(`progressToolStatus_${toolStatus}`);
+  const status = !toolStatus ? "" : label.startsWith("progressToolStatus_") ? t("progressToolStatus_running") : label;
+  const summary = toolRowSummary(tool);
+  const action = progressToolAction(tool);
   const Icon = toolIcon(action);
-  const actionLabel = t(`progressAction_${action}`);
-  const displaysMetadata = tool.exit_code != null || tool.duration_ms != null || Boolean(tool.cwd);
+  const translatedAction = t(`progressAction_${action}`);
+  const actionLabel = translatedAction.startsWith("progressAction_") ? t("progressAction_tool") : translatedAction;
+  const duration = formatProgressToolDuration(tool.duration_ms, t);
+  const durationLabel = duration ? t("progressToolDuration", { duration }) : "";
+  const displaysMetadata = tool.exit_code != null || Boolean(tool.cwd);
   return (
     <li className={styles.tool} data-failed={failed || undefined}>
       <Button
@@ -376,24 +420,31 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
         size="sm"
         className={styles.toolToggle}
         aria-expanded={open}
-        aria-controls={id}
-        aria-label={t("progressToolDetails", { number, command: preview, status })}
+        aria-controls={open ? id : undefined}
+        aria-label={t("progressToolDetails", {
+          number,
+          summary: [actionLabel, summary, status, durationLabel].filter(Boolean).join(" · "),
+        })}
         data-scroll-anchor-toggle
         onClick={() => {
           setOpen(!open);
         }}
       >
-        <span className={styles.ordinal} aria-hidden="true">
-          {number}
+        <span className={styles.stepIcon} aria-hidden="true">
+          <Icon size={15} />
         </span>
-        <Icon size={15} aria-hidden="true" />
-        <span className={styles.toolAction}>
-          {actionLabel.startsWith("progressAction_") ? t("progressAction_tool") : actionLabel}
+        <span className={styles.stepSummary}>
+          <span className={styles.toolAction}>{actionLabel}</span>
+          {summary ? (
+            <span className={styles.toolTarget} title={summary}>
+              {summary}
+            </span>
+          ) : null}
         </span>
-        <span className={styles.commandPreview} title={preview}>
-          {preview}
+        <span className={styles.stepMeta}>
+          {status ? <span className={styles.toolStatus}>{status}</span> : null}
+          {duration ? <span className={styles.toolDuration}>{duration}</span> : null}
         </span>
-        <span className={styles.toolStatus}>{status}</span>
         {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
       </Button>
       {open ? (
@@ -410,7 +461,7 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
               <ToolOutput label={outputLabel} text={tool.output} toggleLabels={toggleLabels} />
             ) : (
               <p className={styles.emptyOutput}>
-                {t(terminalTool(tool.status) ? "progressNoOutput" : "progressWaitingOutput")}
+                {t(!toolStatus || terminalTool(toolStatus) ? "progressNoOutput" : "progressWaitingOutput")}
               </p>
             )}
             {tool.truncated ? <small>{t("progressTruncated")}</small> : null}
@@ -418,9 +469,6 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
           {displaysMetadata ? (
             <div className={styles.toolMeta}>
               {tool.exit_code != null ? <span>{t("progressExitCode", { code: tool.exit_code })}</span> : null}
-              {tool.duration_ms != null ? (
-                <span>{t("progressToolDuration", { seconds: (tool.duration_ms / 1000).toFixed(1) })}</span>
-              ) : null}
               {tool.cwd ? (
                 <span className={styles.directory} title={tool.cwd}>
                   <ListActionIcon size={13} aria-hidden="true" />

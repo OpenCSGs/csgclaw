@@ -1,4 +1,4 @@
-import { expandProgressMessage, newerProgressMessage } from "@/models/turnProgress";
+import { expandProgressMessage, isExecutionToolKind, newerProgressMessage } from "@/models/turnProgress";
 import {
   agentActivityMessageToolMergeKey,
   agentActivityToolMergeKeys,
@@ -213,18 +213,20 @@ export function conversationActivityEntrySummary(entry: ConversationActivityEntr
     return runtimeErrorDetail;
   }
   if (entry.command) {
-    return firstNonEmpty(entry.command.command, entry.command.title, entry.command.output);
+    return "";
   }
   const activity = entry.activity;
   if (activity?.content.msgtype === AgentActivityMsgTypes.tool && activity.content.tool) {
     const tool = activity.content.tool;
-    return firstNonEmpty(
-      toolCommandText(tool),
-      toolInputText(tool),
-      toolOutputText(tool),
-      tool.title,
-      activity.content.body,
+    if (isExecutionToolKind(tool.kind) || isExecutionToolKind(tool.title)) return "";
+    const command = toolCommandText(tool);
+    const fields = ["query", "q", "url", "path", "file"];
+    const summary = firstNonEmpty(
+      tool.progress_summary,
+      summaryValue(tool.input_summary, ...fields),
+      summaryValue(tool.input, ...fields),
     );
+    return command && summary.includes(command) ? "" : summary;
   }
   if (activity?.content.msgtype === AgentActivityMsgTypes.action) {
     const action = activity.content.action;
@@ -303,7 +305,7 @@ export function conversationWorkingParticipantsWithActivity(
             action: conversationWorkingActionForEntry(entry),
             entryID: entry.id,
             summary: compactWorkingSummary(conversationActivityEntrySummary(entry)),
-            toolName: entry.tone === "tool" ? entry.eventType : undefined,
+            toolName: entry.tone === "tool" && !isExecutionToolKind(entry.eventType) ? entry.eventType : undefined,
             updatedAt: entry.updatedAt || entry.createdAt,
           },
         },
@@ -767,9 +769,7 @@ function truncateText(value: string, maxLength: number): string {
 }
 
 function compactWorkingSummary(value: string): string {
-  const compact = value.replace(/\s+/g, " ").trim();
-  const shellCommand = compact.match(/^\/(?:usr\/)?bin\/(?:ba|z|)sh\s+-lc\s+(['"])(.*)\1$/)?.[2] || compact;
-  return truncateText(shellCommand, MAX_WORKING_SUMMARY_LENGTH);
+  return truncateText(value.replace(/\s+/g, " ").trim(), MAX_WORKING_SUMMARY_LENGTH);
 }
 
 function normalizeEventType(value: string): string {

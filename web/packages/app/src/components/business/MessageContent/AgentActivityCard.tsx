@@ -1,12 +1,13 @@
 import messageContentStyles from "./MessageContent.module.css";
 import { useEffect, useMemo, useState } from "react";
-import { Check, ShieldAlert, ShieldCheck, ShieldX, Wrench, X } from "lucide-react";
+import { Check, ShieldAlert, ShieldCheck, ShieldX, X } from "lucide-react";
 import { decideChannelActivity } from "@/api/agentActivities";
 import { errorMessage } from "@/api/client";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { createTranslator } from "@/shared/i18n";
 import { questionOptions } from "@/models/agentActivity";
-import { ToolOutput } from "@/components/business/ToolOutput";
+import { StandaloneToolStep } from "@/components/business/TurnProgress";
+import { isExecutionToolKind } from "@/models/turnProgress";
 import type {
   AgentActivityAction,
   AgentActivityActionOption,
@@ -99,21 +100,22 @@ function questionStatusLabel(status: string, t: TranslateFn): string {
 
 function ToolActivityCard({ activity, t }: { activity: AgentActivityPayload; t: TranslateFn }) {
   const tool = activity.content.tool!;
-  const summary = tool.output_summary || tool.input_summary || activity.content.body || "";
-  const label = t(tool.output_summary ? "progressOutput" : tool.input_summary ? "progressInput" : "progressToolList");
-  return <ToolActivityOutput name={displayToolKind(tool.kind)} label={label} text={summary} />;
-}
-
-export function ToolActivityOutput({ name, label, text }: { name: string; label: string; text: string }) {
   return (
-    <section className={messageContentStyles.toolActivity}>
-      <div className={messageContentStyles.toolActivityHeading}>
-        <Wrench size={14} aria-hidden="true" />
-        <code title={name}>{name}</code>
-        <span>{label}</span>
-      </div>
-      {text ? <ToolOutput label={label} text={text} /> : null}
-    </section>
+    <StandaloneToolStep
+      tool={{
+        name: tool.title,
+        actions: tool.kind ? [isExecutionToolKind(tool.kind) ? "execute" : tool.kind] : [],
+        status: tool.status,
+        summary: tool.progress_summary,
+        command: tool.command,
+        cwd: tool.cwd,
+        input: tool.input_summary || activity.content.body,
+        output: tool.output_summary,
+        duration_ms: tool.duration_ms,
+        exit_code: tool.exit_code ?? undefined,
+      }}
+      t={t}
+    />
   );
 }
 
@@ -255,14 +257,4 @@ function permissionActionOptionLabel(option: AgentActivityActionOption, t: Trans
     default:
       return option.label || option.id || t("permissionAction");
   }
-}
-
-function displayToolKind(kind: string | undefined) {
-  const normalized = String(kind || "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "execute") {
-    return "exec";
-  }
-  return normalized || "tool";
 }

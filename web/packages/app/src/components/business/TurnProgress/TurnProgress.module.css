@@ -69,15 +69,30 @@
 
 .headerControls {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
 .heading > span {
+  flex-wrap: wrap;
   justify-content: flex-start;
   gap: 6px;
   white-space: normal;
+}
+
+.stepCount {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  font: var(--text-xs-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.shell button.heading .failedCount {
+  color: color-mix(in srgb, var(--danger) 72%, var(--text));
 }
 
 .shell svg {
@@ -151,7 +166,7 @@
   max-block-size: min(16rem, 40vh);
   overflow: auto;
   margin: 8px 0 0;
-  padding: 10px 12px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   background: var(--panel-soft);
   font-size: 13px;
@@ -217,39 +232,47 @@
   }
 }
 
-.toolList {
-  margin: 4px 0 16px;
+.toolList,
+.standaloneStep {
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
+.toolList {
+  margin: 2px 0 16px;
+}
+
 .tool {
-  content-visibility: auto;
-  contain-intrinsic-block-size: auto 41px;
+  position: relative;
   min-width: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 4px;
-  transition: background-color 120ms ease;
 }
 
-.tool:hover {
-  background: color-mix(in oklab, var(--text) 4%, transparent);
+.tool:is(:not(:last-child), :has(> .toolDetails))::before {
+  content: "";
+  position: absolute;
+  inset-block: 29px 0;
+  inset-inline-start: 17px;
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 
-.tool:first-child {
-  border-top: 1px solid var(--line);
+.tool:not(:last-child)::before {
+  inset-block-end: -5px;
 }
 
 .shell button.toolToggle {
   display: flex;
   width: 100%;
-  padding: 9px 4px;
+  padding: 5px 6px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .toolToggle > :global(.btn-content) {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   width: 100%;
   min-width: 0;
   gap: 8px;
@@ -257,61 +280,63 @@
 }
 
 .shell button.toolToggle:hover {
-  background: transparent;
+  background: var(--panel-soft);
   color: var(--text);
 }
 
-.shell button.toolToggle:hover .ordinal,
-.shell button.toolToggle:hover .toolStatus {
-  color: var(--text);
+.stepIcon {
+  display: grid;
+  align-self: start;
+  place-items: center;
+  width: 24px;
+  height: 24px;
 }
 
-.shell button.toolToggle:hover .commandPreview {
-  color: var(--text);
-}
-
-.ordinal {
-  width: 18px;
-  flex-shrink: 0;
-  text-align: center;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
+.stepSummary,
+.stepMeta {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 0 8px;
 }
 
 .toolAction {
-  flex: 0 0 auto;
-  color: var(--muted);
+  flex-shrink: 0;
+  max-width: 100%;
+  color: var(--text);
+  font: var(--text-sm-medium);
+  white-space: normal;
 }
 
-.commandPreview {
-  flex: 1;
+.toolTarget {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font:
-    13px/22px ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace;
-  color: color-mix(in srgb, var(--muted) 78%, var(--text));
+  font: var(--text-xs-normal);
 }
 
-.toolStatus {
-  flex-shrink: 0;
+.stepMeta {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: 20ch;
+  font: var(--text-xs-normal);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  font-size: 12px;
+}
+
+.tool[data-failed] .stepIcon,
+.tool[data-failed] .toolStatus {
+  color: color-mix(in srgb, var(--danger) 72%, var(--text));
+}
+
+.toolDuration {
   color: var(--muted);
 }
 
-.tool[data-failed] .toolStatus {
-  color: var(--danger);
-}
-
 .toolDetails {
-  margin: 0 0 10px;
+  position: relative;
+  margin: var(--space-2) 0 8px 38px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 6px;

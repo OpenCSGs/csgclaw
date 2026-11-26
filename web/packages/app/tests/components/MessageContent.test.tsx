@@ -385,7 +385,7 @@ describe("MessageContent", () => {
     expect(screen.queryByText("查看原始 JSON · 1 个字段")).not.toBeInTheDocument();
   });
 
-  it("renders Codex tool activity in the structured tool output style", () => {
+  it("shows Codex tool progress and reveals its input on request", async () => {
     render(
       <MessageContent
         content={JSON.stringify({
@@ -407,9 +407,10 @@ describe("MessageContent", () => {
       />,
     );
 
-    expect(screen.getByText("exec")).toBeInTheDocument();
-    expect(screen.queryByText("Run shell command")).not.toBeInTheDocument();
-    expect(screen.queryByText("Running")).not.toBeInTheDocument();
+    const step = screen.getByRole("button", { name: "Step 1: Run commands · Running" });
+    expect(step).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/go test/)).not.toBeInTheDocument();
+    await userEvent.click(step);
     expect(screen.getByText(/go test/)).toBeInTheDocument();
   });
 
@@ -436,7 +437,7 @@ describe("MessageContent", () => {
     expect(screen.queryByRole("region", { name: "Output" })).not.toBeInTheDocument();
   });
 
-  it("renders legacy output for a confirmed Agent message", () => {
+  it("folds legacy tool commands and output for a confirmed Agent message", async () => {
     render(
       <MessageContent
         content={legacyToolMarkdown}
@@ -445,11 +446,14 @@ describe("MessageContent", () => {
       />,
     );
 
-    expect(screen.getByText("example command")).toBeInTheDocument();
+    expect(screen.queryByText("example command")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Output" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Run commands/ }));
+    expect(screen.getByText("example command")).toBeVisible();
     expect(screen.getByRole("region", { name: "Output" })).toHaveTextContent("example output");
   });
 
-  it("renders tool output with explicit delivery metadata without a resolved Agent", () => {
+  it("folds tool details with explicit delivery metadata without a resolved Agent", async () => {
     render(
       <MessageContent
         content={legacyToolMarkdown}
@@ -457,6 +461,8 @@ describe("MessageContent", () => {
       />,
     );
 
+    expect(screen.queryByRole("region", { name: "Output" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Run commands/ }));
     expect(screen.getByRole("region", { name: "Output" })).toHaveTextContent("example output");
   });
 

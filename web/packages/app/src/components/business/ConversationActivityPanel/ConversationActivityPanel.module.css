@@ -410,6 +410,10 @@
   cursor: pointer;
 }
 
+.toolSummary {
+  font: var(--text-xs-medium);
+}
+
 .rowSummary svg {
   flex: 0 0 auto;
   color: var(--muted);
