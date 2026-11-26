@@ -252,7 +252,7 @@ function StartTaskForm({
   const workspaceAgentID = workspaceAgent?.id || "";
   const userID = sidebar?.currentUserID ?? "";
   const awaitingAgent = selected.startsWith("agent:") && !selectedAgent;
-  const pendingDraftKey = startTaskDraftKey(userID, `pending:${target || "default"}`);
+  const pendingDraftKey = startTaskDraftKey(userID, `pending:${target || "default"}`, "", workspaceDir);
   const draftKey =
     createdDraftKey.current ??
     (awaitingAgent

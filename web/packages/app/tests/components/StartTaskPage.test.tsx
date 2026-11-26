@@ -148,6 +148,7 @@ function setup(
     onCreateAgent,
     requireAuth,
     unmount: view.unmount,
+    container: view.container,
     loadAgents: () => view.rerender(renderPage(true)),
   };
 }
@@ -1072,6 +1073,33 @@ describe("start composer drafts", () => {
     expect(localStorage.getItem(startTaskDraftKey("user-admin", "agent:u-manager", "", "/default"))).toContain(
       "Typed before agents loaded",
     );
+  });
+
+  it("isolates pending drafts when two workspaces for the same Agent load independently", async () => {
+    const route = "/new?agent=u-manager";
+    localStorage.setItem(
+      startTaskDraftKey("user-admin", "agent:u-manager", "", "/project-b"),
+      JSON.stringify({ text: "Project B draft" }),
+    );
+    const projectA = setup(route, "test-model", {
+      delayAgents: true,
+      configuration: { workspace_dir: "/project-a" },
+    });
+    const editorA = within(projectA.container).getByRole("textbox", { name: "taskEntryPrompt" });
+    fireEvent.change(editorA, { target: { value: "Project A private draft" } });
+    window.dispatchEvent(new Event("pagehide"));
+
+    const projectB = setup(route, "test-model", {
+      delayAgents: true,
+      configuration: { workspace_dir: "/project-b" },
+    });
+    projectB.loadAgents();
+    const editorB = within(projectB.container).getByRole("textbox", { name: "taskEntryPrompt" });
+    expect(editorB).toHaveValue("Project B draft");
+
+    projectA.loadAgents();
+    await waitFor(() => expect(editorA).toHaveValue("Project A private draft"));
+    expect(editorB).toHaveValue("Project B draft");
   });
 
   it("restores the recipient and directory recorded in the current history entry", async () => {
