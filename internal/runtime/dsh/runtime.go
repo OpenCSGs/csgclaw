@@ -472,6 +472,7 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
+	environment = agentruntime.WithLocalProxyBypass(environment, ref.Profile.Env["CSGCLAW_BASE_URL"])
 	extensionExecutables := managedExtensionExecutables(projections)
 	proc, err := r.launch(ctx, root, workspace, binary.Path, ref.Profile, mcpServers, meta, environment, extensionDigests, extensionExecutables, true)
 	if err != nil {

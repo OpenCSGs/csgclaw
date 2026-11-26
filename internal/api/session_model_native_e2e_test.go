@@ -44,6 +44,32 @@ func TestNativeSessionModelOptionsThroughBridge(t *testing.T) {
 	}
 }
 
+func TestNativeSessionThroughBridgeBypassesLocalProxy(t *testing.T) {
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "fixture proxy rejects this destination", http.StatusForbidden)
+	}))
+	t.Cleanup(proxy.Close)
+	for _, name := range []string{"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(name, proxy.URL)
+	}
+	for _, tc := range []struct {
+		name  string
+		upper string
+		lower string
+	}{
+		{name: "configured exclusions", upper: "bypass.example", lower: "bypass.example"},
+		{name: "uppercase wildcard and lowercase whitespace", upper: "*", lower: " "},
+		{name: "wildcard exclusions", upper: "*", lower: "*"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("NO_PROXY", tc.upper)
+			t.Setenv("no_proxy", tc.lower)
+			b := newNativeSessionModelBridge(t, "low")
+			b.turn("proxy", modelSelection{}, 100, modelSelection{"model-a", "low"})
+		})
+	}
+}
+
 func TestNativeSessionModelCompactionThroughBridge(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

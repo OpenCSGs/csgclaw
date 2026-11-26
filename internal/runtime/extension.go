@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	stdruntime "runtime"
 	"sort"
 	"strings"
 	"time"
@@ -119,6 +120,13 @@ func MergeExtensionEnvironment(base []string, profile map[string]string, project
 		if found {
 			canonical := CanonicalEnvironmentKey(key)
 			if previous := effectiveKeys[canonical]; previous != "" && previous != key {
+				// Keep the populated alias. On Unix, prefer a populated lowercase
+				// value so the worker receives the same exclusion list in either order.
+				if isProxyBypassEnvironmentKey(key) && isProxyBypassEnvironmentKey(previous) &&
+					values[previous] != "" &&
+					(value == "" || (stdruntime.GOOS != "windows" && previous == "no_proxy")) {
+					continue
+				}
 				delete(values, previous)
 			}
 			values[key] = value

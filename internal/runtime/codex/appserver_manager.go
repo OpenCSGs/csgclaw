@@ -155,7 +155,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		return nil, fmt.Errorf("prepare codex app-server command: %w", err)
 	}
 	cmd.Dir = spec.WorkspaceDir
-	cmd.Env = environment
+	cmd.Env = codexProxyEnvironment(environment, spec.Profile.Env["CSGCLAW_BASE_URL"])
 	if telemetry != nil {
 		// Keep completed-turn exports timely; this does not block the turn itself.
 		cmd.Env = append(cmd.Env, "OTEL_BSP_SCHEDULE_DELAY=1000")
