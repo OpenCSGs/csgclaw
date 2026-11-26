@@ -23,39 +23,32 @@ type nativeTelemetry struct {
 	endpoint   string
 	turns      map[string]nativeDiagnostic
 	traces     map[string]*nativeTrace
-	initialize initializeTiming
+	initialize chan nativeSpan
 }
 
-// Each collector serves one Codex process. Its request span can be exported
-// before or after the client records the successful handshake.
 type initializeTiming struct {
-	start, reply, notified time.Time
-	dispatch, spanEnd      time.Time
-	logger                 *slog.Logger
-	logged                 bool
+	sent, reply, notified time.Time
 }
 
-func (n *nativeTelemetry) recordHandshake(logger *slog.Logger, start, reply, notified time.Time) {
+// Each process has one handshake. Wait for its native span off the startup path.
+func (n *nativeTelemetry) logInitializeAsync(logger *slog.Logger, t initializeTiming, done <-chan struct{}) {
 	if n == nil || logger == nil {
 		return
 	}
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	t := &n.initialize
-	t.logger, t.start, t.reply, t.notified = logger, start, reply, notified
-	t.logIfComplete()
-}
-
-func (t *initializeTiming) logIfComplete() {
-	if t.logged || t.logger == nil || t.dispatch.Before(t.start) || t.dispatch.After(t.reply) {
-		return
-	}
-	t.logged = true
-	t.logger.Info("Codex initialize timing",
-		"request_to_dispatch_us", t.dispatch.Sub(t.start).Microseconds(),
-		"dispatch_to_reply_us", t.reply.Sub(t.dispatch).Microseconds(),
-		"reply_to_initialized_us", t.notified.Sub(t.reply).Microseconds(),
-		"native_request_span_us", t.spanEnd.Sub(t.dispatch).Microseconds())
+	go func() {
+		select {
+		case span := <-n.initialize:
+			if span.start.Before(t.sent) || span.start.After(t.reply) {
+				return
+			}
+			logger.Info("Codex initialize timing",
+				"request_to_dispatch_us", span.start.Sub(t.sent).Microseconds(),
+				"dispatch_to_reply_us", t.reply.Sub(span.start).Microseconds(),
+				"reply_to_initialized_us", t.notified.Sub(t.reply).Microseconds(),
+				"native_request_span_us", span.end.Sub(span.start).Microseconds())
+		case <-done:
+		}
+	}()
 }
 
 type nativeDiagnostic struct {
@@ -117,7 +110,7 @@ func newNativeTelemetry() (*nativeTelemetry, error) {
 		return nil, err
 	}
 	path := "/" + hex.EncodeToString(token) + "/v1/traces"
-	n := &nativeTelemetry{endpoint: "http://" + listener.Addr().String() + path, turns: map[string]nativeDiagnostic{}, traces: map[string]*nativeTrace{}}
+	n := &nativeTelemetry{initialize: make(chan nativeSpan, 1), endpoint: "http://" + listener.Addr().String() + path, turns: map[string]nativeDiagnostic{}, traces: map[string]*nativeTrace{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc(path, n.receive)
 	n.server = &http.Server{Handler: mux, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, MaxHeaderBytes: 8192}
@@ -208,8 +201,10 @@ func (n *nativeTelemetry) receive(w http.ResponseWriter, r *http.Request) {
 				if s.Name == "initialize" {
 					start, end, valid := s.times()
 					if valid {
-						n.initialize.dispatch, n.initialize.spanEnd = start, end
-						n.initialize.logIfComplete()
+						select {
+						case n.initialize <- nativeSpan{start: start, end: end}:
+						default:
+						}
 					}
 					continue
 				}
