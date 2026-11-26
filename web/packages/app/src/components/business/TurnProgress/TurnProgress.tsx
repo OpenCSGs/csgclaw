@@ -1,7 +1,7 @@
 import { imEventsConnected, subscribeIMConnection } from "@/shared/realtime/imEvents";
 import { memo, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown, ChevronRight, Clock3 } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Clock3 } from "lucide-react";
 import { ToolOutput } from "@/components/business/ToolOutput";
 import { Button } from "@/components/ui";
 import { progressActive, progressDuration, progressGroups, toolRowPreview, terminalTool } from "@/models/turnProgress";
@@ -230,7 +230,7 @@ export const TurnProgress = memo(function TurnProgress({
           {open ? (
             <div id={id} className={styles.body} role="region" aria-label={t("progressDetails")}>
               {groups.map((group) => (
-                <Group key={group.id} group={group} renderText={renderText} t={t} />
+                <Group key={group.id} group={group} renderText={renderText} t={t} active={active} />
               ))}
               {!groups.length ? <p className={styles.waiting}>{t("progressStarting")}</p> : null}
             </div>
@@ -258,7 +258,17 @@ function Elapsed({ progress }: { progress: Progress }) {
   return <span className={styles.elapsed}>{progressDuration(progress, now)}</span>;
 }
 const Group = memo(
-  function Group({ group, renderText, t }: { group: ProgressGroup; renderText: Props["renderText"]; t: TranslateFn }) {
+  function Group({
+    group,
+    renderText,
+    t,
+    active,
+  }: {
+    group: ProgressGroup;
+    renderText: Props["renderText"];
+    t: TranslateFn;
+    active: boolean;
+  }) {
     if (group.kind === "commentary")
       return (
         <div className={styles.commentary} data-diagnostic-response-text>
@@ -274,17 +284,10 @@ const Group = memo(
         </ol>
       );
     }
-    return (
-      <div className={styles.group}>
-        <div className={styles.summary}>
-          <Clock3 size={15} aria-hidden="true" />
-          <span>{t("progressReasoning")}</span>
-        </div>
-        <div className={styles.details}>{renderText(group.items[0].text || "")}</div>
-      </div>
-    );
+    return <ReasoningGroup group={group} renderText={renderText} t={t} active={active} />;
   },
   (previous, next) =>
+    previous.active === next.active &&
     previous.t === next.t &&
     previous.renderText === next.renderText &&
     previous.group.kind === next.group.kind &&
@@ -292,6 +295,64 @@ const Group = memo(
     previous.group.items.length === next.group.items.length &&
     previous.group.items.every((item, index) => item === next.group.items[index]),
 );
+
+function ReasoningGroup({
+  group,
+  renderText,
+  t,
+  active,
+}: {
+  group: ProgressGroup;
+  renderText: Props["renderText"];
+  t: TranslateFn;
+  active: boolean;
+}) {
+  const [open, setOpen] = useState(true);
+  const id = useId();
+  const box = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  const text = group.items.map((item) => item.text || "").join("\n\n");
+  useEffect(() => {
+    const element = box.current;
+    if (open && element && pinned.current) element.scrollTop = element.scrollHeight;
+  }, [text, open]);
+  return (
+    <div className={styles.group}>
+      <Button
+        variant="linkGray"
+        size="sm"
+        className={styles.summaryToggle}
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Brain size={15} aria-hidden="true" />
+        <span>{t(active ? "progressReasoningActive" : "progressReasoning")}</span>
+        {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+      </Button>
+      {open ? (
+        <div
+          id={id}
+          ref={box}
+          className={styles.reasoningBox}
+          role="region"
+          aria-label={t("progressReasoning")}
+          tabIndex={0}
+          data-reasoning-stream={active || undefined}
+          onScroll={({ currentTarget }) => {
+            pinned.current = currentTarget.scrollHeight - currentTarget.scrollTop - currentTarget.clientHeight < 24;
+          }}
+        >
+          {group.items.map((item) => (
+            <div key={item.id} className={styles.reasoningChunk}>
+              {renderText(item.text || "")}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool; number: number; t: TranslateFn }) {
   const [open, setOpen] = useState(false);

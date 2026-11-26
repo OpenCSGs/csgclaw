@@ -77,13 +77,13 @@ describe("Image generation status", () => {
     ["zh", "重新生成", "原始参考图片已不可用，请重新上传图片后发起新的编辑请求。"],
     ["en", "Regenerate", "The original reference image is unavailable. Upload it again and start a new edit."],
   ] as const)(
-    "shows a missing reference error alongside the provider error in %s",
+    "localizes the missing reference without exposing provider diagnostics in %s",
     async (locale, retryLabel, message) => {
-      vi.mocked(retryImageGenerationRequest).mockRejectedValueOnce(
-        Object.assign(new Error("The original reference image is unavailable."), {
-          code: "image_reference_unavailable",
-        }),
-      );
+      vi.mocked(retryImageGenerationRequest).mockRejectedValueOnce({
+        status: 409,
+        code: "image_reference_unavailable",
+        message: "The original reference image is unavailable.",
+      });
       render(
         <ImageGenerationStatus
           roomID="room-1"
@@ -100,11 +100,49 @@ describe("Image generation status", () => {
 
       await userEvent.setup().click(screen.getByRole("button", { name: retryLabel }));
       expect(await screen.findByRole("alert")).toHaveTextContent(message);
-      expect(screen.getByText("Previous provider failure.")).toBeInTheDocument();
+      expect(screen.queryByText("Previous provider failure.")).not.toBeInTheDocument();
     },
   );
 
-  it("replaces generating state with the provider reason and diagnostic code", () => {
+  it("shows configuration guidance for an older failed task without offering regeneration", () => {
+    render(
+      <ImageGenerationStatus
+        t={t}
+        message={{
+          id: "image-1",
+          content: "original prompt",
+          metadata: { image_generation: { state: "failed", error: "image_model_not_configured" } },
+        }}
+      />,
+    );
+    expect(screen.getByText(t("image_model_not_configured"))).toBeVisible();
+    expect(screen.queryByRole("button", { name: t("imageRegenerate") })).not.toBeInTheDocument();
+    expect(screen.queryByText("image_model_not_configured")).not.toBeInTheDocument();
+  });
+
+  it.each(["image_model_not_configured", "upstream secret diagnostics"])(
+    "does not expose raw retry result %s",
+    async (message) => {
+      vi.mocked(retryImageGenerationRequest).mockResolvedValueOnce({
+        status: "failed",
+        error: { code: "runtime_failed", message },
+      });
+      render(
+        <ImageGenerationStatus
+          t={t}
+          roomID="room-1"
+          message={{ id: "image-1", content: "original prompt", metadata: { image_generation: { state: "failed" } } }}
+        />,
+      );
+      await userEvent.setup().click(screen.getByRole("button", { name: t("imageRegenerate") }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        t(message === "image_model_not_configured" ? message : "imageRetryFailed"),
+      );
+      expect(screen.queryByText(message)).not.toBeInTheDocument();
+    },
+  );
+
+  it("replaces generating state with localized guidance and hides provider diagnostics", () => {
     const pending = {
       id: "image-1",
       content: "original prompt",
@@ -136,8 +174,8 @@ describe("Image generation status", () => {
     );
     expect(screen.queryByText("正在生成图片")).toBeNull();
     expect(screen.getByText("生成结果未通过生图服务的安全检查，请调整描述后重试。")).toBeInTheDocument();
-    expect(screen.getByText("Your request was rejected by the safety system.")).toBeInTheDocument();
-    expect(screen.getByText(/HTTP 400.*moderation_blocked.*request-123/)).toBeInTheDocument();
+    expect(screen.queryByText("Your request was rejected by the safety system.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/HTTP 400|moderation_blocked|request-123/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重新生成" })).toBeEnabled();
   });
 });

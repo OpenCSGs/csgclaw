@@ -31,3 +31,4 @@ export const CLOUD_AGENTS_STORAGE_KEY = "csgclaw.agents.cloud.v3" as const;
 export const CLOUD_CHAT_STORAGE_KEY = "csgclaw.agents.cloud.chat.v1" as const;
 
 export const PINNED_ENTITIES_STORAGE_KEY = "csgclaw.im.pinnedEntities.v1";
+export const COMPOSER_DRAFT_STORAGE_PREFIX = "csgclaw.im.composerDraft.v1";

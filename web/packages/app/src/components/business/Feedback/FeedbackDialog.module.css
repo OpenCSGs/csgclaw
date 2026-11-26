@@ -1,5 +1,5 @@
 .dialog {
-  width: min(560px, calc(100vw - 32px));
+  width: min(600px, calc(100vw - 32px));
 }
 .headerCopy {
   display: grid;
@@ -94,7 +94,6 @@
 .fileInput {
   display: none;
 }
-.attachmentControls,
 .attachmentUsage {
   display: flex;
   flex-wrap: wrap;
@@ -116,6 +115,7 @@
   margin-block-start: var(--space-1);
 }
 .chooseFilesButton {
+  flex-shrink: 0;
   display: inline-flex;
   border-radius: var(--radius-md);
 }
@@ -127,12 +127,69 @@
 .chooseFilesButton > button:disabled {
   pointer-events: none;
 }
-.imageHint {
+.attachments {
+  display: grid;
+  gap: 10px;
+}
+.attachmentsHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+}
+.attachmentsTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--text-xs-medium);
+}
+.attachmentsTitle svg {
+  color: var(--muted);
+}
+.attachmentsCount {
+  color: var(--muted);
+  font: var(--text-xs-normal);
+  font-variant-numeric: tabular-nums;
+}
+.dropzone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+.dropzoneIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted);
+}
+.dropzoneCopy {
+  flex: 1;
+  min-width: 0;
+}
+.dropzoneTitle {
+  margin: 0;
+  font: var(--text-xs-medium);
+}
+.dropzoneHint,
+.limitHint {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 18px;
   overflow-wrap: anywhere;
+}
+.imageHint {
+  margin: 0;
+  color: var(--muted);
+  font: var(--text-xs-normal);
 }
 .label textarea {
   width: 100%;

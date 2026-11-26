@@ -278,57 +278,178 @@
   height: 34px;
   min-height: 34px;
 }
-.root .searchBar .directory {
-  height: 34px;
-  min-height: 34px;
-  width: 92px;
-  padding: 6px 8px;
+.filterTrigger {
   flex-shrink: 0;
-  font: var(--text-xs-normal);
-  background: var(--input-background);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  position: relative;
 }
 
-.directoryMenu {
-  --csgclaw-ui-popover-background: var(--surface);
-  --csgclaw-ui-popover-border: color-mix(in srgb, var(--text) 12%, transparent);
-  --csgclaw-ui-shadow: 0 8px 24px -4px color-mix(in srgb, var(--gray-950) 26%, transparent);
-  width: min(208px, calc(100vw - 16px));
-  max-width: calc(100vw - 16px);
-  min-width: 0;
+.filterTrigger[data-active="true"] {
+  background: var(--control-selected-background);
+  color: var(--primary);
 }
 
-:global([data-theme="dark"]) .directoryMenu {
+.filterBadge {
+  position: absolute;
+  inset: -4px -4px auto auto;
+  display: grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--white);
+  font: var(--text-xs-medium);
+}
+
+.filterPanel {
   --csgclaw-ui-popover-background: var(--panel-soft);
-  --csgclaw-ui-shadow: 0 8px 24px -4px color-mix(in srgb, var(--black) 64%, transparent);
+  width: min(252px, calc(100vw - 16px));
+  min-width: 0;
+  max-height: min(440px, var(--radix-popover-content-available-height));
+  overflow-y: auto;
+  padding: 6px;
 }
 
-.directoryMenu [role="option"][data-state="checked"] {
+.filterPanel .searchField .search {
+  padding-inline-start: 30px;
+}
+
+.filterHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px 6px;
+  color: var(--muted);
+  font: var(--text-xs-medium);
+}
+
+.filterReset {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.filterSection + .filterSection {
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.filterSection p {
+  margin: 4px 0 2px;
+  padding-inline: 8px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+
+.filterOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: var(--text-xs-normal);
+  text-align: start;
+  cursor: pointer;
+}
+
+.filterOption:hover,
+.filterOption[aria-pressed="true"] {
   background: var(--control-selected-background);
 }
 
-.directoryPath {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  white-space: nowrap;
+.filterOption[aria-pressed="true"] {
+  font: var(--text-xs-medium);
 }
 
-.directoryPrefix,
-.directoryCurrent {
+.filterOption[data-empty="true"]:not([aria-pressed="true"], :hover, :focus-visible) {
+  opacity: 0.55;
+}
+
+.filterReset:focus-visible,
+.filterOption:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.filterOptionIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+  height: 18px;
+  color: var(--muted);
+  overflow: hidden;
+}
+
+.filterOption[aria-pressed="true"] .filterOptionIcon {
+  color: var(--primary);
+}
+
+.filterOptionIcon img,
+.filterOptionIcon :global(.agent-avatar-fallback) {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.filterOptionName {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.directoryPrefix {
-  flex: 0 1000 auto;
+.filterOptionCount,
+.filterPath > span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.directoryCurrent {
-  flex: 0 1 auto;
+.collapsed {
+  --task-conversation-inline-padding: 4px;
+}
+
+.collapsed .searchBar {
+  justify-content: center;
+}
+
+.collapsed .list {
+  scrollbar-width: thin;
+}
+
+.collapsed .open {
+  justify-content: center;
+  padding: 0;
+}
+
+.collapsed .avatar,
+.collapsed .avatar img {
+  width: 28px;
+  height: 28px;
+}
+
+.collapsed .actions,
+.collapsed .timestamp,
+.collapsed .text,
+.collapsed .pinnedIndicator,
+.collapsed .workingDot {
+  display: none;
+}
+
+.collapsed .empty,
+.collapsed .list > p {
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .searchField {

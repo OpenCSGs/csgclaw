@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TurnProgress } from "./TurnProgress";
@@ -44,6 +44,47 @@ describe("TurnProgress", () => {
     expect(screen.getByText("最终答案")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^回复用时/ }).getAttribute("aria-expanded")).toBe("false");
   });
+  it("groups consecutive reasoning chunks and allows the reasoning section to collapse independently", async () => {
+    const items: Progress["items"] = [...progress.items, { id: "next", kind: "reasoning", text: "Next chunk" }];
+    render(<TurnProgress progress={{ ...progress, items }} t={t} renderText={renderText} />);
+    const reasoning = screen.getByRole("region", { name: "思考过程" });
+    expect(within(reasoning).getByText("Detailed reasoning")).toBeVisible();
+    expect(within(reasoning).getByText("Next chunk")).toBeVisible();
+    const toggle = screen.getByRole("button", { name: "正在思考" });
+    await userEvent.setup().click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(reasoning).not.toBeInTheDocument();
+    expect(screen.getByText("正在检查文件")).toBeVisible();
+  });
+
+  it("follows streamed reasoning only while the reader stays near the bottom", () => {
+    const frame = (text: string) => (
+      <TurnProgress
+        progress={{ ...progress, items: [{ id: "reasoning", kind: "reasoning", text }] }}
+        t={t}
+        renderText={renderText}
+      />
+    );
+    const { rerender } = render(frame("First chunk"));
+    const reasoning = screen.getByRole("region", { name: "思考过程" });
+    let height = 500;
+    Object.defineProperties(reasoning, { scrollHeight: { get: () => height }, clientHeight: { value: 150 } });
+    rerender(frame("New chunk"));
+    expect(reasoning.scrollTop).toBe(500);
+
+    reasoning.scrollTop = 10;
+    fireEvent.scroll(reasoning);
+    height = 700;
+    rerender(frame("Another chunk"));
+    expect(reasoning.scrollTop).toBe(10);
+
+    reasoning.scrollTop = 540;
+    fireEvent.scroll(reasoning);
+    height = 750;
+    rerender(frame("Last chunk"));
+    expect(reasoning.scrollTop).toBe(750);
+  });
+
   it("collapses the whole process even if a command was expanded while running", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<TurnProgress progress={progress} t={t} renderText={renderText} />);

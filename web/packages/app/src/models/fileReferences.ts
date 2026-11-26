@@ -43,3 +43,15 @@ export function normalizeBrowserURL(value: string): string | null {
     return null;
   }
 }
+
+export function isComposerFileReference(value: unknown): value is ComposerFileReference {
+  if (!value || typeof value !== "object") return false;
+  const ref = value as Record<string, unknown>;
+  return (
+    typeof ref.name === "string" &&
+    typeof ref.label === "string" &&
+    (ref.source === "attachment"
+      ? typeof ref.attachment_id === "string"
+      : ref.source === "workspace" && typeof ref.agent_id === "string" && typeof ref.path === "string")
+  );
+}

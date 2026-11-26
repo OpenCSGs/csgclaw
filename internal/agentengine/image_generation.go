@@ -16,6 +16,15 @@ import (
 
 type imageGenerator func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error)
 
+var errImageModelNotConfigured = errors.New("image_model_not_configured")
+
+func checkImageModel(ref *modelprovider.ImageGenerationConfig) error {
+	if ref == nil || strings.TrimSpace(ref.ProviderID) == "" || strings.TrimSpace(ref.ModelID) == "" {
+		return errImageModelNotConfigured
+	}
+	return nil
+}
+
 func (c *conversations) imageHandler(turn *activeTurn, sink EventSink, ref *modelprovider.ImageGenerationConfig, input []InputPart) (contract.ImageGenerationHandler, func(bool) error) {
 	var mu sync.Mutex
 	tasks := map[string]error{}
@@ -27,6 +36,9 @@ func (c *conversations) imageHandler(turn *activeTurn, sink EventSink, ref *mode
 		}
 		if editFailed && !edit {
 			return fmt.Errorf("image_edit_fallback_blocked: editing the original failed; ask the user before generating a replacement in a new turn")
+		}
+		if err := checkImageModel(ref); err != nil {
+			return err
 		}
 		if c.engine.imageGenerationModes != nil {
 			modes := c.engine.imageGenerationModes(ref)
@@ -75,6 +87,11 @@ func (c *conversations) generateImage(ctx context.Context, turn *activeTurn, sin
 	}
 	if task.ID == "" || strings.TrimSpace(task.Prompt) == "" || len(task.Prompt) > 32000 {
 		return fmt.Errorf("invalid image prompt")
+	}
+	if task.File == nil {
+		if err := checkImageModel(task.Model); err != nil {
+			return err
+		}
 	}
 	emit := func() error {
 		copy := task

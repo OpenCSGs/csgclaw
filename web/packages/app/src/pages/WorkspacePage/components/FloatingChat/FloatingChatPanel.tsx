@@ -89,6 +89,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onProviderLogin,
     onRetrySend,
     onRemoveAttachment,
+    onClearDraft,
     onRemoveThreadAttachment,
     onSendMessage,
     onStopSend,
@@ -346,6 +347,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         onWorkingAction={(participant) => openActivity(participant?.activity?.entryID)}
         onStopWorkingTurn={onStopWorkingTurn}
         onRemoveAttachment={onRemoveAttachment}
+        onClearDraft={onClearDraft}
         onSyncComposer={onSyncComposer}
       />
       <ChatSidePanel

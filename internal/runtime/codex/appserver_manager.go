@@ -2816,7 +2816,7 @@ func redactSecretishLine(line string) string {
 func appServerGenerateImageToolSpec() map[string]any {
 	return map[string]any{
 		"name":        "csgclaw_generate_image",
-		"description": "Generate a new image from text or edit an attached image using the Agent's configured image model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. Use edit for changes to an original image. Ask the user before generating a replacement if editing is unavailable or fails. Report unsupported operations and invalid requests without retrying or guessing parameters. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile.",
+		"description": "Generate a new image from text or edit an attached image using the Agent's configured image model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. Use edit for changes to an original image. Ask the user before generating a replacement if editing is unavailable or fails. Report unsupported operations and invalid requests without retrying or guessing parameters. If image_model_not_configured is returned, explain in plain language that the Agent needs an Image generation model configured in its profile. Do not retry in this turn or repeat the error code to the user.",
 		"inputSchema": map[string]any{
 			"type": "object",
 			"properties": map[string]any{

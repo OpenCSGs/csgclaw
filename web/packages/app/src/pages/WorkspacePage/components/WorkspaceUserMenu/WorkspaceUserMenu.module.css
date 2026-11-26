@@ -169,9 +169,11 @@
 }
 
 .menuValue {
-  margin-left: 16px;
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .hintDot {

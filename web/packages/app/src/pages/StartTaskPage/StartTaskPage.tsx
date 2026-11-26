@@ -1,4 +1,8 @@
 import { useComposerCompact } from "@/shared/layout/useComposerCompact";
+import { usePersistedComposerDraft } from "@/hooks/usePersistedComposerDraft";
+import { composerDraftKey, getComposerDraft, subscribeToComposerDraft } from "@/shared/storage/composerDrafts";
+import { isResourceSnapshot } from "@/models/agentResources";
+import { isStoredTaskPromptMention, type TaskPromptMention } from "./taskPromptMentions";
 import conversationSendButtonStyles from "@/components/business/ConversationPane/ConversationSendButton.module.css";
 import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
 import { useCloudSendConsent } from "@/hooks/workspace/useCloudSendConsent";
@@ -14,6 +18,7 @@ import { useId, useMemo, useRef, useState } from "react";
 import { useSearchParams, useLocation } from "react-router-dom";
 import {
   ArrowUp,
+  Eraser,
   BookOpen,
   ClipboardCheck,
   FileText,
@@ -66,8 +71,10 @@ import { isComposerKeyboardEventComposing } from "@/models/composer";
 import {
   attachmentSelectionError,
   createAttachmentDrafts,
-  selectAttachmentFiles,
-  type AttachmentDraft,
+  selectComposerAttachmentFiles,
+  hasAttachmentFile,
+  mergeComposerAttachments,
+  type ComposerAttachmentDraft,
 } from "@/models/attachments";
 import {
   builtinSlashCommandNames,
@@ -114,6 +121,20 @@ const collaborationModes = {
   },
 } as const;
 
+function readStartDraft(stored: Record<string, unknown>) {
+  return {
+    text: typeof stored.text === "string" ? stored.text : "",
+    resources: Array.isArray(stored.resources) ? stored.resources.filter(isResourceSnapshot) : [],
+    mentions: Array.isArray(stored.mentions) ? stored.mentions.filter(isStoredTaskPromptMention) : [],
+  };
+}
+
+const emptyStartDraft = readStartDraft({});
+
+function serializeStartDraft(content: typeof emptyStartDraft) {
+  return content.text || content.resources.length ? content : null;
+}
+
 export function StartTaskPage() {
   const location = useLocation();
   const [params] = useSearchParams();
@@ -148,7 +169,37 @@ function StartTaskForm({
   const [collaborationMode, setCollaborationMode] = useState<keyof typeof collaborationModes>(RoomTypes.onDemand);
   const collaborationModeID = useId();
   const { title: modeTitle, hint: modeHint, icon: ModeIcon } = collaborationModes[collaborationMode];
-  const [resources, setResources] = useState<ResourceSnapshot[]>([]);
+  const draftKey = composerDraftKey(controller.sidebarProps?.currentUserID ?? "");
+  const { draft: startDraft, update: updateStartDraft } = usePersistedComposerDraft(
+    draftKey,
+    readStartDraft,
+    serializeStartDraft,
+  );
+  const {
+    content: { text: draft, resources, mentions },
+    attachments,
+  } = startDraft;
+  const selectedAttachments = attachments.filter(hasAttachmentFile);
+  const missingAttachments = attachments.length !== selectedAttachments.length;
+
+  function setDraft(text: string, mentions: TaskPromptMention[] = []) {
+    updateStartDraft(draftKey, (current) => ({ ...current, content: { ...current.content, text, mentions } }));
+  }
+
+  function setResources(change: ResourceSnapshot[] | ((current: ResourceSnapshot[]) => ResourceSnapshot[])) {
+    updateStartDraft(draftKey, (current) => ({
+      ...current,
+      content: {
+        ...current.content,
+        resources: typeof change === "function" ? change(current.content.resources) : change,
+      },
+    }));
+  }
+
+  function setAttachments(attachments: ComposerAttachmentDraft[]) {
+    updateStartDraft(draftKey, (current) => ({ ...current, attachments }));
+  }
+
   const [examplesHidden, setExamplesHidden] = useState(() => {
     try {
       return sessionStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
@@ -156,9 +207,7 @@ function StartTaskForm({
       return false;
     }
   });
-  const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
-  const [removedAttachments, setRemovedAttachments] = useState<{ draft: AttachmentDraft; index: number }[]>([]);
+  const [removedAttachments, setRemovedAttachments] = useState<{ draft: ComposerAttachmentDraft; index: number }[]>([]);
   const [attachmentWarning, setAttachmentWarning] = useState("");
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadFailed, setUploadFailed] = useState(false);
@@ -236,6 +285,7 @@ function StartTaskForm({
   const promptMentions = useTaskPromptMentions({
     value: draft,
     onChange: setDraft,
+    chosen: mentions,
     members: mentionMembers,
     editorRef,
     workspaceAgentID,
@@ -304,6 +354,7 @@ function StartTaskForm({
   const cannotSend =
     busy ||
     cloudOffline ||
+    missingAttachments ||
     resourcePicker.active ||
     !canSendResources(draftInput.content, draftInput.resource_refs, attachments.length + draftFileCount) ||
     Boolean(modelMissing);
@@ -382,12 +433,23 @@ function StartTaskForm({
     return false;
   }
 
+  function clearDraft() {
+    updateStartDraft(draftKey, () => ({ content: emptyStartDraft, attachments: [] }));
+    setRemovedAttachments([]);
+    setAttachmentWarning("");
+    setUploadFailed(false);
+    setSlashQuery(null);
+    setError("");
+    promptMentions.reset();
+    resetFilePanel(cloudTarget, true);
+  }
+
   function addAttachments(files: File[]) {
     if (busy || !files.length) return;
-    const selection = selectAttachmentFiles(files, attachments);
+    const selection = selectComposerAttachmentFiles(files, attachments);
     setAttachmentWarning(attachmentSelectionError(selection, t));
     if (!selection.files.length) return;
-    setAttachments([...attachments, ...createAttachmentDrafts(selection.files, attachments.length)]);
+    setAttachments(mergeComposerAttachments(attachments, createAttachmentDrafts(selection.files, attachments.length)));
     setRemovedAttachments([]);
     setUploadFailed(false);
   }
@@ -408,13 +470,15 @@ function StartTaskForm({
     setRemovedAttachments([]);
   }
 
-  async function start(empty = false, prompt = draft, confirmed = false) {
+  async function start(empty = false, prompt = draft, confirmed = false, submittedDraft = getComposerDraft(draftKey)) {
     const input = messageInput(prompt);
     const fileReferences = selectedCloud ? [] : promptMentions.fileReferences(prompt);
     if (
       inFlight.current ||
       cloudOffline ||
-      (!empty && !canSendResources(input.content, input.resource_refs, attachments.length + fileReferences.length))
+      (!empty &&
+        (missingAttachments ||
+          !canSendResources(input.content, input.resource_refs, attachments.length + fileReferences.length)))
     )
       return;
     if (!selectedCloud && !selectedAgent && !selectedTeam && selected !== "solo") {
@@ -429,12 +493,13 @@ function StartTaskForm({
       !empty &&
       selectedCloud &&
       !confirmed &&
-      consent.request(() => void start(false, prompt, true), attachments.length > 0)
+      consent.request(() => void start(false, prompt, true, submittedDraft), attachments.length > 0)
     )
       return;
     inFlight.current = true;
     setBusy(true);
     setError("");
+    const releaseDraft = subscribeToComposerDraft(draftKey, () => {});
     try {
       if (modelMissing) throw new Error(t("taskEntryModelMissing"));
       if (!empty) {
@@ -497,10 +562,10 @@ function StartTaskForm({
           input.content,
           input.resource_refs,
           fileReferences,
-          attachments.map(({ file }) => [file.name, file.size, file.lastModified]),
+          selectedAttachments.map(({ file }) => [file.name, file.size, file.lastModified]),
         ]);
         if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: createUUID() };
-        const messageFiles = attachments.map(({ file }) => file);
+        const messageFiles = selectedAttachments.map(({ file }) => file);
         const payload = {
           room_id: room.id,
           sender_id: readySidebar.currentUserID,
@@ -519,6 +584,7 @@ function StartTaskForm({
         const message = upload.current
           ? await sendMessageRequest(payload, { signal: upload.current.signal, onUploadProgress: setUploadProgress })
           : await sendMessageRequest(payload);
+        if (getComposerDraft(draftKey) === submittedDraft) clearDraft();
         entry.onMessage(room.id, message);
       }
       entry.open(room);
@@ -528,6 +594,7 @@ function StartTaskForm({
         setError(localizeAPIError(cause, t, errorMessage(cause, t("sendFailed"))));
       }
     } finally {
+      releaseDraft();
       upload.current = null;
       setUploadProgress(null);
       inFlight.current = false;
@@ -977,6 +1044,20 @@ function StartTaskForm({
                         ? t("sending")
                         : t("sendingWithProgress", { progress: Math.round(uploadProgress) })}
                     </span>
+                  ) : null}
+                  {draft || resources.length || attachments.length || removedAttachments.length ? (
+                    <Tooltip content={t("clearDraft")}>
+                      <Button
+                        aria-label={t("clearDraft")}
+                        disabled={busy}
+                        iconOnly
+                        size="sm"
+                        variant="tertiaryGray"
+                        onClick={clearDraft}
+                      >
+                        <Eraser aria-hidden="true" size={16} />
+                      </Button>
+                    </Tooltip>
                   ) : null}
                   <Tooltip content={sendLabel}>
                     <span>

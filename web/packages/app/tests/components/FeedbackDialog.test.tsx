@@ -39,6 +39,19 @@ it("requires text or images and sends text changes to the controller", async () 
   expect(props.onDescriptionChange).toHaveBeenCalledWith("x");
 });
 
+it("shows the attachment counts, drop instructions, and file chooser together", async () => {
+  const t = createTranslator("zh");
+  const dialogs = render(<FeedbackDialog {...props} t={t} archives={[new File(["zip"], "diagnostics.zip")]} />);
+  expect(screen.getByText("图片 0/6 · 压缩包 1/3")).toBeVisible();
+  expect(screen.getByText("拖拽文件到这里，或直接粘贴截图")).toBeVisible();
+  expect(screen.getByText("图片最多 6 张（单张 ≤ 5 MB），压缩包最多 3 个（单个 ≤ 10 MB）")).toBeVisible();
+  const input = dialogs.baseElement.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("Feedback attachment input is missing");
+  const chooseFiles = vi.spyOn(input, "click");
+  await userEvent.setup().click(screen.getByRole("button", { name: "选择文件" }));
+  expect(chooseFiles).toHaveBeenCalledOnce();
+});
+
 it("disables edits and submission while sending", () => {
   render(<FeedbackDialog {...props} description="Problem" busy />);
   expect(screen.getByRole("textbox")).toBeDisabled();
@@ -68,8 +81,8 @@ function FeedbackForm({ locale, site }: { locale: LocaleCode; site?: string }) {
 it("keeps attachment limits visible, reveals formats on demand, and explains where selected archives go", async () => {
   const user = userEvent.setup();
   render(<FeedbackForm locale="zh" site="https://example.test" />);
-  expect(screen.getByText("图片 0/6 · 单张 ≤ 5 MB")).toBeVisible();
-  expect(screen.getByText("压缩包 0/3 · 单个 ≤ 10 MB")).toBeVisible();
+  expect(screen.getByText("图片 0/6 · 压缩包 0/3")).toBeVisible();
+  expect(screen.getByText("图片最多 6 张（单张 ≤ 5 MB），压缩包最多 3 个（单个 ≤ 10 MB）")).toBeVisible();
   const formats = screen.getByText("支持的文件格式");
   expect(formats.closest("details")).not.toHaveAttribute("open");
   await user.click(formats);
@@ -81,12 +94,12 @@ it("keeps attachment limits visible, reveals formats on demand, and explains whe
   const input = screen.getByRole("dialog").querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error("Feedback file input is missing");
   await user.upload(input, new File(["zip"], "diagnostics.zip", { type: "application/zip" }));
-  expect(screen.getByText("压缩包 1/3 · 单个 ≤ 10 MB")).toBeVisible();
+  expect(screen.getByText("图片 0/6 · 压缩包 1/3")).toBeVisible();
   expect(screen.getByRole("button", { name: "提交" })).toHaveAccessibleDescription(
     "提交时，压缩包会上传至 example.test，下载链接会写入工单。请先移除凭据和个人信息。",
   );
   await user.click(screen.getByRole("button", { name: "移除 diagnostics.zip" }));
-  expect(screen.getByText("压缩包 0/3 · 单个 ≤ 10 MB")).toBeVisible();
+  expect(screen.getByText("图片 0/6 · 压缩包 0/3")).toBeVisible();
   expect(screen.queryByText(/提交时，压缩包会上传/)).not.toBeInTheDocument();
 });
 
@@ -99,7 +112,7 @@ it("dismisses attachment warnings and returns focus to the file chooser", async 
   expect(screen.getByRole("alert")).toHaveTextContent("notes.txt");
   await user.click(screen.getByRole("button", { name: "关闭附件提示" }));
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "添加附件" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "选择文件" })).toHaveFocus();
 });
 
 it("shows the filename on focus and opens the image preview with the keyboard", async () => {
@@ -178,8 +191,8 @@ it("offers a header close action and explains why adding attachments is disabled
   const user = userEvent.setup();
   const onOpenChange = vi.fn();
   render(<FeedbackDialog {...props} awaitingStatus onOpenChange={onOpenChange} />);
-  expect(screen.getByRole("button", { name: "feedbackChooseAttachments" })).toBeDisabled();
-  act(() => screen.getByRole("group", { name: "feedbackChooseAttachments" }).focus());
+  expect(screen.getByRole("button", { name: "feedbackChooseFiles" })).toBeDisabled();
+  act(() => screen.getByRole("group", { name: "feedbackChooseFiles" }).focus());
   expect(await screen.findByRole("tooltip")).toHaveTextContent("feedbackAttachmentsAwaitingStatus");
   const close = screen.getByRole("dialog").querySelector<HTMLButtonElement>(".csg-dialog-close");
   expect(close).toHaveAccessibleName("close");

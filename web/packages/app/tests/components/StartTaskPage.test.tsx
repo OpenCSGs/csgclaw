@@ -1,3 +1,5 @@
+import { clearTestComposerDrafts } from "../helpers/composerDrafts";
+import { composerDraftKey } from "@/shared/storage/composerDrafts";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "../helpers/queryClient";
@@ -18,6 +20,8 @@ import {
   PINNED_ENTITIES_STORAGE_KEY,
   TASK_EXAMPLES_HIDDEN_STORAGE_KEY,
 } from "@/shared/storage/keys";
+
+afterEach(clearTestComposerDrafts);
 
 vi.mock("@/api/chatFiles", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/chatFiles")>()),
@@ -174,6 +178,8 @@ describe("task presets", () => {
     await user.click(screen.getByRole("button", { name: title }));
 
     await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+    window.dispatchEvent(new Event("pagehide"));
+    expect(localStorage.getItem(composerDraftKey("user-admin"))).toBeNull();
     expect(prompt).toContain(content);
     expect(sendMessageRequest).toHaveBeenCalledWith(expect.objectContaining({ content: prompt }));
     expect(create).toHaveBeenCalledWith(
@@ -1015,4 +1021,65 @@ it("shows pasted and dropped attachment drafts and sends restored files only onc
       expect.objectContaining({ signal: expect.any(AbortSignal), onUploadProgress: expect.any(Function) }),
     ),
   );
+});
+
+describe("start composer drafts", () => {
+  const key = composerDraftKey("user-admin");
+
+  it("saves the last edit on pagehide, restores it on return, and clears it explicitly", () => {
+    const first = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), {
+      target: { value: "Unfinished task" },
+    });
+    window.dispatchEvent(new Event("pagehide"));
+    expect(JSON.parse(localStorage.getItem(key) ?? "{}")).toMatchObject({ text: "Unfinished task" });
+    first.unmount();
+
+    const returned = setup();
+    expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("Unfinished task");
+    fireEvent.click(screen.getByRole("button", { name: "clearDraft" }));
+    expect(localStorage.getItem(key)).toBeNull();
+    returned.unmount();
+    setup();
+    expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("");
+  });
+
+  it("shows restored attachment metadata, requires reselection, and clears after a successful send", async () => {
+    const attachment = new File(["file content"], "notes.txt", { type: "text/plain" });
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        text: "Review these notes",
+        attachments: [
+          {
+            id: "draft-notes",
+            kind: "file",
+            name: attachment.name,
+            sizeBytes: attachment.size,
+            mediaType: attachment.type,
+          },
+        ],
+      }),
+    );
+    vi.mocked(sendMessageRequest).mockResolvedValueOnce({
+      id: "sent",
+      sender_id: "user-admin",
+      content: "Review these notes",
+    });
+    const user = userEvent.setup();
+    const { open } = setup();
+    expect(screen.getByTitle("notes.txt")).toBeVisible();
+    expect(screen.getByText("attachmentReselect")).toBeVisible();
+    expect(screen.getByRole("button", { name: "taskEntryStart" })).toBeDisabled();
+
+    await user.upload(screen.getByLabelText("addAttachment"), attachment);
+    expect(screen.queryByText("attachmentReselect")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+    expect(sendMessageRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({ content: "Review these notes", attachments: [attachment] }),
+      expect.anything(),
+    );
+    expect(localStorage.getItem(key)).toBeNull();
+  });
 });
