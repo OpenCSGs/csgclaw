@@ -14,6 +14,7 @@
 }
 
 .shell button.heading,
+.shell button.summaryToggle,
 .shell button.toolToggle {
   --btn-height: auto;
   --btn-min-width: 0;
@@ -114,26 +115,20 @@
   margin-bottom: 20px;
 }
 
-.shell button.summaryToggle {
-  --btn-height: auto;
-  --btn-min-width: 0;
-  --btn-padding-x: 0;
-  --btn-font-size: 14px;
-  --btn-line-height: 22px;
+.shell button.summaryToggle,
+.shell button.toolToggle {
   display: flex;
-  height: auto;
-  min-height: 0;
-  padding: 4px 0;
+  width: 100%;
   border: 0;
-  border-radius: 4px;
-  font-weight: 400;
-  text-align: left;
-  color: var(--muted);
-  background: transparent;
-  box-shadow: none;
+  border-radius: var(--radius-sm);
 }
 
-.shell button.summaryToggle:hover {
+.shell button.summaryToggle {
+  justify-content: flex-start;
+}
+
+.shell button.summaryToggle:is(:hover, :focus-visible),
+.shell button.toolToggle:is(:hover, :focus-visible) {
   background: transparent;
   color: var(--text);
 }
@@ -171,7 +166,7 @@
   background: var(--panel-soft);
   font-size: 13px;
   line-height: 1.75;
-  color: color-mix(in srgb, var(--muted) 40%, var(--text));
+  color: color-mix(in srgb, var(--muted) 55%, var(--text));
 }
 
 .reasoningBox::-webkit-scrollbar {
@@ -252,7 +247,7 @@
   content: "";
   position: absolute;
   inset-block: 29px 0;
-  inset-inline-start: 17px;
+  inset-inline-start: 11px;
   width: 1px;
   background: var(--line);
   pointer-events: none;
@@ -263,11 +258,8 @@
 }
 
 .shell button.toolToggle {
-  display: flex;
-  width: 100%;
-  padding: 5px 6px;
-  border: 0;
-  border-radius: var(--radius-sm);
+  padding-block: 5px;
+  padding-inline: 0 6px;
 }
 
 .toolToggle > :global(.btn-content) {
@@ -277,11 +269,6 @@
   min-width: 0;
   gap: 8px;
   justify-content: flex-start;
-}
-
-.shell button.toolToggle:hover {
-  background: var(--panel-soft);
-  color: var(--text);
 }
 
 .stepIcon {
@@ -303,8 +290,6 @@
 .toolAction {
   flex-shrink: 0;
   max-width: 100%;
-  color: var(--text);
-  font: var(--text-sm-medium);
   white-space: normal;
 }
 
@@ -336,7 +321,8 @@
 
 .toolDetails {
   position: relative;
-  margin: var(--space-2) 0 8px 38px;
+  margin: var(--space-2) 0 8px;
+  margin-inline-start: var(--space-8);
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
