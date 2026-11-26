@@ -21,6 +21,7 @@ import (
 	"csgclaw/internal/connectors"
 	"csgclaw/internal/conversationresource"
 	"csgclaw/internal/dshcli"
+	"csgclaw/internal/identity"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/mcp"
@@ -1185,18 +1186,31 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			billingModel = update.Spec.Model
 		}
 		billingProfile := serviceProfileFromEngine(agentengine.ModelView{ModelSpec: billingModel})
-		updated, err := agents.Update(r.Context(), id, update)
+		var updated agentengine.Agent
+		if h.participant != nil && agentUpdateIncludes(update, "name") {
+			updated, err = h.participant.UpdateNamedAgent(r.Context(), agents, current, update)
+		} else {
+			updated, err = agents.Update(r.Context(), id, update)
+		}
+		if errors.Is(err, identity.ErrNameExists) {
+			writeCodedAPIError(w, http.StatusConflict, "agent_name_conflict", err.Error())
+			return
+		}
 		if err != nil {
+			status := http.StatusBadRequest
+			var pathErr *os.PathError
+			if agentUpdateIncludes(update, "name") && errors.As(err, &pathErr) {
+				status = http.StatusInternalServerError
+			}
 			writeAgentOperationErrorWithBillingURL(
 				w,
 				err,
-				http.StatusBadRequest,
+				status,
 				llm.OpenCSGBillingURL(billingProfile),
 			)
 			return
 		}
-		serviceUpdated := serviceAgentFromEngine(updated)
-		h.publishUpdatedAgentUser(serviceUpdated)
+		h.publishUpdatedAgentUser(serviceAgentFromEngine(updated))
 		writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, updated))
 	case http.MethodDelete:
 		h.agentArchiveMu.Lock()
@@ -1272,32 +1286,18 @@ func (h *Handler) publishUpdatedAgentUser(updated agent.Agent) {
 	if h == nil || h.im == nil {
 		return
 	}
-	user, ok, err := h.im.UpdateAgentUser(im.UpdateAgentUserRequest{
-		ID:          updated.ID,
-		Name:        updated.Name,
-		Description: updated.Description,
-		Role:        updated.Role,
-	})
-	if err != nil || !ok {
-		return
+	profile := im.UpdateAgentUserRequest{Description: updated.Description, Role: updated.Role}
+	ids, bound := h.boundAgentChatUserIDs(updated.ID)
+	if !bound {
+		ids = []string{updated.ID}
+		profile.Name = updated.Name
 	}
-	if h.participant != nil {
-		name := updated.Name
-		for _, item := range h.participant.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, AgentID: updated.ID}) {
-			if strings.TrimSpace(item.ID) == "" {
-				continue
-			}
-			_, _, _ = h.participant.Update(context.Background(), participant.ChannelCSGClaw, item.ID, participant.UpdateRequest{
-				Name: &name,
-			})
+	// Explicit bindings own their IM names, including aliases.
+	for _, id := range ids {
+		profile.ID = id
+		if user, ok, err := h.im.UpdateAgentUser(profile); err == nil && ok {
+			h.publishUserEvent(im.EventTypeUserUpdated, user)
 		}
-	}
-	if h.imBus != nil {
-		userCopy := user
-		h.imBus.Publish(im.Event{
-			Type: im.EventTypeUserUpdated,
-			User: &userCopy,
-		})
 	}
 }
 

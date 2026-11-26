@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -230,6 +231,209 @@ func TestCreateCSGClawAgentParticipantRequiresAgentBinding(t *testing.T) {
 	}
 }
 
+func TestRecoveryRequiresTheBoundIMUser(t *testing.T) {
+	store := NewMemoryStore([]Participant{{
+		ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent, AgentID: "agent-qa",
+		ChannelUserRef: "user-qa-1a2b3c4d", ChannelUserKind: ChannelUserKindLocalUserID,
+	}})
+	users := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{
+		{ID: "user-other", Name: "user-qa-1a2b3c4d", Role: "worker"},
+		{ID: "user-qa", Name: "Original", Role: "worker"},
+	}})
+	engine := enginetest.NewMemoryClient()
+	svc := NewService(store, WithAgentEngine(engine), WithIMService(users))
+	_, err := svc.Create(t.Context(), CreateRequest{
+		ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent,
+		AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: "agent-qa", Agent: &agent.CreateAgentSpec{FromTemplate: "local.qa", RuntimeKind: agent.RuntimeKindCodex}},
+	})
+	if !errors.Is(err, im.ErrUserNotFound) {
+		t.Fatalf("retry with a missing bound identity: %v", err)
+	}
+	if _, err := engine.Agents().Get(t.Context(), "agent-qa", agentengine.AgentGetOptions{}); agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+		t.Fatalf("unexpected worker after retry: %v", err)
+	}
+	deleted, err := svc.RepairDanglingCSGClawAgentParticipants()
+	if err != nil || len(deleted) != 1 || deleted[0].ID != "pt-qa" {
+		t.Fatalf("startup repair: %+v, %v", deleted, err)
+	}
+	other, ok := users.LocalUserByID("user-other")
+	if !ok || other.Name != "user-qa-1a2b3c4d" || other.AgentState == "deleted" {
+		t.Fatalf("changed unrelated identity: %+v", other)
+	}
+}
+
+type pausedAgentDeletion struct {
+	agentengine.AgentInterface
+	resume    <-chan struct{}
+	provision <-chan struct{}
+}
+
+func (a pausedAgentDeletion) Delete(ctx context.Context, id string) error {
+	if err := a.AgentInterface.Delete(ctx, id); err != nil {
+		return err
+	}
+	<-a.resume
+	return nil
+}
+
+func (a pausedAgentDeletion) Create(ctx context.Context, req agentengine.AgentCreateRequest) (agentengine.Agent, error) {
+	<-a.provision
+	return a.AgentInterface.Create(ctx, req)
+}
+
+func TestParticipantRetryDuringAgentDeletion(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := NewMemoryStore([]Participant{{
+			ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent, AgentID: "agent-worker",
+			ChannelUserRef: "user-qa", ChannelUserKind: ChannelUserKindLocalUserID,
+		}})
+		users := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: "user-qa", Name: "QA", Role: "worker"}}})
+		engine := enginetest.NewMemoryClient(agentengine.Agent{ID: "agent-worker"})
+		svc := NewService(store, WithIMService(users))
+		resume := make(chan struct{})
+		provision := make(chan struct{})
+		svc.agents = pausedAgentDeletion{AgentInterface: engine.Agents(), resume: resume, provision: provision}
+		removed := make(chan error, 1)
+		go func() { _, err := svc.DeleteAgent(t.Context(), "agent-worker"); removed <- err }()
+		synctest.Wait() // Worker removed; participant and user still exist.
+		retried := make(chan error, 1)
+		go func() {
+			_, err := svc.Create(t.Context(), CreateRequest{
+				ID: "pt-qa", Name: "QA", Channel: ChannelCSGClaw, Type: TypeAgent,
+				AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: "worker", Agent: &agent.CreateAgentSpec{FromTemplate: "local.qa", RuntimeKind: agent.RuntimeKindCodex}},
+			})
+			retried <- err
+		}()
+		synctest.Wait()
+		close(resume)
+		if err := <-removed; err != nil {
+			t.Fatal(err)
+		}
+		close(provision)
+		if err := <-retried; !errors.Is(err, im.ErrAgentIdentityDeleted) {
+			t.Fatalf("retry after delete: %v", err)
+		}
+		if _, ok := store.Get(ChannelCSGClaw, "pt-qa"); ok {
+			t.Fatal("participant survived deletion")
+		}
+		user, ok := users.LocalUserByID("user-qa")
+		if !ok || user.AgentState != "deleted" {
+			t.Fatalf("expected retired user: %+v", user)
+		}
+		agents, err := engine.Agents().List(t.Context(), agentengine.AgentListOptions{})
+		if err != nil || len(agents) != 0 {
+			t.Fatalf("unexpected workers: %+v, %v", agents, err)
+		}
+	})
+}
+
+func TestBindExistingWorkerDuringExecution(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		controller := mustNewAgentService(t)
+		svc := NewService(NewMemoryStore(nil), WithAgentEngine(agentengine.New(controller)))
+		const id, name = "agent-original", "agent-lookup"
+		if _, err := controller.CreateRecord(t.Context(), agent.CreateRequest{Spec: agent.CreateAgentSpec{
+			ID: id, Name: name, Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex, Image: "agent-image:test",
+		}}); err != nil {
+			t.Fatal(err)
+		}
+		release, err := controller.LifecycleCoordinator().Execution(t.Context(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer release()
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		for _, req := range []CreateRequest{
+			{ID: "pt-reuse", Name: "Reuse", AgentBinding: AgentBindingSpec{Mode: BindingModeReuse, AgentID: id}},
+			{ID: "pt-alias", Name: "Alias", AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: id}},
+			{Name: "By display name", AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: name}},
+			{ID: "pt-reuse", Name: name, AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: "agent-requested"}},
+		} {
+			req.Channel, req.Type = ChannelCSGClaw, TypeAgent
+			p, err := svc.Create(ctx, req)
+			if err != nil || p.AgentID != id {
+				t.Fatalf("bind %s using %q: worker %q, error %v", req.AgentBinding.Mode, req.AgentBinding.AgentID, p.AgentID, err)
+			}
+		}
+		workers, err := svc.agents.List(ctx, agentengine.AgentListOptions{})
+		if err != nil || len(workers) != 1 || workers[0].ID != id || workers[0].Spec.Name != name {
+			t.Fatalf("unexpected workers after binding: %+v, %v", workers, err)
+		}
+	})
+}
+
+func TestConcurrentCreateWithDifferentWorkerIDs(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		engine := enginetest.NewMemoryClient()
+		svc := NewService(NewMemoryStore(nil), WithAgentEngine(engine))
+		release, err := svc.lockParticipant(t.Context(), ChannelCSGClaw, "pt-qa")
+		if err != nil {
+			t.Fatal(err)
+		}
+		results := make(chan Participant, 2)
+		for _, id := range []string{"agent-first", "agent-second"} {
+			go func() {
+				item, err := svc.Create(t.Context(), CreateRequest{
+					ID: "pt-qa", Channel: ChannelCSGClaw, Type: TypeAgent, Name: "QA",
+					AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: id, Agent: &agent.CreateAgentSpec{RuntimeKind: agent.RuntimeKindCodex}},
+				})
+				if err != nil {
+					t.Errorf("create with %s: %v", id, err)
+				}
+				results <- item
+			}()
+		}
+		synctest.Wait()
+		release()
+		first, second := <-results, <-results
+		workers, err := engine.Agents().List(t.Context(), agentengine.AgentListOptions{})
+		if err != nil || len(workers) != 1 || first.AgentID != workers[0].ID || second.AgentID != first.AgentID {
+			t.Fatalf("returned %q and %q with workers %+v: %v", first.AgentID, second.AgentID, workers, err)
+		}
+	})
+}
+
+func TestFeishuBindingDuringAgentDeletion(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		controller := mustNewAgentService(t)
+		engine := agentengine.New(controller)
+		const id = "agent-qa"
+		if _, err := controller.CreateRecord(t.Context(), agent.CreateRequest{Spec: agent.CreateAgentSpec{
+			ID: id, Name: "QA", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex, Image: "agent-image:test",
+		}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := engine.Agents().SetArchived(t.Context(), id, true); err != nil {
+			t.Fatal(err)
+		}
+		svc := NewService(NewMemoryStore(nil), WithAgentEngine(engine))
+		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+		defer cancel()
+		deleted := make(chan error, 1)
+		err := controller.WithAgentLifecycle(ctx, id, func(lease context.Context) error {
+			go func() { _, err := svc.DeleteAgent(ctx, id); deleted <- err }()
+			synctest.Wait()
+			_, err := svc.Create(lease, CreateRequest{
+				ID: "pt-qa", Channel: ChannelFeishu, Type: TypeAgent, Name: "QA",
+				ChannelUser:      ChannelUserSpec{Kind: ChannelUserKindAppID},
+				ChannelAppConfig: map[string]any{"app_id": "test-app", "app_secret": "test-secret"},
+				AgentBinding:     AgentBindingSpec{Mode: BindingModeReuse, AgentID: id},
+			})
+			return err
+		})
+		if err != nil {
+			t.Fatalf("Feishu binding under lifecycle lease: %v", err)
+		}
+		if err := <-deleted; err != nil {
+			t.Fatalf("delete after binding: %v", err)
+		}
+		if _, ok := svc.Get(ChannelFeishu, "pt-qa"); ok {
+			t.Fatal("deleted worker still has a Feishu participant")
+		}
+	})
+}
+
 func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testing.T) {
 	agentSvc := mustNewAgentService(t)
 	if _, err := agentSvc.CreateRecord(context.Background(), agent.CreateRequest{
@@ -248,7 +452,7 @@ func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testi
 		Users: []im.User{
 			{ID: im.AdminUserID, Name: "admin", Role: "admin"},
 			{ID: "user-gitlab-worker", Name: "gitlab-worker", Role: "worker"},
-			{ID: "user-stale-worker", Name: "stale-worker", Role: "worker"},
+			{ID: "user-stale-worker", Name: "stale-worker", Role: "worker", AgentState: "deleted"},
 			{ID: "user-qa", Name: "qa", Role: "worker"},
 			{ID: im.ManagerUserID, Name: agent.ManagerName, Role: agent.RoleManager},
 		},
@@ -320,6 +524,14 @@ func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testi
 	if _, ok := imSvc.User(im.ManagerUserID); !ok {
 		t.Fatal("manager user was deleted")
 	}
+	_, err = svc.Create(t.Context(), CreateRequest{
+		ID: "pt-stale-worker", Name: "stale-worker", Channel: ChannelCSGClaw, Type: TypeAgent,
+		AgentBinding: AgentBindingSpec{Mode: BindingModeCreate, AgentID: "agent-stale-worker"},
+	})
+	if !errors.Is(err, im.ErrAgentIdentityDeleted) {
+		t.Fatalf("retry after intentional deletion: %v", err)
+	}
+
 }
 
 func TestRepairDanglingCSGClawAgentParticipantsRequiresIMService(t *testing.T) {

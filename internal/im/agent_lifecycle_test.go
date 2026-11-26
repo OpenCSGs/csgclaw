@@ -1,6 +1,7 @@
 package im
 
 import (
+	"csgclaw/internal/identity"
 	"errors"
 	"os"
 	"path/filepath"
@@ -8,6 +9,27 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestReserveWorkerNameWithoutPrimaryParticipant(t *testing.T) {
+	s := NewServiceFromBootstrap(Bootstrap{Users: []User{{ID: "user-human", Name: "Taken"}}})
+	for _, name := range []string{"taken", "user-human"} {
+		if _, err := s.ReserveAgentUserName("", name); !errors.Is(err, identity.ErrNameExists) {
+			t.Fatalf("reserve %q: %v", name, err)
+		}
+	}
+	release, err := s.ReserveAgentUserName("", "Available")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim := EnsureAgentUserRequest{ID: "user-other", Name: "available"}
+	if _, _, err := s.EnsureAgentUser(claim); !errors.Is(err, identity.ErrNameExists) {
+		t.Fatalf("competing name claim: %v", err)
+	}
+	release()
+	if _, _, err := s.EnsureAgentUser(claim); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestDeletedAgentIdentityReleasesNameButPreservesHistoryAfterRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "im", "state.json")
@@ -99,6 +121,24 @@ func TestRetireAgentUserSaveFailureRetainsNameReservation(t *testing.T) {
 	user, _ := s.User("user-old")
 	if user.AgentState != "" || user.DeletedAt != nil || s.byName["worker"] != "user-old" {
 		t.Fatalf("failed save changed identity: %+v", user)
+	}
+}
+
+func TestUpdateAgentUserSaveFailureRetainsNameReservation(t *testing.T) {
+	s := NewServiceFromBootstrap(Bootstrap{Users: []User{{ID: "user-worker", Name: "Original"}}})
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.statePath = filepath.Join(blocker, "state.json")
+	if _, _, err := s.UpdateAgentUser(UpdateAgentUserRequest{ID: "user-worker", Name: "Renamed"}); err == nil {
+		t.Fatal("rename succeeded despite failed persistence")
+	}
+	if original, ok := s.User("Original"); !ok || original.ID != "user-worker" || original.Name != "Original" {
+		t.Fatalf("original identity after failed rename: %+v", original)
+	}
+	if _, ok := s.User("Renamed"); ok {
+		t.Fatal("failed rename reserved the new name")
 	}
 }
 
