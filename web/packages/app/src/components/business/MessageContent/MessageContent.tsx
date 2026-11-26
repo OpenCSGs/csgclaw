@@ -25,15 +25,19 @@ import {
 } from "@/models/agentActivity";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
+import { useStreamingText } from "./useStreamingText";
 import "./MessageContent.css";
 
 export const MessageContent = memo(function MessageContent(props: MessageContentProps) {
   const { t, onCitationSelect } = props;
   const renderProgressText = useCallback(
-    (content: string) => <MessageBody content={content} t={t} onCitationSelect={onCitationSelect} />,
+    (content: string, streaming: boolean) => (
+      <MessageBody content={content} streaming={streaming} t={t} onCitationSelect={onCitationSelect} />
+    ),
     [t, onCitationSelect],
   );
   const progress = parseTurnProgress(props.message);
+  const streaming = progress?.status === "running" && !progress.private_output;
   if (progress && props.t && props.showTurnProgress !== false) {
     const hasAnswer = Boolean(props.content?.replace(/\u200b/g, "").trim());
     return (
@@ -43,7 +47,7 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
         headerControls={props.progressControls?.header}
         controls={props.progressControls?.footer}
         t={props.t}
-        answer={hasAnswer ? <MessageBody {...props} diagnosticText /> : null}
+        answer={hasAnswer ? <MessageBody {...props} diagnosticText streaming={streaming} /> : null}
         renderText={renderProgressText}
       />
     );
@@ -58,7 +62,7 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
           ))}
         </div>
       ) : null}
-      <MessageBody {...props} diagnosticText />
+      <MessageBody {...props} diagnosticText streaming={streaming} />
     </>
   );
 });
@@ -76,8 +80,9 @@ function MessageBody({
   onCitationSelect,
   onLongMessageExpandedChange,
   onQuestionSelect,
+  streaming = false,
   t,
-}: MessageContentProps & { diagnosticText?: boolean }) {
+}: MessageContentProps & { diagnosticText?: boolean; streaming?: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeCitationID, setActiveCitationID] = useState<string | null>(null);
   const blankTurnPlaceholder = isBlankTurnPlaceholder(content);
@@ -101,7 +106,9 @@ function MessageBody({
     typeof delivery === "object" &&
     "delivery_kind" in delivery &&
     delivery.delivery_kind === "turn_stopped";
-  const displayContent = interrupted && t ? t("conversationInterrupted") : String(content ?? "");
+  const fullContent = interrupted && t ? t("conversationInterrupted") : String(content ?? "");
+  const displayContent = useStreamingText(fullContent, streaming);
+  const collapseLongMessage = enableLongMessageCollapse && !streaming;
   const rendered = useMemo(
     () =>
       renderMarkdownWithCitations(
@@ -122,7 +129,7 @@ function MessageBody({
   const markdownHTML = useMemo(() => ({ __html: markup }), [markup]);
 
   useEffect(() => {
-    if (enableLongMessageCollapse) {
+    if (collapseLongMessage) {
       return undefined;
     }
 
@@ -142,7 +149,7 @@ function MessageBody({
     return () => {
       cancelled = true;
     };
-  }, [enableLongMessageCollapse, markup]);
+  }, [collapseLongMessage, markup]);
 
   if (blankTurnPlaceholder) {
     return (
@@ -159,7 +166,7 @@ function MessageBody({
   }
 
   const parseCommand = allowLegacyToolFormat ? parseMessageActivityCommand : parseDeliveryCommand;
-  const command = message && parseCommand({ content: displayContent, metadata: message.metadata });
+  const command = message && parseCommand({ content: fullContent, metadata: message.metadata });
   if (command) {
     return (
       <StandaloneToolStep
@@ -199,7 +206,7 @@ function MessageBody({
   }
 
   const markdownContent =
-    enableLongMessageCollapse && t ? (
+    collapseLongMessage && t ? (
       <LongMessageCollapse
         expanded={longMessageExpanded}
         html={markup}
@@ -210,6 +217,7 @@ function MessageBody({
       <div
         ref={rendered.cited.length ? undefined : containerRef}
         data-diagnostic-response-text={diagnosticText || undefined}
+        data-streaming-text={streaming || undefined}
         className="message-content"
         dangerouslySetInnerHTML={markdownHTML}
       />

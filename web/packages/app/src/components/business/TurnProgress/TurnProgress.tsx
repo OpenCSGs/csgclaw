@@ -166,7 +166,7 @@ type Props = {
   headerControls?: ReactNode;
   progress: Progress;
   answer?: ReactNode;
-  renderText: (text: string) => ReactNode;
+  renderText: (text: string, streaming: boolean) => ReactNode;
   t: TranslateFn;
 };
 
@@ -199,6 +199,7 @@ export const TurnProgress = memo(function TurnProgress({
   const failedCount = toolStatuses.filter(failedProgressTool).length;
   const hasProcess = groups.length > 0 || active || videoTiming !== null || progress.status !== "succeeded";
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  const running = progress.status === "running" && online && connected;
   const statusLabel =
     !active && videoTiming
       ? videoTiming.pending
@@ -236,7 +237,9 @@ export const TurnProgress = memo(function TurnProgress({
               onClick={toggle}
             >
               <Clock3 size={15} aria-hidden="true" />
-              <span>{t(statusLabel)}</span>
+              <span data-progress-shimmer={(running && (!open || groups.length === 0)) || undefined}>
+                {t(statusLabel)}
+              </span>
               {clockProgress.status !== "succeeded" ? <span aria-hidden="true">·</span> : null}
               <Elapsed progress={clockProgress} />
               {toolCount ? (
@@ -259,10 +262,17 @@ export const TurnProgress = memo(function TurnProgress({
           </div>
           {open ? (
             <div id={id} className={styles.body} role="region" aria-label={t("progressDetails")}>
-              {groups.map((group) => (
-                <Group key={group.id} group={group} renderText={renderText} t={t} active={active} />
+              {groups.map((group, index) => (
+                <Group
+                  key={group.id}
+                  group={group}
+                  renderText={renderText}
+                  t={t}
+                  running={running}
+                  streaming={progress.status === "running" && !answer && index === groups.length - 1}
+                />
               ))}
-              {!groups.length ? <p className={styles.waiting}>{t("progressStarting")}</p> : null}
+              {!groups.length && !answer ? <p className={styles.waiting}>{t("progressStarting")}</p> : null}
             </div>
           ) : null}
         </>
@@ -292,32 +302,37 @@ const Group = memo(
     group,
     renderText,
     t,
-    active,
+    running,
+    streaming,
   }: {
     group: ProgressGroup;
     renderText: Props["renderText"];
     t: TranslateFn;
-    active: boolean;
+    running: boolean;
+    streaming: boolean;
   }) {
     if (group.kind === "commentary")
       return (
         <div className={styles.commentary} data-diagnostic-response-text>
-          {renderText(group.items[0].text || "")}
+          {renderText(group.items[0].text || "", streaming)}
         </div>
       );
     if (group.kind === "tool") {
       return (
         <ol className={styles.toolList} start={group.firstToolNumber} aria-label={t("progressToolList")}>
           {group.items.map((item, index) =>
-            item.tool ? <ToolRow key={item.id} tool={item.tool} number={group.firstToolNumber + index} t={t} /> : null,
+            item.tool ? (
+              <ToolRow key={item.id} tool={item.tool} number={group.firstToolNumber + index} t={t} running={running} />
+            ) : null,
           )}
         </ol>
       );
     }
-    return <ReasoningGroup group={group} renderText={renderText} t={t} active={active} />;
+    return <ReasoningGroup group={group} renderText={renderText} t={t} streaming={streaming} running={running} />;
   },
   (previous, next) =>
-    previous.active === next.active &&
+    previous.running === next.running &&
+    previous.streaming === next.streaming &&
     previous.t === next.t &&
     previous.renderText === next.renderText &&
     previous.group.kind === next.group.kind &&
@@ -330,22 +345,33 @@ function ReasoningGroup({
   group,
   renderText,
   t,
-  active,
+  streaming,
+  running,
 }: {
   group: ProgressGroup;
   renderText: Props["renderText"];
   t: TranslateFn;
-  active: boolean;
+  streaming: boolean;
+  running: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const id = useId();
   const box = useRef<HTMLDivElement>(null);
+  const contents = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const text = group.items.map((item) => item.text || "").join("\n\n");
   useEffect(() => {
     const element = box.current;
-    if (open && element && pinned.current) element.scrollTop = element.scrollHeight;
-  }, [text, open]);
+    if (!open || !element) return;
+    const follow = () => {
+      if (pinned.current) element.scrollTop = element.scrollHeight;
+    };
+    follow();
+    if (!streaming || !contents.current || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(follow);
+    observer.observe(contents.current);
+    return () => observer.disconnect();
+  }, [text, open, streaming]);
   return (
     <div className={styles.group}>
       <Button
@@ -357,7 +383,9 @@ function ReasoningGroup({
         onClick={() => setOpen((current) => !current)}
       >
         <Brain size={15} aria-hidden="true" />
-        <span>{t(active ? "progressReasoningActive" : "progressReasoning")}</span>
+        <span data-progress-shimmer={(streaming && running) || undefined}>
+          {t(streaming ? "progressReasoningActive" : "progressReasoning")}
+        </span>
         {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
       </Button>
       {open ? (
@@ -368,16 +396,17 @@ function ReasoningGroup({
           role="region"
           aria-label={t("progressReasoning")}
           tabIndex={0}
-          data-reasoning-stream={active || undefined}
           onScroll={({ currentTarget }) => {
             pinned.current = currentTarget.scrollHeight - currentTarget.scrollTop - currentTarget.clientHeight < 24;
           }}
         >
-          {group.items.map((item) => (
-            <div key={item.id} className={styles.reasoningChunk}>
-              {renderText(item.text || "")}
-            </div>
-          ))}
+          <div ref={contents}>
+            {group.items.map((item, index) => (
+              <div key={item.id} className={styles.reasoningChunk}>
+                {renderText(item.text || "", streaming && index === group.items.length - 1)}
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>
@@ -394,7 +423,17 @@ export function StandaloneToolStep({ tool, t }: { tool: ProgressTool; t: Transla
   );
 }
 
-const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool; number: number; t: TranslateFn }) {
+const ToolRow = memo(function ToolRow({
+  tool,
+  number,
+  t,
+  running = true,
+}: {
+  tool: ProgressTool;
+  number: number;
+  t: TranslateFn;
+  running?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const toggleLabels = { expand: t("messageLongExpand"), collapse: t("messageLongCollapse") };
   const input = tool.command || tool.input;
@@ -402,6 +441,7 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
   const outputLabel = t("progressOutput");
   const id = useId();
   const toolStatus = progressToolStatus(tool.status, tool.exit_code);
+  const terminal = terminalTool(toolStatus);
   const failed = failedProgressTool(toolStatus);
   const label = t(`progressToolStatus_${toolStatus}`);
   const status = !toolStatus ? "" : label.startsWith("progressToolStatus_") ? t("progressToolStatus_running") : label;
@@ -434,7 +474,12 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
           <Icon size={15} />
         </span>
         <span className={styles.stepSummary}>
-          <span className={styles.toolAction}>{actionLabel}</span>
+          <span
+            className={styles.toolAction}
+            data-progress-shimmer={(running && Boolean(toolStatus) && !terminal) || undefined}
+          >
+            {actionLabel}
+          </span>
           {summary ? (
             <span className={styles.toolTarget} title={summary}>
               {summary}
@@ -461,7 +506,7 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
               <ToolOutput label={outputLabel} text={tool.output} toggleLabels={toggleLabels} />
             ) : (
               <p className={styles.emptyOutput}>
-                {t(!toolStatus || terminalTool(toolStatus) ? "progressNoOutput" : "progressWaitingOutput")}
+                {t(!toolStatus || terminal ? "progressNoOutput" : "progressWaitingOutput")}
               </p>
             )}
             {tool.truncated ? <small>{t("progressTruncated")}</small> : null}

@@ -61,10 +61,25 @@ describe("TurnProgress", () => {
     expect(within(reasoning).getByText("Detailed reasoning")).toBeVisible();
     expect(within(reasoning).getByText("Next chunk")).toBeVisible();
     const toggle = screen.getByRole("button", { name: "正在思考" });
+    expect(within(toggle).getByText("正在思考")).toHaveAttribute("data-progress-shimmer");
     await userEvent.setup().click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(reasoning).not.toBeInTheDocument();
     expect(screen.getByText("正在检查文件")).toBeVisible();
+  });
+
+  it("shows the title shimmer on running tools and clears it when the turn is waiting", () => {
+    const items: Progress["items"] = [
+      ...progress.items,
+      { id: "executing", kind: "tool", tool: { name: "Shell", actions: ["execute"], status: "running" } },
+    ];
+    const { rerender } = render(<TurnProgress progress={{ ...progress, items }} t={t} renderText={renderText} />);
+    expect(screen.getByText("运行命令")).toHaveAttribute("data-progress-shimmer");
+    expect(screen.getByText("读取文件")).not.toHaveAttribute("data-progress-shimmer");
+    expect(screen.getByText("思考过程")).not.toHaveAttribute("data-progress-shimmer");
+
+    rerender(<TurnProgress progress={{ ...progress, items, status: "waiting" }} t={t} renderText={renderText} />);
+    expect(screen.getByText("运行命令")).not.toHaveAttribute("data-progress-shimmer");
   });
 
   it("follows streamed reasoning only while the reader stays near the bottom", () => {

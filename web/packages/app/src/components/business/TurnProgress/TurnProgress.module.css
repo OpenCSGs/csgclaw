@@ -133,6 +133,29 @@
   color: var(--text);
 }
 
+@media (prefers-reduced-motion: no-preference) and (not (forced-colors: active)) {
+  @supports (background-clip: text) {
+    .shell button:not(:is(:hover, :focus-visible)) [data-progress-shimmer] {
+      --shimmer-base: color-mix(in srgb, var(--muted) 86%, var(--text));
+      background-image: linear-gradient(105deg, var(--shimmer-base) 38%, var(--text) 50%, var(--shimmer-base) 62%);
+      background-size: 230% 100%;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: progress-title-shimmer 2s linear infinite;
+    }
+  }
+}
+
+@keyframes progress-title-shimmer {
+  from {
+    background-position: 100% 50%;
+  }
+
+  to {
+    background-position: 0% 50%;
+  }
+}
+
 .shell button.summaryToggle > :global(.btn-content) {
   gap: 6px;
   justify-content: flex-start;
@@ -200,31 +223,6 @@
 
 .reasoningChunk + .reasoningChunk {
   margin-top: 8px;
-}
-
-.reasoningBox[data-reasoning-stream] .reasoningChunk:last-child::after {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 13px;
-  margin-left: 3px;
-  vertical-align: -2px;
-  border-radius: 1px;
-  background: currentColor;
-  opacity: 0.55;
-  animation: reasoning-caret 1.1s ease-in-out infinite;
-}
-
-@keyframes reasoning-caret {
-  50% {
-    opacity: 0.1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reasoningBox[data-reasoning-stream] .reasoningChunk:last-child::after {
-    animation: none;
-  }
 }
 
 .toolList,
