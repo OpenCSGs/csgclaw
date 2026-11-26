@@ -5,6 +5,7 @@ import { CLOUD_SEND_CONSENT_STORAGE_KEY } from "@/shared/storage/keys";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { vi } from "vitest";
 import { useConversationController } from "@/hooks/workspace/useConversationController";
 import { WorkspacePaneTypes } from "@/models/routing";
@@ -1880,6 +1881,48 @@ describe("useConversationController", () => {
     });
 
     expect(result.current.conversationViewProps.workingParticipants).toEqual([]);
+  });
+
+  it.each(["", "Next message"])("preserves only new edits after Enter sends a draft (%j)", async (nextDraft) => {
+    const key = composerDraftKey("u-admin", directConversation.id);
+    let completeSend!: (message: IMMessage) => void;
+    apiMocks.sendMessageRequest.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          completeSend = resolve;
+        }),
+    );
+    const { result } = renderConversationController();
+    const editor = document.createElement("div");
+    editor.textContent = "Send this message";
+    result.current.conversationViewProps.editorRef.current = editor;
+    act(() => result.current.conversationViewProps.onSyncComposer());
+
+    const preventDefault = vi.fn();
+    act(() =>
+      result.current.conversationViewProps.onComposerKeyDown({
+        key: "Enter",
+        preventDefault,
+      } as unknown as ReactKeyboardEvent<HTMLElement>),
+    );
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+    // The composer also synchronizes its DOM on keyup, while the send is pending.
+    act(() => result.current.conversationViewProps.onSyncComposer());
+    if (nextDraft) {
+      editor.textContent = nextDraft;
+      act(() => result.current.conversationViewProps.onSyncComposer());
+    }
+    await act(async () => completeSend(successfulMessage("Send this message")));
+    window.dispatchEvent(new Event("pagehide"));
+
+    expect(editor.textContent).toBe(nextDraft);
+    expect(result.current.conversationViewProps.draftText).toBe(nextDraft);
+    if (nextDraft) {
+      expect(localStorage.getItem(key)).toContain(nextDraft);
+    } else {
+      expect(localStorage.getItem(key)).toBeNull();
+    }
   });
 
   it("restores drafts by room and clears the sent room when navigation completes before sending", async () => {
