@@ -64,7 +64,7 @@ func (s Store) refreshAIGatewayCredentials(ctx context.Context, client *http.Cli
 		return baseURL, "", false, fmt.Errorf("csghub user uuid is required to fetch aigateway api key")
 	}
 
-	apiKey, err := fetchBuiltinAPIKey(ctx, client, record.Account.BaseURL, record.Tokens.AccessToken, record.Account.UserID, record.Account.UserUUID)
+	apiKey, err := FetchBuiltinAPIKey(ctx, client, record.Account.BaseURL, record.Tokens.AccessToken, record.Account.UserID, record.Account.UserUUID)
 	if err != nil {
 		return baseURL, "", false, err
 	}
@@ -77,7 +77,8 @@ func (s Store) refreshAIGatewayCredentials(ctx context.Context, client *http.Cli
 	return baseURL, apiKey, baseURL != "" && apiKey != "", nil
 }
 
-func fetchBuiltinAPIKey(ctx context.Context, client *http.Client, baseURL, authToken, userID, namespaceUUID string) (string, error) {
+// FetchBuiltinAPIKey obtains the current AI Gateway key using a CSGHub credential.
+func FetchBuiltinAPIKey(ctx context.Context, client *http.Client, baseURL, authToken, userID, namespaceUUID string) (string, error) {
 	authToken = strings.TrimSpace(authToken)
 	if authToken == "" {
 		return "", fmt.Errorf("csghub auth token is required")

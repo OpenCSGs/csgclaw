@@ -307,7 +307,7 @@ func (s *Service) fetchUserProfile(ctx context.Context, baseURL, userID string) 
 }
 
 func (s *Service) fetchBuiltinAPIKey(ctx context.Context, baseURL, authToken, userID, namespaceUUID string) (string, error) {
-	return fetchBuiltinAPIKey(ctx, s.httpClient(), baseURL, authToken, userID, namespaceUUID)
+	return FetchBuiltinAPIKey(ctx, s.httpClient(), baseURL, authToken, userID, namespaceUUID)
 }
 
 func (s *Service) doJSON(req *http.Request, out any) error {

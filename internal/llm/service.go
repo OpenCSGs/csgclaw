@@ -32,6 +32,7 @@ type Service struct {
 	defaults                      config.ModelConfig
 	agents                        AgentProfileReader
 	client                        *http.Client
+	managedGateway                *managedGateway
 	openCSGCredentialRefreshMu    sync.Mutex
 	responsesCapabilityMu         sync.Mutex
 	responsesUnsupported          map[string]time.Time
@@ -751,11 +752,17 @@ func readAndCloseUpstreamBody(resp *http.Response) ([]byte, error) {
 
 func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte, billingURL string) (*UpstreamResponse, error) {
 	code := modelprovider.UpstreamErrorCodeForResponse(resp.StatusCode, body)
+	logBody := body
+	if resp.Request != nil {
+		if key, ok := strings.CutPrefix(resp.Request.Header.Get("Authorization"), "Bearer "); ok && key != "" {
+			logBody = bytes.ReplaceAll(body, []byte(key), []byte("[redacted]"))
+		}
+	}
 	attrs := []any{
 		"status", resp.StatusCode,
 		"code", code,
 		"upstream_request_id", upstreamRequestID(resp.Header),
-		"response_body", upstreamErrorBodyForLog(body),
+		"response_body", upstreamErrorBodyForLog(logBody),
 	}
 	attrs = append(attrs, modelRequestLogAttrs(resp.Request)...)
 	slog.Error("model upstream request failed", attrs...)

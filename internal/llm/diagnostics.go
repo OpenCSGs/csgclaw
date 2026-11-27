@@ -15,7 +15,7 @@ import (
 // Measure every upstream attempt through response consumption, including
 // streaming bodies and retries. This is client-observed LLM service latency,
 // including network/gateway time, not pure model compute or first-token time.
-func (s *Service) modelRequestAttempt(req *http.Request, stream bool) (*http.Response, error) {
+func (s *Service) modelRequestAttempt(client *http.Client, req *http.Request, stream bool) (*http.Response, error) {
 
 	exchange, _ := req.Context().Value(modelExchangeKey{}).(*modelExchange)
 	var attempt uint64
@@ -35,7 +35,7 @@ func (s *Service) modelRequestAttempt(req *http.Request, stream bool) (*http.Res
 	}
 	logModelRequest(req)
 	if !diagnostics.Enabled(req.Context()) {
-		resp, err := s.client.Do(req)
+		resp, err := client.Do(req)
 		observeModelCapture(exchange, attempt, resp, err)
 		if err != nil {
 			logModelTransportFailure(req, err)
@@ -49,7 +49,7 @@ func (s *Service) modelRequestAttempt(req *http.Request, stream bool) (*http.Res
 	}
 	update, finish := diagnostics.ObserveRequest(req.Context(), operation)
 	start := time.Now()
-	resp, err := s.client.Do(req)
+	resp, err := client.Do(req)
 	observeModelCapture(exchange, attempt, resp, err)
 	if err != nil {
 		logModelTransportFailure(req, err)
