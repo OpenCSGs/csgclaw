@@ -4,7 +4,6 @@ import (
 	"context"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelprovider"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
@@ -44,50 +43,20 @@ func modelRequestFailure(ctx context.Context, response *http.Response, body []by
 		case strings.HasPrefix(status.Code, "model_") && status.Code != "model_cooldown", status.Code == "unsupported_model", status.Code == "unsupported_feature", status.Code == "context_length_exceeded":
 			status.Source = "model"
 		}
-		status.Details = modelErrorDetails(body)
 	}
 	if err != nil {
 		var timeout net.Error
 		if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &timeout) && timeout.Timeout() {
 			status.Category = "timeout"
 		}
-		status.Details = err.Error()
 	}
-	for _, secret := range exchange.secrets {
-		if len(secret) >= 4 {
-			status.Details = strings.ReplaceAll(status.Details, secret, "[redacted]")
-		}
+	messageStatus := status.HTTPStatus
+	if messageStatus < http.StatusBadRequest {
+		// Streaming failures can carry an error code in an HTTP 200 response.
+		messageStatus = modelprovider.UpstreamStatusForErrorCode(status.Code)
 	}
-	status.Details = diagnostics.ProtectText(status.Details)
-	if len(status.Details) > 2048 {
-		status.Details = strings.ToValidUTF8(status.Details[:2048], "") + "…"
-	}
+	status.Details = modelprovider.FriendlyUpstreamErrorMessage(messageStatus, status.Code)
 	return status
-}
-
-func modelErrorDetails(body []byte) string {
-	var payload map[string]any
-	if json.Unmarshal(body, &payload) != nil {
-		return ""
-	}
-	if nested, ok := payload["response"].(map[string]any); ok {
-		payload = nested
-	}
-	if nested, ok := payload["error"].(map[string]any); ok {
-		payload = nested
-	}
-	// Response.failed can carry the complete conversation. Expose the original
-	// error fields without copying inputs, outputs, tools, or upstream headers.
-	fields := make(map[string]any, 4)
-	for _, key := range []string{"code", "type", "param", "message"} {
-		if value, ok := payload[key].(string); ok {
-			fields[key] = value
-		}
-	}
-	if len(fields) == 0 {
-		return ""
-	}
-	return string(diagnostics.Protect(fields))
 }
 
 func reportModelRequestFailure(ctx context.Context, status diagnostics.ModelRequestStatus) {

@@ -16,6 +16,7 @@ import (
 	"csgclaw/internal/agentmemory"
 	"csgclaw/internal/config"
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/modelprovider"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -111,6 +112,66 @@ func TestGatewayRequestFeedback(t *testing.T) {
 			failure := statuses[len(statuses)-1]
 			if failure.State != "failed" || failure.Category != scenario.category || failure.Source != scenario.source || failure.RequestID == "" || strings.Contains(failure.Details, "fixture-key") {
 				t.Fatalf("unexpected failure %+v", failure)
+			}
+		})
+	}
+}
+
+func TestGatewayErrorDetailsStayInDiagnostics(t *testing.T) {
+	const private = "quoted private task text"
+	const providerError = `{"code":"unsupported_feature","message":"rejected ` + private + `","param":"tools"}`
+	for _, test := range []struct {
+		name        string
+		status      int
+		contentType string
+		body        string
+	}{
+		{"HTTP", http.StatusBadRequest, "application/json", `{"error":` + providerError + `}`},
+		{"event stream", http.StatusOK, "text/event-stream", "data: " + `{"type":"response.failed","response":{"error":` + providerError + "}}\n\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", test.contentType)
+				w.Header().Set("X-Request-ID", "gateway-fixture")
+				w.WriteHeader(test.status)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			defer gateway.Close()
+			store := diagnostics.New(t.TempDir())
+			t.Cleanup(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := store.Flush(ctx); err != nil {
+					t.Error(err)
+				}
+			})
+			record := store.Begin("room", "source", "", "agent", "turn")
+			record.Running()
+			var feedback []diagnostics.ModelRequestStatus
+			record.ObserveModelRequest(func(status diagnostics.ModelRequestStatus) { feedback = append(feedback, status) })
+			ctx := WithTaskProfile(diagnostics.WithRecord(t.Context(), record), openCSGTestProfile(gateway.URL))
+			resp, err := NewService(config.ModelConfig{}, nil).Responses(ctx, "agent", []byte(`{"input":"test","stream":true}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil || strings.Contains(string(body), private) {
+				t.Fatalf("unexpected runtime response: %s, %v", body, err)
+			}
+			want := modelprovider.FriendlyUpstreamErrorMessage(http.StatusBadRequest, "unsupported_feature")
+			if len(feedback) != 1 || feedback[0].Details != want || feedback[0].GatewayRequestID != "gateway-fixture" {
+				t.Errorf("transcript feedback did not use the friendly error message: %+v", feedback)
+			}
+			captured := false
+			err = store.ReadContext(t.Context(), record.Snapshot().ID, func(entry diagnostics.ContextEntry) error {
+				if entry.Kind == "model.upstream_response" && strings.Contains(string(entry.Data), private) {
+					captured = true
+				}
+				return nil
+			})
+			if err != nil || !captured {
+				t.Fatalf("provider error was lost from diagnostics: %v", err)
 			}
 		})
 	}

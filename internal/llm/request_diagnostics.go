@@ -26,7 +26,6 @@ type modelExchange struct {
 	attempt  atomic.Uint64
 	id       string
 	openCSG  bool
-	secrets  []string
 	failure  atomic.Pointer[diagnostics.ModelRequestStatus]
 	rootSpan trace.Span
 }
@@ -81,7 +80,6 @@ func (s *Service) withModelRequestContext(ctx context.Context, agentID string, p
 	exchange := &modelExchange{
 		recorder: diagnostics.NewRecorder(ctx, secrets...), id: metadata.id,
 		openCSG:  openCSG,
-		secrets:  secrets,
 		rootSpan: rootSpan,
 	}
 	exchange.recorder.Capture("model.runtime_request", map[string]any{"request_id": metadata.id, "ingress_request_id": diagnostics.IngressID(ctx), "agent_id": agentID, "provider": provider, "model": profile.ModelID, "body": json.RawMessage(body)})

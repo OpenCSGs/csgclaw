@@ -9,7 +9,8 @@ import (
 const modelRequestEvent = "llm.model_request_status"
 
 // ModelRequestStatus carries bounded failure and recovery information to the
-// transcript. It never carries request data or authentication headers.
+// transcript. Details is user-facing guidance, never raw provider or transport
+// text. The upstream response is captured separately in diagnostics.
 type ModelRequestStatus struct {
 	State            string     `json:"state"`
 	Category         string     `json:"category"`
