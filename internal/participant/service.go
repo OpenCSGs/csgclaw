@@ -247,7 +247,7 @@ func (s *Service) bindingTarget(ctx context.Context, req *normalizedCreateReques
 				if !target.reconcileBoundName {
 					target.workerName = selected.Spec.Name
 				}
-				target.readOnly = nameMatches || !target.reconcileBoundName
+				target.readOnly = (nameMatches || !target.reconcileBoundName) && req.workerTemplate() == ""
 			}
 			return target, nil
 		}
@@ -1161,6 +1161,13 @@ func (s *Service) boundAgentByID(ctx context.Context, id string) (agentengine.Ag
 	return selected, selected.ID == agent.CanonicalID(id), nil
 }
 
+func (req normalizedCreateRequest) workerTemplate() string {
+	if req.reconcile && req.AgentBinding.Agent != nil && !strings.EqualFold(req.AgentBinding.Agent.Role, agent.RoleManager) {
+		return strings.TrimSpace(req.AgentBinding.Agent.FromTemplate)
+	}
+	return ""
+}
+
 func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRequest, restoring bool) (string, error) {
 	switch req.AgentBinding.Mode {
 	case BindingModeNone:
@@ -1193,6 +1200,13 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if existing, found, err := s.boundAgentByID(ctx, agentID); err != nil {
 			return "", err
 		} else if found {
+			if ref := req.workerTemplate(); ref != "" && existing.Spec.Role == agentengine.AgentRoleWorker {
+				updateCtx := agentengine.WithLocalTemplateService(ctx, req.AgentHubService)
+				existing, err = s.agents.Update(updateCtx, existing.ID, agentengine.AgentUpdateRequest{RefreshTemplate: ref})
+				if err != nil {
+					return "", err
+				}
+			}
 			return s.reconcileAgentName(ctx, req, existing)
 		}
 		if restoring && (req.AgentBinding.Agent == nil || strings.TrimSpace(req.AgentBinding.Agent.FromTemplate) == "") {

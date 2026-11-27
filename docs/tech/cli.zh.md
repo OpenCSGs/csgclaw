@@ -506,6 +506,8 @@ csgclaw pt <subcommand> [flags]
 - `--model-id string`：`--bind create` 时的 Agent model ID。
 - `--env KEY=VALUE`：`--bind create` 时的 Agent image 环境变量，可重复传入。
 
+重复执行 `participant create --channel csgclaw --type agent --id <participant-id> --bind create --from-template <template-id>` 会更新该 participant 已绑定的 Worker。每次请求都会重新读取模板。远端模板使用默认分支的最新压缩包。模板提供的设置和文件会覆盖本地修改，其余设置、文件以及 Worker ID 会保留。模板要求切换运行时时，请求在写入前返回错误。如果模板更改了 MCP 服务的协议、主机或有效端口，新地址仅使用模板明确提供的请求头和认证配置。
+
 `participant delete` 用法与参数：
 
 ```bash

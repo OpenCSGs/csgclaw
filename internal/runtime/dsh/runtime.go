@@ -242,13 +242,15 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 			return fmt.Errorf("overlay DSH worker workspace: %w", err)
 		}
 	}
-	workspaceSkills := filepath.Join(layout.WorkspaceRoot, "skills")
-	if info, statErr := os.Stat(workspaceSkills); statErr == nil && info.IsDir() {
-		if err := runtimeworkspace.OverlayWorkspaceTree(workspaceSkills, layout.SkillsRoot); err != nil {
-			return fmt.Errorf("install DSH template skills: %w", err)
+	if !agentruntime.KeepInstalledSkills(ctx) {
+		workspaceSkills := filepath.Join(layout.WorkspaceRoot, "skills")
+		if info, statErr := os.Stat(workspaceSkills); statErr == nil && info.IsDir() {
+			if err := runtimeworkspace.OverlayWorkspaceTree(workspaceSkills, layout.SkillsRoot); err != nil {
+				return fmt.Errorf("install DSH template skills: %w", err)
+			}
+		} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return fmt.Errorf("inspect DSH template skills: %w", statErr)
 		}
-	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-		return fmt.Errorf("inspect DSH template skills: %w", statErr)
 	}
 	seededBase, removeSeed, err := embeddedWorkspaceInstructions(root)
 	if err != nil {

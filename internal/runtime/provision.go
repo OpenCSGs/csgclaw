@@ -4,6 +4,22 @@ import (
 	"context"
 )
 
+type installedSkillsContextKey struct{}
+
+// WithInstalledSkills marks a restart after worker files have already been
+// applied. Runtime startup must retain the installed tree, including local edits.
+func WithInstalledSkills(ctx context.Context) context.Context {
+	return context.WithValue(ctx, installedSkillsContextKey{}, true)
+}
+
+func KeepInstalledSkills(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	keep, _ := ctx.Value(installedSkillsContextKey{}).(bool)
+	return keep
+}
+
 // Provisioner is an optional runtime capability for host-side preparation that
 // must happen before Runtime.New.
 //

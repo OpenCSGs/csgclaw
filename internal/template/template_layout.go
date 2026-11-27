@@ -61,9 +61,13 @@ func materializeLegacyTemplateWorkspace(templateRoot string) (WorkspaceRef, erro
 }
 
 func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (WorkspaceRef, error) {
+	return materializeWorkspaceFiles(srcFS, templateRoot, runtimeKind, true)
+}
+
+func materializeWorkspaceFiles(srcFS fs.FS, templateRoot, runtimeKind string, requireDocuments bool) (WorkspaceRef, error) {
 	instructionsRoot := filepath.ToSlash(filepath.Join(templateRoot, localInstructionsDirName))
 	instructionsFile := retiredclaws.InstructionFile(srcFS, instructionsRoot, requiredInstructionsFile)
-	if _, err := fs.Stat(srcFS, instructionsRoot+"/"+instructionsFile); err != nil {
+	if _, err := fs.Stat(srcFS, instructionsRoot+"/"+instructionsFile); err != nil && (requireDocuments || !errors.Is(err, fs.ErrNotExist)) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return WorkspaceRef{}, fmt.Errorf("template instructions/%s is required", requiredInstructionsFile)
 		}
@@ -77,7 +81,7 @@ func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (Works
 		_ = os.RemoveAll(dstRoot)
 		return WorkspaceRef{}, err
 	}
-	if err := copyWorkspaceTreeFS(srcFS, instructionsRoot, dstRoot, "template instructions"); err != nil {
+	if err := copyWorkspaceTreeFS(srcFS, instructionsRoot, dstRoot, "template instructions"); err != nil && (requireDocuments || !errors.Is(err, fs.ErrNotExist)) {
 		return cleanup(err)
 	}
 	if err := retiredclaws.CopiedInstructions(dstRoot, instructionsFile, requiredInstructionsFile); err != nil {
@@ -116,7 +120,10 @@ func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (Works
 		}
 	}
 	servers, err := readTemplateMCPServers(srcFS, filepath.ToSlash(filepath.Join(templateRoot, localMCPsDirName, localMCPFileName)))
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) && requireDocuments {
+		return cleanup(fmt.Errorf("template %s/%s is required", localMCPsDirName, localMCPFileName))
+	}
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return cleanup(err)
 	}
 	encodedServers, err := json.Marshal(servers)
@@ -129,9 +136,6 @@ func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (Works
 func readTemplateMCPServers(srcFS fs.FS, filePath string) (map[string]any, error) {
 	data, err := fs.ReadFile(srcFS, filePath)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("template %s/%s is required", localMCPsDirName, localMCPFileName)
-		}
 		return nil, err
 	}
 	var raw map[string]any
@@ -304,7 +308,7 @@ func copyTemplateSkills(source, target, runtimeKind string) error {
 		// Installation locks, activation journals and staging trees belong to the
 		// local installation. Skill resources with similar names remain intact.
 		top, _, _ := strings.Cut(path, "/")
-		return path == ".skillhub-lock.json.lock" || installstate.IsBuiltinArtifact(top) || (isCodex && path == codexSystemSkillsDirName)
+		return path == installstate.RecordsLockName || installstate.IsBuiltinArtifact(top) || (isCodex && path == codexSystemSkillsDirName)
 	})
 }
 
