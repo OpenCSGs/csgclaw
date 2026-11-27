@@ -2760,7 +2760,7 @@ export function useAgentController({
           return true;
         }
         const current = new Map(
-          (await fetchAgentSkillSummaries(agentDetailAgentID)).map((skill) => [skill.name, skill]),
+          (await fetchAgentSkillSummaries(agentDetailAgentID)).map((skill) => [skill.id ?? skill.name, skill]),
         );
         const missing = names.filter((name) => !current.has(name));
         if (missing.length) await batchAddAgentSkillsRequest(agentDetailAgentID, missing);
@@ -2790,11 +2790,11 @@ export function useAgentController({
   );
 
   const deleteAgentSkill = useCallback(
-    async (skill: { name?: string | null } | string | null | undefined) => {
+    async (skill: { id?: string; name?: string | null } | string | null | undefined) => {
       if (!agentDetailAgentID || agentSkillDeleteBusy) {
         return false;
       }
-      const rawName = typeof skill === "string" ? skill : String(skill?.name || "");
+      const rawName = typeof skill === "string" ? skill : String(skill?.id ?? skill?.name ?? "");
       const name = rawName.trim();
       if (!name) {
         return false;

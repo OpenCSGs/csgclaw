@@ -57,3 +57,23 @@ func TestReinstallRetainsPreviousBundleUntilReady(t *testing.T) {
 		t.Fatalf("replacement origin: %+v, %v", after, err)
 	}
 }
+
+func TestDirectoryImportPreservesSkillGroup(t *testing.T) {
+	root := t.TempDir()
+	grouped := filepath.Join(root, "team", "review")
+	source := filepath.Join(t.TempDir(), "team")
+	for _, dir := range []string{grouped, source} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(filepath.Base(dir)), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := ImportDirectory(root, source, true); !errors.Is(err, ErrSkillDirExists) {
+		t.Fatalf("import into group: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(grouped, "SKILL.md")); err != nil || string(data) != "review" {
+		t.Fatalf("grouped skill = %q, %v", data, err)
+	}
+}

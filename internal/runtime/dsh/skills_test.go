@@ -12,7 +12,7 @@ import (
 func TestSkillProjectionPreservesFilesAndPermissions(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "home", "skills")
-	for _, name := range []string{"reviewer", "writer"} {
+	for _, name := range []string{"reviewer", "writer", "team/reviewer", "user/reviewer"} {
 		dir := filepath.Join(source, name, "scripts")
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)
@@ -28,12 +28,19 @@ func TestSkillProjectionPreservesFilesAndPermissions(t *testing.T) {
 		if err := writeRuntimePatch(filepath.Join(root, patchFileName), agentruntime.Profile{}); err != nil {
 			t.Fatal(err)
 		}
-		if err := projectSkills(root, source, map[string]skill.State{"reviewer": {Enabled: enabled}}); err != nil {
+		if err := projectSkills(root, source, map[string]skill.State{"reviewer": {Enabled: enabled}, "team/reviewer": {Enabled: enabled}}); err != nil {
 			t.Fatal(err)
 		}
 		_, err := os.Stat(filepath.Join(root, "skill-view", "skills", "reviewer"))
 		if enabled && err != nil || !enabled && !os.IsNotExist(err) {
 			t.Fatalf("启用状态 %v：%v", enabled, err)
+		}
+		for _, id := range []string{"team/reviewer", "user/reviewer"} {
+			_, err := os.Stat(filepath.Join(root, "skill-view", "skills", id, "SKILL.md"))
+			want := id == "user/reviewer" || enabled
+			if want && err != nil || !want && !os.IsNotExist(err) {
+				t.Fatalf("projected %s: %v", id, err)
+			}
 		}
 		for _, base := range []string{source, filepath.Join(root, "skill-view", "skills")} {
 			info, err := os.Stat(filepath.Join(base, "writer", "scripts", "run.sh"))

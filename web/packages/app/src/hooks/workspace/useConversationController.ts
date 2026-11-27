@@ -2220,6 +2220,7 @@ export function buildSlashPickerState(input: SlashPickerStateInput): SlashPicker
         )
         .map((name) => ({ description: slashCommandDescription(name), name, type: "command" as const })),
       ...input.skillOptions
+        .map((skill) => ({ ...skill, name: skill.id ?? skill.name }))
         .filter(
           (skill) =>
             !builtinSlashCommandNames.includes(skill.name) &&

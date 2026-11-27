@@ -2,6 +2,7 @@ package slashcommand
 
 import (
 	"bytes"
+	"csgclaw/internal/skill/skillpath"
 	"encoding/xml"
 	"fmt"
 	"regexp"
@@ -11,7 +12,7 @@ import (
 const ElementName = "slash-command"
 
 var commandNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
-var skillSlugPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+var skillSlugPattern = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
 
 const (
 	UseSkillCommandName        = "use-skill"
@@ -198,7 +199,7 @@ func validate(cmd Command) error {
 
 func validSkillSlug(slug string) bool {
 	slug = strings.TrimSpace(slug)
-	return slug != "" && slug != "." && slug != ".." && !strings.ContainsAny(slug, `/\`) && skillSlugPattern.MatchString(slug)
+	return skillpath.Valid(slug) && skillSlugPattern.MatchString(slug)
 }
 
 func IsNewConversationCommand(cmd Command) bool {

@@ -105,7 +105,10 @@ export function messageResources(metadata: unknown): ResourceSnapshot[] {
 }
 
 export function resourceMessageText(content: unknown, metadata: unknown): string {
-  return [...messageResources(metadata).map((resource) => `[${resource.name}]`), String(content ?? "")]
+  return [
+    ...messageResources(metadata).map((resource) => `[${resource.source === "skill" ? resource.id : resource.name}]`),
+    String(content ?? ""),
+  ]
     .filter(Boolean)
     .join(" ");
 }

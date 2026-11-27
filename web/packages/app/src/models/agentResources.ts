@@ -10,7 +10,7 @@ export type AgentResourceSummary = ResourceSnapshot & {
 };
 export const resourceKey = (resource: ResourceReference) => `${resource.source}:${resource.id}`;
 export const resourceLabel = (resource: ResourceSnapshot) =>
-  resource.type === "skill" ? `/${resource.name}` : resource.name;
+  resource.type === "skill" ? `/${resource.id}` : resource.name;
 
 export function isResourceSnapshot(value: unknown): value is ResourceSnapshot {
   if (!value || typeof value !== "object") return false;

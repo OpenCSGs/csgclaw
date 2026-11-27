@@ -22,6 +22,7 @@ const skillFileName = "SKILL.md"
 var ErrSkillInvalid = errors.New("skill directory must contain SKILL.md")
 
 type SkillSummary struct {
+	ID          string               `json:"id,omitempty"`
 	Name        string               `json:"name"`
 	Version     string               `json:"version,omitempty"`
 	Description string               `json:"description,omitempty"`

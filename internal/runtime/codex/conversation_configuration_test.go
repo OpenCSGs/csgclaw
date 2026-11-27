@@ -220,26 +220,29 @@ func TestConversationThreadContextUsesRoomProfile(t *testing.T) {
 
 func TestRoomReadOnlyPreservesAgentSkills(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, "skills", "assigned", "SKILL.md")
+	path := filepath.Join(root, "skills", "team", "assigned", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte("# Assigned skill"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	original := map[string]skill.State{"assigned": {Enabled: true}}
+	if err := os.Mkdir(filepath.Join(root, "skills", "pending"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	original := map[string]skill.State{"team/assigned": {Enabled: true}}
 	rt := New(Dependencies{ResolveRoomProfile: func(string, string, taskconfig.Config) (agentruntime.Profile, error) {
 		return agentruntime.Profile{}, nil
 	}})
 	restricted, err := rt.conversationSkillStates(root, ExecutionModeReadOnly, original)
-	if err != nil || restricted["assigned"].Enabled {
+	if err != nil || skill.Enabled(restricted, "team/assigned") || skill.Enabled(restricted, "pending") {
 		t.Fatal("read-only skill restriction missing", err)
 	}
-	if !original["assigned"].Enabled {
+	if !original["team/assigned"].Enabled {
 		t.Fatal("changed saved Agent skill state")
 	}
 	restored, err := rt.conversationSkillStates(root, ExecutionModeStandard, original)
-	if err != nil || !restored["assigned"].Enabled {
+	if err != nil || !restored["team/assigned"].Enabled {
 		t.Fatal("skill did not restore after mode change", err)
 	}
 	if data, err := os.ReadFile(path); err != nil || string(data) != "# Assigned skill" {

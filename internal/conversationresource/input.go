@@ -2,10 +2,10 @@ package conversationresource
 
 import (
 	"context"
+	"csgclaw/internal/skill/skillpath"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"csgclaw/internal/agentengine/contract"
@@ -55,8 +55,6 @@ func readError(err error) error {
 	return &Error{Code: ServiceUnavailable, Cause: err}
 }
 
-var skillSlug = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-
 type NormalizedInput struct {
 	Content string
 	Refs    []apitypes.ResourceReference
@@ -75,7 +73,7 @@ func Normalize(content string, refs []apitypes.ResourceReference) (NormalizedInp
 		}
 		switch ref.Source {
 		case apitypes.ResourceSourceSkill:
-			if ref.ID == "." || ref.ID == ".." || !skillSlug.MatchString(ref.ID) {
+			if !skillpath.Valid(ref.ID) {
 				return NormalizedInput{}, &Error{Code: InvalidReference, Reference: ref}
 			}
 		case apitypes.ResourceSourceMCP, apitypes.ResourceSourceApp:

@@ -7,6 +7,7 @@ export type SlashCommandPayload = {
 export type SlashPickerCandidateType = "command" | "skill";
 
 export type SlashSkillOption = {
+  id?: string;
   enabled?: boolean;
   description?: string;
   name: string;
@@ -298,10 +299,7 @@ export function parseSlashShorthandToPayload(
 }
 
 function isValidSkillSlug(value: string): boolean {
-  if (!value || value === "." || value === ".." || /[/\\]/u.test(value)) {
-    return false;
-  }
-  return /^[A-Za-z0-9._-]+$/u.test(value);
+  return value.split("/").every((part) => part !== "." && part !== ".." && /^[A-Za-z0-9._-]+$/u.test(part));
 }
 
 function escapeXMLAttribute(value: string): string {

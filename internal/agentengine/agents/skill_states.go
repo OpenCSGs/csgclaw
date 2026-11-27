@@ -6,6 +6,7 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
+	"csgclaw/internal/skill/skillpath"
 	skill "csgclaw/internal/skill/state"
 	"errors"
 	"fmt"
@@ -125,8 +126,7 @@ func validateSkillStates(kind string, states map[string]skill.State) error {
 		return ErrSkillEnablementUnsupported
 	}
 	for name := range states {
-		normalized, err := skilllocal.NormalizeName(name)
-		if err != nil || normalized != name {
+		if !skillpath.Valid(name) {
 			return fmt.Errorf("%w: %s", ErrAgentSkillInvalid, name)
 		}
 	}

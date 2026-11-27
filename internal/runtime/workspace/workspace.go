@@ -33,7 +33,12 @@ func OverlayWorkspaceTree(srcRoot, dstRoot string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("workspace source %q is not a directory", srcRoot)
 	}
-	return copyWorkspaceFS(os.DirFS(srcRoot), ".", dstRoot, "workspace", true)
+	return OverlayWorkspaceSubtree(os.DirFS(srcRoot), ".", dstRoot)
+}
+
+// OverlayWorkspaceSubtree copies a selected directory from a caller-provided filesystem.
+func OverlayWorkspaceSubtree(source fs.FS, dir, dstRoot string) error {
+	return copyWorkspaceFS(source, dir, dstRoot, "workspace", true)
 }
 
 func EnsureEmbeddedWorkspace(templateRoot, dstRoot string) error {

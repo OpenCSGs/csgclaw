@@ -1,8 +1,10 @@
 package conversationresource
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"path"
 	"slices"
 	"strings"
 
@@ -62,7 +64,7 @@ func (s *Service) List(ctx context.Context, agentID string, kind apitypes.Resour
 	if kind == apitypes.ResourceTypeSkill {
 		items := []apitypes.AgentResourceSummary{}
 		for _, summary := range agent.Status.SkillSummaries {
-			items = append(items, resourceSummary(apitypes.ResourceSourceSkill, summary.Name, kind, summary.Name, summary.Description, summary.Enabled))
+			items = append(items, resourceSummary(apitypes.ResourceSourceSkill, cmp.Or(summary.ID, summary.Name), kind, summary.Name, summary.Description, summary.Enabled))
 		}
 		if agent.Status.SkillPage == nil {
 			return nil, resourcequery.Metadata{}, &Error{Code: ResourceUnavailable}
@@ -123,8 +125,8 @@ func (s *Service) Resolve(ctx context.Context, agentID string, refs []apitypes.R
 		return result, err
 	}
 	candidates := map[apitypes.ResourceReference]apitypes.AgentResourceSummary{}
-	for _, slug := range agent.Spec.Skills {
-		item := resourceSummary(apitypes.ResourceSourceSkill, slug, apitypes.ResourceTypeSkill, slug, "", skillstate.Enabled(agent.Spec.SkillStates, slug))
+	for _, id := range agent.Spec.Skills {
+		item := resourceSummary(apitypes.ResourceSourceSkill, id, apitypes.ResourceTypeSkill, path.Base(id), "", skillstate.Enabled(agent.Spec.SkillStates, id))
 		candidates[item.ResourceReference] = item
 	}
 	for _, item := range mcpSummaries(agent) {

@@ -13,6 +13,7 @@ import (
 
 	skillinstall "csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
+	"csgclaw/internal/skill/skillpath"
 )
 
 type preparedSkillReplacement struct {
@@ -185,6 +186,12 @@ func (p *preparedSkillReplacement) apply() error {
 				}
 				if !info.IsDir() {
 					return fmt.Errorf("%w: %s", ErrAgentSkillInvalid, name)
+				}
+				if err := skillpath.CheckReplacement(target); err != nil {
+					if errors.Is(err, os.ErrExist) {
+						return fmt.Errorf("%w: %w", ErrAgentSkillAlreadyExists, err)
+					}
+					return err
 				}
 				if err := os.Rename(target, filepath.Join(backupRoot, name)); err != nil {
 					return fmt.Errorf("backup skill %q: %w", name, err)

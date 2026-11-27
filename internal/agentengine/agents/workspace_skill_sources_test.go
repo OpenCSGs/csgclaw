@@ -260,3 +260,25 @@ func TestWorkspaceSkillSummariesIncludeAgentCopyVersion(t *testing.T) {
 		t.Fatalf("agent metadata=%+v err=%v", items, err)
 	}
 }
+
+func TestStageGroupedSkillsPreservesInstalledCopyAndOrigin(t *testing.T) {
+	root, stage := t.TempDir(), t.TempDir()
+	const id = "team/tools/review"
+	writeWorkspaceFileAt(t, root, id+"/SKILL.md", "team skill", 0600)
+	writeWorkspaceFileAt(t, root, "user/review/SKILL.md", "other skill", 0600)
+	record := skillinstall.Record{Source: skillinstall.SourceMarket, Version: "v1"}
+	if err := skillinstall.Update(root, id, &record, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := stageGroupedSkills(t.Context(), root, stage, []string{id}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := skilllocal.ListSummaries(t.Context(), stage)
+	if err != nil || len(items) != 1 || items[0].ID != id || items[0].Version != "v1" {
+		t.Fatalf("restored: %+v %v", items, err)
+	}
+	content, err := os.ReadFile(filepath.Join(stage, id, "SKILL.md"))
+	if err != nil || string(content) != "team skill" {
+		t.Fatalf("restored definition: %q %v", content, err)
+	}
+}
