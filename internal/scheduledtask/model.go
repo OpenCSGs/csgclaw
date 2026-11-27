@@ -1,29 +1,40 @@
 package scheduledtask
 
-import "time"
+import (
+	"time"
+
+	"csgclaw/internal/apitypes"
+)
+
+type ScheduleDetail = apitypes.ScheduledTaskScheduleDetail
 
 const (
-	RecurrenceOnce    = "once"
-	RecurrenceDaily   = "daily"
-	RecurrenceWeekly  = "weekly"
-	RecurrenceMonthly = "monthly"
+	RecurrenceInterval = "interval"
+	RecurrenceBiweekly = "biweekly"
+	RecurrenceYearly   = "yearly"
+	RecurrenceOnce     = "once"
+	RecurrenceDaily    = "daily"
+	RecurrenceWeekly   = "weekly"
+	RecurrenceMonthly  = "monthly"
 
 	StatusTriggered = "triggered"
 	StatusFailed    = "failed"
 )
 
 type Task struct {
-	ID         string     `json:"id"`
-	Title      string     `json:"title"`
-	AgentID    string     `json:"agent_id"`
-	Prompt     string     `json:"prompt"`
-	Recurrence string     `json:"recurrence"`
-	Enabled    bool       `json:"enabled"`
-	NextRunAt  time.Time  `json:"next_run_at"`
-	LastRunAt  *time.Time `json:"last_run_at,omitempty"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	ID             string          `json:"id"`
+	Title          string          `json:"title"`
+	AgentID        string          `json:"agent_id"`
+	Prompt         string          `json:"prompt"`
+	Recurrence     string          `json:"recurrence"`
+	ScheduleDetail *ScheduleDetail `json:"schedule_detail,omitempty"`
+	StartsAt       *time.Time      `json:"starts_at,omitempty"`
+	Enabled        bool            `json:"enabled"`
+	NextRunAt      time.Time       `json:"next_run_at"`
+	LastRunAt      *time.Time      `json:"last_run_at,omitempty"`
+	ExpiresAt      *time.Time      `json:"expires_at,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
 type Run struct {
@@ -36,24 +47,28 @@ type Run struct {
 }
 
 type CreateInput struct {
-	Title      string
-	AgentID    string
-	Prompt     string
-	Recurrence string
-	FirstRunAt time.Time
-	ExpiresAt  *time.Time
-	Enabled    bool
+	Title          string
+	AgentID        string
+	Prompt         string
+	Recurrence     string
+	ScheduleDetail *ScheduleDetail
+	StartsAt       *time.Time
+	FirstRunAt     time.Time
+	ExpiresAt      *time.Time
+	Enabled        bool
 }
 
 type UpdateInput struct {
-	ID         string
-	Title      *string
-	AgentID    *string
-	Prompt     *string
-	Recurrence *string
-	NextRunAt  *time.Time
-	ExpiresAt  **time.Time
-	Enabled    *bool
+	ID             string
+	Title          *string
+	AgentID        *string
+	Prompt         *string
+	Recurrence     *string
+	ScheduleDetail *ScheduleDetail
+	StartsAt       **time.Time
+	NextRunAt      *time.Time
+	ExpiresAt      **time.Time
+	Enabled        *bool
 }
 
 type state struct {

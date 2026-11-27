@@ -127,10 +127,14 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusCreated
 		}
 		if req.AutoPublish {
-			if err := h.queueAgentPublication(created.AgentID); err != nil {
+			if err := h.queueAgentPublication(created.AgentID, false); err != nil {
 				writeAgentSessionError(w, 502, "relay_publish_failed", "participant created; automatic publication could not be queued: "+err.Error(), nil)
 				return
 			}
+		} else if templateID, agentID := startupTemplatePublication(); agentID != "" &&
+			created.AgentID == agentID && req.ReconcilesBinding() &&
+			req.AgentBinding.Agent != nil && req.AgentBinding.Agent.FromTemplate == templateID {
+			h.queueStartupTemplatePublication(agentID)
 		}
 		writeJSON(w, status, presented)
 	default:

@@ -1,3 +1,4 @@
+import { normalizeModelProviderBalance, type ModelProviderBalance } from "@/models/modelProviderBalance";
 import { normalizeReasoningEfforts } from "@/models/reasoning";
 import {
   normalizeModelMetadataMap,
@@ -41,6 +42,7 @@ const builtinRank = new Map<string, number>(BUILTIN_MODEL_PROVIDER_IDS.map((id, 
 export type ModelProviderStatus = "unknown" | "connected" | "failed" | string;
 
 export type ModelProvider = {
+  balance?: ModelProviderBalance;
   reasoning_efforts?: Record<string, string[]>;
   model_metadata?: Record<string, ModelMetadata>;
   model_defaults?: Record<string, ModelMetadata>;
@@ -89,6 +91,7 @@ export type ModelProviderOption = {
 type ImageModelCapabilities = { textToImage: boolean; imageToImage: boolean };
 
 export type ModelProviderSelectOption = {
+  balance?: ModelProviderBalance;
   reasoningEfforts?: Record<string, string[]>;
   brandName?: string;
   serviceName?: string;
@@ -231,6 +234,7 @@ export function normalizeModelProvider(raw: unknown): ModelProvider {
   return {
     id,
     kind,
+    balance: normalizeModelProviderBalance(record.balance) ?? normalizeModelProviderBalance(record.quota, "quota"),
     avatar: String(record.avatar || "") || undefined,
     brand_name: String(record.brand_name || "") || undefined,
     service_name: String(record.service_name || "") || undefined,
@@ -453,6 +457,7 @@ export function modelProviderSelectOptionsFromCatalog(
     providers.set(provider.id, {
       avatar: modelProviderAvatarPath(provider),
       brandName: provider.brand_name,
+      ...(provider.balance ? { balance: provider.balance } : {}),
       builtin: provider.builtin || undefined,
       displayName: provider.display_name || provider.id,
       serviceName: provider.service_name,

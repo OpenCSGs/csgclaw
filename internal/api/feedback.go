@@ -120,6 +120,7 @@ func (h *Handler) handleFeedback(w http.ResponseWriter, r *http.Request) {
 			writeFeedbackAttachmentError(w, requestID, file.Filename, "Invalid image format or size")
 			return
 		}
+		image.Filename = file.Filename
 		images = append(images, image)
 	}
 	archives := make([]feedback.Archive, 0, len(archiveFiles))
@@ -136,6 +137,7 @@ func (h *Handler) handleFeedback(w http.ResponseWriter, r *http.Request) {
 			writeFeedbackAttachmentError(w, requestID, file.Filename, "Invalid archive format or size")
 			return
 		}
+		archive.Filename = file.Filename
 		archives = append(archives, archive)
 	}
 	ctx := r.Context()

@@ -40,6 +40,8 @@ export type ComboboxOption = {
   disabled?: boolean;
   separatorAfter?: boolean;
   group?: string;
+  groupKey?: string;
+  groupMeta?: ReactNode;
   alwaysVisible?: boolean;
 };
 
@@ -147,12 +149,15 @@ export function Combobox({
   const groups = useMemo(() => {
     const result: {
       name?: string;
+      key?: string;
       items: { option: ComboboxOption; index: number }[];
     }[] = [];
     filtered.forEach((option, index) => {
       const name = option.group?.trim() || undefined;
-      if (!result.length || result.at(-1)?.name !== name)
-        result.push({ name, items: [] });
+      const key = name ? option.groupKey ?? name : undefined;
+      const previous = result.at(-1);
+      if (!previous || previous.name !== name || previous.key !== key)
+        result.push({ name, key, items: [] });
       result.at(-1)?.items.push({ option, index });
     });
     return result;
@@ -438,17 +443,15 @@ export function Combobox({
           ) : filtered.length ? (
             groups.map((group, groupIndex) => (
               <div
-                key={`${group.name ?? "ungrouped"}-${groupIndex}`}
+                key={`${group.key ?? "ungrouped"}-${groupIndex}`}
                 role={group.name ? "group" : "presentation"}
                 aria-label={group.name}
                 className={styles["csg-combobox-group"]}
               >
                 {group.name ? (
-                  <div
-                    className={styles["csg-combobox-group-title"]}
-                    aria-hidden="true"
-                  >
-                    {group.name}
+                  <div className={styles["csg-combobox-group-title"]}>
+                    <span className={styles["csg-combobox-group-name"]} aria-hidden="true">{group.name}</span>
+                    {group.items[0]?.option.groupMeta}
                   </div>
                 ) : null}
                 {group.items.map(({ option, index }) => (

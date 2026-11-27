@@ -65,6 +65,7 @@ func TestFeedbackUsesAuthenticatedSiteAndServerVersion(t *testing.T) {
 }
 
 func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
+	const filename = "诊断日志 (1).ZIP"
 	var uploads, issues atomic.Int32
 	var rejectUpload atomic.Bool
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +79,7 @@ func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
 			}
 			defer r.MultipartForm.RemoveAll()
 			defer file.Close()
-			if header.Filename != "feedback-0.zip" {
+			if header.Filename != filename {
 				t.Errorf("unexpected detected archive name: %s", header.Filename)
 			}
 			uploads.Add(1)
@@ -97,7 +98,7 @@ func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			if len(payload.ScreenshotURLs) != 0 || !strings.Contains(payload.Description, "https://files.example/diagnostic.zip") {
+			if len(payload.ScreenshotURLs) != 0 || !strings.Contains(payload.Description, "["+filename+"](<https://files.example/diagnostic.zip>)") {
 				t.Errorf("unexpected feedback payload: %+v", payload)
 			}
 			issues.Add(1)
@@ -132,7 +133,7 @@ func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
 			rejectUpload.Store(tc.rejectUpload)
 			var body bytes.Buffer
 			writer := multipart.NewWriter(&body)
-			part, err := writer.CreateFormFile("archives", "diagnostics.zip")
+			part, err := writer.CreateFormFile("archives", filename)
 			if err != nil {
 				t.Fatal(err)
 			}

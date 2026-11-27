@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { CalendarClock, Pencil, Play, Trash2 } from "lucide-react";
 import {
@@ -22,17 +22,25 @@ import type { CreateScheduledTaskPayload, UpdateScheduledTaskPayload } from "@/a
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import {
-  scheduledTaskRecurrenceLabel,
+  scheduledTaskScheduleSummary,
   scheduledTaskExecutors,
   type WorkspaceScheduledTask,
   type WorkspaceScheduledTaskRun,
 } from "@/models/scheduledTasks";
-import { displayTeam, formatTaskUpdatedAt, rootTaskForTask, taskChildren } from "@/models/tasks";
+import { displayTeam, formatTaskUpdatedAt, rootTaskForTask, taskChildren, taskExecutionRoomID } from "@/models/tasks";
 import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
 import { agentNameLookup, displayAgentByID } from "@/models/taskBoard";
 import { classNames } from "@/shared/lib/classNames";
 import { ScheduledTaskCreateDialog } from "./ScheduledTaskCreateDialog";
 import { ScheduledTaskFormFields } from "./ScheduledTaskFormFields";
+import {
+  draftScheduleFromTask,
+  nextRunISOFromDraft,
+  scheduleDetailFromDraft,
+  scheduleDraftBounds,
+  scheduleDraftChanged,
+  validateScheduleDraft,
+} from "./ScheduleControls/scheduleDraft";
 import { TaskCreateDialog } from "./TaskCreateDialog";
 import {
   TASK_TITLE_MAX_LENGTH,
@@ -45,7 +53,7 @@ import styles from "./TasksView.module.css";
 import taskFormStyles from "./TaskForm.module.css";
 import scheduledTasksStyles from "./ScheduledTasks.module.css";
 import taskDetailsStyles from "./TaskDetails/TaskDetails.module.css";
-import { GeneratedTaskInlineDetail, TaskDetailDialog } from "./TaskDetails";
+import { GeneratedTaskDetailDialog, TaskDetailDialog } from "./TaskDetails";
 
 const EMPTY_AGENTS: AgentLike[] = [];
 
@@ -57,12 +65,19 @@ const emptyCreateDraft: TaskCreateDraft = {
 
 const emptyScheduledTaskDraft: ScheduledTaskFormDraft = {
   agentID: "",
-  date: "",
-  expiresDate: "",
   prompt: "",
-  recurrence: "once",
-  time: "",
   title: "",
+  recurrence: "once",
+  onceAt: "",
+  time: "",
+  weekdays: [],
+  monthDays: [],
+  month: 0,
+  day: 0,
+  intervalValue: 1,
+  intervalUnit: "hour",
+  startsDate: "",
+  expiresDate: "",
 };
 
 function truncateTaskTitle(value: string): string {
@@ -150,84 +165,21 @@ function scheduledTaskAgentOptions(agents: readonly AgentLike[]) {
   }));
 }
 
-function todayInputValue(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
-function timeInputValue(now = new Date()): string {
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}
-
-function localDateTimeISO(date: string, time: string): string {
-  const parsed = new Date(`${date}T${time}:00`);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
-}
-
-function nextDailyRunAtISO(time: string, now = new Date()): string {
-  const candidate = new Date(`${todayInputValue(now)}T${time}:00`);
-  if (Number.isNaN(candidate.getTime())) {
-    return "";
-  }
-  if (candidate.getTime() <= now.getTime()) {
-    candidate.setDate(candidate.getDate() + 1);
-  }
-  return candidate.toISOString();
-}
-
-function scheduledTaskNextRunAtISO(draft: ScheduledTaskFormDraft): string {
-  if (draft.date) {
-    return localDateTimeISO(draft.date, draft.time);
-  }
-  if (draft.recurrence === "daily" && draft.time) {
-    return nextDailyRunAtISO(draft.time);
-  }
-  return "";
-}
-
-function dateInputFromISO(value: string): string {
-  if (!value) {
-    return "";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-  return todayInputValue(parsed);
-}
-
-function timeInputFromISO(value: string): string {
-  if (!value) {
-    return "";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-  return timeInputValue(parsed);
-}
-
-function scheduledTaskDraftFromTask(task: WorkspaceScheduledTask): ScheduledTaskFormDraft {
+function initialScheduleForNow(now: Date): Partial<ScheduledTaskFormDraft> {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 0, 0);
+  const clock = `${pad2(next.getHours())}:${pad2(next.getMinutes())}`;
   return {
-    agentID: task.agent_id,
-    date: dateInputFromISO(task.next_run_at),
-    expiresDate: dateInputFromISO(task.expires_at),
-    prompt: task.prompt,
-    recurrence: task.recurrence,
-    time: timeInputFromISO(task.next_run_at),
-    title: task.title,
+    onceAt: `${next.getFullYear()}-${pad2(next.getMonth() + 1)}-${pad2(next.getDate())}T${clock}`,
+    time: clock,
+    weekdays: [next.getDay()],
+    monthDays: [next.getDate()],
+    month: next.getMonth() + 1,
+    day: next.getDate(),
   };
-}
-
-function scheduledTaskRunTimeChanged(current: string, next: string): boolean {
-  if (!current || !next) {
-    return current !== next;
-  }
-  const currentTime = new Date(current).getTime();
-  const nextTime = new Date(next).getTime();
-  if (Number.isNaN(currentTime) || Number.isNaN(nextTime)) {
-    return current !== next;
-  }
-  return currentTime !== nextTime;
 }
 
 function scheduledTaskRunErrorLabel(error: string, t: TranslateFn): string {
@@ -407,7 +359,10 @@ export function TasksView({
   const latestRunTaskID = scheduledTaskRuns[0]?.task_id;
   const latestRunTask = latestRunTaskID ? tasks.find((item) => item.id === latestRunTaskID) : undefined;
   const latestRunOutcome = latestRunTask?.result || latestRunTask?.error;
-  const [selectedGeneratedTaskID, setSelectedGeneratedTaskID] = useState("");
+  const [selectedRunID, setSelectedRunID] = useState("");
+  const runDetailTrigger = useRef<HTMLButtonElement | null>(null);
+  const selectedRun = scheduledTaskRuns.find((run) => run.id === selectedRunID);
+  const selectedGeneratedTaskID = selectedRun?.task_id;
   const selectedGeneratedTask = useMemo(
     () => tasks.find((item) => item.id === selectedGeneratedTaskID) ?? null,
     [selectedGeneratedTaskID, tasks],
@@ -416,6 +371,21 @@ export function TasksView({
     () => (selectedGeneratedTask ? taskChildren(tasks, selectedGeneratedTask.id) : []),
     [selectedGeneratedTask, tasks],
   );
+  const runConversationRoomIDs = useMemo(() => {
+    const map = new Map<string, string>();
+    scheduledTaskRuns.forEach((run) => {
+      const task = run.task_id ? tasks.find((item) => item.id === run.task_id) : undefined;
+      if (!task) {
+        return;
+      }
+      const roomID = taskExecutionRoomID(task, taskChildren(tasks, task.id), teams) || task.room_id;
+      if (roomID) {
+        map.set(run.id, roomID);
+      }
+    });
+    return map;
+  }, [scheduledTaskRuns, tasks, teams]);
+  const selectedRunRoomID = runConversationRoomIDs.get(selectedRunID);
   const [conversationOpenError, setConversationOpenError] = useState("");
   const availableRoomIDs = useMemo(() => (rooms ? new Set(rooms.map((room) => room.id)) : null), [rooms]);
 
@@ -438,8 +408,7 @@ export function TasksView({
     const now = new Date();
     setScheduledDraft({
       ...emptyScheduledTaskDraft,
-      date: todayInputValue(now),
-      time: timeInputValue(now),
+      ...initialScheduleForNow(now),
     });
     setScheduledFieldErrors({});
   }, [showCreateScheduledTaskModal]);
@@ -448,13 +417,13 @@ export function TasksView({
     if (!editingScheduledTask) {
       return;
     }
-    setEditScheduledDraft(scheduledTaskDraftFromTask(editingScheduledTask));
+    setEditScheduledDraft(draftScheduleFromTask(editingScheduledTask));
     setEditScheduledFieldErrors({});
   }, [editingScheduledTask]);
 
   useEffect(() => {
-    setSelectedGeneratedTaskID("");
-  }, [selectedScheduledTask?.id]);
+    setSelectedRunID("");
+  }, [activeView, selectedScheduledTask?.id]);
 
   async function submitCreateTask() {
     const title = truncateTaskTitle(createDraft.title.trim());
@@ -500,17 +469,21 @@ export function TasksView({
     });
   }
 
-  function validateScheduledTaskDraft(draft: ScheduledTaskFormDraft): {
+  function validateScheduledTaskDraft(
+    draft: ScheduledTaskFormDraft,
+    previous?: WorkspaceScheduledTask,
+    scheduleChanged = true,
+  ): {
     errors: ScheduledTaskFormFieldErrors;
     nextRunAt: string;
     prompt: string;
     title: string;
+    startsAt: string;
+    expiresAt: string;
   } {
     const title = truncateTaskTitle(draft.title.trim());
     const prompt = draft.prompt.trim();
-    const nextRunAt = scheduledTaskNextRunAtISO(draft);
-    const requiresDate = draft.recurrence !== "daily";
-    const errors: ScheduledTaskFormFieldErrors = {};
+    const errors: ScheduledTaskFormFieldErrors = { ...validateScheduleDraft(draft, t) };
     if (!title) {
       errors.title = t("taskTitleRequired");
     }
@@ -520,13 +493,25 @@ export function TasksView({
     if (!prompt) {
       errors.prompt = t("scheduledTaskPromptRequired");
     }
-    if ((requiresDate && !draft.date) || (draft.date && !nextRunAt)) {
-      errors.date = t("scheduledTaskDateRequired");
+    const { startsAt, expiresAt } = scheduleDraftBounds(draft, previous);
+    const phase =
+      previous?.recurrence === "biweekly" && previous.next_run_at ? new Date(previous.next_run_at) : undefined;
+    const nextRunAt =
+      !scheduleChanged && previous ? previous.next_run_at : nextRunISOFromDraft(draft, new Date(), startsAt, phase);
+    if (startsAt && expiresAt && Date.parse(startsAt) > Date.parse(expiresAt)) {
+      errors.effectiveRange = t("scheduledTaskEffectiveRangeError");
+    } else if (
+      expiresAt &&
+      nextRunAt &&
+      (scheduleChanged || expiresAt !== previous?.expires_at) &&
+      Date.parse(nextRunAt) > Date.parse(expiresAt)
+    ) {
+      errors.effectiveRange = t("scheduledTaskEffectiveRangeNoRun");
     }
-    if (!draft.time || (!nextRunAt && !errors.date)) {
-      errors.time = t("scheduledTaskTimeRequired");
+    if (!nextRunAt && scheduleChanged && !Object.keys(errors).length) {
+      errors.time = t("scheduledTaskNoMatchingDate");
     }
-    return { errors, nextRunAt, prompt, title };
+    return { errors, nextRunAt, prompt, title, startsAt, expiresAt };
   }
 
   async function submitCreateScheduledTask() {
@@ -544,8 +529,10 @@ export function TasksView({
       first_run_at: result.nextRunAt,
       enabled: true,
     };
-    if (scheduledDraft.expiresDate) {
-      payload.expires_at = localDateTimeISO(scheduledDraft.expiresDate, "23:59");
+    if (scheduledDraft.recurrence !== "once") {
+      payload.schedule_detail = scheduleDetailFromDraft(scheduledDraft);
+      if (result.startsAt) payload.starts_at = result.startsAt;
+      if (result.expiresAt) payload.expires_at = result.expiresAt;
     }
     await onCreateScheduledTask?.(payload);
     onSelectTaskBoardView("scheduled");
@@ -555,23 +542,40 @@ export function TasksView({
     if (!editingScheduledTask) {
       return;
     }
-    const result = validateScheduledTaskDraft(editScheduledDraft);
+    const scheduleChanged = scheduleDraftChanged(editScheduledDraft, editingScheduledTask);
+    const result = validateScheduledTaskDraft(editScheduledDraft, editingScheduledTask, scheduleChanged);
+    const changedToOnce = scheduleChanged && editScheduledDraft.recurrence === "once";
+    const shouldReactivate =
+      scheduleChanged &&
+      !editingScheduledTask.enabled &&
+      Date.parse(result.nextRunAt) !== Date.parse(editingScheduledTask.next_run_at);
     if (Object.keys(result.errors).length) {
       setEditScheduledFieldErrors(result.errors);
       return;
     }
     setEditScheduledFieldErrors({});
-    const nextRunChanged = scheduledTaskRunTimeChanged(editingScheduledTask.next_run_at, result.nextRunAt);
-    const shouldReactivateEditedSchedule =
-      !editingScheduledTask.enabled && (!editingScheduledTask.next_run_at || nextRunChanged);
+
     await onEditScheduledTask?.(editingScheduledTask.id, {
       title: result.title,
       agent_id: editScheduledDraft.agentID,
       prompt: result.prompt,
-      recurrence: editScheduledDraft.recurrence,
-      next_run_at: result.nextRunAt,
-      expires_at: editScheduledDraft.expiresDate ? localDateTimeISO(editScheduledDraft.expiresDate, "23:59") : null,
-      enabled: shouldReactivateEditedSchedule ? true : editingScheduledTask.enabled,
+      ...(scheduleChanged
+        ? {
+            recurrence: editScheduledDraft.recurrence,
+            next_run_at: result.nextRunAt,
+            ...(shouldReactivate ? { enabled: true } : {}),
+            ...(editScheduledDraft.recurrence !== "once"
+              ? { schedule_detail: scheduleDetailFromDraft(editScheduledDraft) }
+              : {}),
+          }
+        : {}),
+      ...(changedToOnce || result.startsAt !== (editingScheduledTask.starts_at ?? "")
+        ? { starts_at: result.startsAt || null }
+        : {}),
+      ...(changedToOnce ||
+      (editScheduledDraft.recurrence !== "once" && result.expiresAt !== editingScheduledTask.expires_at)
+        ? { expires_at: result.expiresAt || null }
+        : {}),
     });
   }
 
@@ -607,11 +611,6 @@ export function TasksView({
     setConversationOpenError("");
     setShowScheduledStart(false);
     onSelectScheduledTask(taskID);
-  }
-
-  function openRunTask(taskID: string) {
-    setSelectedGeneratedTaskID(taskID);
-    setConversationOpenError("");
   }
 
   function openTaskConversation(roomID: string) {
@@ -703,8 +702,7 @@ export function TasksView({
                               </span>
                             </span>
                             <small>
-                              {scheduledTaskRecurrenceLabel(item.recurrence, t)} ·{" "}
-                              {formatTaskUpdatedAt(item.next_run_at)}
+                              {scheduledTaskScheduleSummary(item, t)} · {formatTaskUpdatedAt(item.next_run_at)}
                             </small>
                           </button>
                         );
@@ -723,7 +721,7 @@ export function TasksView({
                         <div className={scheduledTasksStyles.scheduledTaskDetailHead}>
                           <div>
                             <h2>{selectedScheduledTask.title}</h2>
-                            <p>{scheduledTaskRecurrenceLabel(selectedScheduledTask.recurrence, t)}</p>
+                            <p>{scheduledTaskScheduleSummary(selectedScheduledTask, t)}</p>
                           </div>
                           <div className={scheduledTasksStyles.scheduledTaskActions}>
                             <Button
@@ -816,7 +814,7 @@ export function TasksView({
                           </div>
                         </dl>
                         <div className={scheduledTasksStyles.scheduledTaskPrompt}>{selectedScheduledTask.prompt}</div>
-                        {!selectedGeneratedTaskID && latestRunTask?.assignment_type === "agent" && latestRunOutcome ? (
+                        {latestRunTask?.assignment_type === "agent" && latestRunOutcome ? (
                           <section
                             className={classNames(
                               scheduledTasksStyles.scheduledTaskRuns,
@@ -839,20 +837,35 @@ export function TasksView({
                                       ? t("scheduledTaskRunFailedStatus")
                                       : t("scheduledTaskRunTriggeredStatus")}
                                   </strong>
-                                  {run.task_id ? (
+                                  <span className={scheduledTasksStyles.scheduledTaskRunActions}>
                                     <button
                                       type="button"
-                                      data-active={selectedGeneratedTaskID === run.task_id ? true : undefined}
-                                      onClick={() => openRunTask(run.task_id)}
+                                      aria-haspopup="dialog"
+                                      data-active={selectedRunID === run.id ? true : undefined}
+                                      onClick={(event) => {
+                                        runDetailTrigger.current = event.currentTarget;
+                                        setSelectedRunID(run.id);
+                                        setConversationOpenError("");
+                                      }}
                                     >
-                                      {run.task_id}
+                                      {run.task_id || t("scheduledTaskRunDetails")}
                                     </button>
-                                  ) : null}
-                                  {run.error ? (
-                                    <Tooltip content={run.error}>
-                                      <small>{scheduledTaskRunErrorLabel(run.error, t)}</small>
-                                    </Tooltip>
-                                  ) : null}
+                                    {runConversationRoomIDs.get(run.id) ? (
+                                      <button
+                                        type="button"
+                                        className={scheduledTasksStyles.scheduledTaskRunHistory}
+                                        title={t("taskOpenConversation")}
+                                        onClick={() => openTaskConversation(runConversationRoomIDs.get(run.id) ?? "")}
+                                      >
+                                        {t("taskOpenConversationShort")}
+                                      </button>
+                                    ) : null}
+                                    {run.error ? (
+                                      <Tooltip content={run.error}>
+                                        <small>{scheduledTaskRunErrorLabel(run.error, t)}</small>
+                                      </Tooltip>
+                                    ) : null}
+                                  </span>
                                 </div>
                               ))}
                             </div>
@@ -860,17 +873,6 @@ export function TasksView({
                             <div className={styles.taskBoardEmpty}>{t("scheduledTaskRunsEmpty")}</div>
                           )}
                         </div>
-                        {selectedGeneratedTaskID ? (
-                          <GeneratedTaskInlineDetail
-                            task={selectedGeneratedTask}
-                            childTasks={selectedGeneratedChildTasks}
-                            agentNames={agentNames}
-                            teams={teams}
-                            taskEvents={taskEvents}
-                            t={t}
-                            onOpenConversation={openTaskConversation}
-                          />
-                        ) : null}
                       </>
                     ) : (
                       <ScheduledTaskStart
@@ -889,6 +891,30 @@ export function TasksView({
           </div>
         </div>
       ) : null}
+      <GeneratedTaskDetailDialog
+        open={Boolean(selectedRun)}
+        runError={selectedRun?.error && scheduledTaskRunErrorLabel(selectedRun.error, t)}
+        runID={selectedRun?.id}
+        onCloseAutoFocus={(event) => {
+          if (!runDetailTrigger.current?.isConnected) return;
+          event.preventDefault();
+          runDetailTrigger.current.focus();
+        }}
+        task={selectedGeneratedTask}
+        childTasks={selectedGeneratedChildTasks}
+        agentNames={agentNames}
+        taskEvents={taskEvents}
+        t={t}
+        onOpenConversation={
+          selectedRunRoomID
+            ? () => {
+                setSelectedRunID("");
+                openTaskConversation(selectedRunRoomID);
+              }
+            : undefined
+        }
+        onClose={() => setSelectedRunID("")}
+      />
       <TaskDetailDialog
         t={t}
         title={t("taskParentDetailTitle")}

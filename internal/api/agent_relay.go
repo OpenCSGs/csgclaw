@@ -2,13 +2,19 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 	"time"
+	"unicode"
 
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apiclient"
 	"csgclaw/internal/config"
 	"csgclaw/internal/relay"
@@ -26,6 +32,9 @@ func (h *Handler) EnableRelay(ctx context.Context) error {
 	h.relayContext, h.relayCancel = context.WithCancel(ctx)
 	h.relayManager, err = relay.NewManager(h.relayContext, root, apiclient.New(h.internalBaseURL, h.serverAccessToken, nil), relay.WithCommunity(relay.HubCommunity{Credentials: relay.LoadSiteCredentials}, relay.LoadSiteCredentials))
 	if err == nil {
+		if _, id := startupTemplatePublication(); id != "" {
+			h.queueStartupTemplatePublication(id)
+		}
 		if h.im != nil {
 			for _, room := range h.im.Bootstrap().Rooms {
 				if room.CloudAgent != nil {
@@ -88,7 +97,7 @@ func (h *Handler) handleAgentRelay(w http.ResponseWriter, r *http.Request) {
 			writeAgentSessionError(w, 400, "invalid_request", "automatic publication uses the current community credentials", nil)
 			return
 		}
-		if err := h.queueAgentPublication(id); err != nil {
+		if err := h.queueAgentPublication(id, false); err != nil {
 			if errors.Is(err, relay.ErrLocalAgentDeleted) {
 				writeAgentSessionError(w, http.StatusConflict, "agent_identity_deleted", err.Error(), nil)
 				return
@@ -203,7 +212,36 @@ func (h *Handler) handleRelayAgentTemplate(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"data": profile})
 }
 
-func (h *Handler) queueAgentPublication(id string) error {
+func startupTemplatePublication() (templateID, agentID string) {
+	templateID = os.Getenv("TEMPLATE_ID")
+	if os.Getenv("CSGCLAW_AGENT_AUTO_PUBLISH") != "true" ||
+		strings.Contains(templateID, "\\") || strings.IndexFunc(templateID, unicode.IsSpace) >= 0 {
+		return "", ""
+	}
+	separator := "/"
+	if !strings.Contains(templateID, separator) {
+		separator = "."
+	}
+	if templateID[strings.LastIndex(templateID, separator)+1:] == "" {
+		return "", ""
+	}
+	// Match sandbox-runtime's persisted worker IDs, including built-in prefixes.
+	name := templateID[strings.LastIndex(templateID, "/")+1:]
+	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(templateID)))
+	return templateID, agent.CanonicalID(name + "-" + digest[:7])
+}
+
+func (h *Handler) queueStartupTemplatePublication(id string) {
+	a, ok := h.svc.Agent(id)
+	if !ok || a.Role != agent.RoleWorker {
+		return
+	}
+	if err := h.queueAgentPublication(id, true); err != nil {
+		slog.Warn("could not queue startup template agent publication", "agent_id", id, "error", err)
+	}
+}
+
+func (h *Handler) queueAgentPublication(id string, startup bool) error {
 	if h.relayManager == nil {
 		return fmt.Errorf("cloud agent service is unavailable")
 	}
@@ -219,5 +257,9 @@ func (h *Handler) queueAgentPublication(id string) error {
 	if err != nil {
 		return err
 	}
-	return h.relayManager.QueuePublication(relay.PublishRequest{Name: a.Name, Description: a.Description, SourceAgentID: id, Executor: "csgclaw", Visibility: "public"}, target)
+	request := relay.PublishRequest{Name: a.Name, Description: a.Description, SourceAgentID: id, Executor: "csgclaw", Visibility: "public"}
+	if startup {
+		return h.relayManager.QueueStartupPublication(request, target)
+	}
+	return h.relayManager.QueuePublication(request, target)
 }

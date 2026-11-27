@@ -48,20 +48,21 @@ type managedExecutor struct {
 var ErrLocalAgentDeleted = errors.New("local agent has been deleted; create a new agent")
 
 type relayManifest struct {
-	Deleted      map[string]bool            `json:"deleted,omitempty"`
-	Targets      map[string]CommunityTarget `json:"targets,omitempty"`
-	Removing     map[string]bool            `json:"removing,omitempty"`
-	AutoPublish  map[string]PublishRequest  `json:"auto_publish,omitempty"`
-	Pending      map[string]bool            `json:"pending,omitempty"`
-	ClientID     string                     `json:"client_id"`
-	Site         string                     `json:"site,omitempty"`
-	User         string                     `json:"user,omitempty"`
-	Instances    map[string]int64           `json:"instances,omitempty"`
-	ConnectionID string                     `json:"connection_id"`
-	Catalog      map[string]CatalogEntry    `json:"catalog,omitempty"`
-	Endpoint     string                     `json:"endpoint"`
-	Token        string                     `json:"token"`
-	Agents       map[string]PublishRequest  `json:"agents"`
+	StartupPublicationCancelled map[string]bool            `json:"startup_publication_cancelled,omitempty"`
+	Deleted                     map[string]bool            `json:"deleted,omitempty"`
+	Targets                     map[string]CommunityTarget `json:"targets,omitempty"`
+	Removing                    map[string]bool            `json:"removing,omitempty"`
+	AutoPublish                 map[string]PublishRequest  `json:"auto_publish,omitempty"`
+	Pending                     map[string]bool            `json:"pending,omitempty"`
+	ClientID                    string                     `json:"client_id"`
+	Site                        string                     `json:"site,omitempty"`
+	User                        string                     `json:"user,omitempty"`
+	Instances                   map[string]int64           `json:"instances,omitempty"`
+	ConnectionID                string                     `json:"connection_id"`
+	Catalog                     map[string]CatalogEntry    `json:"catalog,omitempty"`
+	Endpoint                    string                     `json:"endpoint"`
+	Token                       string                     `json:"token"`
+	Agents                      map[string]PublishRequest  `json:"agents"`
 }
 type PublicationStatus struct {
 	Pending      bool   `json:"pending,omitempty"`
@@ -622,12 +623,22 @@ func (m *Manager) Unpublish(ctx context.Context, localID string) error {
 	defer m.opMu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Persist cancellation before remote cleanup so a queued startup worker cannot
-	// resurrect an agent after an explicit unpublish, including across restarts.
-	if desired, exists := m.manifest.AutoPublish[localID]; exists {
+	// Record an explicit unpublish before cleaning up any remote state.
+	desired, queued := m.manifest.AutoPublish[localID]
+	wasCancelled := m.manifest.StartupPublicationCancelled[localID]
+	if queued || !wasCancelled {
+		if m.manifest.StartupPublicationCancelled == nil {
+			m.manifest.StartupPublicationCancelled = make(map[string]bool)
+		}
+		m.manifest.StartupPublicationCancelled[localID] = true
 		delete(m.manifest.AutoPublish, localID)
 		if err := m.saveLocked(); err != nil {
-			m.manifest.AutoPublish[localID] = desired
+			if !wasCancelled {
+				delete(m.manifest.StartupPublicationCancelled, localID)
+			}
+			if queued {
+				m.manifest.AutoPublish[localID] = desired
+			}
 			return err
 		}
 	}

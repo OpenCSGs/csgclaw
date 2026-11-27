@@ -28,6 +28,7 @@ const (
 type Image struct {
 	Data      []byte
 	Extension string
+	Filename  string
 }
 
 func ParseImage(data []byte) (Image, error) {
@@ -49,6 +50,7 @@ const maxExpandedArchiveBytes = 256 * 1024 * 1024
 type Archive struct {
 	Data      []byte
 	Extension string
+	Filename  string
 }
 
 // ParseArchive identifies the container without extracting its contents.

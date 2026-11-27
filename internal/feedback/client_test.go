@@ -28,7 +28,7 @@ func TestClientUploadsToPortalAndSubmitsJSON(t *testing.T) {
 		}
 		defer file.Close()
 		data, _ := io.ReadAll(file)
-		if header.Filename == "feedback-1.zip" && string(data) == "archive" {
+		if header.Filename == "logs [1].zip" && string(data) == "archive" {
 			if r.URL.RequestURI() != ArchiveUploadEndpoint {
 				t.Errorf("unexpected archive upload URL: %s", r.URL)
 			}
@@ -38,7 +38,7 @@ func TestClientUploadsToPortalAndSubmitsJSON(t *testing.T) {
 		if r.URL.RequestURI() != UploadEndpoint {
 			t.Errorf("unexpected image upload URL: %s", r.URL)
 		}
-		if header.Filename != "feedback-0.png" || string(data) != "image" {
+		if header.Filename != "Screenshot (1).PNG" || string(data) != "image" {
 			t.Error(string(data))
 		}
 		uploaded = true
@@ -64,7 +64,7 @@ func TestClientUploadsToPortalAndSubmitsJSON(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasPrefix(payload.Description, "- [feedback-1.zip](<https://files.example/diagnostic.zip>)\n\nTest\n```text\nlog") {
+		if !strings.HasPrefix(payload.Description, "- [logs \\[1\\].zip](<https://files.example/diagnostic.zip>)\n\nTest\n```text\nlog") {
 			t.Errorf("archive link must precede the unfinished code fence: %q", payload.Description)
 		}
 		if len(payload.ScreenshotURLs) != 1 || payload.ScreenshotURLs[0] != "https://images.example/test.png" || payload.CSGClaw.SiteURL != portal.URL || payload.CSGClaw.Version != "v0.8.0" || payload.UserName != "alice" {
@@ -74,7 +74,7 @@ func TestClientUploadsToPortalAndSubmitsJSON(t *testing.T) {
 	}))
 	defer upstream.Close()
 	client := Client{BaseURL: upstream.URL, Token: "test-token"}
-	result, err := client.Submit(context.Background(), Submission{Description: "Test\n```text\nlog", SiteURL: portal.URL, Version: "v0.8.0", Channel: "release", UserName: "alice", Images: []Image{{Data: []byte("image"), Extension: "png"}}, Archives: []Archive{{Data: []byte("archive"), Extension: "zip"}}})
+	result, err := client.Submit(context.Background(), Submission{Description: "Test\n```text\nlog", SiteURL: portal.URL, Version: "v0.8.0", Channel: "release", UserName: "alice", Images: []Image{{Data: []byte("image"), Extension: "png", Filename: "Screenshot (1).PNG"}}, Archives: []Archive{{Data: []byte("archive"), Extension: "zip", Filename: "logs [1].zip"}}})
 	if err != nil || result.IssueID != 42 {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}

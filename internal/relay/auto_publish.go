@@ -9,6 +9,15 @@ import (
 // QueuePublication durably records startup intent before any remote operation.
 // Readiness and transient network/auth failures are retried by the server, not CLI.
 func (m *Manager) QueuePublication(req PublishRequest, targets ...*CommunityTarget) error {
+	return m.queuePublication(req, false, targets...)
+}
+
+// QueueStartupPublication honors an explicit cancellation from an earlier start.
+func (m *Manager) QueueStartupPublication(req PublishRequest, target *CommunityTarget) error {
+	return m.queuePublication(req, true, target)
+}
+
+func (m *Manager) queuePublication(req PublishRequest, startup bool, targets ...*CommunityTarget) error {
 	if !safeID(req.SourceAgentID) || (req.Visibility != "public" && req.Visibility != "private") {
 		return fmt.Errorf("invalid automatic publication")
 	}
@@ -18,6 +27,9 @@ func (m *Manager) QueuePublication(req PublishRequest, targets ...*CommunityTarg
 	defer m.mu.Unlock()
 	if m.ctx.Err() != nil {
 		return m.ctx.Err()
+	}
+	if startup && m.manifest.StartupPublicationCancelled[req.SourceAgentID] {
+		return nil
 	}
 	if m.manifest.Deleted[req.SourceAgentID] {
 		return ErrLocalAgentDeleted

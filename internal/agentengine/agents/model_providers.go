@@ -53,6 +53,8 @@ type ModelProviderCatalog struct {
 }
 
 type ModelProviderSummary struct {
+	Balance          *modelprovider.AccountUsage         `json:"balance,omitempty"`
+	Quota            *modelprovider.AccountUsage         `json:"quota,omitempty"`
 	ReasoningEfforts map[string][]string                 `json:"reasoning_efforts,omitempty"`
 	BrandName        string                              `json:"brand_name,omitempty"`
 	ServiceName      string                              `json:"service_name,omitempty"`

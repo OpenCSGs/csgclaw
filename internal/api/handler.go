@@ -55,6 +55,7 @@ import (
 )
 
 type Handler struct {
+	modelProviderUsage         modelprovider.AccountUsageCache
 	compactionMu               sync.Mutex
 	browserMu                  sync.Mutex
 	browser                    *browser.Service

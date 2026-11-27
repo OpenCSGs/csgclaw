@@ -1,4 +1,4 @@
-import type { ScheduledTaskRecurrence } from "@/models/scheduledTasks";
+import type { ScheduledTaskIntervalUnit, ScheduledTaskRecurrence } from "@/models/scheduledTasks";
 
 export const TASK_TITLE_MAX_LENGTH = 80;
 
@@ -15,18 +15,30 @@ export type TaskCreateFieldErrors = {
 
 export type ScheduledTaskFormDraft = {
   agentID: string;
-  date: string;
-  expiresDate: string;
   prompt: string;
-  recurrence: ScheduledTaskRecurrence;
-  time: string;
   title: string;
+  recurrence: ScheduledTaskRecurrence;
+  onceAt: string;
+  time: string;
+  timeZone?: string;
+  weekdays: number[];
+  monthDays: number[];
+  month: number;
+  day: number;
+  intervalValue: number;
+  intervalUnit: ScheduledTaskIntervalUnit;
+  startsDate: string;
+  expiresDate: string;
 };
 
 export type ScheduledTaskFormFieldErrors = {
   agentID?: string;
-  date?: string;
+  interval?: string;
+  monthDays?: string;
+  effectiveRange?: string;
+  onceAt?: string;
   prompt?: string;
   time?: string;
   title?: string;
+  weekdays?: string;
 };

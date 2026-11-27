@@ -220,6 +220,29 @@
   cursor: pointer;
 }
 
+.scheduledTaskRunActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 「查看记录」是记录行上的次要动作，别用任务 id 那种主色下划线样式 */
+.scheduledTaskRunRow .scheduledTaskRunHistory {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.scheduledTaskRunRow .scheduledTaskRunHistory:hover {
+  border-color: var(--line-strong, var(--gray-300));
+  color: var(--text);
+}
+
 .scheduledTaskRunRow button[data-active] {
   color: var(--primary-strong);
   text-decoration: underline;

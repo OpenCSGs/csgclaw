@@ -20,9 +20,116 @@ import (
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apiclient"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 	"csgclaw/internal/relay"
+	hub "csgclaw/internal/template"
 )
+
+func TestStartupTemplatePublication(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TEMPLATE_ID", "builtin.codex-worker")
+	t.Setenv("CSGCLAW_NAME", "")
+	t.Setenv("OPENCSG_SANDBOX_TYPE", "")
+	const target = "agent-builtin.codex-worker-9194ed4"
+	const other = "agent-other"
+	local := httptest.NewServer(http.NotFoundHandler())
+	defer local.Close()
+	for _, enabled := range []string{"false", "true"} {
+		t.Run(enabled, func(t *testing.T) {
+			t.Setenv("CSGCLAW_AGENT_AUTO_PUBLISH", enabled)
+			h, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{
+				sessionCodexAgent(target, "Template Worker"),
+				sessionCodexAgent(other, "Other Worker"),
+			}, &fakeSessionEngine{}, "")
+			h.internalBaseURL = local.URL
+			if err := h.EnableRelay(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			defer h.CloseRelay()
+			if got := h.relayManager.Status(t.Context(), target).Publishing; got != (enabled == "true") {
+				t.Fatalf("template worker publishing = %v with automatic publication %s", got, enabled)
+			}
+			if h.relayManager.Status(t.Context(), other).Publishing {
+				t.Fatal("unrelated worker was queued")
+			}
+			if enabled != "true" {
+				return
+			}
+			request := func(handler *Handler, method, body string) *httptest.ResponseRecorder {
+				req := httptest.NewRequest(method, "/api/v1/agents/"+target+"/relay", strings.NewReader(body))
+				req.Header.Set("Authorization", "Bearer test-server-token")
+				rec := httptest.NewRecorder()
+				handler.Routes().ServeHTTP(rec, req)
+				return rec
+			}
+			if rec := request(h, http.MethodDelete, ""); rec.Code != http.StatusOK {
+				t.Fatalf("cancel publication: %d %s", rec.Code, rec.Body)
+			}
+			h.CloseRelay()
+			restarted, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{
+				sessionCodexAgent(target, "Template Worker"),
+			}, &fakeSessionEngine{}, "")
+			restarted.internalBaseURL = local.URL
+			if err := restarted.EnableRelay(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			defer restarted.CloseRelay()
+			if restarted.relayManager.Status(t.Context(), target).Publishing {
+				t.Fatal("cancelled template worker was queued on restart")
+			}
+			if rec := request(restarted, http.MethodPost, `{"auto_publish":true}`); rec.Code != http.StatusAccepted {
+				t.Fatalf("explicit publication: %d %s", rec.Code, rec.Body)
+			}
+			if !restarted.relayManager.Status(t.Context(), target).Publishing {
+				t.Fatal("explicit publication was not queued")
+			}
+		})
+	}
+}
+
+func TestStartupTemplateParticipantBindingQueuesPublication(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TEMPLATE_ID", "builtin.codex-worker")
+	t.Setenv("CSGCLAW_AGENT_AUTO_PUBLISH", "false")
+	t.Setenv("CSGCLAW_NAME", "")
+	t.Setenv("OPENCSG_SANDBOX_TYPE", "")
+	const target = "agent-builtin.codex-worker-9194ed4"
+	local := httptest.NewServer(http.NotFoundHandler())
+	defer local.Close()
+	h, imSvc, _, _ := newAgentSessionTestHandler(t, []agent.Agent{
+		sessionCodexAgent(target, "codex-worker"),
+	}, &fakeSessionEngine{}, "")
+	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.SetHubService(hubSvc)
+	h.SetParticipantService(participant.NewService(participant.NewMemoryStore(nil),
+		participant.WithAgentEngine(agentengine.New(h.svc.(*agent.Controller))), participant.WithIMService(imSvc)))
+	h.internalBaseURL = local.URL
+	if err := h.EnableRelay(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer h.CloseRelay()
+	t.Setenv("CSGCLAW_AGENT_AUTO_PUBLISH", "true")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(`{
+		"type":"agent","id":"pt-codex-worker","name":"codex-worker",
+		"agent_binding":{"mode":"create","agent_id":"agent-builtin.codex-worker-9194ed4",
+			"agent":{"from_template":"builtin.codex-worker"}}
+	}`))
+	req.Header.Set("Authorization", "Bearer test-server-token")
+	rec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create participant: %d %s", rec.Code, rec.Body)
+	}
+	if !h.relayManager.Status(t.Context(), target).Publishing {
+		t.Fatal("template worker publication was not queued")
+	}
+}
 
 func TestRelayCatalogAuthenticationError(t *testing.T) {
 	tests := []struct {

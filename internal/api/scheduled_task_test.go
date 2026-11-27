@@ -20,7 +20,7 @@ import (
 	"csgclaw/internal/scheduledtask"
 )
 
-func TestScheduledTaskPatchCanClearExpiresAt(t *testing.T) {
+func TestScheduledTaskPatchCanClearValidity(t *testing.T) {
 	store, err := scheduledtask.NewStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewStore() error = %v", err)
@@ -32,14 +32,26 @@ func TestScheduledTaskPatchCanClearExpiresAt(t *testing.T) {
 	h := &Handler{}
 	h.SetScheduledTaskService(svc)
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/scheduled-tasks", strings.NewReader(`{
+	createBody := `{
 		"title":"Daily check",
 		"agent_id":"worker",
 		"prompt":"Report status.",
-		"recurrence":"daily",
+		"recurrence":"biweekly",
+		"schedule_detail":{"weekdays":[0,2],"clock":"10:40","time_zone":"Asia/Shanghai"},
 		"first_run_at":"2026-07-07T10:40:00+08:00",
+		"starts_at":"2026-07-01T00:00:00+08:00",
 		"expires_at":"2026-07-31T23:59:00+08:00"
-	}`))
+	}`
+
+	badCreateReq := httptest.NewRequest(http.MethodPost, "/api/v1/scheduled-tasks", strings.NewReader(
+		strings.Replace(createBody, "2026-07-07T10:40:00+08:00", "2026-07-07T11:40:00+08:00", 1)))
+	badCreateRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(badCreateRec, badCreateReq)
+	if badCreateRec.Code != http.StatusBadRequest || !strings.Contains(badCreateRec.Body.String(), "next_run_at does not match schedule") {
+		t.Fatalf("mismatched clock create: %d %s", badCreateRec.Code, badCreateRec.Body.String())
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/scheduled-tasks", strings.NewReader(createBody))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -49,8 +61,17 @@ func TestScheduledTaskPatchCanClearExpiresAt(t *testing.T) {
 	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if created.ExpiresAt == nil {
-		t.Fatalf("created ExpiresAt = nil, want value")
+	if created.ExpiresAt == nil || created.StartsAt == nil || created.ScheduleDetail == nil ||
+		len(created.ScheduleDetail.Weekdays) != 2 || created.ScheduleDetail.Weekdays[0] != 0 {
+		t.Fatalf("create response lost schedule details: %+v", created)
+	}
+
+	invalidReq := httptest.NewRequest(http.MethodPatch, "/api/v1/scheduled-tasks/"+created.ID, strings.NewReader(
+		`{"next_run_at":"2026-07-07T11:40:00+08:00"}`))
+	invalidRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(invalidRec, invalidReq)
+	if invalidRec.Code != http.StatusBadRequest || !strings.Contains(invalidRec.Body.String(), "next_run_at does not match schedule") {
+		t.Fatalf("mismatched clock patch: %d %s", invalidRec.Code, invalidRec.Body.String())
 	}
 
 	preserveReq := httptest.NewRequest(http.MethodPatch, "/api/v1/scheduled-tasks/"+created.ID, strings.NewReader(`{"enabled":false}`))
@@ -63,11 +84,11 @@ func TestScheduledTaskPatchCanClearExpiresAt(t *testing.T) {
 	if err := json.NewDecoder(preserveRec.Body).Decode(&preserved); err != nil {
 		t.Fatalf("decode preserve response: %v", err)
 	}
-	if preserved.ExpiresAt == nil {
-		t.Fatalf("preserved ExpiresAt = nil, want original value")
+	if preserved.ExpiresAt == nil || preserved.StartsAt == nil || preserved.ScheduleDetail == nil {
+		t.Fatalf("metadata patch lost schedule details: %+v", preserved)
 	}
 
-	clearReq := httptest.NewRequest(http.MethodPatch, "/api/v1/scheduled-tasks/"+created.ID, strings.NewReader(`{"expires_at":null}`))
+	clearReq := httptest.NewRequest(http.MethodPatch, "/api/v1/scheduled-tasks/"+created.ID, strings.NewReader(`{"starts_at":null,"expires_at":null}`))
 	clearRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(clearRec, clearReq)
 	if clearRec.Code != http.StatusOK {
@@ -77,8 +98,8 @@ func TestScheduledTaskPatchCanClearExpiresAt(t *testing.T) {
 	if err := json.NewDecoder(clearRec.Body).Decode(&cleared); err != nil {
 		t.Fatalf("decode clear response: %v", err)
 	}
-	if cleared.ExpiresAt != nil {
-		t.Fatalf("cleared ExpiresAt = %v, want nil", cleared.ExpiresAt)
+	if cleared.ExpiresAt != nil || cleared.StartsAt != nil || cleared.ScheduleDetail == nil {
+		t.Fatalf("validity patch did not clear both bounds and preserve recurrence: %+v", cleared)
 	}
 }
 

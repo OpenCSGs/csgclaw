@@ -712,22 +712,16 @@
   background: color-mix(in srgb, var(--gray-800) 50%, var(--surface));
 }
 
+.generatedTaskDialog {
+  width: min(920px, calc(100vw - 40px));
+  max-height: min(86dvh, 900px);
+}
+
 .generatedTaskDetail {
   display: grid;
   gap: 10px;
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
 }
 
-.generatedTaskDetailHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.generatedTaskDetailHead h3,
 .generatedTaskDetail h4 {
   margin: 0;
   color: var(--text);
@@ -739,10 +733,6 @@
   display: grid;
   gap: 14px;
   min-height: 132px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-muted) 38%, transparent);
 }
 
 .generatedTaskSummary {

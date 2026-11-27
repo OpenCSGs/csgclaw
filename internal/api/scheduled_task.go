@@ -51,13 +51,15 @@ func (h *Handler) handleCreateScheduledTask(w http.ResponseWriter, r *http.Reque
 		enabled = *req.Enabled
 	}
 	item, err := svc.Create(scheduledtask.CreateInput{
-		Title:      strings.TrimSpace(req.Title),
-		AgentID:    strings.TrimSpace(req.AgentID),
-		Prompt:     strings.TrimSpace(req.Prompt),
-		Recurrence: strings.TrimSpace(req.Recurrence),
-		FirstRunAt: req.FirstRunAt.In(time.Local),
-		ExpiresAt:  localTimePtr(req.ExpiresAt),
-		Enabled:    enabled,
+		Title:          strings.TrimSpace(req.Title),
+		AgentID:        strings.TrimSpace(req.AgentID),
+		Prompt:         strings.TrimSpace(req.Prompt),
+		Recurrence:     strings.TrimSpace(req.Recurrence),
+		ScheduleDetail: req.ScheduleDetail,
+		StartsAt:       localTimePtr(req.StartsAt),
+		FirstRunAt:     req.FirstRunAt.In(time.Local),
+		ExpiresAt:      localTimePtr(req.ExpiresAt),
+		Enabled:        enabled,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -78,14 +80,16 @@ func (h *Handler) handleUpdateScheduledTask(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	item, err := svc.Update(scheduledtask.UpdateInput{
-		ID:         pathValue(r, "scheduled_task_id"),
-		Title:      req.Title,
-		AgentID:    req.AgentID,
-		Prompt:     req.Prompt,
-		Recurrence: req.Recurrence,
-		NextRunAt:  localTimeValuePtr(req.NextRunAt),
-		ExpiresAt:  localOptionalTimeDoublePtr(req.ExpiresAt),
-		Enabled:    req.Enabled,
+		ID:             pathValue(r, "scheduled_task_id"),
+		Title:          req.Title,
+		AgentID:        req.AgentID,
+		Prompt:         req.Prompt,
+		Recurrence:     req.Recurrence,
+		ScheduleDetail: req.ScheduleDetail,
+		StartsAt:       localOptionalTimeDoublePtr(req.StartsAt),
+		NextRunAt:      localTimeValuePtr(req.NextRunAt),
+		ExpiresAt:      localOptionalTimeDoublePtr(req.ExpiresAt),
+		Enabled:        req.Enabled,
 	})
 	if err != nil {
 		writeScheduledTaskError(w, err)
@@ -148,19 +152,21 @@ func writeScheduledTaskError(w http.ResponseWriter, err error) {
 
 func apiScheduledTask(item scheduledtask.Task, presenter teamIdentityPresenter) apitypes.ScheduledTask {
 	return apitypes.ScheduledTask{
-		AgentState: presenter.agentState(item.AgentID),
-		ID:         item.ID,
-		Title:      item.Title,
-		AgentID:    item.AgentID,
-		AgentName:  presenter.displayAgentName(item.AgentID),
-		Prompt:     item.Prompt,
-		Recurrence: item.Recurrence,
-		Enabled:    item.Enabled,
-		NextRunAt:  item.NextRunAt,
-		LastRunAt:  item.LastRunAt,
-		ExpiresAt:  item.ExpiresAt,
-		CreatedAt:  item.CreatedAt,
-		UpdatedAt:  item.UpdatedAt,
+		AgentState:     presenter.agentState(item.AgentID),
+		ID:             item.ID,
+		Title:          item.Title,
+		AgentID:        item.AgentID,
+		AgentName:      presenter.displayAgentName(item.AgentID),
+		Prompt:         item.Prompt,
+		Recurrence:     item.Recurrence,
+		ScheduleDetail: item.ScheduleDetail,
+		StartsAt:       item.StartsAt,
+		Enabled:        item.Enabled,
+		NextRunAt:      item.NextRunAt,
+		LastRunAt:      item.LastRunAt,
+		ExpiresAt:      item.ExpiresAt,
+		CreatedAt:      item.CreatedAt,
+		UpdatedAt:      item.UpdatedAt,
 	}
 }
 
@@ -196,13 +202,15 @@ func localTimeDoublePtr(value *time.Time) **time.Time {
 }
 
 type patchScheduledTaskRequest struct {
-	Title      *string      `json:"title,omitempty"`
-	AgentID    *string      `json:"agent_id,omitempty"`
-	Prompt     *string      `json:"prompt,omitempty"`
-	Recurrence *string      `json:"recurrence,omitempty"`
-	NextRunAt  *time.Time   `json:"next_run_at,omitempty"`
-	ExpiresAt  optionalTime `json:"expires_at,omitempty"`
-	Enabled    *bool        `json:"enabled,omitempty"`
+	Title          *string                       `json:"title,omitempty"`
+	AgentID        *string                       `json:"agent_id,omitempty"`
+	Prompt         *string                       `json:"prompt,omitempty"`
+	Recurrence     *string                       `json:"recurrence,omitempty"`
+	NextRunAt      *time.Time                    `json:"next_run_at,omitempty"`
+	ScheduleDetail *scheduledtask.ScheduleDetail `json:"schedule_detail,omitempty"`
+	StartsAt       optionalTime                  `json:"starts_at,omitempty"`
+	ExpiresAt      optionalTime                  `json:"expires_at,omitempty"`
+	Enabled        *bool                         `json:"enabled,omitempty"`
 }
 
 type optionalTime struct {

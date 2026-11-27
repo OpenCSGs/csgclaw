@@ -28,9 +28,11 @@ Relay 在 Agent 查询中返回当前连接的能力，并以 `executor_files_un
 ## 模板 sandbox 自动发布
 
 镜像启动时设置 `TEMPLATE_ID` 和 `CSGCLAW_AGENT_AUTO_PUBLISH=true`。
-脚本调用 `participant create --bind create --auto-publish=true`，`csgclaw` 与
-`csgclaw-cli` 共用该参数。默认关闭，只作用于启动脚本的目标 Agent。
-没有模板时不通过此镜像创建 Agent 或注册 relay，不新增这类启动场景。
+CSGClaw 在启动脚本创建模板 worker 后将发布任务入队。如果目标 worker 已存在，
+服务端启动时也会检查并入队。默认关闭，只作用于启动模板的目标 worker。
+取消排队或下架后，重启时不会自动重新发布，仍可手动发布。
+镜像在模板 worker 运行后开放 8888 端口的就绪检查，Relay 发布由服务端异步完成。
+重新构建 sandbox 镜像时，需将 `CSGCLAW_BASE_IMAGE` 指向包含服务端自动发布的版本。
 
 社区已创建对应的 platform instance。`CSGCLAW_NAME` 是它的 content ID，
 不是本地 Agent ID、数字 instance ID 或 relay ID。服务端在自动发布排队时保存该目标，

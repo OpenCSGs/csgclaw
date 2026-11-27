@@ -47,6 +47,51 @@ func TestCreateAndTriggerDueAdvancesSchedule(t *testing.T) {
 	}
 }
 
+func TestTriggerDueSkipsOccurrenceChangedBeforeDispatch(t *testing.T) {
+	now := time.Date(2026, 7, 7, 10, 40, 0, 0, time.UTC)
+	for _, action := range []string{"delete", "disable", "reschedule"} {
+		t.Run(action, func(t *testing.T) {
+			svc := newTestService(t, now)
+			item, err := svc.Create(CreateInput{
+				Title: "Daily check", AgentID: "u-worker", Prompt: "Summarize open work.",
+				Recurrence: RecurrenceDaily, FirstRunAt: now, Enabled: true,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Agent validation runs after collecting due tasks and before reserving a run.
+			var changed bool
+			svc.SetAgentCheck(func(string) error {
+				if changed {
+					return nil
+				}
+				changed = true
+				switch action {
+				case "delete":
+					err = svc.Delete(item.ID)
+				case "disable":
+					enabled := false
+					_, err = svc.Update(UpdateInput{ID: item.ID, Enabled: &enabled})
+				case "reschedule":
+					next := now.Add(time.Hour)
+					_, err = svc.Update(UpdateInput{ID: item.ID, NextRunAt: &next})
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				return nil
+			})
+			if runs := svc.TriggerDue(t.Context()); len(runs) != 0 {
+				t.Fatalf("TriggerDue dispatched an obsolete occurrence: %+v", runs)
+			}
+			if runs := svc.Runs(item.ID); len(runs) != 0 {
+				t.Fatalf("obsolete occurrence left a persisted run: %+v", runs)
+			}
+		})
+	}
+}
+
 func TestRunNowDoesNotAdvanceSchedule(t *testing.T) {
 	now := time.Date(2026, 7, 7, 10, 40, 0, 0, time.Local)
 	svc := newTestService(t, now)

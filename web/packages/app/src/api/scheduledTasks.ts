@@ -7,6 +7,7 @@ import {
 } from "@/models/scheduledTasks";
 import type {
   ScheduledTaskRecurrence,
+  ScheduledTaskScheduleDetail,
   WorkspaceScheduledTask,
   WorkspaceScheduledTaskRun,
 } from "@/models/scheduledTasks";
@@ -17,6 +18,8 @@ export type CreateScheduledTaskPayload = {
   prompt: string;
   recurrence: ScheduledTaskRecurrence;
   first_run_at: string;
+  schedule_detail?: ScheduledTaskScheduleDetail;
+  starts_at?: string;
   expires_at?: string;
   enabled?: boolean;
 };
@@ -27,6 +30,8 @@ export type UpdateScheduledTaskPayload = Partial<{
   prompt: string;
   recurrence: ScheduledTaskRecurrence;
   next_run_at: string;
+  schedule_detail: ScheduledTaskScheduleDetail;
+  starts_at: string | null;
   expires_at: string | null;
   enabled: boolean;
 }>;

@@ -1,1 +1,1 @@
-export { GeneratedTaskInlineDetail, TaskDetailDialog } from "./TaskDetails";
+export { GeneratedTaskDetailDialog, TaskDetailDialog } from "./TaskDetails";

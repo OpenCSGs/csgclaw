@@ -46,10 +46,17 @@
   border-top: 1px solid var(--csgclaw-ui-line);
 }
 .csg-combobox-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
   padding: var(--csgclaw-ui-space-2) var(--csgclaw-ui-space-3) var(--csgclaw-ui-space-1)
     calc(var(--csgclaw-ui-space-3) + 20px);
   color: var(--csgclaw-ui-muted);
   font: var(--csgclaw-ui-text-xs-medium);
+}
+.csg-combobox-group-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
