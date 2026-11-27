@@ -4,10 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/fs"
 	"net/http"
-	"path"
-	"slices"
 	"strings"
 	"time"
 
@@ -49,7 +46,9 @@ func (h *Handler) interpretHubTemplate(w http.ResponseWriter, r *http.Request) {
 	id := hubTemplateIDPathValue(r)
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
-	item, err := hubSvc.Get(ctx, id)
+	sourceCtx, cancelSource := context.WithTimeout(ctx, 60*time.Second)
+	defer cancelSource()
+	item, err := hubSvc.Get(sourceCtx, id)
 	if err != nil {
 		http.Error(w, "template could not be loaded", http.StatusBadGateway)
 		return
@@ -65,11 +64,14 @@ func (h *Handler) interpretHubTemplate(w http.ResponseWriter, r *http.Request) {
 		"description": limitDescriptionSource(item.Description, 2000),
 	}
 	// Official templates need not ship instructions, skills, or connectors.
-	if file, err := hubSvc.ReadWorkspaceFile(ctx, id, "instructions/AGENTS.md"); err == nil && !file.Binary {
+	if file, err := hubSvc.ReadWorkspaceFile(sourceCtx, id, "instructions/AGENTS.md"); err == nil && !file.Binary {
 		source["instructions"] = limitDescriptionSource(file.Content, 6000)
 	}
-	source["skills"] = limitDescriptionSource(strings.Join(templateInterpretationSkillNames(ctx, hubSvc, id), ", "), 1500)
-	if file, err := hubSvc.ReadWorkspaceFile(ctx, id, "mcps/mcp.json"); err == nil && !file.Binary && !file.Truncated {
+	skillCtx, cancelSkills := context.WithTimeout(sourceCtx, 25*time.Second)
+	names := hubSvc.WorkspaceSkillNames(skillCtx, id)
+	cancelSkills()
+	source["skills"] = limitDescriptionSource(strings.Join(names, ", "), 1500)
+	if file, err := hubSvc.ReadWorkspaceFile(sourceCtx, id, "mcps/mcp.json"); err == nil && !file.Binary && !file.Truncated {
 		source["enabled_mcp_servers"] = limitDescriptionSource(strings.Join(hub.EnabledTemplateMCPServerNames([]byte(file.Content)), ", "), 1500)
 	}
 	input, err := json.Marshal(source)
@@ -94,35 +96,4 @@ func (h *Handler) interpretHubTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, descriptionResponse{Description: description})
-}
-
-func templateInterpretationSkillNames(ctx context.Context, svc *hub.Service, id string) []string {
-	root := "skills"
-	listing, err := svc.ListWorkspace(ctx, id, root)
-	if errors.Is(err, hub.ErrTemplateNotFound) || errors.Is(err, fs.ErrNotExist) {
-		root = "workspace/skills"
-		listing, err = svc.ListWorkspace(ctx, id, root)
-	}
-	if err != nil {
-		return nil
-	}
-	var names []string
-	for _, entry := range listing.Entries {
-		name := entry.Name
-		if entry.Type != "dir" || name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
-			continue
-		}
-		files, err := svc.ListWorkspace(ctx, id, path.Join(root, name))
-		if err != nil {
-			continue
-		}
-		for _, file := range files.Entries {
-			if file.Type == "file" && file.Name == "SKILL.md" {
-				names = append(names, name)
-				break
-			}
-		}
-	}
-	slices.Sort(names)
-	return names
 }
