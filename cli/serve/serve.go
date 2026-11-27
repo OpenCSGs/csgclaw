@@ -1609,6 +1609,15 @@ func newLLMService(cfg config.Config, svc *agent.Controller) (*llm.Service, erro
 	if err != nil {
 		modelCfg = config.ModelConfig{}
 	}
+	if cfg.IsCSGHubDeployment() {
+		return llm.NewCSGHubService(modelCfg, svc, llm.CSGHubGatewayConfig{
+			GatewayURL: os.Getenv("CSGCLAW_LLM_BASE_URL"),
+			HubURL:     os.Getenv("CSGHUB_API_BASE_URL"),
+			UserToken:  os.Getenv("CSGHUB_USER_TOKEN"),
+			UserName:   os.Getenv("CSGHUB_USER_NAME"),
+			UserUUID:   os.Getenv("CSGHUB_USER_UUID"),
+		}), nil
+	}
 	return llm.NewService(modelCfg, svc), nil
 }
 

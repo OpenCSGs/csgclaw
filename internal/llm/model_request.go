@@ -17,11 +17,18 @@ import (
 // known to precede model execution may be replayed. Once a response stream has
 // been handed to a caller, its failures are never replayed by this layer.
 func (s *Service) modelRequest(req *http.Request, stream bool) (*http.Response, error) {
+	if s.managedGateway.matches(req) {
+		return s.managedGatewayRequest(req, stream)
+	}
+	return s.modelRequestWithRecovery(s.client, req, stream)
+}
+
+func (s *Service) modelRequestWithRecovery(client *http.Client, req *http.Request, stream bool) (*http.Response, error) {
 	const attempts = 5
 	original := req
 	connectionFailed := false
 	for attempt := 0; ; attempt++ {
-		response, err := s.modelRequestAttempt(req, stream)
+		response, err := s.modelRequestAttempt(client, req, stream)
 		if attempt == attempts-1 || original.Context().Err() != nil || (original.Body != nil && original.GetBody == nil) {
 			return response, err
 		}
