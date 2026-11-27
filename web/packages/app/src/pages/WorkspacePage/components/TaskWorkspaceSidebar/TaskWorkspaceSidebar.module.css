@@ -128,6 +128,7 @@
   --rail-gap: 8px;
   --rail-pitch: 52px;
   width: var(--workspace-primary-sidebar-collapsed-width);
+  overflow-y: auto;
 }
 
 .collapsed header {

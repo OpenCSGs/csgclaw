@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { useWorkspaceDialogs } from "@/hooks/workspace";
 import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 import { latestSidebarUpdateVersion } from "@/models/upgradeStatus";
@@ -27,20 +28,27 @@ type FooterProps = Pick<
 
 export function WorkspaceAccountFooter({ onSelectDestination = (action) => action(), ...props }: FooterProps) {
   const { openProfile, openSettings, setFeedbackOpen } = useWorkspaceDialogs();
+  const [updateNoticeDismissed, setUpdateNoticeDismissed] = useState(false);
+  const accountTrigger = useRef<HTMLButtonElement>(null);
   const { t, isSidebarCollapsed } = props;
   const updateVersion = latestSidebarUpdateVersion(props);
 
   return (
     <div className={styles.footer}>
-      {updateVersion ? (
+      {updateVersion && !updateNoticeDismissed ? (
         <SidebarUpgradeButton
           collapsed={isSidebarCollapsed}
           version={updateVersion}
           t={t}
           onClick={() => onSelectDestination(() => openSettings("version", true))}
+          onDismiss={() => {
+            setUpdateNoticeDismissed(true);
+            accountTrigger.current?.focus({ preventScroll: true });
+          }}
         />
       ) : null}
       <WorkspaceUserMenu
+        triggerRef={accountTrigger}
         currentUser={props.usersById.get(props.currentUserID)}
         openCSG={{
           authenticated: props.authStatus.authenticated === true,

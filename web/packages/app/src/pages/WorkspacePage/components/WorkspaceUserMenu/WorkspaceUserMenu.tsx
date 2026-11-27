@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 import {
   Check,
   ChevronRight,
@@ -30,6 +30,7 @@ import type { IMUser, LocaleCode, TranslateFn } from "@/models/conversations";
 import type { ThemeMode } from "@/shared/theme/theme";
 
 export type WorkspaceUserMenuProps = {
+  triggerRef?: RefObject<HTMLButtonElement | null>;
   currentUser: IMUser | undefined;
 
   openCSG: {
@@ -61,6 +62,7 @@ const THEME_OPTIONS = [
 ];
 
 export function WorkspaceUserMenu({
+  triggerRef,
   currentUser,
   openCSG,
   locale,
@@ -75,7 +77,8 @@ export function WorkspaceUserMenu({
   onOpenFeedback,
   onThemeChange,
 }: WorkspaceUserMenuProps) {
-  const accountTrigger = useRef<HTMLButtonElement>(null);
+  const internalTrigger = useRef<HTMLButtonElement>(null);
+  const accountTrigger = triggerRef ?? internalTrigger;
   const [open, setOpen] = useState(false);
   const name = currentUser?.name || currentUser?.id || t("localIdentityFallback");
   const role = currentUser?.role || "";
