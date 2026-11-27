@@ -170,6 +170,7 @@ export function fetchMessagesRequest(roomID: string, options: FetchMessagesOptio
 type MessagePage = {
   messages: IMMessage[];
   refreshed?: IMMessage[];
+  sources?: IMMessage[];
   has_more: boolean;
   cursor_missing?: boolean;
 };
@@ -178,7 +179,12 @@ export function fetchMessagePageRequest(
   roomID: string,
   { limit, before, refreshIDs, signal }: { limit: number; before?: string; refreshIDs?: string[]; signal: AbortSignal },
 ): Promise<MessagePage> {
-  const params = new URLSearchParams({ room_id: roomID, limit: String(limit), include_thread_replies: "true" });
+  const params = new URLSearchParams({
+    room_id: roomID,
+    limit: String(limit),
+    include_thread_replies: "true",
+    include_sources: "true",
+  });
   if (before) params.set("before", before);
   for (const id of refreshIDs ?? []) params.append("refresh_id", id);
   return get(`api/v1/messages?${params.toString()}`, { signal });

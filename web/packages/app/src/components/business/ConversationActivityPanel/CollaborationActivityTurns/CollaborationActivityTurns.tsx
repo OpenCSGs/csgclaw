@@ -12,6 +12,7 @@ import {
   localIdentitiesMatch,
   userDisplayName,
   type LocaleCode,
+  type IMMessage,
   type TranslateFn,
   type UsersById,
 } from "@/models/conversations";
@@ -28,7 +29,7 @@ import {
 } from "../conversationActivity";
 import styles from "./CollaborationActivityTurns.module.css";
 
-type Selection = { agentID?: string; turnID?: string; requestID?: string };
+type Selection = { agentID?: string; turnID?: string; requestID?: string; messageID?: string };
 type Row = {
   turn: CollaborationTurn;
   agent: ConversationActivityAgent;
@@ -52,6 +53,7 @@ type Props = {
   loadError: string;
   active: boolean;
   onRefresh: () => void;
+  onInspect: (messages: readonly IMMessage[] | undefined) => void;
   earlier?: EarlierActivity;
   onShowEvents: () => void;
   onCitationSelect?: CitationSelectHandler;
@@ -72,6 +74,7 @@ export function CollaborationActivityTurns({
   loadError,
   active,
   onRefresh,
+  onInspect,
   earlier,
   onShowEvents,
   onCitationSelect,
@@ -145,6 +148,11 @@ export function CollaborationActivityTurns({
   );
   const displayed = newest ? [...filtered].reverse() : filtered;
   const selected = rows.find((row) => row.turn.key === selectedKey);
+  const inspectedMessages = selected?.turn.messages;
+  useEffect(() => {
+    onInspect(inspectedMessages);
+    return () => onInspect(undefined);
+  }, [inspectedMessages, onInspect]);
   const selectedEntries = useMemo(
     () =>
       selected
@@ -173,16 +181,19 @@ export function CollaborationActivityTurns({
     appliedTarget.current = null;
   }, [selection]);
   useEffect(() => {
-    const target = selection?.turnID || selection?.requestID || initialEntryID;
+    const target = selection?.messageID || selection?.turnID || selection?.requestID || initialEntryID;
     if (!target || appliedTarget.current === target) return;
     const match = rows.find(
       (row) =>
         (!selection?.agentID || localIdentitiesMatch(selection.agentID, row.agentID)) &&
-        (row.turn.id === selection?.turnID ||
-          (selection?.requestID && row.turn.sourceID === selection.requestID) ||
-          (initialEntryID &&
-            (row.entries?.some((entry) => entry.id === initialEntryID) ||
-              row.turn.messages.some((message) => activityEntryHasMessage(initialEntryID, message.id))))),
+        (selection?.messageID
+          ? row.turn.messages.some((message) => message.id === selection.messageID)
+          : selection?.turnID
+            ? row.turn.id === selection.turnID
+            : (selection?.requestID && row.turn.sourceID === selection.requestID) ||
+              (initialEntryID &&
+                (row.entries?.some((entry) => entry.id === initialEntryID) ||
+                  row.turn.messages.some((message) => activityEntryHasMessage(initialEntryID, message.id))))),
     );
     if (match) {
       setSelectedKey(match.turn.key);
@@ -280,17 +291,17 @@ export function CollaborationActivityTurns({
           <div role="list" aria-label={t("collaborationTurnSequence")} className={styles.records}>
             {detailPage.items.map((entry) => renderEntry(entry, expandAll, entry.id === initialEntryID))}
           </div>
-          <ActivityPagination
-            {...detailPage}
-            t={t}
-            onChange={(index) => {
-              if (detailBody.current) detailBody.current.scrollTop = 0;
-              setExpandAll(false);
-              detailPage.onChange(index);
-            }}
-          />
           {!selectedEntries.length ? <p className={styles.empty}>{t("collaborationTurnQuiet")}</p> : null}
         </div>
+        <ActivityPagination
+          {...detailPage}
+          t={t}
+          onChange={(index) => {
+            if (detailBody.current) detailBody.current.scrollTop = 0;
+            setExpandAll(false);
+            detailPage.onChange(index);
+          }}
+        />
       </div>
     );
   return (
@@ -358,7 +369,7 @@ export function CollaborationActivityTurns({
             {loadError}
           </p>
         ) : null}
-        {earlier && !newest && page.index === 0 ? (
+        {earlier && !newest ? (
           <ActivityHistoryContinuation
             earlier={earlier}
             active={active}
@@ -417,14 +428,6 @@ export function CollaborationActivityTurns({
             <ChevronRight size={13} />
           </Button>
         ) : null}
-        <ActivityPagination
-          {...page}
-          t={t}
-          onChange={(index) => {
-            if (turnList.current) turnList.current.scrollTop = 0;
-            page.onChange(index);
-          }}
-        />
         {earlier && newest && page.index + 1 >= page.count ? (
           <ActivityHistoryContinuation
             earlier={earlier}
@@ -437,6 +440,14 @@ export function CollaborationActivityTurns({
           />
         ) : null}
       </div>
+      <ActivityPagination
+        {...page}
+        t={t}
+        onChange={(index) => {
+          if (turnList.current) turnList.current.scrollTop = 0;
+          page.onChange(index);
+        }}
+      />
     </div>
   );
 }

@@ -14,12 +14,14 @@ type MessagePageOptions struct {
 	RefreshIDs           []string
 	ThreadRootID         string
 	IncludeThreadReplies bool
+	IncludeSources       bool
 	PublicAutonomousOnly bool
 }
 
 type MessagePage struct {
 	Messages      []Message `json:"messages"`
 	Refreshed     []Message `json:"refreshed,omitempty"`
+	Sources       []Message `json:"sources,omitempty"`
 	HasMore       bool      `json:"has_more"`
 	CursorMissing bool      `json:"cursor_missing,omitempty"`
 }
@@ -56,6 +58,19 @@ func (s *Service) ListMessagePage(roomID string, opts MessagePageOptions) (Messa
 		}
 		return message
 	}
+	readExtra := func(wanted map[string]struct{}) []Message {
+		var extra []Message
+		for i := len(room.Messages) - 1; i >= 0 && len(wanted) > 0; i-- {
+			message := room.Messages[i]
+			if _, ok := wanted[message.ID]; ok {
+				delete(wanted, message.ID)
+				if inScope(message) {
+					extra = append(extra, present(message))
+				}
+			}
+		}
+		return extra
+	}
 	end := len(room.Messages)
 	if opts.Before != "" {
 		end--
@@ -87,15 +102,47 @@ func (s *Service) ListMessagePage(roomID string, opts MessagePageOptions) (Messa
 		for _, message := range page.Messages {
 			delete(wanted, message.ID)
 		}
-		for i := len(room.Messages) - 1; i >= 0 && len(wanted) > 0; i-- {
-			message := room.Messages[i]
-			if _, ok := wanted[message.ID]; ok {
-				delete(wanted, message.ID)
-				if inScope(message) {
-					page.Refreshed = append(page.Refreshed, present(message))
+		page.Refreshed = readExtra(wanted)
+	}
+	if opts.IncludeSources {
+		wanted := make(map[string]struct{})
+		for _, messages := range [][]Message{page.Messages, page.Refreshed} {
+			for _, message := range messages {
+				if id := activitySourceID(message); id != "" {
+					wanted[id] = struct{}{}
 				}
 			}
 		}
+		for _, messages := range [][]Message{page.Messages, page.Refreshed} {
+			for _, message := range messages {
+				delete(wanted, message.ID)
+			}
+		}
+		page.Sources = readExtra(wanted)
 	}
 	return page, nil
+}
+
+// Activity records have used both the CSGClaw and Codex metadata namespaces.
+// Match the source resolution used by collaboration turn grouping.
+func activitySourceID(message Message) string {
+	firstID := func(values ...any) string {
+		for _, candidate := range values {
+			if value, _ := candidate.(string); strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+		return ""
+	}
+	csgclaw, _ := message.Metadata["csgclaw"].(map[string]any)
+	codex, _ := message.Metadata["codex"].(map[string]any)
+	if source := firstID(csgclaw["source_message_id"], csgclaw["request_id"], codex["source_message_id"], codex["request_id"], codex["requestId"]); source != "" {
+		return source
+	}
+	diagnostics, _ := message.Metadata["diagnostics"].(map[string]any)
+	progress, _ := csgclaw["turn_progress"].(map[string]any)
+	if firstID(progress["id"], csgclaw["turn_id"], codex["turn_id"], diagnostics["turn_id"]) != "" {
+		return firstID(diagnostics["source_id"])
+	}
+	return ""
 }

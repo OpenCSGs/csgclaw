@@ -29,6 +29,7 @@ func (h *Handler) writeMessagePage(w http.ResponseWriter, r *http.Request, chann
 		RefreshIDs:           refreshIDs,
 		ThreadRootID:         rootID,
 		IncludeThreadReplies: rootID != "" || parseBoolQuery(query.Get("include_thread_replies")),
+		IncludeSources:       parseBoolQuery(query.Get("include_sources")),
 		PublicAutonomousOnly: appRequestAgentID(r) != "",
 	})
 	if err != nil {

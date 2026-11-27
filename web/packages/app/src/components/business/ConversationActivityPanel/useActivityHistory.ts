@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { fetchMessagePageRequest } from "@/api/im";
 import type { IMMessage } from "@/models/conversations";
 import { newerProgressMessage, parseTurnProgress, progressActive } from "@/models/turnProgress";
@@ -12,6 +12,7 @@ const liveBatchMs = 80;
 type History = {
   roomID: string;
   messages: IMMessage[];
+  sources: IMMessage[];
   before: string;
   latest: IMMessage[];
   loaded: boolean;
@@ -24,6 +25,7 @@ function emptyHistory(roomID: string): History {
   return {
     roomID,
     messages: [],
+    sources: [],
     before: "",
     latest: [],
     loaded: false,
@@ -33,18 +35,28 @@ function emptyHistory(roomID: string): History {
   };
 }
 
-function refreshMessageIDs(targetIDs: string[], messages: IMMessage[]): string[] {
-  const ids = new Set(targetIDs.slice(0, maxRefreshIDs));
+function refreshMessageIDs(targetIDs: string[], inspected: readonly IMMessage[], messages: IMMessage[]): string[] {
+  const inspectedID = inspected.at(-1)?.id;
+  const ids = new Set(inspectedID ? [inspectedID, ...targetIDs] : targetIDs);
   for (let index = messages.length - 1; index >= 0 && ids.size < maxRefreshIDs; index--) {
     const message = messages[index];
     if (!message.id) continue;
     const progress = parseTurnProgress(message);
     if (progress && progressActive(progress)) ids.add(message.id);
   }
-  return [...ids];
+  for (const message of inspected) {
+    if (ids.size >= maxRefreshIDs) break;
+    if (message.id) ids.add(message.id);
+  }
+  return [...ids].slice(0, maxRefreshIDs);
 }
 
-export function useActivityHistory(roomID: string, active: boolean, targetKey: string) {
+export function useActivityHistory(
+  roomID: string,
+  active: boolean,
+  targetKey: string,
+  inspected?: RefObject<readonly IMMessage[] | undefined>,
+) {
   const [history, setHistory] = useState(() => emptyHistory(roomID));
   const current = useRef(history);
   const actions = useRef<{ refresh(): void; loadOlder(): void } | null>(null);
@@ -91,11 +103,12 @@ export function useActivityHistory(roomID: string, active: boolean, targetKey: s
 
       try {
         let before = older ? start.before : undefined;
-        const loadLatest = () =>
-          fetchMessagePageRequest(roomID, {
-            ...options,
-            refreshIDs: refreshMessageIDs(JSON.parse(targetKey) as string[], start.messages),
-          });
+        const inspecting = start.messages.length ? (inspected?.current ?? []) : [];
+        let requestedIDs: string[] = [];
+        const loadLatest = () => {
+          requestedIDs = refreshMessageIDs(JSON.parse(targetKey) as string[], inspecting, start.messages);
+          return fetchMessagePageRequest(roomID, { ...options, refreshIDs: requestedIDs });
+        };
         let page = await (before ? fetchMessagePageRequest(roomID, { ...options, before }) : loadLatest());
         const missingCursor = page.cursor_missing;
         if (missingCursor) {
@@ -112,8 +125,17 @@ export function useActivityHistory(roomID: string, active: boolean, targetKey: s
             (page.has_more &&
               first?.id &&
               start.latest.some((message) => message.id === first.id && message.created_at === first.created_at)));
-        const existing = keepEarlier ? current.current.messages : [];
         const fetched = [...page.messages, ...(page.refreshed ?? [])];
+        let existing = keepEarlier ? current.current.messages : [];
+        if (!keepEarlier && inspecting.length > 0) {
+          const fetchedIDs = new Set(fetched.map((message) => message.id));
+          if (inspecting.some((message) => message.id && fetchedIDs.has(message.id))) {
+            // Long legacy turns can span more records than one refresh request.
+            // Keep their loaded remainder after the server confirms the turn still exists.
+            const checked = new Set(requestedIDs);
+            existing = inspecting.filter((message) => !message.id || !checked.has(message.id));
+          }
+        }
         const pending = [...duringRequest.values()];
         clearTimeout(timer);
         timer = undefined;
@@ -123,6 +145,7 @@ export function useActivityHistory(roomID: string, active: boolean, targetKey: s
           messages: before
             ? mergeConversationActivityMessages(fetched, existing, pending)
             : mergeConversationActivityMessages(existing, fetched, pending),
+          sources: mergeConversationActivityMessages(keepEarlier ? start.sources : [], page.sources),
           before: !before && keepEarlier ? start.before : page.has_more ? first?.id || "" : "",
           latest: before ? start.latest : page.messages,
           loaded: true,
@@ -178,7 +201,7 @@ export function useActivityHistory(roomID: string, active: boolean, targetKey: s
       unsubscribe();
       actions.current = null;
     };
-  }, [active, roomID, targetKey]);
+  }, [active, roomID, targetKey, inspected]);
 
   return {
     ...(history.roomID === roomID ? history : emptyHistory(roomID)),

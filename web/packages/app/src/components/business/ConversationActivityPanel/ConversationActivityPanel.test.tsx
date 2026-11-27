@@ -2,6 +2,7 @@ import { act, fireEvent, render, renderHook, screen, within, waitFor } from "@te
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchMessagePageRequest } from "@/api/im";
+import { TooltipProvider } from "@/components/ui";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import { createTranslator } from "@/shared/i18n";
 import { ConversationActivityPanel } from "./ConversationActivityPanel";
@@ -11,7 +12,9 @@ vi.mock("@/api/im", () => ({ fetchMessagePageRequest: vi.fn() }));
 vi.mock("@/shared/realtime/imEvents", () => ({ subscribeIMEvents: vi.fn(() => vi.fn()) }));
 
 const fetch = vi.mocked(fetchMessagePageRequest);
-beforeEach(() => fetch.mockReset());
+beforeEach(() => {
+  fetch.mockReset();
+});
 
 function scrollTowardEnd(list: HTMLElement, top: number) {
   const scroller = list.parentElement;
@@ -111,6 +114,16 @@ function turnPanelProps(toolCount = 50) {
   fetch.mockResolvedValue({ messages: props.conversation.messages, has_more: false });
   return props;
 }
+
+function recentMessages() {
+  return Array.from({ length: 100 }, (_, index) => ({
+    id: `recent-${index}`,
+    sender_id: "admin",
+    content: `Recent message ${index}`,
+    created_at: new Date(Date.UTC(2026, 10, 12, 2, 0, index)).toISOString(),
+  }));
+}
+
 describe("collaboration activity turns", () => {
   it("narrows 100 calls to two executions and preserves the complete selected execution after searching", async () => {
     const user = userEvent.setup();
@@ -144,6 +157,44 @@ describe("collaboration activity turns", () => {
     );
     expect(await screen.findByRole("heading", { name: "Tester · Turn 2" })).toBeVisible();
     expect(screen.queryByText(/dev-turn-command-0$/)).not.toBeInTheDocument();
+  });
+  it("uses the message from the thread dock to open its turn outside the latest activity window", async () => {
+    const props = turnPanelProps(1);
+    const [source, oldTurn, recentTurn] = props.conversation.messages;
+    const turn = { ...oldTurn, id: "dev-turn-final", relates_to: { rel_type: "m.thread", event_id: source.id } };
+    const recentSameRequest = { ...recentTurn, sender_id: "dev" };
+    const recent = [recentSameRequest, ...recentMessages().slice(1)];
+    fetch.mockImplementation(async (_roomID, options) => ({
+      messages: recent,
+      refreshed: options.refreshIDs?.includes(turn.id) ? [turn] : [],
+      sources: [source],
+      has_more: true,
+    }));
+    render(
+      <ConversationActivityPanel
+        {...props}
+        conversation={{ ...props.conversation, messages: [source, ...recent] }}
+        actorSelection={{ agentID: "dev", turnID: "dev-turn", requestID: source.id, messageID: turn.id }}
+      />,
+    );
+    expect(await screen.findByText(/dev-turn-command-0$/)).toBeVisible();
+    expect(screen.queryByText(/test-turn-command-0$/)).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("room", expect.objectContaining({ refreshIDs: [turn.id] }));
+  });
+  it("searches a visible turn by its out-of-window trigger without adding the trigger to activity rows", async () => {
+    const user = userEvent.setup();
+    const props = turnPanelProps(1);
+    const [source, turn] = props.conversation.messages;
+    fetch.mockResolvedValue({ messages: [turn, ...recentMessages().slice(1)], sources: [source], has_more: true });
+    render(<ConversationActivityPanel {...props} conversation={{ ...props.conversation, messages: [] }} />);
+    const card = await screen.findByRole("button", { name: "Developer · Turn 1" });
+    const search = screen.getByRole("textbox", { name: "Search triggers, tools or output" });
+    await user.type(search, source.content);
+    expect(card).toBeVisible();
+    await user.click(card);
+    expect(screen.getByText("Triggered by").closest("summary")).toHaveTextContent(source.content);
+    await user.click(screen.getByRole("radio", { name: "All events" }));
+    expect(screen.queryByText(source.content)).not.toBeInTheDocument();
   });
   it("keeps the single-agent activity view unchanged", () => {
     const props = turnPanelProps();
@@ -179,10 +230,74 @@ it("pauses a hidden activity tab and reconciles thread replies when returning to
   expect(screen.getByText("dev-turn-output-49")).toBeVisible();
 });
 
+it("keeps an inspected turn through a non-overlapping reconnect and clears it when the room is cleared", async () => {
+  const user = userEvent.setup();
+  const props = turnPanelProps(1);
+  const [source, turn] = props.conversation.messages;
+  const subscribe = vi.mocked(subscribeIMEvents).mockClear();
+  const recent = recentMessages();
+  fetch.mockResolvedValueOnce({ messages: [source, turn], has_more: true });
+  fetch.mockImplementationOnce(async (_roomID, options) => ({
+    messages: recent,
+    refreshed: options.refreshIDs?.includes(turn.id) ? [turn] : [],
+    sources: [source],
+    has_more: true,
+  }));
+  fetch.mockResolvedValueOnce({ messages: [], has_more: false });
+  render(<ConversationActivityPanel {...props} />);
+  await user.click(await screen.findByRole("button", { name: "Developer · Turn 1" }));
+  await user.click(screen.getByRole("button", { name: "Expand all" }));
+  const emit = subscribe.mock.calls[0][0];
+  await act(async () => emit({ type: "connection.open" }));
+  expect(fetch).toHaveBeenLastCalledWith("room", expect.objectContaining({ refreshIDs: [turn.id] }));
+  expect(screen.getByRole("heading", { name: "Developer · Turn 1" })).toBeVisible();
+  expect(screen.getByText("dev-turn-output-0")).toBeVisible();
+  await act(async () => emit({ type: "room.messages_cleared", room_id: "room" }));
+  expect(screen.queryByRole("heading", { name: "Developer · Turn 1" })).not.toBeInTheDocument();
+  expect(fetch).toHaveBeenLastCalledWith("room", expect.objectContaining({ refreshIDs: [] }));
+});
+
+it("preserves an inspected legacy turn larger than the refresh limit", async () => {
+  const recent = recentMessages();
+  const legacy = Array.from({ length: 120 }, (_, index) => ({
+    id: `legacy-${index}`,
+    sender_id: "dev",
+    content: `Execution record ${index}`,
+    metadata: { codex: { request_id: "legacy-request" } },
+  }));
+  const { conversation } = turnPanelProps(1);
+  const running = {
+    ...conversation.messages[1],
+    metadata: {
+      csgclaw: { turn_progress: { id: "running", revision: 1, status: "running", started_at: "", items: [] } },
+    },
+  };
+  const inspected = { current: legacy };
+  fetch
+    .mockResolvedValueOnce({ messages: [...legacy.slice(-99), running], has_more: true })
+    .mockResolvedValueOnce({ messages: legacy.slice(0, -99), has_more: false })
+    .mockImplementationOnce(async (_roomID, options) => ({
+      messages: recent,
+      refreshed: legacy.filter((message) => options.refreshIDs?.includes(message.id)),
+      has_more: true,
+    }));
+  const { result } = renderHook(() => useActivityHistory("room", true, "[]", inspected));
+  await waitFor(() => expect(result.current.loaded).toBe(true));
+  act(() => result.current.loadOlder());
+  await waitFor(() => expect(result.current.messages).toHaveLength(legacy.length + 1));
+  act(() => result.current.refresh());
+  await waitFor(() => expect(result.current.messages).toHaveLength(legacy.length + recent.length));
+  expect(fetch.mock.lastCall?.[1].refreshIDs).toHaveLength(100);
+  expect(fetch.mock.lastCall?.[1].refreshIDs).toContain(running.id);
+  expect(result.current.messages).toEqual(expect.arrayContaining(legacy));
+});
+
 it("keeps a 4,146-tool turn navigable with at most 100 mounted activity rows", async () => {
   const user = userEvent.setup();
   const props = turnPanelProps(4146);
-  render(<ConversationActivityPanel {...props} conversation={{ ...props.conversation, messages: [] }} />);
+  render(<ConversationActivityPanel {...props} conversation={{ ...props.conversation, messages: [] }} />, {
+    wrapper: TooltipProvider,
+  });
   const turn = await screen.findByRole("button", { name: "Developer · Turn 1" });
   expect(within(turn).getByText("4146 tool calls")).toBeVisible();
   await user.click(turn);
@@ -354,10 +469,14 @@ it("loads one chronological history page from an upward gesture and preserves th
   const { conversation, ...props } = turnPanelProps();
   const recent = { id: "recent", sender_id: "dev", content: "Recent activity", created_at: "2026-11-12T00:01:00Z" };
   const older = { id: "older", sender_id: "dev", content: "Earlier activity", created_at: "2026-11-12T00:00:00Z" };
+  const oldest = { id: "oldest", sender_id: "dev", content: "Oldest activity", created_at: "2026-11-11T23:59:00Z" };
   fetch
     .mockResolvedValueOnce({ messages: [recent], has_more: true })
-    .mockResolvedValueOnce({ messages: [older], has_more: true });
-  render(<ConversationActivityPanel {...props} conversation={{ ...conversation, messages: [], is_direct: true }} />);
+    .mockResolvedValueOnce({ messages: [older], has_more: true })
+    .mockResolvedValueOnce({ messages: [oldest], has_more: false });
+  render(<ConversationActivityPanel {...props} conversation={{ ...conversation, messages: [], is_direct: true }} />, {
+    wrapper: TooltipProvider,
+  });
   await screen.findByText("Recent activity");
   await user.click(screen.getByRole("radio", { name: "Chronological" }));
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -365,9 +484,13 @@ it("loads one chronological history page from an upward gesture and preserves th
   expect(await screen.findByText("Page 2 of 2")).toBeVisible();
   expect(screen.getByText("Recent activity")).toBeVisible();
   expect(fetch).toHaveBeenCalledTimes(2);
+  await user.click(screen.getByRole("button", { name: "Load earlier activity" }));
+  expect(screen.getByText("Recent activity")).toBeVisible();
+  expect(fetch).toHaveBeenLastCalledWith("room", expect.objectContaining({ before: older.id }));
   await user.click(screen.getByRole("button", { name: "Previous page" }));
   expect(screen.getByText("Earlier activity")).toBeVisible();
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(screen.getByText("Oldest activity")).toBeVisible();
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 it("waits for another gesture when a short filtered list still has earlier history", async () => {

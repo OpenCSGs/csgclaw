@@ -44,14 +44,17 @@ function identity(message: IMMessage) {
 
 // Never infer a turn from adjacent timestamps: members and threads can overlap.
 // Request-only legacy records join a known turn only when that association is unique.
-export function collaborationTurns(messages: readonly IMMessage[]): {
+export function collaborationTurns(
+  messages: readonly IMMessage[],
+  sourceMessages: readonly IMMessage[] = [],
+): {
   turns: CollaborationTurn[];
   unassigned: IMMessage[];
 } {
   const scopedMessages: { message: IMMessage; meta: ReturnType<typeof identity> }[] = [];
   const groups = new Map<string, CollaborationTurn>();
   const sources = new Map<string, Set<string>>();
-  const messageByID = new Map<IMMessage["id"], IMMessage>();
+  const messageByID = new Map(sourceMessages.map((message) => [message.id, message]));
   for (const message of messages) {
     if (isAutonomousCoordinationNotice(message)) continue;
     const meta = identity(message);

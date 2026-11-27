@@ -485,13 +485,13 @@ function ConversationPaneContent({
   );
 
   const openCollaborationActivity = useCallback(
-    (senderID?: string, turnID?: string, requestID?: string) => {
+    (senderID?: string, turnID?: string, requestID?: string, messageID?: string) => {
       onToggleChannelTools(false);
       memberPanelProps?.onClose();
       const actor = senderID
         ? activityAgents.find((agent) => agent.identities.some((identity) => localIdentitiesMatch(identity, senderID)))
         : undefined;
-      openActivity(undefined, actor?.id, turnID, requestID);
+      openActivity(undefined, actor?.id, turnID, requestID, messageID);
     },
     [activityAgents, memberPanelProps, onToggleChannelTools, openActivity],
   );

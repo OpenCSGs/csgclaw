@@ -45,6 +45,7 @@ import {
   roomType,
   RoomTypes,
   type IMConversation,
+  type IMMessage,
   type LocaleCode,
   type TranslateFn,
   type UsersById,
@@ -76,7 +77,7 @@ type ConversationActivityPanelProps = {
   agents: readonly AgentLike[];
   conversation: IMConversation;
   initialEntryID?: string | null;
-  actorSelection?: { agentID?: string; turnID?: string; requestID?: string };
+  actorSelection?: { agentID?: string; turnID?: string; requestID?: string; messageID?: string };
   locale: LocaleCode;
   onClose: () => void;
   onCitationSelect?: CitationSelectHandler;
@@ -140,13 +141,20 @@ function ActivityPanel({
   t,
   usersById,
 }: ConversationActivityPanelProps) {
-  const { turnID, requestID } = actorSelection ?? {};
+  const { turnID, requestID, messageID } = actorSelection ?? {};
   const target = useMemo(
-    () => activityTargetMessages(conversation.messages, initialEntryID, turnID, requestID),
-    [conversation.messages, initialEntryID, turnID, requestID],
+    () =>
+      messageID
+        ? conversation.messages.filter((message) => message.id === messageID)
+        : activityTargetMessages(conversation.messages, initialEntryID, turnID, requestID),
+    [conversation.messages, initialEntryID, messageID, turnID, requestID],
   );
-  const targetKey = JSON.stringify(target.flatMap((message) => (message.id ? [message.id] : [])));
-  const history = useActivityHistory(conversation.id, active, targetKey);
+  const targetKey = JSON.stringify([...new Set([messageID, ...target.map((message) => message.id)].filter(Boolean))]);
+  const inspected = useRef<readonly IMMessage[] | undefined>(undefined);
+  const trackInspectedMessages = useCallback((messages: readonly IMMessage[] | undefined) => {
+    inspected.current = messages;
+  }, []);
+  const history = useActivityHistory(conversation.id, active, targetKey, inspected);
   const { loading, refresh } = history;
   const earlier = history.before
     ? { cursor: history.before, load: history.loadOlder, loading: history.loadingOlder }
@@ -178,7 +186,10 @@ function ActivityPanel({
   const collaboration = usesCollaborationTranscript(conversation);
   const autonomous = collaboration && roomType(conversation) === RoomTypes.autonomous;
   const [showEvents, setShowEvents] = useState(false);
-  const turnGroups = useMemo(() => (collaboration ? collaborationTurns(messages) : null), [collaboration, messages]);
+  const turnGroups = useMemo(
+    () => (collaboration ? collaborationTurns(messages, history.sources) : null),
+    [collaboration, messages, history.sources],
+  );
   const showTurns = !showEvents && Boolean(turnGroups?.turns.length);
   useEffect(() => {
     if (actorSelection?.turnID || actorSelection?.requestID) setShowEvents(false);
@@ -465,6 +476,7 @@ function ActivityPanel({
           loadError={loadError}
           active={active}
           onRefresh={refresh}
+          onInspect={trackInspectedMessages}
           earlier={earlier}
           onShowEvents={() => setShowEvents(true)}
           onCitationSelect={onCitationSelect}
@@ -628,7 +640,7 @@ function ActivityPanel({
                 {loadError}
               </div>
             ) : null}
-            {earlier && sortMode === "chronological" && page.index === 0 ? (
+            {earlier && sortMode === "chronological" ? (
               <ActivityHistoryContinuation
                 earlier={earlier}
                 active={active}
@@ -671,14 +683,6 @@ function ActivityPanel({
                 ))}
               </div>
             ) : null}
-            <ActivityPagination
-              {...page}
-              t={t}
-              onChange={(index) => {
-                if (bodyRef.current) bodyRef.current.scrollTop = 0;
-                page.onChange(index);
-              }}
-            />
             {earlier && sortMode === "newest_first" && page.index + 1 >= page.count ? (
               <ActivityHistoryContinuation
                 earlier={earlier}
@@ -691,6 +695,14 @@ function ActivityPanel({
               />
             ) : null}
           </div>
+          <ActivityPagination
+            {...page}
+            t={t}
+            onChange={(index) => {
+              if (bodyRef.current) bodyRef.current.scrollTop = 0;
+              page.onChange(index);
+            }}
+          />
         </>
       )}
     </aside>

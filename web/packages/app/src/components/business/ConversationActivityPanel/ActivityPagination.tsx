@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useRef, type RefObject } from "react";
-import { Button } from "@/components/ui";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button, IconButton, Tooltip } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./ConversationActivityPanel.module.css";
 
@@ -15,16 +16,34 @@ export function ActivityPagination({
   t: TranslateFn;
 }) {
   if (count < 2) return null;
+  const previous = t("activityPreviousPage");
+  const next = t("activityNextPage");
   return (
-    <div className={styles.pageActions}>
-      <Button size="sm" variant="tertiaryGray" disabled={index === 0} onClick={() => onChange(index - 1)}>
-        {t("activityPreviousPage")}
-      </Button>
-      <span aria-live="polite">{t("activityPageCount", { page: index + 1, count })}</span>
-      <Button size="sm" variant="tertiaryGray" disabled={index + 1 === count} onClick={() => onChange(index + 1)}>
-        {t("activityNextPage")}
-      </Button>
-    </div>
+    <footer className={styles.pagination}>
+      <Tooltip content={previous}>
+        <IconButton
+          size="sm"
+          variant="tertiaryGray"
+          icon={<ChevronLeft size={16} />}
+          label={previous}
+          disabled={index === 0}
+          onClick={() => onChange(index - 1)}
+        />
+      </Tooltip>
+      <span className={styles.pageCount} aria-live="polite" aria-atomic="true">
+        {t("activityPageCount", { page: index + 1, count })}
+      </span>
+      <Tooltip content={next}>
+        <IconButton
+          size="sm"
+          variant="tertiaryGray"
+          icon={<ChevronRight size={16} />}
+          label={next}
+          disabled={index + 1 === count}
+          onClick={() => onChange(index + 1)}
+        />
+      </Tooltip>
+    </footer>
   );
 }
 
