@@ -363,7 +363,7 @@ function Invoke-TargetTest {
         throw "missing required command: go"
     }
 
-    Invoke-Checked -FilePath $go -Arguments @("test", "./...") -Env @{ GOCACHE = $script:Gocache }
+    Invoke-Checked -FilePath $go -Arguments @("test", "./...")
 }
 
 function Invoke-TargetCheckWebToolchain {
@@ -436,15 +436,10 @@ function Invoke-GoBuild {
     }
     $args += @("-ldflags", $Ldflags, "-o", $OutputPath, $PackagePath)
 
-    $baseEnv = @{ GOCACHE = $script:Gocache }
-    foreach ($key in $Env.Keys) {
-        $baseEnv[$key] = $Env[$key]
-    }
-
     if (-not $Quiet) {
         Write-Host "Building $OutputPath from $PackagePath."
     }
-    Invoke-Checked -FilePath $go -Arguments $args -Env $baseEnv
+    Invoke-Checked -FilePath $go -Arguments $args -Env $Env
 }
 
 function Invoke-TargetBuildServerBin {
@@ -827,7 +822,7 @@ function Invoke-TargetRun {
 
 function Invoke-TargetClean {
     $packageRoot = Split-Path -Parent ([System.IO.Path]::GetFullPath($script:BinDir))
-    foreach ($path in @($script:BinDir, $script:DistDir, $script:Gocache,
+    foreach ($path in @($script:BinDir, $script:DistDir,
         (Join-Path $packageRoot "codex-resources"), (Join-Path $packageRoot "codex-path"), (Join-Path $packageRoot "codex-package.json"))) {
         if (Test-Path -LiteralPath $path) {
             Remove-Item -LiteralPath $path -Recurse -Force
@@ -867,7 +862,6 @@ function Invoke-TargetRelease {
 $script:App = Get-EnvOrDefault -Name "APP" -Default "csgclaw"
 $script:BinDir = Get-EnvOrDefault -Name "BIN_DIR" -Default (Join-Path $RootDir "bin")
 $script:DistDir = Get-EnvOrDefault -Name "DIST_DIR" -Default (Join-Path $RootDir "dist")
-$script:Gocache = Get-EnvOrDefault -Name "GOCACHE" -Default (Join-Path $RootDir ".gocache")
 $script:VersionPkg = Get-EnvOrDefault -Name "VERSION_PKG" -Default "csgclaw/internal/version"
 $script:Version = Get-EnvOrDefault -Name "VERSION" -Default (Resolve-Version)
 $script:Commit = Get-EnvOrDefault -Name "COMMIT" -Default (Resolve-Commit)

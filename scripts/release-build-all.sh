@@ -26,9 +26,7 @@ VERSION="${VERSION:?VERSION is required}"
 COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 DIST_DIR="${DIST_DIR:-dist}"
-GOCACHE="${GOCACHE:-${ROOT}/.gocache}"
-mkdir -p "${DIST_DIR}" "${GOCACHE}"
-export GOCACHE
+mkdir -p "${DIST_DIR}"
 
 chmod +x scripts/package-release.sh scripts/fetch-codex-cli.sh
 
@@ -45,12 +43,12 @@ build_pair() {
   local goos="$1" goarch="$2"
   if release_builds_app csgclaw; then
     CGO_ENABLED=0 APP=csgclaw VERSION="${VERSION}" COMMIT="${COMMIT}" BUILD_TIME="${BUILD_TIME}" \
-      DIST_DIR="${DIST_DIR}" GOCACHE="${GOCACHE}" \
+      DIST_DIR="${DIST_DIR}" \
       ./scripts/package-release.sh "${goos}" "${goarch}"
   fi
   if release_builds_app csgclaw-cli; then
     CGO_ENABLED=0 APP=csgclaw-cli VERSION="${VERSION}" COMMIT="${COMMIT}" BUILD_TIME="${BUILD_TIME}" \
-      DIST_DIR="${DIST_DIR}" GOCACHE="${GOCACHE}" \
+      DIST_DIR="${DIST_DIR}" \
       ./scripts/package-release.sh "${goos}" "${goarch}"
   fi
 }
