@@ -33,7 +33,6 @@ mkdir -p "$BACKEND_ROOT" "$TEMP_ROOT/release"
     COMMIT="${COMMIT:-unknown}" \
     BUILD_TIME="${BUILD_TIME:-unknown}" \
     DIST_DIR="$TEMP_ROOT/release" \
-    GOCACHE="${GOCACHE:-$ROOT_DIR/.gocache}" \
     GOWORK=off \
     "$SCRIPT_DIR/package-release.sh" "$GOOS_TARGET" "$GOARCH_TARGET" >/dev/null
 )
@@ -63,7 +62,6 @@ if [ "$GOOS_TARGET" = "windows" ]; then
       CGO_ENABLED=0 \
       GOOS="$GOOS_TARGET" \
       GOARCH="$GOARCH_TARGET" \
-      GOCACHE="${GOCACHE:-$ROOT_DIR/.gocache}" \
       GOWORK=off \
       go build \
         -ldflags "-s -w -H=windowsgui" \
