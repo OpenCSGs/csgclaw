@@ -1,3 +1,4 @@
+import chatSidePanelStyles from "./ChatSidePanel.module.css";
 import { createUUID } from "@/shared/lib/uuid";
 import type { RefObject } from "react";
 import { Activity, Globe, ListTodo } from "lucide-react";
@@ -53,7 +54,7 @@ export function ChatToolsToolbar({
     },
   ];
   return (
-    <div className="chat-tools-actions">
+    <div className={chatSidePanelStyles["chat-tools-actions"]} data-chat-tools>
       {actions.map(({ id, label, icon: Icon, action }) => (
         <Tooltip key={id} content={label} contentProps={{ side: "bottom" }}>
           <Button

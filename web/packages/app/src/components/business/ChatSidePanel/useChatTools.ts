@@ -89,7 +89,7 @@ export function useChatTools({
         range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
       const editor = element?.closest<HTMLElement>('[contenteditable="true"]');
       const chat = editorRef.current?.closest(".chat-panel");
-      if (editor && chat?.contains(editor) && !editor.closest(".chat-side-panel")?.hasAttribute("hidden"))
+      if (editor && chat?.contains(editor) && !editor.closest("[data-chat-side-panel]")?.hasAttribute("hidden"))
         selectionRef.current = { editor, range: range.cloneRange() };
     };
     document.addEventListener("selectionchange", remember);
@@ -103,7 +103,12 @@ export function useChatTools({
       if (!editor || editor.getAttribute("contenteditable") === "false") return;
       const sideTab = editor.closest<HTMLElement>("[data-side-tab-id]");
       if (sideTab?.dataset.sideTabId) patch({ activeID: sideTab.dataset.sideTabId, open: true });
-      else if (editor.closest(".chat-panel")?.querySelector(".chat-side-panel")?.matches(".is-overlay, .is-maximized"))
+      else if (
+        editor
+          .closest(".chat-panel")
+          ?.querySelector("[data-chat-side-panel]")
+          ?.matches('[data-layout="overlay"], [data-layout="maximized"]')
+      )
         patch({ open: false });
       requestAnimationFrame(() => {
         editor.focus({ preventScroll: true });
@@ -142,8 +147,8 @@ export function useChatTools({
     [openTab],
   );
   const openActivity = useCallback(
-    (entryID?: string, agentID?: string, turnID?: string, requestID?: string) =>
-      openTab({ id: "activity", kind: "activity", entryID, agentID, turnID, requestID }),
+    (entryID?: string, agentID?: string, turnID?: string, requestID?: string, messageID?: string) =>
+      openTab({ id: "activity", kind: "activity", entryID, agentID, turnID, requestID, messageID }),
     [openTab],
   );
   const openSources = useCallback(

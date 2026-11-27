@@ -56,6 +56,7 @@ const labels: Record<string, string> = {
   modelProviderModelSearch: "Search models",
   modelProviderModels: "Models",
   modelProviderNoModels: "No models",
+  modelRecommended: "Recommended",
   modelsSection: "Models",
   profileAPIKey: "API Key",
   profileBaseURL: "Base URL",
@@ -122,6 +123,10 @@ function renderModelProviderPage(
   controllerOverrides: Record<string, unknown> = {},
 ) {
   const refreshWorkspaceModelProviders = vi.fn().mockResolvedValue(null);
+  const checkWorkspaceModelProvider = vi.fn(async (...args: Parameters<typeof checkModelProvider>) => {
+    const check = await checkModelProvider(...args);
+    return { check, savedProvider: check.provider };
+  });
   const renderPage = (nextCatalog = catalog) => (
     <WorkspaceControllerProvider
       controller={
@@ -130,6 +135,7 @@ function renderModelProviderPage(
           modelProviders: nextCatalog,
           ready: true,
           refreshWorkspaceModelProviders,
+          checkWorkspaceModelProvider,
           sidebarProps: {
             authBusy: false,
             authPending: false,
@@ -472,6 +478,34 @@ describe("ModelProviderPage", () => {
     expect(screen.getByText("No models")).toBeInTheDocument();
   });
 
+  it("shows recommended models first in the complete OpenCSG catalog and in search results", async () => {
+    const user = userEvent.setup();
+    const recommended = ["qwen3.8-flash", "deepseek-v4.1-flash-1017", "glm-5.3-flash"];
+    renderModelProviderPage(
+      createCatalog({
+        id: "opencsg",
+        kind: "opencsg",
+        builtin: true,
+        display_name: "OpenCSG",
+        models: ["auto", "qwen3.8-max", "glm-5.3", ...[...recommended].reverse()],
+      }),
+      "opencsg",
+    );
+    const list = screen.getByRole("list", { name: "Models" });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows).toHaveLength(6);
+    for (const [index, id] of recommended.entries()) {
+      expect(within(rows[index]).getByText(id, { exact: true })).toBeVisible();
+      expect(within(rows[index]).getByText("(Recommended)", { exact: true })).toBeVisible();
+    }
+    expect(within(list).getAllByText("(Recommended)")).toHaveLength(3);
+    await user.type(screen.getByLabelText("Search models"), "glm-5.3");
+    const filtered = within(list).getAllByRole("listitem");
+    expect(filtered).toHaveLength(2);
+    expect(within(filtered[0]).getByText("glm-5.3-flash", { exact: true })).toBeVisible();
+    expect(within(filtered[1]).getByText("glm-5.3", { exact: true })).toBeVisible();
+  });
+
   it("restores all OpenCSG model defaults even when search hides customized models, then saves", async () => {
     const user = userEvent.setup();
     renderModelProviderPage(
@@ -666,13 +700,10 @@ describe("ModelProviderPage", () => {
   });
 
   it("loads OpenCSG models automatically after authentication", async () => {
-    vi.mocked(checkModelProvider).mockResolvedValueOnce({
-      id: "opencsg",
-      last_checked_at: "2026-07-16T09:00:00Z",
-      models: ["stage-model"],
-      status: "connected",
-    });
-    renderModelProviderPage(
+    const catalog = createCatalog({ id: "opencsg", display_name: "OpenCSG", models: ["stage-model"] });
+    const provider = catalog.providers[0];
+    vi.mocked(checkModelProvider).mockResolvedValueOnce({ ...provider, provider });
+    const { container, rerenderWithCatalog } = renderModelProviderPage(
       normalizeModelProviderCatalog({
         providers: [
           {
@@ -707,7 +738,9 @@ describe("ModelProviderPage", () => {
         }),
       ),
     );
+    rerenderWithCatalog(catalog);
     expect(await screen.findByText("stage-model")).toBeInTheDocument();
+    expect(within(container).getByText("1 models")).toBeInTheDocument();
   });
 
   it("clears rendered OpenCSG models when the provider catalog is cleared", async () => {

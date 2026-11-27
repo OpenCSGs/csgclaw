@@ -24,7 +24,7 @@ import {
   Video,
 } from "lucide-react";
 import { errorMessage } from "@/api/client";
-import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
+import { deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
 import { StatusDot, InlineError, Field, TextInput, Select } from "@/components/ui";
 import {
@@ -44,7 +44,9 @@ import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
   MODEL_PROVIDER_IDS,
+  isRecommendedOpenCSGModel,
   mergeModelProviderModelIDs,
+  modelIDsForPicker,
   modelProviderMessageLabel,
   modelProviderStatusLabel,
   modelProviderAvatarPath,
@@ -81,7 +83,9 @@ function providerToDraft(provider: ModelProvider | null | undefined): ProviderDr
   };
 }
 
-function providerToCheckState(provider: ModelProvider | null | undefined): ProviderCheckState {
+function providerToCheckState(
+  provider: Pick<ModelProvider, "last_checked_at" | "message" | "status"> | null | undefined,
+): ProviderCheckState {
   return {
     lastCheckedAt: provider?.last_checked_at,
     message: provider?.message,
@@ -91,7 +95,7 @@ function providerToCheckState(provider: ModelProvider | null | undefined): Provi
 
 export function ModelProviderSettings({ embedded = false }: { embedded?: boolean }) {
   const controller = useWorkspaceControllerContext();
-  const { activePane, modelProviders, refreshWorkspaceModelProviders, t } = controller;
+  const { activePane, modelProviders, refreshWorkspaceModelProviders, checkWorkspaceModelProvider, t } = controller;
   const [localProviderID, setLocalProviderID] = useState("");
   const providerID = embedded
     ? localProviderID || modelProviders?.providers[0]?.id || ""
@@ -160,34 +164,37 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         setSaveStatus("");
       }
       try {
-        const result = await checkModelProvider(providerID, {
+        const previewConnection =
+          baseURL.trim() !== providerBaseURL || Boolean(apiKey) || apiProtocol !== persistedProtocol;
+        const { check, savedProvider } = await checkWorkspaceModelProvider(providerID, {
           connect: options.showError || undefined,
           api_protocol: apiProtocol,
           base_url: baseURL,
           api_key: apiKey,
         });
-        setCheckState({
-          lastCheckedAt: result.last_checked_at,
-          message: result.message || result.status,
-          status: result.status,
-        });
-        if (result.base_url || result.status === "connected") {
+        if (!check.provider && !previewConnection) {
+          await refreshWorkspaceModelProviders();
+        }
+        if (draftSourceKeyRef.current !== draftSourceKey || (check.provider && !savedProvider)) return;
+        const checked = savedProvider ?? check;
+        setCheckState(providerToCheckState(checked));
+        if (checked.base_url || checked.status === "connected") {
           setDraft((current) => {
             if (
               current.baseURL.trim() !== baseURL.trim() ||
+              current.apiKey.trim() !== apiKey.trim() ||
               resolveModelProviderProtocol(current.apiProtocol, providerRegion, current.baseURL) !== apiProtocol
             ) {
               return current;
             }
             return {
               ...current,
-              baseURL: result.base_url || current.baseURL,
-              modelsText: result.status === "connected" ? (result.models ?? []).join("\n") : current.modelsText,
+              baseURL: checked.base_url || current.baseURL,
+              modelsText: checked.status === "connected" ? (checked.models ?? []).join("\n") : current.modelsText,
             };
           });
         }
-        await refreshWorkspaceModelProviders();
-        return result;
+        return checked;
       } catch (err) {
         if (options.showError) {
           setError(errorMessage(err, t("modelProviderCheckFailed")));
@@ -198,7 +205,16 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         }
       }
     },
-    [providerID, providerRegion, refreshWorkspaceModelProviders, t],
+    [
+      draftSourceKey,
+      persistedProtocol,
+      providerBaseURL,
+      providerID,
+      providerRegion,
+      checkWorkspaceModelProvider,
+      refreshWorkspaceModelProviders,
+      t,
+    ],
   );
 
   useEffect(() => {
@@ -322,10 +338,13 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const providerSubtitle = isBuiltinCLI ? provider.kind : provider.base_url || draft.baseURL || provider.kind;
   const imageModels = new Set(provider.imageModels || []);
   const videoModels = new Set(provider.videoModels || []);
-  const modelList = mergeModelProviderModelIDs(
-    parseModelProviderModelsText(draft.modelsText),
-    provider.imageModels,
-    provider.videoModels,
+  const modelList = modelIDsForPicker(
+    provider.id,
+    mergeModelProviderModelIDs(
+      isOpenCSG || isBuiltinCLI ? provider.models : parseModelProviderModelsText(draft.modelsText),
+      provider.imageModels,
+      provider.videoModels,
+    ),
   );
   const dirty =
     draft.apiProtocol !== savedDraft.apiProtocol ||
@@ -752,6 +771,9 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                   </Tooltip>
                 </div>
                 <ModelProviderModelList
+                  qualifierForModel={(model) =>
+                    isRecommendedOpenCSGModel(provider.id, model) ? t("modelRecommended") : undefined
+                  }
                   renderDetails={(model) => {
                     const imageModel = imageModels.has(model);
                     const videoModel = videoModels.has(model);

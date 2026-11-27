@@ -194,6 +194,19 @@ describe("useConversationController slash skill helpers", () => {
     ]);
   });
 
+  it("selects identically named skills by their relative directories", () => {
+    const ids = ["team/tools/review", "user/review"];
+    const { candidates } = buildSlashPickerState({
+      draftText: "/review",
+      enabled: true,
+      skillOptions: ids.map((id) => ({ id, name: "review" })),
+    });
+    expect(candidates.map((item) => item.name)).toEqual(ids);
+    for (const id of ids) {
+      expect(normalizeSlashShorthandForPayload("/" + id)).toBe(slashSkillCommandText(id));
+    }
+  });
+
   it("renders selected skills as canonical slash-command XML", () => {
     expect(slashSkillCommandText("skill-creator")).toBe(
       '<slash-command name="use-skill" arg="skill-creator"></slash-command>',
@@ -230,7 +243,7 @@ describe("useConversationController slash skill helpers", () => {
   });
 
   it("does not normalize invalid shorthand payloads", () => {
-    expect(normalizeSlashShorthandForPayload("/skill/creator")).toBe("/skill/creator");
+    expect(normalizeSlashShorthandForPayload("/skill/../creator")).toBe("/skill/../creator");
     expect(normalizeSlashShorthandForPayload("/")).toBe("/");
     expect(normalizeSlashShorthandForPayload("hello /skill-creator")).toBe("hello /skill-creator");
     expect(normalizeSlashShorthandForPayload("//skill-creator")).toBe("//skill-creator");

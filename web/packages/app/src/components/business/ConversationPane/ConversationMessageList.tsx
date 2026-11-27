@@ -11,6 +11,8 @@ import conversationThreadsStyles from "./ConversationThreads.module.css";
 import { messageResources } from "@/models/conversationResources";
 import { useEventCallback } from "@/hooks/useEventCallback";
 import { emptyCompletedProgress } from "@/models/turnProgress";
+import { InlineAgentQuestion } from "./InlineAgentQuestion";
+import { useQuestionTranscriptVisibility } from "./useQuestionTranscriptVisibility";
 import { isAutonomousCoordinationNotice } from "@/models/agentActivity";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
@@ -78,7 +80,6 @@ export type ConversationMessageListProps = {
   onFollowLatest?: () => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
-  onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   onCitationSelect?: CitationSelectHandler;
   t: TranslateFn;
   theme: ThemeMode;
@@ -92,7 +93,6 @@ export function ConversationMessageList(props: ConversationMessageListProps) {
   const onPreviewUser = useEventCallback(props.onPreviewUser);
   const onOpenAgentDetail = useEventCallback(props.onOpenAgentDetail);
   const onPreviewAttachment = useEventCallback(props.onPreviewAttachment);
-  const onQuestionSelect = useEventCallback(props.onQuestionSelect);
   const onCitationSelect = useEventCallback(props.onCitationSelect);
   return (
     <MessageListContent
@@ -102,7 +102,6 @@ export function ConversationMessageList(props: ConversationMessageListProps) {
       onPreviewUser={onPreviewUser}
       onOpenAgentDetail={props.onOpenAgentDetail ? onOpenAgentDetail : undefined}
       onPreviewAttachment={props.onPreviewAttachment ? onPreviewAttachment : undefined}
-      onQuestionSelect={props.onQuestionSelect ? onQuestionSelect : undefined}
       onCitationSelect={props.onCitationSelect ? onCitationSelect : undefined}
     />
   );
@@ -132,7 +131,6 @@ const MessageListContent = memo(function MessageListContent({
   onFollowLatest,
   onPreviewUser,
   onPreviewAttachment,
-  onQuestionSelect,
   onCitationSelect,
 }: ConversationMessageListProps) {
   const memory = useConversationMemory(
@@ -146,12 +144,29 @@ const MessageListContent = memo(function MessageListContent({
     () => (collaboration ? collaborationTranscript(visibleMessages) : { messages: visibleMessages, activities: [] }),
     [collaboration, visibleMessages],
   );
-  const { messages: displayMessages } = transcript;
+  const { hideQuestionTranscript, onQuestionSettled } = useQuestionTranscriptVisibility();
+  const hiddenTranscripts = useMemo(
+    () => new Set(transcript.messages.filter(hideQuestionTranscript)),
+    [transcript.messages, hideQuestionTranscript],
+  );
+  const displayMessages = useMemo(
+    () =>
+      transcript.messages.filter(
+        (message) => !hiddenTranscripts.has(message) || (!conversation.cloud_agent && threadHasReplies(message.thread)),
+      ),
+    [transcript.messages, hiddenTranscripts, conversation.cloud_agent],
+  );
   const videosByTurn = useMemo(() => indexVideoMessagesByTurn(displayMessages), [displayMessages]);
 
   const timelineItems = useMemo(
-    () => buildMessageTimelineItems(displayMessages, agents, usersById, t("attachment")),
-    [displayMessages, agents, usersById, t],
+    () =>
+      buildMessageTimelineItems(
+        displayMessages.filter((message) => !hiddenTranscripts.has(message)),
+        agents,
+        usersById,
+        t("attachment"),
+      ),
+    [displayMessages, hiddenTranscripts, agents, usersById, t],
   );
 
   return (
@@ -200,6 +215,19 @@ const MessageListContent = memo(function MessageListContent({
           const previousMessage = displayMessages[index - 1];
           const showDivider = shouldShowMessageDateDivider(previousMessage, message);
 
+          if (hiddenTranscripts.has(message)) {
+            return (
+              <Fragment key={message.id}>
+                {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
+                <div className="message-row" data-message-id={message.id || undefined}>
+                  <div className="message-thread-actions has-thread-summary">
+                    <ThreadReplyCountButton message={message} onOpenThread={onOpenThread} t={t} />
+                  </div>
+                </div>
+              </Fragment>
+            );
+          }
+
           const compaction = messageCompaction(message);
           if (compaction) return <ContextCompactionCard key={message.id} operation={compaction} t={t} />;
           if (isEventMessage(message)) {
@@ -229,7 +257,8 @@ const MessageListContent = memo(function MessageListContent({
             ? resolveAgentAvatarFallback(messageAgent, usersById)
             : avatarFallbackText(user.avatar, user.name, user.id);
           const threadSummary = threadHasReplies(message.thread) ? message.thread : null;
-          const latestThreadReply = threadSummary?.latest_reply;
+          const latestReply = threadSummary?.latest_reply;
+          const latestThreadReply = latestReply && !hideQuestionTranscript(latestReply) ? latestReply : null;
           const messageStateKey = longMessageStateKey(conversation, message, index);
           const turnVideos = message.id ? videosByTurn.get(message.id) || [] : [];
           const isVideoGeneration = Boolean(message.metadata?.video_generation);
@@ -279,34 +308,40 @@ const MessageListContent = memo(function MessageListContent({
                   {(message.content || messageResources(message.metadata).length > 0) &&
                   !message.metadata?.image_generation &&
                   !isVideoGeneration ? (
-                    <div className={`message-bubble ${messageLayoutStyles["message-bubble"]}`}>
-                      <MessageContent
-                        key={`${message.id}:${theme}`}
-                        content={message.content}
-                        message={message}
-                        allowLegacyToolFormat={Boolean(messageAgent)}
-                        showTurnProgress={!collaboration}
-                        progressControls={progressControls}
-                        videoMessages={turnVideos}
-                        actionBusy={messageActionBusy}
-                        actionFeedback={messageActionFeedback}
-                        enableLongMessageCollapse={collapsible}
-                        longMessageExpanded={collapsible ? expandedLongMessages[messageStateKey] === true : undefined}
-                        onAction={onMessageAction}
-                        onLongMessageExpandedChange={
-                          collapsible
-                            ? (expanded) =>
-                                setExpandedLongMessages((current) => ({
-                                  ...current,
-                                  [messageStateKey]: expanded,
-                                }))
-                            : undefined
-                        }
-                        onQuestionSelect={onQuestionSelect}
-                        onCitationSelect={onCitationSelect}
-                        t={t}
-                      />
-                    </div>
+                    <InlineAgentQuestion
+                      message={message}
+                      t={t}
+                      enabled={!conversation.cloud_agent}
+                      onSettled={onQuestionSettled}
+                    >
+                      <div className={`message-bubble ${messageLayoutStyles["message-bubble"]}`}>
+                        <MessageContent
+                          key={`${message.id}:${theme}`}
+                          content={message.content}
+                          message={message}
+                          allowLegacyToolFormat={Boolean(messageAgent)}
+                          showTurnProgress={!collaboration}
+                          progressControls={progressControls}
+                          videoMessages={turnVideos}
+                          actionBusy={messageActionBusy}
+                          actionFeedback={messageActionFeedback}
+                          enableLongMessageCollapse={collapsible}
+                          longMessageExpanded={collapsible ? expandedLongMessages[messageStateKey] === true : undefined}
+                          onAction={onMessageAction}
+                          onLongMessageExpandedChange={
+                            collapsible
+                              ? (expanded) =>
+                                  setExpandedLongMessages((current) => ({
+                                    ...current,
+                                    [messageStateKey]: expanded,
+                                  }))
+                              : undefined
+                          }
+                          onCitationSelect={onCitationSelect}
+                          t={t}
+                        />
+                      </div>
+                    </InlineAgentQuestion>
                   ) : null}
                   <DiagnosticMessageAction metadata={message.metadata} t={t} />
                   {isVideoGeneration && message.metadata?.image_generation ? (
@@ -333,14 +368,7 @@ const MessageListContent = memo(function MessageListContent({
                   )}
                   {!conversation.cloud_agent && threadSummary ? (
                     <div className="message-thread-actions has-thread-summary">
-                      <button
-                        type="button"
-                        className={conversationThreadsStyles["thread-action-button"]}
-                        onClick={() => onOpenThread(message)}
-                      >
-                        <span aria-hidden="true">{IconImage("rooms")}</span>
-                        <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
-                      </button>
+                      <ThreadReplyCountButton message={message} onOpenThread={onOpenThread} t={t} />
                       {latestThreadReply && !isAutonomousCoordinationNotice(latestThreadReply) ? (
                         <button
                           type="button"
@@ -401,6 +429,27 @@ const MessageListContent = memo(function MessageListContent({
     </div>
   );
 });
+
+function ThreadReplyCountButton({
+  message,
+  onOpenThread,
+  t,
+}: {
+  message: IMMessage;
+  onOpenThread: ConversationMessageListProps["onOpenThread"];
+  t: TranslateFn;
+}) {
+  return (
+    <button
+      type="button"
+      className={conversationThreadsStyles["thread-action-button"]}
+      onClick={() => onOpenThread(message)}
+    >
+      <span aria-hidden="true">{IconImage("rooms")}</span>
+      <span>{formatThreadReplyCount(message.thread?.reply_count, t)}</span>
+    </button>
+  );
+}
 
 function longMessageStateKey(conversation: IMConversation, message: IMMessage, index: number): string {
   const conversationKey = String(conversation.id || "conversation");

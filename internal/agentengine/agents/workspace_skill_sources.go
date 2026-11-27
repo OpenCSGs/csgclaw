@@ -2,6 +2,7 @@ package agents
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"io"
 	"io/fs"
@@ -27,7 +28,8 @@ func workspaceSkillSummaries(ctx context.Context, root string, agent Agent, item
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if item.Source == skillinstall.SourceUnknown {
+		id := cmp.Or(item.ID, item.Name)
+		if item.Source == skillinstall.SourceUnknown && id == item.Name {
 			candidates := make([]skillsystem.SkillSource, 0, 2)
 			if source, err := skillsystem.ResolveSource(item.Name); err == nil {
 				candidates = append(candidates, source)
@@ -52,7 +54,7 @@ func workspaceSkillSummaries(ctx context.Context, root string, agent Agent, item
 		if item.Source == skillinstall.SourceBuiltin {
 			item.Version = ""
 		}
-		out = append(out, contract.SkillSummary{Enabled: skill.Enabled(agent.SkillStates, item.Name), Name: item.Name, Version: item.Version, Description: item.Description, Source: item.Source, Error: item.Error})
+		out = append(out, contract.SkillSummary{ID: id, Enabled: skill.Enabled(agent.SkillStates, id), Name: item.Name, Version: item.Version, Description: item.Description, Source: item.Source, Error: item.Error})
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"maps"
 	"net/url"
 	"os"
@@ -14,6 +15,7 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/conversationconfig"
 	"csgclaw/internal/sandbox"
+	"csgclaw/internal/skill/skillpath"
 	skill "csgclaw/internal/skill/state"
 	"golang.org/x/sync/semaphore"
 )
@@ -225,6 +227,10 @@ func roomThreadParams(ctx context.Context, params map[string]any) map[string]any
 		params["config"] = config
 	}
 	config["model_providers."+codexProxyProviderName+".base_url"] = room.Profile.BaseURL
+	if room.Profile.Provider == "csghub" || room.Profile.Provider == "opencsg" {
+		config["model_providers."+codexProxyProviderName+".request_max_retries"] = 0
+		config["model_providers."+codexProxyProviderName+".stream_max_retries"] = 0
+	}
 	return params
 }
 
@@ -244,17 +250,32 @@ func (r *Runtime) conversationSkillStates(home, mode string, states map[string]s
 	if states == nil {
 		states = map[string]skill.State{}
 	}
-	entries, err := os.ReadDir(filepath.Join(home, "skills"))
-	if os.IsNotExist(err) {
+	dir, err := os.OpenRoot(filepath.Join(home, "skills"))
+	if errors.Is(err, fs.ErrNotExist) {
 		return states, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	// Disable discovery without deleting Agent-owned skills when a room is read-only.
+	defer dir.Close()
+	// Preserve the root-level restrictions for entries that are not valid
+	// installed bundles, including links and directories being synchronized.
+	entries, err := fs.ReadDir(dir.FS(), ".")
+	if err != nil {
+		return nil, err
+	}
 	for _, entry := range entries {
 		if entry.Name() != ".system" {
 			states[entry.Name()] = skill.State{Enabled: false}
+		}
+	}
+	ids, err := skillpath.IDs(context.Background(), dir, true)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		if id != ".system" {
+			states[id] = skill.State{Enabled: false}
 		}
 	}
 	return states, nil

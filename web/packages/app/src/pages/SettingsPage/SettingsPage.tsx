@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { ChevronLeft } from "lucide-react";
 import { useWorkspaceControllerContext, useWorkspaceDialogs } from "@/hooks/workspace";
-import { SETTINGS_MARK_PARAM, WorkspaceDialogNames } from "@/models/workspaceDialogs";
+import { SETTINGS_HIGHLIGHT_PARAM, WorkspaceDialogNames } from "@/models/workspaceDialogs";
 import { classNames } from "@/shared/lib/classNames";
 import {
   DEFAULT_SETTINGS_SECTION,
@@ -56,7 +56,7 @@ export function SettingsPage() {
   // CSS uses this URL state to switch between catalog and details on narrow screens.
   const navigating = location.search.includes("section=");
   const versionHighlighted =
-    section === "version" && new URLSearchParams(location.search).get(SETTINGS_MARK_PARAM) === "version";
+    section === "version" && new URLSearchParams(location.search).get(SETTINGS_HIGHLIGHT_PARAM) === "version";
 
   function closeSettings() {
     close();
@@ -65,12 +65,12 @@ export function SettingsPage() {
   // Section changes stay in the same settings history entry.
   function goToSection(id: SettingsSectionID | null) {
     const next = new URLSearchParams(location.search);
+    if (id !== section) next.delete(SETTINGS_HIGHLIGHT_PARAM);
     if (!id || id === DEFAULT_SETTINGS_SECTION) {
       next.delete("section");
     } else {
       next.set("section", id);
     }
-    next.delete(SETTINGS_MARK_PARAM);
     void navigate({ search: next.toString() }, { replace: true, state: location.state });
   }
 

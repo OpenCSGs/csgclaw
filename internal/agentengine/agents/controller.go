@@ -7,7 +7,6 @@ import (
 	"csgclaw/internal/agentengine/interactionstate"
 	"csgclaw/internal/agentengine/registry"
 	skillbuiltin "csgclaw/internal/skill/builtin"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,8 +26,7 @@ import (
 	"csgclaw/internal/assets"
 	"csgclaw/internal/config"
 	"csgclaw/internal/identity"
-	"csgclaw/internal/knowledgebase"
-	"csgclaw/internal/mcp"
+	"csgclaw/internal/mcpschema"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"csgclaw/internal/sandbox"
@@ -49,6 +47,7 @@ const (
 )
 
 const agentListRuntimeProbeConcurrency = 4
+const configuredHostAgentStartupConcurrency = 4
 
 const stopRunningSandboxAgentsConcurrency = 4
 
@@ -195,12 +194,7 @@ type Controller struct {
 	defaultWorkerTemplate  string
 	managerImage           string
 
-	sandbox sandbox.Provider
-	// mcpServersMu serializes all MCP server mutations. A catalog batch add
-	// first reads the current set before issuing its update, so it must share
-	// the same lock as direct PUT/PATCH-style updates to avoid stale snapshots
-	// overwriting a concurrent edit.
-	mcpServersMu       sync.Mutex
+	sandbox            sandbox.Provider
 	runtimes           map[string]sandbox.Runtime
 	runtimeRegistry    *registry.Registry
 	availability       map[string]RuntimeAvailability
@@ -1097,22 +1091,14 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 			}
 		}
 		if !createSpecSetsMCPServers(spec) && strings.TrimSpace(workspace.MCPServersJSON) != "" {
-			var templateMCPServers map[string]any
-			if err := json.Unmarshal([]byte(workspace.MCPServersJSON), &templateMCPServers); err != nil {
-				return CreateAgentSpec{}, cleanup, fmt.Errorf("decode template mcp servers: %w", err)
-			}
-			hydratedMCPServers, err := knowledgebase.HydrateTemplateServers(ctx, templateMCPServers)
+			templateMCP, err := templateServers(ctx, workspace.MCPServersJSON)
 			if err != nil {
 				return CreateAgentSpec{}, cleanup, err
 			}
-			if availability, ok := ctx.Value(templateMCPAvailabilityContextKey{}).(templateMCPAvailabilityContext); ok {
-				var skipped []mcp.SkippedTemplateResource
-				hydratedMCPServers, skipped = availability.service.FilterAvailableTemplateServers(ctx, hydratedMCPServers)
-				if len(skipped) > 0 {
-					*availability.skipped = append(*availability.skipped, skipped...)
-				}
+			spec.MCPServers, err = mcpschema.TemplateServerIDs(nil, templateMCP)
+			if err != nil {
+				return CreateAgentSpec{}, cleanup, err
 			}
-			spec.MCPServers = hydratedMCPServers
 			spec.MCPServersSet = true
 		}
 	}
@@ -1660,7 +1646,26 @@ func (s *Controller) refreshAgentBoxID(id string, got Agent, resolvedKey string,
 	return s.saveLocked()
 }
 
-func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
+func startupStageOutcome(stage string, result Agent, success bool) []slog.Attr {
+	availability := result.Availability
+	if availability == nil {
+		return []slog.Attr{slog.Bool("success", success)}
+	}
+	if stage == "check_availability" {
+		success = success && (availability.State == RuntimeAvailabilityReady || availability.State == RuntimeAvailabilityNotApplicable)
+	}
+	attrs := []slog.Attr{
+		slog.Bool("success", success), slog.String("state", result.Status),
+		slog.String("availability", string(availability.State)),
+	}
+	if availability.Reason != "" {
+		attrs = append(attrs, slog.String("availability_reason", availability.Reason))
+	}
+	return attrs
+}
+
+func (s *Controller) Start(ctx context.Context, id string) (result Agent, startErr error) {
+	started := time.Now()
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
@@ -1678,10 +1683,27 @@ func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
 	if got.ArchivedAt != nil {
 		return Agent{}, archivedAgentError()
 	}
+	stage := "prepare_runtime"
+	stageStarted := started
+	finishStage := func(success bool) {
+		now := time.Now()
+		attrs := []slog.Attr{
+			slog.String("agent_id", id), slog.String("runtime_id", got.RuntimeID),
+			slog.String("stage", stage),
+			slog.Int64("duration_ms", now.Sub(stageStarted).Milliseconds()),
+			slog.Int64("total_ms", now.Sub(started).Milliseconds()),
+		}
+		attrs = append(attrs, startupStageOutcome(stage, result, success)...)
+		slog.LogAttrs(ctx, slog.LevelInfo, "agent startup stage", attrs...)
+		stageStarted = now
+	}
+	defer func() { finishStage(startErr == nil) }()
 	if got.AgentProfile.EnvRestartRequired && !got.AgentProfile.ImageUpgradeRequired && isHostRuntimeKind(got.RuntimeKind) {
+		stage = "restart_runtime"
 		return s.restartRuntimeLocked(ctx, id)
 	}
 	if got.AgentProfile.EnvRestartRequired || got.AgentProfile.ImageUpgradeRequired {
+		stage = "recreate_runtime"
 		return s.RecreateRecord(ctx, id)
 	}
 	startProfile := s.hydrateProfileFromCatalog(normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil))
@@ -1703,13 +1725,19 @@ func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
 		return Agent{}, err
 	}
 	handle := runtimeHandleForAgent(got)
+	finishStage(true)
+	stage = "start_runtime"
 	state, err := runtimeImpl.Start(ctx, handle)
 	if err != nil {
 		if sandbox.IsNotFound(err) {
+			finishStage(false)
+			stage = "recreate_runtime"
 			return s.RecreateRecord(ctx, id)
 		}
 		return Agent{}, err
 	}
+	finishStage(true)
+	stage = "update_runtime_state"
 	info, err := s.runtimeInfo(ctx, runtimeImpl, handle)
 	if err != nil {
 		return Agent{}, fmt.Errorf("read agent runtime info: %w", err)
@@ -1721,6 +1749,8 @@ func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
+	finishStage(true)
+	stage = "check_availability"
 	if err := s.observeStartedExtensions(ctx, id); err != nil {
 		return Agent{}, err
 	}
@@ -2011,38 +2041,63 @@ func (s *Controller) finishConfiguredAgentsStartup() {
 	s.mu.Unlock()
 }
 
-func (s *Controller) StartConfiguredAgents(ctx context.Context) error {
+func (s *Controller) StartConfiguredAgents(ctx context.Context) (startErr error) {
 	if s == nil {
 		return nil
 	}
+	started := time.Now()
 	s.PrepareConfiguredAgentsStartup()
-	defer s.finishConfiguredAgentsStartup()
 	agents := s.startupAgentCandidates()
-	runningGateways := make([]Agent, 0, len(agents))
-	var startErr error
-	for _, a := range agents {
-		if err := ctx.Err(); err != nil {
-			return err
+	defer func() {
+		s.finishConfiguredAgentsStartup()
+		slog.InfoContext(ctx, "configured worker startup finished", "candidates", len(agents),
+			"success", startErr == nil, "total_ms", time.Since(started).Milliseconds())
+	}()
+	startErrors := make([]error, len(agents))
+	startAgent := func(index int, live Agent) {
+		if _, err := s.Start(ctx, live.ID); err != nil {
+			startErrors[index] = fmt.Errorf("%s: %w", live.Name, err)
 		}
-		live := s.hydrateAgentStatus(ctx, a)
-		if isHostRuntimeKind(live.RuntimeKind) {
-			if !shouldRestoreConfiguredHostRuntime(live) {
+	}
+	var hostStarts sync.WaitGroup
+	hostSlots := make(chan struct{}, configuredHostAgentStartupConcurrency)
+	runningGateways := make([]Agent, 0, len(agents))
+	for index, a := range agents {
+		if ctx.Err() != nil {
+			break
+		}
+		if isHostRuntimeKind(a.RuntimeKind) {
+			select {
+			case hostSlots <- struct{}{}:
+			case <-ctx.Done():
 				continue
 			}
-		} else if isRuntimeRunning(live) {
+			hostStarts.Go(func() {
+				defer func() { <-hostSlots }()
+				live := s.hydrateAgentStatus(ctx, a)
+				if shouldRestoreConfiguredHostRuntime(live) {
+					startAgent(index, live)
+				}
+			})
+			continue
+		}
+		live := s.hydrateAgentStatus(ctx, a)
+		if isRuntimeRunning(live) {
 			runningGateways = append(runningGateways, live)
 			continue
 		}
-		if _, err := s.Start(ctx, live.ID); err != nil {
-			startErr = errors.Join(startErr, fmt.Errorf("%s: %w", live.Name, err))
-		}
+		startAgent(index, live)
+	}
+	hostStarts.Wait()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	// Readiness observations are intentionally not persisted. Prime the running
 	// gateway workers after a process restart so an already-dead gateway does
 	// not look healthy until a user opens its detail endpoint. Each probe has a
 	// deadline while the startup marker keeps the roster fresh.
 	s.primeUnknownGatewayRuntimeAvailability(ctx, runningGateways)
-	return startErr
+	return errors.Join(startErrors...)
 }
 
 // StopRunningSandboxAgents stops every registered sandbox agent whose runtime
@@ -2620,7 +2675,7 @@ func (s *Controller) provisionRuntimeForAgentWithPrevious(ctx context.Context, r
 	if s == nil || rt == nil {
 		return nil
 	}
-	if got.Role == RoleWorker && isHostRuntimeKind(got.RuntimeKind) {
+	if !agentruntime.KeepInstalledSkills(ctx) && got.Role == RoleWorker && isHostRuntimeKind(got.RuntimeKind) {
 		root, err := s.agentSkillsRoot(got.ID, got.RuntimeKind)
 		if err != nil {
 			return err

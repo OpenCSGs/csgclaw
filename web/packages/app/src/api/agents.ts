@@ -264,6 +264,7 @@ export function fetchAgentSkills(agentID: string, skillsPath = ""): Promise<Work
 }
 
 export type AgentSkillSummary = {
+  id?: string;
   enabled?: boolean;
   name: string;
   description?: string;
@@ -371,6 +372,10 @@ export async function pickHostDirectoryRequest(): Promise<HostDirectoryPickResul
     }
     throw error;
   }
+}
+
+export function generateAgentDescriptionRequest(agentID: string, locale: string): Promise<{ description: string }> {
+  return post(`api/v1/agents/${encodeURIComponent(agentID)}/description:generate`, { locale });
 }
 
 export function updateAgentRequest(agentID: string, payload: AgentUpdatePayload): Promise<AgentLike> {
@@ -558,6 +563,7 @@ function participantToAgentLike(participant: ParticipantLike): AgentLike {
 
 export type AgentResourceKind = "skill" | "mcp";
 export type AgentResourceEnabledResult = {
+  id?: string;
   agent_id: string;
   resource_version: string;
   name: string;

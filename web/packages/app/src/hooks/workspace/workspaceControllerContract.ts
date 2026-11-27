@@ -33,6 +33,7 @@ export type WorkspaceControllerBase = {
   modelProviders: ModelProviderCatalog | null;
   modelProvidersLoaded: boolean;
   refreshWorkspaceModelProviders: ReturnType<typeof useWorkspaceData>["refreshWorkspaceModelProviders"];
+  checkWorkspaceModelProvider: ReturnType<typeof useWorkspaceData>["checkWorkspaceModelProvider"];
   t: TranslateFn;
 };
 

@@ -1,4 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { WorkspaceFeedback } from "@/components/business/Feedback";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@/components/ui";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
@@ -18,6 +20,7 @@ function SettingsSections() {
       <NotificationsSection />
       <VersionSection />
       <FeedbackSection />
+      <WorkspaceFeedback />
     </>
   );
 }
@@ -76,6 +79,7 @@ function renderSettings(controller: WorkspaceController) {
         <SettingsSections />
       </WorkspaceControllerProvider>
     </TooltipProvider>,
+    { wrapper: MemoryRouter },
   );
 }
 
@@ -570,8 +574,11 @@ it("opens feedback after the required OpenCSG login succeeds", async () => {
     },
   } as unknown as WorkspaceController;
   const view = renderSettings(controller);
-  await userEvent.setup().click(screen.getByRole("button", { name: "feedbackWrite" }));
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "feedbackWrite" }));
   expect(screen.queryByRole("dialog", { name: "feedbackTitle" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "csghubConnectContinue" }));
+  expect(controller.sidebarProps?.onLogin).toHaveBeenCalledOnce();
   expect(screen.getByRole("button", { name: "csghubConnectContinue" })).toBeVisible();
   const authenticated = {
     ...controller,

@@ -8,6 +8,8 @@ Agent Profile Skill and MCP lists load cursor batches of 20 through a shared inf
 
 `GET /api/v1/agents/{id}/skill-summaries` and `GET /api/v1/agents/{id}/mcp-servers` preserve their existing complete responses when `pagination` is omitted. MCP editing and candidate membership checks continue to use complete configuration. The skill installation dialog loads complete membership only when opened.
 
+Each installed skill has an `id` relative to the Agent's skills directory and a `name` equal to its final directory name. Discovery stops at each `SKILL.md`. For example, `team/review` and `user/review` both have the name `review`. Use the ID for pagination exclusions and resource selections. Encode the entire ID as one URL segment for enablement and deletion, e.g. `PUT /api/v1/agents/{id}/skills/team%2Freview/enabled`.
+
 With `pagination=page`, parameters are `page` (default 1), `per` (default 20, maximum 100), optional `search`, `enabled`, and `list_revision`. Responses contain `items`, `page`, `per`, `total`, `list_revision`, and `has_more`. MCP items contain `name` and `config`; skill items retain their existing fields. Both response modes provide the Agent ETag used by enablement mutations.
 
 With `pagination=cursor`, parameters are `limit` (default 20, maximum 100), optional `cursor`, `search`, `enabled`, and repeated `exclude`. Responses contain `items`, `total`, `list_revision`, `next_cursor` when more results exist, and `has_more`. Page and cursor parameters cannot be mixed. Invalid requests return `invalid_resource_query` with HTTP 400.
@@ -16,7 +18,7 @@ Paginated MCP requests also accept `kind=mcp` or `kind=knowledge`. The handler u
 
 Filtering precedes deterministic ascending resource-name ordering and selection. Search uses case-insensitive name subsequence matching. The revision identifies the matching resource membership and query scope, independently of descriptions and MCP configuration contents. A mismatched revision or cursor returns `resource_list_changed` with HTTP 409. Both Profile and chat restart the cursor sequence. Descriptions and configuration always reflect the current query, rather than a historical snapshot.
 
-`internal/resourcequery` owns filtering, ordering, range selection, and cursor validation. HTTP handlers own query parsing and response envelopes. Skill queries go through Agent Engine and WorkspaceService; the local skill reader enumerates valid membership before reading metadata only for selected entries. Directory enumeration remains proportional to the total number of skills. MCP configuration remains a complete stored map; pagination bounds its response and source status requests for loaded entries.
+`internal/resourcequery` owns filtering, ordering, range selection, and cursor validation. HTTP handlers own query parsing and response envelopes. Skill queries go through Agent Engine and WorkspaceService; the local skill reader enumerates valid membership before reading metadata only for selected entries. Directory enumeration visits grouping directories and stops at each skill manifest. MCP configuration remains a complete stored map; pagination bounds its response and source status requests for loaded entries.
 
 ## Chat selection
 

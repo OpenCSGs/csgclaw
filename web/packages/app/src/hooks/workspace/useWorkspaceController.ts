@@ -113,6 +113,7 @@ export function useWorkspaceController(): WorkspaceController {
     refreshWorkspaceManagerProfile,
     refreshWorkspaceAgents,
     refreshWorkspaceModelProviders,
+    checkWorkspaceModelProvider,
     refreshWorkspaceHubTemplates,
   } = useWorkspaceData();
   const t = useMemo(() => createTranslator(locale), [locale]);
@@ -313,7 +314,7 @@ export function useWorkspaceController(): WorkspaceController {
       }
       if (
         !options.skipUnsavedCheck &&
-        agent.agentViewProps.hasUnsavedChanges &&
+        (agent.agentViewProps.hasUnsavedChanges || agent.agentViewProps.hasUnsavedDescription) &&
         !confirmWithFocusRecovery(t("agentUnsavedChangesWarning"))
       ) {
         return false;
@@ -330,7 +331,12 @@ export function useWorkspaceController(): WorkspaceController {
       }
       return true;
     },
-    [agent.agentViewProps.hasUnsavedChanges, conversationProfileDetailAgentID, t],
+    [
+      agent.agentViewProps.hasUnsavedChanges,
+      agent.agentViewProps.hasUnsavedDescription,
+      conversationProfileDetailAgentID,
+      t,
+    ],
   );
   const managerDirectConversation = useMemo(
     () => resolveManagerDirectConversation(rooms, displayData?.current_user_id ?? "", agent.managerAgent),
@@ -896,6 +902,7 @@ export function useWorkspaceController(): WorkspaceController {
       modelProviders,
       modelProvidersLoaded,
       refreshWorkspaceModelProviders,
+      checkWorkspaceModelProvider,
       t,
     };
   }
@@ -916,7 +923,7 @@ export function useWorkspaceController(): WorkspaceController {
     taskEntry,
     openAgentSettings: agent.openEditAgentModal,
     openWorkspaceSettings: (section = "") =>
-      navigate({ search: settingsDialogSearch(location.search, section) }, { replace: true }),
+      navigate({ search: settingsDialogSearch(location.search, section) }, { replace: true, state: location.state }),
     configSettings: configSettings.settings,
     loadingText: "",
     t,
@@ -926,6 +933,7 @@ export function useWorkspaceController(): WorkspaceController {
     modelProviders,
     modelProvidersLoaded,
     refreshWorkspaceModelProviders,
+    checkWorkspaceModelProvider,
     floatingChatProps: {
       avatar: floatingChatAvatar,
       avatarFallback: floatingChatAvatarFallback,
@@ -1039,6 +1047,7 @@ export function useWorkspaceController(): WorkspaceController {
       onOpenConfigSettings: configSettings.openConfigModal,
       onOpenSettings: selectSettings,
       authStatus: auth.status,
+      authStatusLoading: auth.statusLoading,
       authExpired: auth.status.authenticated === true && !openCSGAuthGuard.authenticated,
       authEnvironment: auth.environment,
       authBusy: auth.busy,

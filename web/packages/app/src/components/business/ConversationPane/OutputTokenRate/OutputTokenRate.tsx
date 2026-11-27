@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Tooltip } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./OutputTokenRate.module.css";
 
@@ -47,12 +48,18 @@ export function OutputTokenRate({ rate, expiresAt, t }: { rate?: number; expires
   const accessibleLabel = t("tokenRateLabel", { rate: rounded });
   const tier = rounded >= 35 ? "fast" : rounded >= 20 ? "medium" : "slow";
   return (
-    <span className={styles.rate} data-tier={tier} title={accessibleLabel} aria-label={accessibleLabel}>
-      <span className={styles.pulse} aria-hidden="true" />
-      <span aria-hidden="true">≈{rounded}</span>
-      <span className={styles.unit} aria-hidden="true">
-        t/s
+    <Tooltip
+      disableHoverableContent
+      content={t("tokenRateTooltip", { rate: rounded })}
+      contentProps={{ side: "top", sideOffset: 6 }}
+    >
+      <span className={styles.rate} data-tier={tier} aria-label={accessibleLabel}>
+        <span className={styles.pulse} aria-hidden="true" />
+        <span aria-hidden="true">{rounded}</span>
+        <span className={styles.unit} aria-hidden="true">
+          t/s
+        </span>
       </span>
-    </span>
+    </Tooltip>
   );
 }

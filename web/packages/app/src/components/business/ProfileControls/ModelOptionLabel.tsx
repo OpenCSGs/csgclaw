@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import styles from "./ProfileControls.module.css";
 
 export type ModelOptionLabelProps = {
   avatar?: string;
@@ -9,6 +10,7 @@ export type ModelOptionLabelProps = {
   provider?: string;
   showAvatar?: boolean;
   title?: string;
+  qualifier?: string;
 };
 
 export function ModelOptionLabel({
@@ -20,6 +22,7 @@ export function ModelOptionLabel({
   provider,
   showAvatar = true,
   title,
+  qualifier,
 }: ModelOptionLabelProps) {
   const hasAvatar = showAvatar && Boolean(avatar || icon);
   const hasProvider = Boolean(provider);
@@ -47,6 +50,7 @@ export function ModelOptionLabel({
               <span className="model-option-badge">{label}</span>
             </Fragment>
           ))}
+          {qualifier ? <span className={styles["model-qualifier"]}>({qualifier})</span> : null}
         </span>
         {hasProvider ? <span className="model-option-provider">{provider}</span> : null}
       </span>

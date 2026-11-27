@@ -167,7 +167,7 @@ export function ConversationResourcePicker({
                   icon
                 )}
                 <span className={styles.copy}>
-                  <strong>{item.name}</strong>
+                  <strong>{item.source === "skill" ? item.id : item.name}</strong>
                   {item.description ? <span className={styles.description}>{item.description}</span> : null}
                   {!item.available ? (
                     <span className={styles.reason}>

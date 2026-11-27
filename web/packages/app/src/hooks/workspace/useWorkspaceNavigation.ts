@@ -108,9 +108,9 @@ export function useWorkspaceNavigation({
       if (!item?.id) {
         return;
       }
-      navigate({ search: profileDialogSearch(location.search, item.id) }, { replace: true });
+      navigate({ search: profileDialogSearch(location.search, item.id) }, { replace: true, state: location.state });
     },
-    [location.search, navigate],
+    [location.search, location.state, navigate],
   );
 
   const selectComputer = useCallback(
@@ -130,8 +130,8 @@ export function useWorkspaceNavigation({
   );
 
   const selectSettings = useCallback(() => {
-    navigate({ search: settingsDialogSearch(location.search) }, { replace: true });
-  }, [location.search, navigate]);
+    navigate({ search: settingsDialogSearch(location.search) }, { replace: true, state: location.state });
+  }, [location.search, location.state, navigate]);
 
   const selectTasks = useCallback(
     (taskID = "", options: NavigatePaneOptions = {}) => {

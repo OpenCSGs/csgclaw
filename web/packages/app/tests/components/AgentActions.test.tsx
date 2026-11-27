@@ -1060,8 +1060,9 @@ describe("agent action visibility", () => {
     expect(screen.queryByRole("menuitem", { name: "Recreate" })).not.toBeInTheDocument();
   });
 
-  it("keeps header description compact until entering edit mode and removes duplicate basics fields", async () => {
+  it("edits and saves the description from the introduction card", async () => {
     const user = userEvent.setup();
+    const onMetadataSave = vi.fn();
     render(
       <AgentDetailPane
         item={worker}
@@ -1080,6 +1081,7 @@ describe("agent action visibility", () => {
         notifierWebhookPublicOrigin="http://127.0.0.1:18080"
         onDraftChange={vi.fn()}
         onSave={vi.fn()}
+        onMetadataSave={onMetadataSave}
         onPublish={vi.fn()}
         onProviderLogin={vi.fn()}
         onStart={vi.fn()}
@@ -1094,13 +1096,18 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("button", { name: "Edit name" })).toHaveTextContent("Worker");
     expect(screen.queryByDisplayValue("Agent description")).not.toBeInTheDocument();
     const descriptionTrigger = screen.getByRole("button", { name: "Edit description" });
-    expect(descriptionTrigger).toHaveTextContent("Agent description");
+    expect(screen.getByText("Agent description")).toBeVisible();
     expect(screen.queryByText("Description")).not.toBeInTheDocument();
 
     await user.click(descriptionTrigger);
     const descriptionInput = screen.getByDisplayValue("Agent description");
     expect(descriptionInput).toBeInTheDocument();
     expect(descriptionInput.tagName).toBe("TEXTAREA");
+    await user.clear(descriptionInput);
+    await user.type(descriptionInput, "Updated description");
+    expect(onMetadataSave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: t("save") }));
+    expect(onMetadataSave).toHaveBeenCalledWith({ description: "Updated description" });
   });
 
   it("shows model settings in Profile and instructions in their own tab", async () => {
@@ -1535,8 +1542,8 @@ describe("agent action visibility", () => {
     expect(screen.queryByText("profileNotifierSection")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Notifier" })).toBeInTheDocument();
     const descriptionTrigger = screen.getByRole("button", { name: "Edit description" });
-    expect(descriptionTrigger).toHaveTextContent("Notifier description");
-    expect(descriptionTrigger.closest(".entity-heading")).toBeInTheDocument();
+    expect(screen.getByText("Notifier description")).toBeVisible();
+    expect(descriptionTrigger.closest("section")).toHaveTextContent("Notifier description");
     const toolbar = container.querySelector(".entity-header .entity-toolbar");
     expect(toolbar).toBeInTheDocument();
     expect(toolbar?.textContent).toContain("Save");

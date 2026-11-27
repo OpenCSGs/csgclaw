@@ -26,6 +26,7 @@ export type AgentActivityTool = {
   output?: unknown;
   output_summary?: string;
   phase?: string;
+  progress_summary?: string;
   status: string;
   title: string;
   tool_call_id?: string;
@@ -187,6 +188,19 @@ export function pendingQuestionActivities(messages: readonly IMMessage[]): Agent
       (activity): activity is AgentActivityPayload =>
         activity?.content.msgtype === AgentActivityMsgTypes.question && activity.content.question?.status === "pending",
     );
+}
+
+export function isHiddenQuestionTranscript(message: IMMessage, settled: ReadonlySet<string>): boolean {
+  const transcript = recordValue(recordValue(message.metadata?.csgclaw)?.request_user_input);
+  if (transcript?.kind === "answer") return true;
+
+  const activity = parseAgentActivity(message);
+  const question = activity?.content.question;
+  return Boolean(
+    activity?.content.msgtype === AgentActivityMsgTypes.question &&
+    question &&
+    (question.status !== "pending" || settled.has(question.id)),
+  );
 }
 
 function agentActivityValue(value: unknown): unknown {
@@ -493,6 +507,7 @@ function parseTool(value: unknown): AgentActivityTool | undefined {
     output: firstDefined(value.output, value.result),
     output_summary: stringValue(value.output_summary),
     phase: stringValue(value.phase),
+    progress_summary: stringValue(value.progress_summary),
     status: stringValue(value.status, "running"),
     title: stringValue(value.title, "Run tool"),
     tool_call_id: stringValue(value.tool_call_id, value.toolCallId),

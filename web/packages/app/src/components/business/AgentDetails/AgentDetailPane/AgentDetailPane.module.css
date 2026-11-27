@@ -116,3 +116,14 @@
     grid-template-columns: 1fr;
   }
 }
+
+.introductionPreview > summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--text-sm-size);
+}
+
+.introductionPreview[open] > summary {
+  margin-bottom: var(--space-2);
+}

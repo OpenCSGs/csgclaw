@@ -2,12 +2,14 @@
 package enginetest
 
 import (
+	"cmp"
 	"context"
 	"csgclaw/internal/resourcequery"
 	"errors"
 	"fmt"
 	"maps"
 	"os"
+	"path"
 	"reflect"
 	"slices"
 	"sort"
@@ -377,22 +379,22 @@ func (a *memoryAgents) Get(ctx context.Context, agentID string, options agenteng
 	} else {
 		metadata := make(map[string]agentengine.SkillSummary, len(item.Status.SkillSummaries))
 		for _, summary := range item.Status.SkillSummaries {
-			metadata[summary.Name] = summary
+			metadata[cmp.Or(summary.ID, summary.Name)] = summary
 		}
 		item.Status.SkillSummaries = make([]agentengine.SkillSummary, 0, len(item.Spec.Skills))
 		for _, name := range item.Spec.Skills {
 			summary := metadata[name]
-			summary.Name = name
+			summary.ID, summary.Name = name, path.Base(name)
 			item.Status.SkillSummaries = append(item.Status.SkillSummaries, summary)
 		}
 	}
-	sort.Slice(item.Status.SkillSummaries, func(i, j int) bool { return item.Status.SkillSummaries[i].Name < item.Status.SkillSummaries[j].Name })
+	sort.Slice(item.Status.SkillSummaries, func(i, j int) bool { return item.Status.SkillSummaries[i].ID < item.Status.SkillSummaries[j].ID })
 	if options.SkillQuery != nil && options.IncludeSkillSummaries {
 		entries := make([]resourcequery.Entry, 0, len(item.Status.SkillSummaries))
 		byName := map[string]agentengine.SkillSummary{}
 		for _, summary := range item.Status.SkillSummaries {
-			entries = append(entries, resourcequery.Entry{Name: summary.Name, Enabled: summary.Enabled})
-			byName[summary.Name] = summary
+			entries = append(entries, resourcequery.Entry{Name: summary.ID, Enabled: summary.Enabled})
+			byName[summary.ID] = summary
 		}
 		names, meta, err := resourcequery.Select(entries, *options.SkillQuery, item.ID)
 		if err != nil {

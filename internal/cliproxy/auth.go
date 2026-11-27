@@ -27,7 +27,8 @@ const (
 	noBrowserEnv       = "CSGCLAW_CLIPROXY_NO_BROWSER"
 	disableKeychainEnv = "CSGCLAW_CLIPROXY_DISABLE_KEYCHAIN"
 
-	authProviderClaude = "claude"
+	authProviderClaude             = "claude"
+	automaticKeychainImportTimeout = 3 * time.Second
 )
 
 type AuthStatus struct {
@@ -169,7 +170,7 @@ func (s *Service) authStatus(ctx context.Context, provider string, allowImport b
 
 	var importMessage string
 	if allowImport && autoAuthImportEnabled() && authProvider == ProviderCodex {
-		imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider)
+		imported, _ := importAuthAutomatically(ctx, cfg.AuthDir, authProvider)
 		importMessage = imported.message
 		if imported.imported {
 			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
@@ -181,7 +182,7 @@ func (s *Service) authStatus(ctx context.Context, provider string, allowImport b
 	}
 
 	if allowImport && autoAuthImportEnabled() && authProvider != ProviderCodex {
-		imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider)
+		imported, _ := importAuthAutomatically(ctx, cfg.AuthDir, authProvider)
 		importMessage = imported.message
 		if imported.imported {
 			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
@@ -203,8 +204,18 @@ func importExistingAuth(ctx context.Context, authDir string) {
 		return
 	}
 	for _, provider := range []string{ProviderCodex, authProviderClaude} {
-		_, _ = importExternalAuth(ctx, authDir, provider)
+		_, _ = importAuthAutomatically(ctx, authDir, provider)
 	}
+}
+
+func importAuthAutomatically(ctx context.Context, authDir, provider string) (authImportResult, error) {
+	if provider == authProviderClaude {
+		// Share one budget across all Keychain candidates for automatic probes.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, automaticKeychainImportTimeout)
+		defer cancel()
+	}
+	return importExternalAuth(ctx, authDir, provider)
 }
 
 func importExternalAuth(ctx context.Context, authDir, provider string) (authImportResult, error) {
@@ -252,6 +263,9 @@ func importClaudeKeychainAuth(ctx context.Context, authDir string) (authImportRe
 		return authImportResult{message: "Claude Keychain probing is disabled. Run csgclaw model auth login claude-code."}, nil
 	}
 	for _, candidate := range claudeKeychainCandidates {
+		if err := ctx.Err(); err != nil {
+			return authImportResult{}, err
+		}
 		raw, err := claudeKeychainReader(ctx, candidate.service, candidate.account)
 		if err != nil || len(strings.TrimSpace(string(raw))) == 0 {
 			continue

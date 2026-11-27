@@ -882,3 +882,16 @@
     margin-top: var(--space-2);
   }
 }
+
+.hub-template-interpretation {
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-3);
+  margin-top: var(--space-1);
+  min-width: 0;
+}
+
+.hub-template-interpretation > h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-semibold);
+}

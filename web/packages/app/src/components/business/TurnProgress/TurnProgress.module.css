@@ -14,6 +14,7 @@
 }
 
 .shell button.heading,
+.shell button.summaryToggle,
 .shell button.toolToggle {
   --btn-height: auto;
   --btn-min-width: 0;
@@ -69,15 +70,30 @@
 
 .headerControls {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
 .heading > span {
+  flex-wrap: wrap;
   justify-content: flex-start;
   gap: 6px;
   white-space: normal;
+}
+
+.stepCount {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  font: var(--text-xs-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.shell button.heading .failedCount {
+  color: color-mix(in srgb, var(--danger) 72%, var(--text));
 }
 
 .shell svg {
@@ -99,14 +115,50 @@
   margin-bottom: 20px;
 }
 
-.summary {
+.shell button.summaryToggle,
+.shell button.toolToggle {
   display: flex;
-  align-items: center;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-sm);
+}
+
+.shell button.summaryToggle {
+  justify-content: flex-start;
+}
+
+.shell button.summaryToggle:is(:hover, :focus-visible),
+.shell button.toolToggle:is(:hover, :focus-visible) {
+  background: transparent;
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: no-preference) and (not (forced-colors: active)) {
+  @supports (background-clip: text) {
+    .shell button:not(:is(:hover, :focus-visible)) [data-progress-shimmer] {
+      --shimmer-base: color-mix(in srgb, var(--muted) 86%, var(--text));
+      background-image: linear-gradient(105deg, var(--shimmer-base) 38%, var(--text) 50%, var(--shimmer-base) 62%);
+      background-size: 230% 100%;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: progress-title-shimmer 1s linear infinite;
+    }
+  }
+}
+
+@keyframes progress-title-shimmer {
+  from {
+    background-position: 100% 50%;
+  }
+
+  to {
+    background-position: 0% 50%;
+  }
+}
+
+.shell button.summaryToggle > :global(.btn-content) {
   gap: 6px;
-  padding: 4px 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 22px;
+  justify-content: flex-start;
 }
 
 .commentary {
@@ -118,12 +170,8 @@
   line-height: 1.65;
 }
 
-/* 过程区（工具/推理）与正文回答分开：
-   靠一条左侧竖线告诉人“这一段是过程，不是答案”，组多了也不会糊成一片。 */
 .group {
-  margin: 4px 0 16px;
-  padding-left: 12px;
-  border-left: 2px solid color-mix(in oklab, var(--brand-600) 26%, var(--line));
+  margin: 10px 0 16px;
 }
 
 .commentary {
@@ -131,101 +179,144 @@
   border-left: 2px solid transparent;
 }
 
-.details {
+.reasoningBox {
+  box-sizing: border-box;
+  max-block-size: min(16rem, 40vh);
+  overflow: auto;
   margin: 8px 0 0;
-  padding: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+  font-size: 13px;
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--muted) 55%, var(--text));
 }
 
-.toolList {
+.reasoningBox::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.reasoningBox::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.reasoningBox::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+}
+
+.reasoningBox::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text) 34%, transparent);
+}
+
+.reasoningBox:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.reasoningBox :global(.message-content) {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+.reasoningChunk + .reasoningChunk {
+  margin-top: 8px;
+}
+
+.toolList,
+.standaloneStep {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+.toolList {
+  margin: 2px 0 16px;
+}
+
 .tool {
-  content-visibility: auto;
-  contain-intrinsic-block-size: auto 41px;
+  position: relative;
   min-width: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 4px;
-  transition: background-color 120ms ease;
 }
 
-.tool:hover {
-  background: color-mix(in oklab, var(--text) 4%, transparent);
-}
-
-.tool:first-child {
-  border-top: 1px solid var(--line);
+.tool:has(> .toolDetails)::before {
+  content: "";
+  position: absolute;
+  inset-block: 29px 0;
+  inset-inline-start: 11px;
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 
 .shell button.toolToggle {
-  display: flex;
-  width: 100%;
-  padding: 9px 4px;
-  border: 0;
-  border-radius: 4px;
+  padding-block: 5px;
+  padding-inline: 0 6px;
 }
 
 .toolToggle > :global(.btn-content) {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   width: 100%;
   min-width: 0;
   gap: 8px;
   justify-content: flex-start;
 }
 
-.shell button.toolToggle:hover {
-  background: transparent;
-  color: var(--text);
+.stepIcon {
+  display: grid;
+  align-self: start;
+  place-items: center;
+  width: 24px;
+  height: 24px;
 }
 
-.shell button.toolToggle:hover .ordinal,
-.shell button.toolToggle:hover .toolStatus {
-  color: var(--text);
+.stepSummary,
+.stepMeta {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 0 8px;
 }
 
-.shell button.toolToggle:hover .commandPreview {
-  color: var(--text);
-}
-
-.ordinal {
-  width: 18px;
+.toolAction {
   flex-shrink: 0;
-  text-align: center;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
+  max-width: 100%;
+  white-space: normal;
 }
 
-.commandPreview {
-  flex: 1;
+.toolTarget {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font:
-    13px/22px ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace;
-  color: color-mix(in srgb, var(--muted) 78%, var(--text));
+  font: var(--text-xs-normal);
 }
 
-.toolStatus {
-  flex-shrink: 0;
+.stepMeta {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: 20ch;
+  font: var(--text-xs-normal);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  font-size: 12px;
+}
+
+.tool[data-failed] .stepIcon,
+.tool[data-failed] .toolStatus {
+  color: color-mix(in srgb, var(--danger) 72%, var(--text));
+}
+
+.toolDuration {
   color: var(--muted);
 }
 
-.tool[data-failed] .toolStatus {
-  color: var(--danger);
-}
-
 .toolDetails {
-  margin: 0 0 10px;
+  position: relative;
+  margin: var(--space-2) 0 8px;
+  margin-inline-start: var(--space-8);
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -297,4 +388,45 @@
     transition: none;
     animation: none;
   }
+}
+.modelRequest {
+  display: grid;
+  gap: var(--space-1);
+  margin-block: var(--space-2);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.modelRequest p,
+.modelRequest pre {
+  margin: 0;
+}
+
+.modelRequestSummary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.modelRequestFailed {
+  color: var(--danger-text);
+}
+
+.modelRequestID,
+.modelRequestRetry,
+.modelRequest details {
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+
+.modelRequest .modelRequestRetry {
+  margin-block-start: var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.modelRequest pre {
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
 }

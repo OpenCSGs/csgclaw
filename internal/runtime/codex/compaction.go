@@ -151,13 +151,16 @@ func (r *Runtime) CompactConversation(ctx context.Context, runtimeID string, req
 // Manual compaction may resume a saved thread, but must never create a
 // replacement or rewrite the binding when history is unavailable.
 func (m *appServerManager) resumeCompactionThread(ctx context.Context, live *liveSession, key, thread string) error {
-	live.conversationResumeMu.Lock()
-	defer live.conversationResumeMu.Unlock()
+	release, err := live.lockThreadPreparation(ctx, key)
+	if err != nil {
+		return err
+	}
+	defer release()
 	live.conversationPersistMu.Lock()
-	defer live.conversationPersistMu.Unlock()
 	live.mu.Lock()
 	current, loaded := live.conversationSessions[key], live.loadedConversations[key]
 	live.mu.Unlock()
+	live.conversationPersistMu.Unlock()
 	if current != thread {
 		return fmt.Errorf("%w: binding changed", errCompactionIdentityChanged)
 	}
@@ -171,8 +174,13 @@ func (m *appServerManager) resumeCompactionThread(ctx context.Context, live *liv
 	if resumed != thread {
 		return fmt.Errorf("%w: resume returned a different conversation", errCompactionIdentityChanged)
 	}
+	live.conversationPersistMu.Lock()
+	defer live.conversationPersistMu.Unlock()
 	live.mu.Lock()
 	defer live.mu.Unlock()
+	if live.conversationSessions[key] != thread {
+		return fmt.Errorf("%w: binding changed", errCompactionIdentityChanged)
+	}
 	if live.loadedConversations == nil {
 		live.loadedConversations = make(map[string]bool)
 	}

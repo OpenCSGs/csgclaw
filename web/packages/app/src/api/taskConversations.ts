@@ -10,9 +10,38 @@ export type ConversationMetadataPatch = {
   archived?: boolean;
 };
 
-export function fetchTaskConversations(q: string, archived = false, offset = 0): Promise<TaskConversationPage> {
+export type TaskConversationPageFilters = {
+  owner: string;
+  directory: string;
+  legacyPeers: readonly string[];
+};
+
+export function fetchTaskConversations(
+  q: string,
+  archived = false,
+  offset = 0,
+  filters?: TaskConversationPageFilters,
+): Promise<TaskConversationPage> {
   const params = new URLSearchParams({ q, archived: String(archived), offset: String(offset), limit: "20" });
+  if (filters?.owner) params.set("owner", filters.owner);
+  if (filters?.directory) {
+    params.set("directory", filters.directory);
+    for (const peer of filters.legacyPeers) params.append("legacy_peer", peer);
+  }
   return get(`/api/v1/conversations?${params}`);
+}
+
+type TaskConversationFilterGroup = {
+  is_direct: boolean;
+  peer?: string;
+  cloud_user?: string;
+  workspace_dir?: string;
+  count: number;
+};
+
+export function fetchTaskConversationFilters(archived: boolean, q = ""): Promise<TaskConversationFilterGroup[]> {
+  const params = new URLSearchParams({ archived: String(archived), q });
+  return get(`/api/v1/conversations/filters?${params}`);
 }
 
 export function updateConversationMetadata(id: string, patch: ConversationMetadataPatch): Promise<IMConversation> {

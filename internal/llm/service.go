@@ -26,12 +26,18 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type Service struct {
 	defaults                      config.ModelConfig
 	agents                        AgentProfileReader
 	client                        *http.Client
+	managedGateway                *managedGateway
+	gatewayClient                 *http.Client
+	gatewayTracer                 *sdktrace.TracerProvider
+	modelHeaderTimeout            time.Duration
+	modelIdleTimeout              time.Duration
 	openCSGCredentialRefreshMu    sync.Mutex
 	responsesCapabilityMu         sync.Mutex
 	responsesUnsupported          map[string]time.Time
@@ -84,13 +90,17 @@ type AgentProfileReader interface {
 }
 
 func NewService(defaults config.ModelConfig, agents AgentProfileReader) *Service {
-	return &Service{
+	service := &Service{
 		defaults:                      defaults.Resolved(),
 		agents:                        agents,
 		client:                        &http.Client{},
+		modelHeaderTimeout:            90 * time.Second,
+		modelIdleTimeout:              90 * time.Second,
 		responsesUnsupported:          make(map[string]time.Time),
 		responsesReasoningUnsupported: make(map[string]struct{}),
 	}
+	service.setGatewayTracer(sdktrace.NewTracerProvider())
+	return service
 }
 
 func (s *Service) Models(ctx context.Context, botID string) ([]byte, int, string, error) {
@@ -191,7 +201,7 @@ func (s *Service) ChatCompletionsStream(ctx context.Context, botID string, body 
 	if err != nil {
 		return nil, err
 	}
-	ctx = withModelRequestContext(ctx, botID, profile, body)
+	ctx = s.withModelRequestContext(ctx, botID, profile, body)
 	response, callErr := s.forwardRemoteChat(ctx, profile, body)
 	return captureRuntimeResponse(ctx, response, callErr)
 }
@@ -204,7 +214,7 @@ func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*Up
 	if profile.Provider == agent.ProviderCodex {
 		profile.APIProtocol = modelpreset.Responses
 	}
-	ctx = withModelRequestContext(ctx, botID, profile, body)
+	ctx = s.withModelRequestContext(ctx, botID, profile, body)
 	response, callErr := s.forwardRemoteResponses(ctx, profile, body)
 	if response != nil && response.StatusCode == http.StatusRequestEntityTooLarge {
 		response.StatusCode = RequestTooLargeError(ctx).Status
@@ -253,7 +263,16 @@ func (s *Service) ResponsesWebsocket(w http.ResponseWriter, r *http.Request, bot
 	}
 	defer downstream.Close()
 
-	upstream, _, err := responsesWebsocketDialer.DialContext(r.Context(), upstreamURL, websocketUpstreamHeaders(r.Header, apiKey, profile.Headers))
+	headers := websocketUpstreamHeaders(r.Header, apiKey, profile.Headers)
+	dialCtx := r.Context()
+	if isOpenCSGGateway(profile) {
+		headers.Del("Traceparent")
+		headers.Del("Tracestate")
+		ctx, span := s.traceGatewayWebsocket(dialCtx, headers)
+		dialCtx = ctx
+		defer span.End()
+	}
+	upstream, _, err := responsesWebsocketDialer.DialContext(dialCtx, upstreamURL, headers)
 	if err != nil {
 		writeResponsesWebsocketClose(downstream, websocket.CloseTryAgainLater, fmt.Sprintf("dial upstream responses websocket: %v", err))
 		return nil
@@ -371,7 +390,8 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 	}
 	mergeResponsesPayload(payload, profile)
 	applySessionReasoningEffort(ctx, payload, true)
-	if profile.APIProtocol != "" && profile.APIProtocol != modelpreset.Responses {
+	openCSG := isOpenCSGGateway(profile)
+	if !openCSG && profile.APIProtocol != "" && profile.APIProtocol != modelpreset.Responses {
 		return s.forwardProtocol(ctx, profile, payload, "openai-response")
 	}
 
@@ -382,14 +402,14 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 	if baseURL == "" {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: "profile base_url is required"}
 	}
-	if s.responsesReasoningInputUnsupportedCached(profile, baseURL) {
+	if !openCSG && s.responsesReasoningInputUnsupportedCached(profile, baseURL) {
 		logResponsesReasoningInputRemoved(profile, stripResponsesInputReasoning(payload), "cached_unsupported")
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
 	}
-	if profile.Provider != agent.ProviderCodex && s.responsesAPIUnsupportedCached(profile, baseURL) {
+	if !openCSG && profile.Provider != agent.ProviderCodex && s.responsesAPIUnsupportedCached(profile, baseURL) {
 		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, allowAuthRefresh)
 	}
 	upstreamURL := strings.TrimRight(baseURL, "/") + "/responses"
@@ -420,6 +440,7 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 type responsesRequestSender func([]byte) (*http.Response, error)
 
 func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent.AgentProfile, payload map[string]any, baseURL, apiKey string, resp *http.Response, allowReasoningRetry bool, sendResponses responsesRequestSender) (*UpstreamResponse, error) {
+	openCSG := isOpenCSGGateway(profile)
 	if resp.StatusCode == http.StatusOK && modelprovider.IsZhipuResponsesURL(baseURL) &&
 		strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
 		body, err := peekModelError(resp)
@@ -429,7 +450,7 @@ func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent
 		}
 		resp.StatusCode = modelprovider.ZhipuResponsesGatewayStatus(baseURL, resp.StatusCode, body)
 	}
-	if responsesAPITransientFallbackStatus(profile, resp.StatusCode) && !responsesPayloadHasToolSemantics(payload) {
+	if !openCSG && responsesAPITransientFallbackStatus(profile, resp.StatusCode) && !responsesPayloadHasToolSemantics(payload) {
 		_ = resp.Body.Close()
 		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, true)
 	}
@@ -438,11 +459,11 @@ func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent
 		if err != nil {
 			return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("read upstream error response: %v", err)}
 		}
-		if profile.Provider != agent.ProviderCodex && responsesAPIUnsupported(resp.StatusCode, body) {
+		if !openCSG && profile.Provider != agent.ProviderCodex && responsesAPIUnsupported(resp.StatusCode, body) {
 			s.markResponsesAPIUnsupported(profile, baseURL)
 			return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, true)
 		}
-		if allowReasoningRetry && responsesReasoningInputUnsupportedError(resp.StatusCode, body) {
+		if !openCSG && allowReasoningRetry && responsesReasoningInputUnsupportedError(resp.StatusCode, body) {
 			removed := stripResponsesInputReasoning(payload)
 			if removed > 0 {
 				s.markResponsesReasoningInputUnsupported(profile, baseURL)
@@ -751,11 +772,17 @@ func readAndCloseUpstreamBody(resp *http.Response) ([]byte, error) {
 
 func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte, billingURL string) (*UpstreamResponse, error) {
 	code := modelprovider.UpstreamErrorCodeForResponse(resp.StatusCode, body)
+	logBody := body
+	if resp.Request != nil {
+		if key, ok := strings.CutPrefix(resp.Request.Header.Get("Authorization"), "Bearer "); ok && key != "" {
+			logBody = bytes.ReplaceAll(body, []byte(key), []byte("[redacted]"))
+		}
+	}
 	attrs := []any{
 		"status", resp.StatusCode,
 		"code", code,
 		"upstream_request_id", upstreamRequestID(resp.Header),
-		"response_body", upstreamErrorBodyForLog(body),
+		"response_body", upstreamErrorBodyForLog(logBody),
 	}
 	attrs = append(attrs, modelRequestLogAttrs(resp.Request)...)
 	slog.Error("model upstream request failed", attrs...)

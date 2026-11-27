@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -17,12 +18,39 @@ import (
 // Native exports arrive asynchronously, often after turn/completed. Correlation
 // uses the process-owned native turn ID and trace ID, never the latest turn.
 type nativeTelemetry struct {
-	mu       sync.Mutex
-	server   *http.Server
-	endpoint string
-	turns    map[string]nativeDiagnostic
-	traces   map[string]*nativeTrace
+	mu         sync.Mutex
+	server     *http.Server
+	endpoint   string
+	turns      map[string]nativeDiagnostic
+	traces     map[string]*nativeTrace
+	initialize chan nativeSpan
 }
+
+type initializeTiming struct {
+	sent, reply, notified time.Time
+}
+
+// Each process has one handshake. Wait for its native span off the startup path.
+func (n *nativeTelemetry) logInitializeAsync(logger *slog.Logger, t initializeTiming, done <-chan struct{}) {
+	if n == nil || logger == nil {
+		return
+	}
+	go func() {
+		select {
+		case span := <-n.initialize:
+			if span.start.Before(t.sent) || span.start.After(t.reply) {
+				return
+			}
+			logger.Info("Codex initialize timing",
+				"request_to_dispatch_us", span.start.Sub(t.sent).Microseconds(),
+				"dispatch_to_reply_us", t.reply.Sub(span.start).Microseconds(),
+				"reply_to_initialized_us", t.notified.Sub(t.reply).Microseconds(),
+				"native_request_span_us", span.end.Sub(span.start).Microseconds())
+		case <-done:
+		}
+	}()
+}
+
 type nativeDiagnostic struct {
 	active bool
 	record *diagnostics.Record
@@ -82,7 +110,7 @@ func newNativeTelemetry() (*nativeTelemetry, error) {
 		return nil, err
 	}
 	path := "/" + hex.EncodeToString(token) + "/v1/traces"
-	n := &nativeTelemetry{endpoint: "http://" + listener.Addr().String() + path, turns: map[string]nativeDiagnostic{}, traces: map[string]*nativeTrace{}}
+	n := &nativeTelemetry{initialize: make(chan nativeSpan, 1), endpoint: "http://" + listener.Addr().String() + path, turns: map[string]nativeDiagnostic{}, traces: map[string]*nativeTrace{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc(path, n.receive)
 	n.server = &http.Server{Handler: mux, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, MaxHeaderBytes: 8192}
@@ -170,6 +198,16 @@ func (n *nativeTelemetry) receive(w http.ResponseWriter, r *http.Request) {
 				if !validTelemetryID(s.TraceID, 32) || !validTelemetryID(s.SpanID, 16) {
 					continue
 				}
+				if s.Name == "initialize" {
+					start, end, valid := s.times()
+					if valid {
+						select {
+						case n.initialize <- nativeSpan{start: start, end: end}:
+						default:
+						}
+					}
+					continue
+				}
 				trace := n.traces[s.TraceID]
 				if trace == nil {
 					if len(n.traces) >= 128 {
@@ -190,12 +228,10 @@ func (n *nativeTelemetry) receive(w http.ResponseWriter, r *http.Request) {
 				if !ok || len(trace.spans) >= 512 {
 					continue
 				}
-				start, e1 := strconv.ParseInt(s.Start, 10, 64)
-				end, e2 := strconv.ParseInt(s.End, 10, 64)
-				if e1 != nil || e2 != nil || start <= 0 || end < start {
-					continue
+				start, end, valid := s.times()
+				if valid {
+					trace.spans[s.SpanID] = nativeSpan{s.SpanID, s.ParentID, s.Name, category, start, end}
 				}
-				trace.spans[s.SpanID] = nativeSpan{s.SpanID, s.ParentID, s.Name, category, time.Unix(0, start), time.Unix(0, end)}
 			}
 		}
 	}
@@ -205,6 +241,12 @@ func (n *nativeTelemetry) receive(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{}`))
 }
+func (s otlpSpan) times() (time.Time, time.Time, bool) {
+	start, e1 := strconv.ParseInt(s.Start, 10, 64)
+	end, e2 := strconv.ParseInt(s.End, 10, 64)
+	return time.Unix(0, start), time.Unix(0, end), e1 == nil && e2 == nil && start > 0 && end >= start
+}
+
 func validTelemetryID(value string, size int) bool {
 	if len(value) != size {
 		return false

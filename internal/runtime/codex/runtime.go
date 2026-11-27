@@ -457,7 +457,7 @@ func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime
 	}
 	return agentruntime.Handle{
 		RuntimeID: strings.TrimSpace(spec.RuntimeID),
-		HandleID:  strings.TrimSpace(session.SessionID),
+		HandleID:  firstNonEmpty(session.SessionID, session.RuntimeID),
 	}, nil
 }
 
@@ -581,6 +581,7 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, model *contr
 		extra = []codexmodel.Profile{{Provider: agentRef.Profile.Provider, ModelID: model.ModelID, Metadata: model.Metadata}}
 	}
 	_, err = r.ensureSession(ctx, SessionSpec{
+		PreserveSkills:              agentruntime.KeepInstalledSkills(ctx),
 		RuntimeID:                   strings.TrimSpace(h.RuntimeID),
 		AgentID:                     strings.TrimSpace(agentRef.ID),
 		AgentName:                   strings.TrimSpace(agentRef.Name),
@@ -711,7 +712,7 @@ func (r *Runtime) Info(_ context.Context, h agentruntime.Handle) (agentruntime.I
 	// a missing runtime in the agent roster.
 	if session, err := r.sessionManager().LiveSession(SessionHandle{RuntimeID: strings.TrimSpace(h.RuntimeID)}); err == nil && session != nil && processAlive(session.ProcessID) {
 		return agentruntime.Info{
-			HandleID:  strings.TrimSpace(session.SessionID),
+			HandleID:  firstNonEmpty(session.SessionID, session.RuntimeID),
 			State:     agentruntime.StateRunning,
 			CreatedAt: session.CreatedAt,
 		}, nil
@@ -745,7 +746,7 @@ func (r *Runtime) Info(_ context.Context, h agentruntime.Handle) (agentruntime.I
 		_ = writeJSONFile(r.writePrivateFile, path, meta)
 	}
 	return agentruntime.Info{
-		HandleID:  strings.TrimSpace(meta.SessionID),
+		HandleID:  firstNonEmpty(meta.SessionID, meta.RuntimeID),
 		State:     state,
 		CreatedAt: meta.CreatedAt,
 	}, nil
@@ -794,14 +795,8 @@ func (r *Runtime) sessionManager() Manager {
 				slog.Warn("save Codex exit status failed", "runtime_id", session.RuntimeID, "error", err)
 			}
 		},
-		OnConversationSessionsChange: func(session *Session, conversations map[string]string, filePublishing map[string]bool) error {
-			if session == nil {
-				return nil
-			}
-			meta := sessionToSessionMetadata(session)
-			meta.ConversationSessions = cloneConversationSessions(conversations)
-			meta.FilePublishingConversations = cloneFilePublishingConversations(filePublishing)
-			return writeJSONFile(r.writePrivateFile, filepath.Join(session.RuntimeDir, sessionFileName), meta)
+		SaveSessionMetadata: func(dir string, meta sessionMetadata) error {
+			return writeJSONFile(r.writePrivateFile, filepath.Join(dir, sessionFileName), meta)
 		},
 	})
 	manager.deps.HydrateSession = func(ctx context.Context, handle SessionHandle) (*Session, error) {
@@ -1735,14 +1730,43 @@ func (r *Runtime) readSessionMetadata(runtimeID string) (sessionMetadata, error)
 	if err != nil {
 		return sessionMetadata{}, err
 	}
-	var meta sessionMetadata
-	if err := readJSONFile(r.readFile, path, &meta); err != nil {
+	meta, err := readSavedThreads(r.readFile, filepath.Dir(path))
+	if err != nil {
 		return sessionMetadata{}, err
 	}
 	// Native dynamic tools are persisted at thread creation and cannot be added
 	// by thread/resume. Reuse the existing capability-upgrade path for older sets.
 	if meta.DynamicToolsVersion != engineDynamicToolsVersion {
 		meta.FilePublishingConversations = nil
+	}
+	return normalizeSessionMetadata(meta), nil
+}
+
+// Older room imports can omit session_id. An explicit empty ID means that
+// this runtime has no default thread yet, even if runtime.json is stale.
+func readSavedThreads(read func(string) ([]byte, error), dir string) (sessionMetadata, error) {
+	var saved struct {
+		sessionMetadata
+		Primary *string `json:"session_id"`
+	}
+	err := readJSONFile(read, filepath.Join(dir, sessionFileName), &saved)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return sessionMetadata{}, err
+	}
+	meta := saved.sessionMetadata
+	if saved.Primary != nil {
+		meta.SessionID = *saved.Primary
+	} else {
+		var runtime struct {
+			SessionID string `json:"session_id"`
+		}
+		if e := readJSONFile(read, filepath.Join(dir, runtimeFileName), &runtime); e == nil {
+			meta.SessionID = runtime.SessionID
+		} else if !errors.Is(e, os.ErrNotExist) {
+			return sessionMetadata{}, e
+		} else if err != nil {
+			return sessionMetadata{}, err
+		}
 	}
 	return normalizeSessionMetadata(meta), nil
 }
@@ -2427,14 +2451,14 @@ func writeJSONFile(writeFile func(string, []byte, os.FileMode) error, path strin
 }
 
 type managerDeps struct {
-	BeforePrompt                 func(context.Context, SessionHandle) error
-	EventSink                    SessionEventSink
-	Permission                   PermissionBroker
-	UserInput                    UserInputBroker
-	OpenFile                     func(string, int, os.FileMode) (*os.File, error)
-	WriteFile                    func(string, []byte, os.FileMode) error
-	ReadFile                     func(string) ([]byte, error)
-	OnExit                       func(*Session, int)
-	HydrateSession               func(context.Context, SessionHandle) (*Session, error)
-	OnConversationSessionsChange func(*Session, map[string]string, map[string]bool) error
+	BeforePrompt        func(context.Context, SessionHandle) error
+	EventSink           SessionEventSink
+	Permission          PermissionBroker
+	UserInput           UserInputBroker
+	OpenFile            func(string, int, os.FileMode) (*os.File, error)
+	WriteFile           func(string, []byte, os.FileMode) error
+	ReadFile            func(string) ([]byte, error)
+	OnExit              func(*Session, int)
+	HydrateSession      func(context.Context, SessionHandle) (*Session, error)
+	SaveSessionMetadata func(string, sessionMetadata) error
 }

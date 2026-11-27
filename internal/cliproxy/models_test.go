@@ -3,6 +3,7 @@ package cliproxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -26,7 +27,7 @@ import (
 func startModelTestService(t *testing.T, ctx context.Context, svc *Service, transport *modelTransportFixture) *coreauth.Manager {
 	t.Helper()
 	ready := make(chan *coreauth.Manager, 1)
-	if err := svc.ensureStarted(ctx, cliproxyapi.WithRouterConfigurator(func(_ *gin.Engine, handler *sdkhandlers.BaseAPIHandler, _ *sdkconfig.Config) {
+	if _, err := svc.ensureStarted(ctx, cliproxyapi.WithRouterConfigurator(func(_ *gin.Engine, handler *sdkhandlers.BaseAPIHandler, _ *sdkconfig.Config) {
 		manager := handler.AuthManager
 		if transport != nil {
 			manager.SetRoundTripperProvider(transport)
@@ -45,6 +46,170 @@ func startModelTestService(t *testing.T, ctx context.Context, svc *Service, tran
 		}
 	})
 	return manager
+}
+
+func TestCanceledFirstCallerLeavesSharedStartupRunning(t *testing.T) {
+	t.Setenv(configDirEnv, t.TempDir())
+	t.Setenv(authDirEnv, t.TempDir())
+	t.Setenv(autoLoginEnv, "false")
+
+	entered := make(chan struct{})
+	readyGate := make(chan struct{})
+	release := sync.OnceFunc(func() { close(readyGate) })
+	svc := &Service{}
+	t.Cleanup(func() {
+		release()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := svc.Shutdown(ctx); err != nil {
+			t.Error(err)
+		}
+	})
+	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Second)
+	defer cancel()
+	firstCtx, cancelFirst := context.WithCancel(ctx)
+	defer cancelFirst()
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := svc.ensureStarted(firstCtx, cliproxyapi.WithRouterConfigurator(
+			func(router *gin.Engine, _ *sdkhandlers.BaseAPIHandler, _ *sdkconfig.Config) {
+				router.GET("/startup-fixture", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+				close(entered)
+				<-readyGate
+			},
+		))
+		firstDone <- err
+	}()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("embedded service did not begin startup")
+	}
+	type workerResult struct {
+		baseURL string
+		err     error
+	}
+	secondDone := make(chan workerResult, 1)
+	go func() {
+		baseURL, err := svc.BaseURL(ctx)
+		secondDone <- workerResult{baseURL: baseURL, err: err}
+	}()
+	cancelFirst()
+	select {
+	case err := <-firstDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("first readiness wait returned %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		release()
+		select {
+		case <-firstDone:
+		case <-ctx.Done():
+		}
+		t.Fatal("first caller waited for service shutdown after canceling its readiness wait")
+	}
+
+	release()
+	var second workerResult
+	select {
+	case second = <-secondDone:
+		if second.err != nil {
+			t.Fatal(second.err)
+		}
+	case <-ctx.Done():
+		t.Fatal("second caller did not receive the ready service")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, second.baseURL+"/startup-fixture", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("fixture route returned %d, want the instance started by the first caller", response.StatusCode)
+	}
+}
+
+func TestEmbeddedStartupFailureCanRetry(t *testing.T) {
+	blocked := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocked, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(configDirEnv, filepath.Join(blocked, "config"))
+	t.Setenv(authDirEnv, t.TempDir())
+	t.Setenv(autoLoginEnv, "false")
+
+	svc := &Service{}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if err := svc.EnsureStarted(ctx); err == nil {
+		t.Fatal("startup unexpectedly succeeded with an unusable configuration directory")
+	}
+	t.Setenv(configDirEnv, t.TempDir())
+	startModelTestService(t, ctx, svc, nil)
+}
+
+func TestStartupHealthTimeoutReturnsBeforeDaemonCleanup(t *testing.T) {
+	t.Setenv(configDirEnv, t.TempDir())
+	t.Setenv(authDirEnv, t.TempDir())
+	t.Setenv(autoLoginEnv, "false")
+
+	svc := &Service{}
+	entered := make(chan struct{})
+	gate := make(chan struct{})
+	release := sync.OnceFunc(func() { close(gate) })
+	t.Cleanup(func() {
+		release()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = svc.Shutdown(ctx)
+	})
+
+	started := make(chan error, 1)
+	go func() {
+		_, err := svc.ensureStarted(t.Context(), cliproxyapi.WithRouterConfigurator(
+			func(_ *gin.Engine, _ *sdkhandlers.BaseAPIHandler, _ *sdkconfig.Config) {
+				close(entered)
+				<-gate
+			},
+		))
+		started <- err
+	}()
+	select {
+	case <-entered:
+	case <-time.After(4 * time.Second):
+		t.Fatal("embedded service did not enter the startup hook")
+	}
+
+	var startupErr error
+	select {
+	case startupErr = <-started:
+		if !errors.Is(startupErr, context.DeadlineExceeded) {
+			t.Fatalf("startup returned %v, want its health check deadline", startupErr)
+		}
+	case <-time.After(7 * time.Second):
+		t.Fatal("startup health timeout did not reach the waiter while the SDK was blocked")
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if err := svc.EnsureStarted(ctx); err != startupErr {
+		t.Fatalf("retry during cleanup returned %v, want the same startup failure %v", err, startupErr)
+	}
+	shutdownCtx, cancelShutdown := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancelShutdown()
+	if err := svc.Shutdown(shutdownCtx); err != context.DeadlineExceeded {
+		t.Fatalf("shutdown returned %v before the SDK was released", err)
+	}
+
+	release()
+	if err := svc.Shutdown(ctx); ctx.Err() != nil || (err != nil && err != startupErr) {
+		t.Fatalf("shutdown after releasing the SDK returned %v", err)
+	}
+	startModelTestService(t, ctx, svc, nil)
 }
 
 type modelTransportFixture struct {

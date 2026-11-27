@@ -82,6 +82,11 @@ describe("会话资源选择", () => {
     expect(resourceMessageText("正文", metadata)).toBe("[review] [GitLab] 正文");
     expect(messageResources({ csgclaw: { resource_selection: { version: 2, refs: [skill] } } })).toEqual([]);
   });
+  it("keeps grouped skill IDs distinct in copied messages and thread previews", () => {
+    const refs = ["team/review", "user/review"].map((id) => ({ ...skill, id, name: "review" }));
+    const metadata = { csgclaw: { resource_selection: { version: 1, refs } } };
+    expect(resourceMessageText("Review", metadata)).toBe("[team/review] [user/review] Review");
+  });
   it("草稿保留 Agent 身份，切换目标后拒绝旧选择", () => {
     const segments = addResources([], [skill], "agent-a");
     const root = document.createElement("div");

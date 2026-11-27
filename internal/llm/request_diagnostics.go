@@ -13,8 +13,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type modelExchangeKey struct{}
@@ -22,11 +25,29 @@ type modelExchange struct {
 	recorder *diagnostics.Recorder
 	attempt  atomic.Uint64
 	id       string
+	openCSG  bool
+	failure  atomic.Pointer[diagnostics.ModelRequestStatus]
+	rootSpan trace.Span
 }
 type modelRequestContextKey struct{}
 type modelRequestContext struct{ id, agent, provider, model, runtimeModel string }
 type nativeRequestContextKey struct{}
 type nativeRequestContext struct{ session, turn string }
+
+func isOpenCSGGateway(profile agent.AgentProfile) bool {
+	if agent.NormalizeModelProviderID(profile.ModelProviderID) == agent.ModelProviderIDOpenCSG || profile.Provider == agent.ProviderCSGHub || profile.Provider == agent.ProviderOpenCSG {
+		return true
+	}
+	endpoint, err := url.Parse(profile.BaseURL)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(endpoint.Hostname()) {
+	case "ai.space.opencsg.com", "aigateway.opencsg.com", "aigateway.opencsg-stg.com":
+		return true
+	}
+	return false
+}
 
 func WithNativeRequestMetadata(ctx context.Context, session, turn string) context.Context {
 	if len(session) > 256 || len(turn) > 256 {
@@ -35,7 +56,7 @@ func WithNativeRequestMetadata(ctx context.Context, session, turn string) contex
 	return context.WithValue(ctx, nativeRequestContextKey{}, nativeRequestContext{session, turn})
 }
 
-func withModelRequestContext(ctx context.Context, agentID string, profile agent.AgentProfile, body []byte) context.Context {
+func (s *Service) withModelRequestContext(ctx context.Context, agentID string, profile agent.AgentProfile, body []byte) context.Context {
 	var input struct {
 		Model string `json:"model"`
 	}
@@ -51,7 +72,16 @@ func withModelRequestContext(ctx context.Context, agentID string, profile agent.
 			secrets = append(secrets, value)
 		}
 	}
-	exchange := &modelExchange{recorder: diagnostics.NewRecorder(ctx, secrets...), id: metadata.id}
+	openCSG := isOpenCSGGateway(profile)
+	var rootSpan trace.Span
+	if openCSG && modelTraceID(ctx) == "" {
+		ctx, rootSpan = s.gatewayTracer.Tracer("csgclaw/llm").Start(ctx, "OpenCSG model request")
+	}
+	exchange := &modelExchange{
+		recorder: diagnostics.NewRecorder(ctx, secrets...), id: metadata.id,
+		openCSG:  openCSG,
+		rootSpan: rootSpan,
+	}
 	exchange.recorder.Capture("model.runtime_request", map[string]any{"request_id": metadata.id, "ingress_request_id": diagnostics.IngressID(ctx), "agent_id": agentID, "provider": provider, "model": profile.ModelID, "body": json.RawMessage(body)})
 	ctx = context.WithValue(ctx, modelExchangeKey{}, exchange)
 	ctx = diagnostics.WithRequestModel(ctx, profile.ModelID)
@@ -67,6 +97,12 @@ func modelRequestLogAttrs(req *http.Request) []any {
 	metadata, _ := req.Context().Value(modelRequestContextKey{}).(modelRequestContext)
 	native, _ := req.Context().Value(nativeRequestContextKey{}).(nativeRequestContext)
 	attrs := []any{"request_id", metadata.id, "agent_id", metadata.agent, "model_provider", metadata.provider, "model", metadata.model, "runtime_model", metadata.runtimeModel, "operation", req.URL.Path, "upstream_host", req.URL.Host, "request_bytes", req.ContentLength, "app_version", version.Version, "app_commit", version.Commit}
+	if exchange, _ := req.Context().Value(modelExchangeKey{}).(*modelExchange); exchange != nil {
+		attrs = append(attrs, "attempt", exchange.attempt.Load())
+		if traceID := modelTraceID(req.Context()); exchange.openCSG && traceID != "" {
+			attrs = append(attrs, "trace_id", traceID)
+		}
+	}
 	if native.session != "" {
 		attrs = append(attrs, "runtime_session_id", native.session, "runtime_turn_id", native.turn)
 	}
@@ -132,11 +168,19 @@ func logModelRequest(req *http.Request) {
 func captureRuntimeResponse(ctx context.Context, response *UpstreamResponse, err error) (*UpstreamResponse, error) {
 	exchange, _ := ctx.Value(modelExchangeKey{}).(*modelExchange)
 	if exchange != nil {
+		if err != nil || (response != nil && response.StatusCode >= 400) {
+			if failure := exchange.failure.Load(); failure != nil {
+				reportModelRequestFailure(ctx, *failure)
+			}
+		}
 		if err != nil {
 			exchange.recorder.Capture("model.runtime_error", map[string]any{"request_id": exchange.id, "error": err.Error()})
 		}
 		if response != nil {
 			response.Body = diagnostics.ObserveBody(response.Body, exchange.recorder, "model.runtime_response", map[string]any{"request_id": exchange.id, "status": response.StatusCode}, response.Header.Get("Content-Type"))
+		}
+		if exchange.rootSpan != nil {
+			endTraceWithResponse(exchange.rootSpan, response)
 		}
 	}
 	return response, err

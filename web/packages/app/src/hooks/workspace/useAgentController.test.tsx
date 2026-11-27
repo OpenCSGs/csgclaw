@@ -28,6 +28,7 @@ import {
   deleteAgentSkillRequest,
   deleteBotRequest,
   fetchAgent,
+  generateAgentDescriptionRequest,
   fetchAgentMCPServers,
   fetchAgentProfile,
   fetchAgentProfileDefaults,
@@ -108,6 +109,7 @@ vi.mock("@/api/agents", async () => {
     deleteAgentSkillRequest: vi.fn(),
     deleteBotRequest: vi.fn(),
     fetchAgent: vi.fn(),
+    generateAgentDescriptionRequest: vi.fn(),
     fetchAgentMCPServers: vi.fn(),
     fetchAgentProfile: vi.fn(),
     fetchAgentProfileDefaults: vi.fn(),
@@ -1465,6 +1467,61 @@ describe("useAgentController", () => {
       await result.current.agentViewProps.onMetadataSave?.({ description: "Updated description" });
     });
     expect(updateAgentRequest).toHaveBeenLastCalledWith("u-manager", { description: "Updated description" });
+  });
+
+  it("requests introduction generation through the Agent without an OpenCSG login precheck", async () => {
+    const agentProfile: AgentProfileLike = { ...profile, provider: "csghub", model_provider_id: "opencsg" };
+    const agent: AgentLike = { ...oldAgent, runtime_kind: "dsh", agent_profile: agentProfile };
+    vi.mocked(fetchAgent).mockResolvedValue(agent);
+    vi.mocked(fetchAgentProfile).mockResolvedValue(agentProfile);
+    vi.mocked(generateAgentDescriptionRequest)
+      .mockResolvedValueOnce({ ...agent, description: "I can review technical documents." })
+      .mockRejectedValueOnce({ status: 502, code: "agent_description_failed", message: "Agent request failed" });
+    const authGuard = {
+      ...openCSGAuthGuardStub(false),
+      requireAuthentication: vi.fn(() => false),
+      handleAuthenticationError: vi.fn(() => true),
+    };
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ agents: [agent], openCSGAuthGuard: authGuard }).controller,
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.agentViewProps.savedDraft?.model_provider_id).toBe("opencsg"));
+    authGuard.handleAuthenticationError.mockClear();
+
+    const previousDescription = result.current.agentViewProps.draft?.description;
+    await act(async () => {
+      expect(await result.current.agentViewProps.onGenerateDescription()).toBe("I can review technical documents.");
+    });
+    expect(generateAgentDescriptionRequest).toHaveBeenCalledWith(agent.id, expect.any(String));
+    expect(result.current.agentViewProps.draft?.description).toBe(previousDescription);
+    expect(updateAgentRequest).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await expect(result.current.agentViewProps.onGenerateDescription()).rejects.toMatchObject({
+        code: "agent_description_failed",
+      });
+    });
+    expect(authGuard.handleAuthenticationError).not.toHaveBeenCalled();
+    expect(result.current.agentViewProps.notice).toBe("");
+    expect(authGuard.requireAuthentication).not.toHaveBeenCalled();
+  });
+
+  it("protects an unsaved introduction without including it in the profile save", async () => {
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.agentViewProps.savedDraft?.agent_id).toBe(oldAgent.id));
+    const agentID = String(oldAgent.id);
+    act(() => result.current.agentViewProps.onDescriptionDirtyChange(agentID, true));
+    expect(result.current.agentViewProps.hasUnsavedDescription).toBe(true);
+    expect(result.current.agentViewProps.hasUnsavedChanges).toBe(false);
+    const leaving = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
+    act(() => result.current.agentViewProps.onDescriptionDirtyChange(agentID, false));
+    const afterDiscard = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(afterDiscard);
+    expect(afterDiscard.defaultPrevented).toBe(false);
+    expect(updateAgentRequest).not.toHaveBeenCalled();
   });
 
   it("makes a failed provider selectable after model discovery succeeds", async () => {

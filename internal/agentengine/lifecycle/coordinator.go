@@ -19,11 +19,11 @@ type Coordinator struct {
 	DrainTimeout time.Duration
 }
 type gate struct {
-	token   chan struct{}
-	mu      sync.Mutex
-	closed  bool
-	active  int
-	drained chan struct{}
+	token    chan struct{}
+	mu       sync.Mutex
+	reopened chan struct{}
+	active   int
+	drained  chan struct{}
 }
 type mutation struct {
 	owner   *Coordinator
@@ -70,6 +70,16 @@ func (c *Coordinator) gate(id string) *gate {
 // Execution pins a slot until the idempotent release is called.
 // New execution fails while a mutation is draining, preventing starvation.
 func (c *Coordinator) Execution(ctx context.Context, id string) (func(), error) {
+	return c.pin(ctx, id, false)
+}
+
+// Read pins an Agent for an administrative lookup and its dependent writes.
+// It can share an active execution or nest inside an existing mutation.
+func (c *Coordinator) Read(ctx context.Context, id string) (func(), error) {
+	return c.pin(ctx, id, true)
+}
+
+func (c *Coordinator) pin(ctx context.Context, id string, read bool) (func(), error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -80,12 +90,28 @@ func (c *Coordinator) Execution(ctx context.Context, id string) (func(), error) 
 	if c == nil || id == "" {
 		return nil, fmt.Errorf("lifecycle coordinator and agent ID are required")
 	}
+	if read && c.holdsMutation(ctx, id) {
+		return func() {}, nil
+	}
 	g := c.gate(id)
 	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.closed {
-		return nil, fmt.Errorf("agent %q lifecycle change is in progress", id)
+	for g.reopened != nil {
+		// An active conversation may itself be requesting this binding.
+		// Waiting for a mutation that is draining it would block both.
+		if !read || g.active > 0 {
+			g.mu.Unlock()
+			return nil, fmt.Errorf("agent %q lifecycle change is in progress", id)
+		}
+		reopened := g.reopened
+		g.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-reopened:
+		}
+		g.mu.Lock()
 	}
+	defer g.mu.Unlock()
 	if g.active == 0 {
 		g.drained = make(chan struct{})
 	}
@@ -101,6 +127,16 @@ func (c *Coordinator) Execution(ctx context.Context, id string) (func(), error) 
 			}
 		})
 	}, nil
+}
+
+func (c *Coordinator) holdsMutation(ctx context.Context, id string) bool {
+	current, _ := ctx.Value(mutationKey{}).(*mutation)
+	for ; current != nil; current = current.parent {
+		if current.owner == c && current.agentID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Mutation returns a reentrant context and exclusive lease. Both lock waiting
@@ -133,16 +169,13 @@ func (c *Coordinator) MutationPrepare(ctx context.Context, id string, prepare fu
 	if err := ctx.Err(); err != nil {
 		return ctx, nil, err
 	}
-	parent, _ := ctx.Value(mutationKey{}).(*mutation)
-	for held := parent; held != nil; held = held.parent {
-		if held.owner == c && held.agentID == id {
-			if prepare != nil {
-				if err := prepare(ctx); err != nil {
-					return ctx, nil, err
-				}
+	if c.holdsMutation(ctx, id) {
+		if prepare != nil {
+			if err := prepare(ctx); err != nil {
+				return ctx, nil, err
 			}
-			return ctx, func() {}, nil
 		}
+		return ctx, func() {}, nil
 	}
 	g := c.gate(id)
 	select {
@@ -151,11 +184,17 @@ func (c *Coordinator) MutationPrepare(ctx context.Context, id string, prepare fu
 	case <-g.token:
 	}
 	g.mu.Lock()
-	g.closed = true
+	g.reopened = make(chan struct{})
 	drained := g.drained
 	g.mu.Unlock()
-	var once sync.Once
-	release := func() { once.Do(func() { g.mu.Lock(); g.closed = false; g.mu.Unlock(); g.token <- struct{}{} }) }
+	release := sync.OnceFunc(func() {
+		g.mu.Lock()
+		close(g.reopened)
+		g.reopened = nil
+		g.mu.Unlock()
+		g.token <- struct{}{}
+	})
+	parent, _ := ctx.Value(mutationKey{}).(*mutation)
 	mutationCtx := context.WithValue(ctx, mutationKey{}, &mutation{owner: c, agentID: id, parent: parent})
 	if prepare != nil {
 		if err := prepare(mutationCtx); err != nil {

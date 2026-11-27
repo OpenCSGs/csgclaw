@@ -1,3 +1,4 @@
+import { clearTestComposerDrafts } from "../helpers/composerDrafts";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
@@ -9,6 +10,8 @@ import { paneFromLocation, pathForPane, WorkspacePaneTypes } from "@/models/rout
 import { createTranslator } from "@/shared/i18n";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
+
+afterEach(clearTestComposerDrafts);
 
 vi.mock("@/shared/realtime/imEvents", () => ({ subscribeIMEvents: vi.fn(() => () => {}) }));
 vi.mock("@/api/tasks", async (importOriginal) => ({

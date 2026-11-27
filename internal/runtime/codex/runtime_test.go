@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	stdruntime "runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -28,6 +29,37 @@ import (
 type fakeBinaryProvider struct {
 	path string
 	err  error
+}
+
+func TestCodexProxyEnvironmentKeepsWildcard(t *testing.T) {
+	const httpProxy = "http_proxy=http://proxy.example:8080"
+	const httpsProxy = "HTTPS_PROXY=http://proxy.example:8080"
+	const allProxy = "All_Proxy=socks5://proxy.example:1080"
+	for _, key := range []string{"NO_PROXY", "no_proxy"} {
+		t.Run(key, func(t *testing.T) {
+			got := codexProxyEnvironment([]string{httpProxy, httpsProxy, allProxy, key + "=*", "LANG=C"}, "")
+			want := []string{"LANG=C", "NO_PROXY=*,0.0.0.0/0,::/0"}
+			if stdruntime.GOOS != "windows" {
+				want = []string{httpProxy, httpsProxy, allProxy, "LANG=C", "NO_PROXY=*,0.0.0.0/0,::/0", "no_proxy=*"}
+			}
+			if !slices.Equal(got, want) {
+				t.Fatalf("environment = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestCodexProxyEnvironmentKeepsEffectiveLowercaseOverride(t *testing.T) {
+	base := []string{"HTTP_PROXY=http://proxy.example:8080", "NO_PROXY=*", "no_proxy= "}
+	environment, _, err := agentruntime.MergeExtensionEnvironment(base, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := codexProxyEnvironment(environment, "")
+	want := []string{"HTTP_PROXY=http://proxy.example:8080", "no_proxy= ,127.0.0.1,localhost,::1,[::1]"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("environment = %q, want %q", got, want)
+	}
 }
 
 type binaryProviderFunc func(context.Context) (string, error)
@@ -1933,8 +1965,8 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	if handle.HandleID != "main-thread" {
-		t.Fatalf("initial handle id = %q, want main-thread", handle.HandleID)
+	if handle.HandleID != handle.RuntimeID {
+		t.Fatalf("idle handle id = %q, want %q", handle.HandleID, handle.RuntimeID)
 	}
 
 	legacyWorkspaceDir := filepath.Join(root, "alice", ".codex", "workspace")
@@ -1960,8 +1992,8 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Session() after reload error = %v", err)
 	}
-	if session.SessionID != "resumed-thread" {
-		t.Fatalf("hydrated session id = %q, want resumed-thread", session.SessionID)
+	if session.SessionID != "main-thread" {
+		t.Fatalf("hydrated session id = %q, want main-thread", session.SessionID)
 	}
 	if session.BinaryPath != explicitBinary {
 		t.Fatalf("hydrated binary path = %q, want explicit override %q", session.BinaryPath, explicitBinary)

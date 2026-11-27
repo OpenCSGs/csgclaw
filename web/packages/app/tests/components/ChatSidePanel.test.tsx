@@ -1,3 +1,4 @@
+import { subscribeSidebarAutoCollapse } from "@/shared/layout/sidebarAutoCollapse";
 import testChatSidePanelStyles from "@/components/business/ChatSidePanel/ChatSidePanel.module.css";
 import { useEffect, useRef } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -313,7 +314,7 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Files" }));
     const panel = screen.getByRole("complementary");
     const actions = panel.querySelector(`.${testChatSidePanelStyles["chat-side-leading-actions"]}`);
-    expect(actions?.nextElementSibling).toHaveClass("chat-side-tabs");
+    expect(actions?.nextElementSibling).toHaveClass(testChatSidePanelStyles["chat-side-tabs"]);
     expect(actions?.querySelectorAll("button")[0]).toHaveAttribute("aria-label", "New tab");
     expect(actions?.querySelectorAll("button")[1]).toHaveAttribute("aria-label", "Close all tabs");
     await user.click(within(panel).getByRole("button", { name: "Close all tabs" }));
@@ -630,9 +631,9 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Files" }));
     const panel = screen.getByRole("complementary");
     await user.click(within(panel).getByRole("button", { name: "Maximize sidebar" }));
-    expect(panel).toHaveClass("is-maximized");
+    expect(panel).toHaveAttribute("data-layout", "maximized");
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(panel).not.toHaveClass("is-maximized");
+    expect(panel).not.toHaveAttribute("data-layout", "maximized");
     expect(panel).toBeVisible();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(panel).not.toBeVisible();
@@ -662,4 +663,25 @@ it("opens the Agent's live browser in its chat and closes the shared session wit
   await waitFor(() => expect(closeBrowserSession).toHaveBeenCalledWith(conversation.id, "shared-browser"));
   expect(screen.queryByRole("region", { name: "Agent browser" })).not.toBeInTheDocument();
   vi.mocked(fetchBrowserSessions).mockResolvedValue([]);
+});
+
+it("requests navigation space when keyboard resizing reaches the conversation minimum", async () => {
+  const original = HTMLElement.prototype.getBoundingClientRect;
+  const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("chat-panel") ? new DOMRect(0, 0, 1000, 800) : original.call(this);
+  });
+  const collapse = vi.fn();
+  const unsubscribe = subscribeSidebarAutoCollapse(collapse);
+  try {
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    fireEvent.click(screen.getByRole("button", { name: "Browser" }));
+    const resize = await screen.findByRole("separator", { name: "Resize sidebar" });
+    for (let i = 0; i < 8; i++) fireEvent.keyDown(resize, { key: "ArrowLeft" });
+    expect(collapse).toHaveBeenCalled();
+  } finally {
+    unsubscribe();
+    measure.mockRestore();
+  }
 });

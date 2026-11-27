@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Combobox } from "csgclaw-ui";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
 import type { TranslateFn } from "@/models/conversations";
-import { isOpenCSGAutoModel } from "@/models/modelProviders";
+import { isOpenCSGAutoModel, isRecommendedOpenCSGModel, modelIDsForPicker } from "@/models/modelProviders";
 
 export type ModelPickerProps = {
   value: string;
@@ -37,6 +37,7 @@ export function ModelPicker({
       model={isAuto(model) ? t("modelProviderAutoName") : model}
       badge={showBadge && isAuto(model) ? t("modelProviderAutoBadge") : undefined}
       title={isAuto(model) ? t("modelProviderAutoRouteHint") : undefined}
+      qualifier={showBadge && isRecommendedOpenCSGModel(providerID, model) ? t("modelRecommended") : undefined}
       showAvatar={false}
     />
   );
@@ -53,15 +54,13 @@ export function ModelPicker({
       triggerProps={{ "aria-label": label ?? t("profileModel"), "aria-required": required }}
       searchPlaceholder={t("modelProviderModelSearch")}
       emptyLabel={t("modelProviderNoModels")}
-      options={[
-        ...uniqueModels.map((model) => ({
-          value: model,
-          label: renderOptionLabel?.(model) ?? modelLabel(model),
-          textValue: modelSearchText(model),
-          description: isAuto(model) ? t("modelProviderAutoDescription") : undefined,
-          separatorAfter: isAuto(model),
-        })),
-      ]}
+      options={modelIDsForPicker(providerID, uniqueModels).map((model) => ({
+        value: model,
+        label: renderOptionLabel?.(model) ?? modelLabel(model),
+        textValue: modelSearchText(model),
+        description: isAuto(model) ? t("modelProviderAutoDescription") : undefined,
+        separatorAfter: isAuto(model),
+      }))}
     />
   );
 }

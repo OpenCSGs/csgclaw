@@ -8,7 +8,8 @@ import type { AgentProfileLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import {
   modelProviderAvatarPath,
-  modelIDsForProviderSelection,
+  isRecommendedOpenCSGModel,
+  modelIDsForPicker,
   type ModelProviderCatalog,
 } from "@/models/modelProviders";
 import styles from "./DefaultModelSettings.module.css";
@@ -82,7 +83,7 @@ export function DefaultModelSettings({ catalog, t }: { catalog: ModelProviderCat
           .flatMap((provider) => {
             const models =
               kind === "agent"
-                ? modelIDsForProviderSelection(
+                ? modelIDsForPicker(
                     provider.id,
                     provider.models.filter(
                       (model) => !provider.imageModels?.includes(model) && !provider.videoModels?.includes(model),
@@ -95,6 +96,11 @@ export function DefaultModelSettings({ catalog, t }: { catalog: ModelProviderCat
                 <ModelOptionLabel
                   avatar={modelProviderAvatarPath(provider)}
                   model={model}
+                  qualifier={
+                    kind === "agent" && isRecommendedOpenCSGModel(provider.id, model)
+                      ? t("modelRecommended")
+                      : undefined
+                  }
                   provider={provider.display_name}
                 />
               ),

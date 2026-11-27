@@ -1,19 +1,25 @@
-import { act, renderHook } from "@testing-library/react";
-import { submitFeedback } from "@/api/feedback";
-import { useFeedback } from "@/pages/SettingsPage/useFeedback";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { readFeedbackStatus, submitFeedback } from "@/api/feedback";
+import { useFeedback } from "@/components/business/Feedback/useFeedback";
+import { readFeedbackDraft, saveFeedbackDraft } from "@/shared/storage/feedbackDraft";
 
-vi.mock("@/api/feedback", () => ({ submitFeedback: vi.fn() }));
-beforeEach(() => vi.clearAllMocks());
+vi.mock("@/api/feedback", () => ({ submitFeedback: vi.fn(), readFeedbackStatus: vi.fn() }));
+vi.mock("@/shared/storage/feedbackDraft", () => ({ readFeedbackDraft: vi.fn(), saveFeedbackDraft: vi.fn() }));
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(readFeedbackDraft).mockResolvedValue(undefined);
+  vi.mocked(saveFeedbackDraft).mockResolvedValue(undefined);
+});
 
 it("preserves content after failure and allows an explicit retry", async () => {
   vi.mocked(submitFeedback)
-    .mockRejectedValueOnce(new Error("Network disconnected"))
+    .mockRejectedValueOnce({ code: "feedback_upload_failed" })
     .mockResolvedValueOnce({ success: true });
   const { result } = renderHook(() => useFeedback((key) => key));
   const image = new File(["image"], "test.png", { type: "image/png" });
   act(() => {
     result.current.changeDescription("A problem");
-    result.current.changeImages([image]);
+    result.current.addAttachments([image]);
   });
   await act(async () => {
     await result.current.submit();
@@ -24,8 +30,9 @@ it("preserves content after failure and allows an explicit retry", async () => {
   await act(async () => {
     await result.current.submit();
   });
-  expect(submitFeedback).toHaveBeenLastCalledWith("A problem", [image]);
-  expect(result.current.success).toBe(true);
+  const attempt = vi.mocked(submitFeedback).mock.calls[0][3];
+  expect(submitFeedback).toHaveBeenLastCalledWith("A problem", [image], [], attempt);
+  expect(result.current.receipt?.success).toBe(true);
   expect(result.current.description).toBe("");
 });
 
@@ -52,11 +59,130 @@ it("prevents simultaneous submits", async () => {
   });
 });
 
-it("clears form state when the signed-in account or site changes", () => {
+it("clears form state when the signed-in account or site changes", async () => {
   const { result, rerender } = renderHook(({ scope }) => useFeedback((key) => key, scope), {
     initialProps: { scope: "user:site-a" },
   });
-  act(() => result.current.changeDescription("Private feedback"));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  await act(async () => result.current.changeDescription("Private feedback"));
   rerender({ scope: "user:site-b" });
   expect(result.current.description).toBe("");
+  await waitFor(() => expect(result.current.ready).toBe(true));
+});
+
+it("keeps valid files in a mixed batch and sends archives separately", async () => {
+  vi.mocked(submitFeedback).mockResolvedValue({ success: true, issue_id: 42 });
+  const { result } = renderHook(() => useFeedback((key) => key));
+  const screenshot = new File(["image"], "Screenshot.PNG");
+  const archive = new File(["zip"], "diagnostics.zip");
+  const invalid = new File(["text"], "notes.txt", { type: "text/plain" });
+  const oversized = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "oversized.zip");
+  act(() => result.current.addAttachments([screenshot, invalid, oversized, archive]));
+  expect(result.current.images).toEqual([screenshot]);
+  expect(result.current.archives).toEqual([archive]);
+  expect(result.current.rejections).toEqual([
+    { file: "notes.txt", reason: "feedbackAttachmentFormat" },
+    { file: "oversized.zip", reason: "feedbackArchiveTooLarge" },
+  ]);
+  act(() => result.current.removeAttachment("image", 0));
+  expect(result.current.rejections).toHaveLength(2);
+  act(() => result.current.addAttachments([screenshot]));
+  await act(async () => {
+    await result.current.submit();
+  });
+  expect(submitFeedback).toHaveBeenCalledWith("", [screenshot], [archive], expect.stringMatching(/^[a-f0-9]{32}$/));
+  expect(result.current.receipt?.issue_id).toBe(42);
+});
+
+it("clears only the count warnings for the attachment type that has room again", () => {
+  const { result } = renderHook(() => useFeedback((key) => key));
+  const images = Array.from({ length: 7 }, (_, index) => new File(["image"], `image-${index}.png`));
+  const archives = Array.from({ length: 4 }, (_, index) => new File(["zip"], `archive-${index}.zip`));
+  const invalid = new File(["text"], "notes.txt", { type: "text/plain" });
+  act(() => result.current.addAttachments([...images, ...archives, invalid]));
+  expect(result.current.rejections.map(({ reason }) => reason)).toEqual([
+    "feedbackImageCount",
+    "feedbackArchiveCount",
+    "feedbackAttachmentFormat",
+  ]);
+  act(() => result.current.removeAttachment("image", 0));
+  expect(result.current.images).toHaveLength(5);
+  expect(result.current.rejections.map(({ reason }) => reason)).toEqual([
+    "feedbackArchiveCount",
+    "feedbackAttachmentFormat",
+  ]);
+  act(() => result.current.removeAttachment("archive", 0));
+  expect(result.current.archives).toHaveLength(2);
+  expect(result.current.rejections).toEqual([{ file: "notes.txt", reason: "feedbackAttachmentFormat" }]);
+});
+
+it("restores a pending draft and checks the receipt without resending", async () => {
+  const image = new File(["image"], "feedback.png", { type: "image/png" });
+  const requestID = "0123456789abcdef0123456789abcdef";
+  vi.mocked(readFeedbackDraft).mockResolvedValue({
+    description: "Saved draft",
+    images: [image],
+    archives: [],
+    requestID,
+    awaitingStatus: true,
+  });
+  vi.mocked(readFeedbackStatus).mockResolvedValue({ state: "submitted", receipt: { success: true, issue_id: 12 } });
+  const { result } = renderHook(() => useFeedback((key) => key, "my-site:my-account"));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  expect(result.current.description).toBe("Saved draft");
+  expect(result.current.images).toEqual([image]);
+  await act(async () => {
+    await result.current.submit();
+  });
+  expect(submitFeedback).not.toHaveBeenCalled();
+  await act(async () => {
+    await result.current.checkStatus();
+  });
+  expect(readFeedbackStatus).toHaveBeenCalledWith(requestID);
+  expect(result.current.receipt?.issue_id).toBe(12);
+  expect(saveFeedbackDraft).toHaveBeenLastCalledWith(
+    "my-site:my-account",
+    { description: "", images: [], archives: [] },
+    true,
+  );
+});
+
+it("checks an unknown result and reuses its reference when the attempt was not recorded", async () => {
+  vi.mocked(submitFeedback)
+    .mockRejectedValueOnce(new Error("Network disconnected"))
+    .mockResolvedValueOnce({ success: true });
+  vi.mocked(readFeedbackStatus)
+    .mockResolvedValueOnce({ state: "unknown" })
+    .mockRejectedValueOnce(new DOMException("The operation timed out", "TimeoutError"))
+    .mockResolvedValueOnce({ state: "not_found" });
+  const { result } = renderHook(() => useFeedback((key) => key));
+  act(() => result.current.changeDescription("A problem"));
+  await act(async () => {
+    await result.current.submit();
+  });
+  expect(result.current.awaitingStatus).toBe(true);
+  await act(async () => {
+    await result.current.checkStatus();
+  });
+  expect(result.current.awaitingStatus).toBe(true);
+  expect(result.current.error).toBe("feedbackStillUnknown");
+  await act(async () => {
+    await result.current.checkStatus();
+  });
+  expect(result.current.awaitingStatus).toBe(true);
+  expect(result.current.checking).toBe(false);
+  expect(result.current.error).toBe("feedbackStatusFailed");
+  await act(async () => {
+    await result.current.submit();
+  });
+  expect(submitFeedback).toHaveBeenCalledOnce();
+  await act(async () => {
+    await result.current.checkStatus();
+  });
+  expect(result.current.awaitingStatus).toBe(false);
+  await act(async () => {
+    await result.current.submit();
+  });
+  expect(submitFeedback).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(submitFeedback).mock.calls[0][3]).toBe(vi.mocked(submitFeedback).mock.calls[1][3]);
 });

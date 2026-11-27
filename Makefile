@@ -1,7 +1,6 @@
 APP ?= csgclaw
 BIN_DIR ?= bin
 DIST_DIR ?= dist
-GOCACHE ?= $(CURDIR)/.gocache
 VERSION ?= $(shell sh $(CURDIR)/scripts/version.sh)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -77,7 +76,7 @@ fmt:
 	$(GOFMT) -w $(shell find cli cmd internal web -name '*.go')
 
 test:
-	env GOCACHE=$(GOCACHE) $(GO) test ./...
+	$(GO) test ./...
 
 check-web-toolchain:
 	@$(WEB_PNPM) --check
@@ -178,7 +177,7 @@ desktop-dev: ensure-desktop-deps build-web build-server-bin
 
 desktop-backend-bundle: build-web
 	@printf 'Building desktop backend (%s/%s)...\n' "$(TARGET_OS)" "$(TARGET_ARCH)"
-	@VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-desktop-backend.sh $(TARGET_OS) $(TARGET_ARCH)
+	@VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) $(CURDIR)/scripts/package-desktop-backend.sh $(TARGET_OS) $(TARGET_ARCH)
 
 desktop-package: WEB_BUILD_REPORT := summary
 desktop-package: ensure-desktop-deps desktop-backend-bundle
@@ -264,9 +263,9 @@ build-server-bin: build-codex-cli
 	else \
 		rm -f "$(BIN_DIR)/csgclaw.exe" "$(BIN_DIR)/csgclaw-cli.exe"; \
 	fi
-	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
+	env CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
 		$(GO) build -ldflags "$(LDFLAGS)" -o "$(SERVER_BIN)" ./cmd/csgclaw
-	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
+	env CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
 		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o "$(HOST_CLI_BIN)" ./cmd/csgclaw-cli
 
 build-codex-cli:
@@ -280,25 +279,25 @@ run: build
 
 package: build-web
 	mkdir -p $(DIST_DIR)
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=$(APP) GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=$(APP) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
 
 package-all: build-all
 	mkdir -p $(DIST_DIR)
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
 
 release: build-web
 	mkdir -p $(DIST_DIR)
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh darwin arm64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh darwin arm64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh darwin amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh darwin amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh linux amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh linux amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh linux arm64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh linux arm64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh windows amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh windows amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw $(CURDIR)/scripts/package-release.sh darwin arm64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli $(CURDIR)/scripts/package-release.sh darwin arm64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw $(CURDIR)/scripts/package-release.sh darwin amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli $(CURDIR)/scripts/package-release.sh darwin amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw $(CURDIR)/scripts/package-release.sh linux amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli $(CURDIR)/scripts/package-release.sh linux amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw $(CURDIR)/scripts/package-release.sh linux arm64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli $(CURDIR)/scripts/package-release.sh linux arm64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw $(CURDIR)/scripts/package-release.sh windows amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli $(CURDIR)/scripts/package-release.sh windows amd64
 
 clean:
-	rm -rf $(BIN_DIR) $(DIST_DIR) $(GOCACHE) $(addprefix $(dir $(abspath $(BIN_DIR))),codex-resources codex-path codex-package.json)
+	rm -rf $(BIN_DIR) $(DIST_DIR) $(addprefix $(dir $(abspath $(BIN_DIR))),codex-resources codex-path codex-package.json)

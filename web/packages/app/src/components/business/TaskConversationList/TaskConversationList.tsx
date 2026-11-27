@@ -1,9 +1,25 @@
-import { useEffect, useRef, useState } from "react";
-import { Archive, MoreHorizontal, Pin, PinOff, Search, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Archive,
+  ChevronDown,
+  Filter,
+  Folder,
+  Funnel,
+  ListFilter,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Search,
+  Users,
+  X,
+} from "lucide-react";
 import {
   Button,
   Tooltip,
-  Select,
+  PopoverRoot,
+  PopoverTrigger,
+  PopoverContent,
   Checkbox,
   TextInput,
   DialogRoot,
@@ -27,6 +43,7 @@ import { useCloudAgentAvatarMetadata } from "@/hooks/workspace/useCloudAgentAvat
 import { cloudAgentAvatar } from "@/models/cloudAgents";
 import type { AuthStatus } from "@/models/auth";
 import { errorMessage } from "@/api/client";
+import { fetchTaskConversationFilters } from "@/api/taskConversations";
 import { taskConversationPreview, uniqueTaskConversations } from "@/models/taskConversations";
 import { resolveConversationUser } from "@/models/conversations";
 import type { IMConversation, IMMessage, TranslateFn, UsersById } from "@/models/conversations";
@@ -34,7 +51,70 @@ import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import { useArchiveConfirmation } from "@/hooks/workspace/useArchiveConfirmation";
 import { MANAGER_AGENT_ID, MANAGER_PARTICIPANT_ID } from "@/shared/constants/agents";
 import { localizeAPIError } from "@/shared/i18n";
+import {
+  collaborationConversationOwner,
+  conversationFilterOptions,
+  emptyConversationFilters,
+  type ConversationFilters,
+} from "@/models/conversationAgentFilter";
 import styles from "./TaskConversationList.module.css";
+
+function FilterRow({
+  label,
+  icon,
+  count,
+  selected,
+  onSelect,
+  title,
+  disabled,
+}: {
+  label: ReactNode;
+  icon: ReactNode;
+  count: number;
+  selected: boolean;
+  onSelect: () => void;
+  title?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={styles.filterOption}
+      aria-pressed={selected}
+      data-empty={count === 0}
+      disabled={disabled}
+      onClick={onSelect}
+      title={title}
+    >
+      <span className={styles.filterOptionIcon} aria-hidden="true">
+        {icon}
+      </span>
+      <span className={styles.filterOptionName}>{label}</span> <span className={styles.filterOptionCount}>{count}</span>
+    </button>
+  );
+}
+
+function FilterOptionsSkeleton({ label }: { label: string }) {
+  return (
+    <div role="status">
+      <span className="sr-only">{label}</span>
+      <div aria-hidden="true">
+        {["owner", "directory"].map((group) => (
+          <div key={group} className={styles.filterSection}>
+            <span className={styles.filterSkeletonHeading} />
+            {[0, 1].map((row) => (
+              <div key={row} className={styles.filterSkeletonRow}>
+                <span className={styles.filterSkeletonIcon} />
+                <span className={styles.filterSkeletonLabel} />
+                <span className={styles.filterSkeletonCount} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function highlightedSearchText(text: string, query: string) {
   const terms = Array.from(new Set(query.trim().split(/\s+/).filter(Boolean))).sort((a, b) => b.length - a.length);
@@ -77,7 +157,11 @@ type Props = {
   authStatus?: AuthStatus;
   archived?: boolean;
   compact?: boolean;
-  directories?: { path: string; agentIDs: string[] }[];
+  collapsed?: boolean;
+  onExpand?: () => void;
+  filters?: ConversationFilters;
+  onFiltersChange?: (filters: ConversationFilters) => void;
+  directoriesByPeer?: ReadonlyMap<string, string>;
   entry: TaskEntryController;
   activeID?: string;
   currentUserID: string;
@@ -89,11 +173,17 @@ type Props = {
   onEditAgent?: (room: IMConversation) => void;
 };
 
+const noDirectories = new Map<string, string>();
+
 export function TaskConversationList({
   authStatus,
   archived = false,
   compact = false,
-  directories = [],
+  collapsed = false,
+  onExpand,
+  filters,
+  onFiltersChange,
+  directoriesByPeer = noDirectories,
   entry,
   activeID,
   currentUserID,
@@ -104,52 +194,61 @@ export function TaskConversationList({
   onNewWith,
   onEditAgent,
 }: Props) {
-  const [search, setSearch] = useState("");
+  const [localSearch, setLocalSearch] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  if (collapsed && filterOpen) setFilterOpen(false);
+  const { owner, directory, search } = filters ?? { ...emptyConversationFilters, search: localSearch };
+  const filterCount = Number(Boolean(owner)) + Number(Boolean(directory));
+  const filtering = filterCount > 0;
+  const expandFilterLabel = filtering
+    ? t(filterCount === 1 ? "iaSessionExpandWithFilter" : "iaSessionExpandWithFilters", { count: filterCount })
+    : t("iaSessionExpandSearchResults");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const searchBarRef = useRef<HTMLDivElement>(null);
-  const [searchBarWidth, setSearchBarWidth] = useState<number>();
-  const [directory, setDirectory] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(search);
+  function setSearch(value: string) {
+    if (filters && onFiltersChange) onFiltersChange({ ...filters, search: value });
+    else setLocalSearch(value);
+  }
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<{ kind: "rename" | "archive" | "delete"; room: IMConversation } | null>(null);
   const [title, setTitle] = useState("");
   const [dontAsk, setDontAsk] = useState(false);
   const [skipArchive, setSkipArchive] = useArchiveConfirmation();
   useEffect(() => {
-    const element = searchBarRef.current;
-    if (!element) return;
-    const updateWidth = () => setSearchBarWidth(element.getBoundingClientRect().width);
-    updateWidth();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
     const timer = window.setTimeout(() => setQuery(search), 250);
     return () => window.clearTimeout(timer);
   }, [search]);
-  const list = useTaskConversationPages(archived, query);
+  const legacyPeers = directory
+    ? Array.from(directoriesByPeer, ([peer, path]) => (path === directory ? peer : ""))
+        .filter(Boolean)
+        .sort()
+    : [];
+  const list = useTaskConversationPages(
+    archived,
+    query,
+    true,
+    filtering ? { owner, directory, legacyPeers } : undefined,
+  );
   const deletingID = dialog?.kind === "delete" && entry.busyID === dialog.room.id ? dialog.room.id : "";
-  const allRooms = uniqueTaskConversations(list.data?.pages ?? []).filter((room) => room.id !== deletingID);
+  const rooms = uniqueTaskConversations(list.data?.pages ?? []).filter((room) => room.id !== deletingID);
   const cloudCatalog = useCloudAgentAvatarMetadata(authStatus);
-  const directoryPaths = Array.from(
-    new Set([
-      ...directories.map((item) => item.path),
-      ...allRooms.map((room) => room.configuration?.workspace_dir || ""),
-    ]),
-  ).filter(Boolean);
-  const directoryItem = directories.find((item) => item.path === directory);
-  const rooms = allRooms.filter((room) => {
-    if (!directory) return true;
-    if (room.configuration) return room.configuration.workspace_dir === directory;
-    return room.members.some((id) => directoryItem?.agentIDs.includes(id));
+  const filterGroups = useQuery({
+    queryKey: ["task-conversations", archived, query, "filters"],
+    enabled: filterOpen,
+    queryFn: () => fetchTaskConversationFilters(archived, query),
   });
-  const fetchNextPage = list.fetchNextPage;
-  useEffect(() => {
-    if (directory && rooms.length < 20 && list.hasNextPage && !list.isFetchingNextPage && !list.isFetchNextPageError)
-      void fetchNextPage();
-  }, [directory, rooms.length, list.hasNextPage, list.isFetchingNextPage, list.isFetchNextPageError, fetchNextPage]);
+  const options = useMemo(() => {
+    const groups = (filterGroups.data ?? []).map((group) => ({
+      members: group.peer ? [group.peer] : [],
+      is_direct: group.is_direct,
+      cloud_agent: group.cloud_user !== undefined ? { user_id: group.cloud_user } : undefined,
+      configuration: group.workspace_dir !== undefined ? { workspace_dir: group.workspace_dir } : undefined,
+      count: group.count,
+    }));
+    return conversationFilterOptions(groups, { owner, directory }, currentUserID, usersById, directoriesByPeer, t);
+  }, [filterGroups.data, owner, directory, currentUserID, usersById, directoriesByPeer, t]);
+  const optionsPending = filterGroups.isPending;
+  const optionsError = filterGroups.isError;
   async function run(action: () => Promise<unknown>) {
     setError("");
     try {
@@ -194,72 +293,159 @@ export function TaskConversationList({
     if (completed && dialog.kind === "archive" && dialog.room.id === activeIDRef.current) archiveCurrentRef.current?.();
   }
 
+  const searchField = (
+    <div className={styles.searchField}>
+      <Search size={15} aria-hidden="true" />
+      <TextInput
+        variant="plain"
+        ref={searchInputRef}
+        className={styles.search}
+        aria-label={t("taskEntrySearchHistory")}
+        placeholder={t(compact ? "iaSessionSearchPlaceholder" : "taskEntrySearchHistory")}
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
+      {search && (
+        <button
+          type="button"
+          className={styles.clearSearch}
+          aria-label={t("taskEntryClearSearch")}
+          title={t("taskEntryClearSearch")}
+          onClick={() => {
+            setSearch("");
+            setQuery("");
+            searchInputRef.current?.focus();
+          }}
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
   return (
-    <div className={`${styles.root} ${compact ? styles.compact : ""} ${archived ? styles.archived : ""}`}>
-      <div ref={searchBarRef} className={styles.searchBar}>
-        <div className={styles.searchField}>
-          <Search size={15} aria-hidden="true" />
-          <TextInput
-            variant="plain"
-            ref={searchInputRef}
-            className={styles.search}
-            aria-label={t("taskEntrySearchHistory")}
-            placeholder={t(compact ? "iaSessionSearchPlaceholder" : "taskEntrySearchHistory")}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          {search && (
-            <button
-              type="button"
-              className={styles.clearSearch}
-              aria-label={t("taskEntryClearSearch")}
-              title={t("taskEntryClearSearch")}
-              onClick={() => {
-                setSearch("");
-                setQuery("");
-                searchInputRef.current?.focus();
-              }}
-            >
-              <X size={14} aria-hidden="true" />
+    <div
+      className={`${styles.root} ${compact ? styles.compact : ""} ${archived ? styles.archived : ""} ${collapsed ? styles.collapsed : ""}`}
+    >
+      {collapsed && (filtering || search) ? (
+        <div className={styles.railControls}>
+          <Tooltip content={expandFilterLabel} contentProps={{ side: "right" }}>
+            <button type="button" aria-label={expandFilterLabel} onClick={onExpand}>
+              <span className={styles.railFilter}>
+                <Filter size={13} aria-hidden="true" />
+              </span>
             </button>
-          )}
+          </Tooltip>
         </div>
-        {compact ? (
-          <Select
-            size="sm"
-            triggerClassName={styles.directory}
-            contentClassName={styles.directoryMenu}
-            triggerProps={{
-              "aria-label": t("iaSessionDirectoryFilter"),
-              title: directory || t("iaSessionDirectoryAll"),
-            }}
-            contentProps={{
-              align: "end",
-              collisionPadding: 8,
-              style: searchBarWidth ? { width: searchBarWidth } : undefined,
-            }}
-            value={directory}
-            onValueChange={setDirectory}
-            options={[
-              { value: "", label: t("iaSessionDirectoryAll") },
-              ...directoryPaths.map((path) => {
-                const trimmed = path.replace(/[\\/]+$/, "");
-                const separator = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-                const prefix = separator >= 0 ? trimmed.slice(0, separator + 1) : "";
-                const current = separator >= 0 ? trimmed.slice(separator + 1) : trimmed;
-                return {
-                  value: path,
-                  label: current || path,
-                  description: (
-                    <span className={styles.directoryPath} title={path}>
-                      <span className={styles.directoryPrefix}>{prefix}</span>
-                      <span className={styles.directoryCurrent}>{current}</span>
-                    </span>
-                  ),
-                };
-              }),
-            ]}
-          />
+      ) : null}
+      <div hidden={collapsed} className={styles.searchBar}>
+        {!collapsed ? searchField : null}
+        {filters && onFiltersChange ? (
+          <PopoverRoot open={!collapsed && filterOpen} onOpenChange={setFilterOpen}>
+            <Tooltip content={t("iaSessionFilters")}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="secondaryGray"
+                  iconOnly
+                  size="sm"
+                  className={styles.filterTrigger}
+                  data-active={filtering || (collapsed && Boolean(search))}
+                  aria-label={t("iaSessionFilters")}
+                >
+                  <Funnel size={16} aria-hidden="true" />
+                  {filterCount ? <small className={styles.filterBadge}>{filterCount}</small> : null}
+                </Button>
+              </PopoverTrigger>
+            </Tooltip>
+            <PopoverContent
+              align="end"
+              collisionPadding={8}
+              className={styles.filterPanel}
+              aria-label={t("iaSessionFilters")}
+            >
+              <div className={styles.filterHead}>
+                <span>{t("iaSessionFilters")}</span>
+                {filtering ? (
+                  <button
+                    type="button"
+                    className={styles.filterReset}
+                    onClick={() => onFiltersChange({ search, owner: "", directory: "" })}
+                  >
+                    {t("iaSessionClearFilters")}
+                  </button>
+                ) : null}
+              </div>
+              {!optionsPending && !optionsError ? (
+                <>
+                  <div className={styles.filterSection} role="group" aria-label={t("iaSessionOwnerFilter")}>
+                    <p>{t("iaSessionOwnerFilter")}</p>
+                    <FilterRow
+                      label={t("iaSessionOwnerAll")}
+                      icon={<ListFilter size={14} />}
+                      count={options.ownerTotal}
+                      selected={!owner}
+                      onSelect={() => onFiltersChange({ ...filters, owner: "" })}
+                    />
+                    {options.owners.map((option) => (
+                      <FilterRow
+                        key={option.value}
+                        title={option.label}
+                        label={option.label}
+                        icon={
+                          option.value === collaborationConversationOwner ? (
+                            <Users size={14} />
+                          ) : (
+                            <AgentAvatarContent avatar={option.avatar} fallback={option.label.slice(0, 1)} />
+                          )
+                        }
+                        count={option.count}
+                        selected={owner === option.value}
+                        disabled={option.count === 0}
+                        onSelect={() => onFiltersChange({ ...filters, owner: option.value })}
+                      />
+                    ))}
+                  </div>
+                  <div className={styles.filterSection} role="group" aria-label={t("iaSessionDirectoryFilter")}>
+                    <p>{t("iaSessionDirectoryFilter")}</p>
+                    <FilterRow
+                      label={t("iaSessionDirectoryAll")}
+                      icon={<Folder size={14} />}
+                      count={options.directoryTotal}
+                      selected={!directory}
+                      onSelect={() => onFiltersChange({ ...filters, directory: "" })}
+                    />
+                    {options.directories.map(({ path, count }) => {
+                      const separator = path.replace(/[\\/]+$/, "").search(/[^\\/]+$/);
+                      const prefix = separator > 0 ? path.slice(0, separator) : "";
+                      return (
+                        <FilterRow
+                          key={path}
+                          title={path}
+                          label={
+                            <span className={styles.filterPath}>
+                              <span>{prefix}</span>
+                              {path.slice(prefix.length)}
+                            </span>
+                          }
+                          icon={<Folder size={14} />}
+                          count={count}
+                          selected={directory === path}
+                          disabled={count === 0}
+                          onSelect={() => onFiltersChange({ ...filters, directory: path })}
+                        />
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
+              {optionsPending ? <FilterOptionsSkeleton label={t("iaSessionFiltersLoading")} /> : null}
+              {optionsError ? (
+                <Button size="sm" variant="secondaryGray" onClick={() => void filterGroups.refetch()}>
+                  {t("retry")}
+                </Button>
+              ) : null}
+            </PopoverContent>
+          </PopoverRoot>
         ) : null}
       </div>
       {error && !dialog ? (
@@ -269,6 +455,11 @@ export function TaskConversationList({
       ) : null}
       <div
         className={styles.list}
+        onPointerOver={(event) => event.currentTarget.classList.add(styles.pointerOver)}
+        onPointerOut={(event) => {
+          if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget))
+            event.currentTarget.classList.remove(styles.pointerOver);
+        }}
         onScroll={(event) => {
           const node = event.currentTarget;
           if (
@@ -301,7 +492,7 @@ export function TaskConversationList({
           return (
             <div
               key={room.id}
-              className={`${styles.row} ${managerDM ? styles.noAvatar : ""} ${activeID === room.id ? styles.active : ""}`}
+              className={`${styles.row} ${managerDM && !collapsed ? styles.noAvatar : ""} ${activeID === room.id ? styles.active : ""}`}
             >
               <Tooltip
                 content={room.title || t("taskEntryUntitled")}
@@ -311,9 +502,10 @@ export function TaskConversationList({
                   type="button"
                   className={styles.open}
                   aria-current={activeID === room.id ? "page" : undefined}
+                  aria-label={collapsed ? room.title || t("taskEntryUntitled") : undefined}
                   onClick={() => onSelect(room.id, searchMatch)}
                 >
-                  {!managerDM ? (
+                  {!managerDM || collapsed ? (
                     <span className={styles.avatar} aria-hidden="true">
                       {room.cloud_agent ? (
                         <AgentAvatarContent
@@ -376,7 +568,7 @@ export function TaskConversationList({
                   ) : null}
                 </button>
               </Tooltip>
-              <div className={styles.actions}>
+              <div className={styles.actions} hidden={collapsed}>
                 <DropdownMenuRoot>
                   <DropdownMenuTrigger asChild>
                     {archived ? (
@@ -499,16 +691,19 @@ export function TaskConversationList({
           </p>
         ) : null}
         {!list.isPending && !list.isError && !rooms.length ? (
-          <p className={styles.empty}>{t(archived ? "archivedEmpty" : "taskEntryNoHistory")}</p>
+          <p className={styles.empty}>
+            {t(archived ? "archivedEmpty" : filtering ? "iaSessionNoFilterMatches" : "taskEntryNoHistory")}
+          </p>
         ) : null}
-        {list.hasNextPage ? (
+        {list.hasNextPage && !collapsed ? (
           <Button
             variant="tertiaryGray"
             size="sm"
             disabled={list.isFetchingNextPage}
+            aria-label={t("taskEntryLoadMore")}
             onClick={() => void list.fetchNextPage()}
           >
-            {t("taskEntryLoadMore")}
+            {collapsed ? <ChevronDown size={16} aria-hidden="true" /> : t("taskEntryLoadMore")}
           </Button>
         ) : null}
       </div>

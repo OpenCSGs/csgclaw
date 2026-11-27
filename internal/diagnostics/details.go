@@ -8,6 +8,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // SpanDetails contains bounded display fields, never model prompts or outputs.
@@ -61,6 +64,9 @@ func (r *Record) Annotate(id string, details SpanDetails) {
 		}
 		if details.Label != "" {
 			v.Label = displayText(details.Label)
+		}
+		if details.TraceID != "" {
+			v.TraceID = displayText(details.TraceID)
 		}
 		if details.Command != "" {
 			v.Command = displayText(details.Command)
@@ -269,10 +275,17 @@ func ObserveRequest(ctx context.Context, operation string) (func(int, *float64),
 	var mu sync.Mutex
 	started := time.Now()
 	record := Resolve(ctx)
+	span := trace.SpanFromContext(ctx)
+	if record != nil && record.data.TurnID != "" {
+		span.SetAttributes(attribute.String("csgclaw.turn_id", record.data.TurnID))
+	}
 	model, _ := ctx.Value(requestModelKey{}).(string)
 	record.requestModel(model)
 	id := record.Start("llm.request", "llm", "")
 	details := SpanDetails{Label: operation}
+	if traceID := trace.SpanContextFromContext(ctx).TraceID(); traceID.IsValid() {
+		details.TraceID = traceID.String()
+	}
 	record.Annotate(id, details)
 	update := func(status int, first *float64) {
 		mu.Lock()
@@ -288,6 +301,9 @@ func ObserveRequest(ctx context.Context, operation string) (func(int, *float64),
 			record = Resolve(ctx)
 			if record == nil {
 				return
+			}
+			if record.data.TurnID != "" {
+				span.SetAttributes(attribute.String("csgclaw.turn_id", record.data.TurnID))
 			}
 			record.mu.Lock()
 			if len(record.data.Spans) < maxSpans {

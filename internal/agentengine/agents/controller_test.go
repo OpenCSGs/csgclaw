@@ -2140,6 +2140,9 @@ func TestAddMCPServersSerializesConcurrentNameMerges(t *testing.T) {
 		Instructions: "keep synced",
 		CreatedAt:    time.Date(2026, 5, 18, 9, 0, 0, 0, time.UTC),
 	}
+	other := svc.agents["u-dev"]
+	other.ID, other.Name, other.RuntimeID = "agent-other", "other", "rt-other"
+	svc.agents[other.ID] = other
 	catalogServers := map[string]any{
 		"context7": map[string]any{
 			"command":     "uvx",
@@ -2162,6 +2165,10 @@ func TestAddMCPServersSerializesConcurrentNameMerges(t *testing.T) {
 	case <-firstValidateEntered:
 	case <-ctx.Done():
 		t.Fatalf("first AddMCPServersFromHub did not enter validation: %v", ctx.Err())
+	}
+	// The first worker is still validating. A different worker can finish its update.
+	if _, err := svc.AddMCPServersFromHub(ctx, other.ID, []string{"remote"}, catalogServers); err != nil {
+		t.Fatalf("unrelated worker blocked on MCP validation: %v", err)
 	}
 	go func() {
 		_, err := svc.AddMCPServersFromHub(ctx, "u-dev", []string{"remote"}, catalogServers)
@@ -6246,6 +6253,36 @@ func TestCreateWorkerUsesDefaultProfileSnapshotForGatewayRuntime(t *testing.T) {
 	}
 }
 
+func TestStartupStageLogsReadinessOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		err         error
+		wantSuccess bool
+		wantState   RuntimeAvailabilityState
+		wantReason  string
+	}{
+		{"ready", nil, true, RuntimeAvailabilityReady, ""},
+		{"unsupported", agentruntime.ErrReadinessNotSupported, true, RuntimeAvailabilityNotApplicable, ""},
+		{"timeout", context.DeadlineExceeded, false, RuntimeAvailabilityUnknown, "probe_timed_out"},
+		{"failed", errors.New("unhealthy"), false, RuntimeAvailabilityDegraded, "readiness_failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			availability := runtimeAvailabilityFromReadinessError(tc.err)
+			agent := Agent{Status: "running", Availability: &availability}
+			fields := map[string]any{}
+			for _, attr := range startupStageOutcome("check_availability", agent, true) {
+				fields[attr.Key] = attr.Value.Any()
+			}
+			if fields["success"] != tc.wantSuccess || fields["availability"] != string(tc.wantState) {
+				t.Fatalf("unexpected readiness outcome: %v", fields)
+			}
+			if reason, _ := fields["availability_reason"].(string); reason != tc.wantReason {
+				t.Fatalf("reason = %q, want %q", reason, tc.wantReason)
+			}
+		})
+	}
+}
+
 func TestStartProvisionsRuntimeBeforeStart(t *testing.T) {
 	var callOrder []string
 	svc, err := NewController(
@@ -7603,6 +7640,73 @@ func TestStartConfiguredAgentsRestoresRunningCodexWorker(t *testing.T) {
 	}
 	if got := svc.withConfiguredAgentStartupStatus(svc.agents["u-alice"]); got.StartupPending {
 		t.Fatal("configured startup marker remained set after the restore pass")
+	}
+}
+
+func TestStartConfiguredAgentsRestoresHealthyWorkerWhileAnotherStarts(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	slowStarted := make(chan struct{})
+	releaseSlow := make(chan struct{})
+	fastStarted := make(chan struct{})
+	rt := fakeAgentRuntime{
+		kind: RuntimeKindCodex,
+		start: func(ctx context.Context, h agentruntime.Handle) (agentruntime.State, error) {
+			if h.RuntimeID == runtimeIDForAgentID("agent-slow") {
+				close(slowStarted)
+				select {
+				case <-releaseSlow:
+				case <-ctx.Done():
+					return agentruntime.StateStopped, ctx.Err()
+				}
+			} else if h.RuntimeID == runtimeIDForAgentID("agent-fast") {
+				close(fastStarted)
+			} else {
+				return agentruntime.StateStopped, fmt.Errorf("unexpected runtime %s", h.RuntimeID)
+			}
+			return agentruntime.StateRunning, nil
+		},
+		info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+			return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+		},
+	}
+	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "", "", WithRuntime(rt))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, name := range []string{"slow", "fast"} {
+		id := "agent-" + name
+		svc.agents[id] = Agent{
+			ID: id, Name: name, Role: RoleWorker,
+			RuntimeKind: RuntimeKindCodex, RuntimeID: runtimeIDForAgentID(id), BoxID: "sess-" + name,
+			Status: string(agentruntime.StateRunning), CreatedAt: time.Unix(int64(index), 0),
+			AgentProfile:    AgentProfile{Name: name, Provider: ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
+			ProfileComplete: true,
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- svc.StartConfiguredAgents(ctx) }()
+	select {
+	case <-slowStarted:
+	case err := <-done:
+		t.Fatalf("worker restoration returned before starting the first worker: %v", err)
+	case <-ctx.Done():
+		<-done
+		t.Fatal("the first worker did not begin restoring")
+	}
+	select {
+	case <-fastStarted:
+	case err := <-done:
+		t.Fatalf("worker restoration returned before starting the healthy worker: %v", err)
+	case <-ctx.Done():
+		<-done
+		t.Fatal("the healthy worker waited for the slow worker")
+	}
+	close(releaseSlow)
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }
 

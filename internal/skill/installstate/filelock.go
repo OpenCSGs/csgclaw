@@ -6,6 +6,19 @@ import (
 	"path/filepath"
 )
 
+const RecordsLockName = lockFileName + ".lock"
+
+// WithFilesLocked serializes file updates in one installed skill tree with CLI
+// installs and snapshot readers. The callback must not acquire this lock again.
+func WithFilesLocked(skillsRoot string, apply func() error) error {
+	lock, err := acquireRecordsLock(skillsRoot, true)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	return apply()
+}
+
 // Use a separate, persistent file: the JSON file is atomically replaced on write.
 // Never remove the lock file on release; waiters must keep using the same file.
 // Closing the handle releases the OS lock, including when the process exits.
@@ -15,7 +28,7 @@ func acquireRecordsLock(skillsRoot string, createRoot bool) (*os.File, error) {
 			return nil, fmt.Errorf("create skills root: %w", err)
 		}
 	}
-	file, err := os.OpenFile(filepath.Join(skillsRoot, lockFileName+".lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	file, err := os.OpenFile(filepath.Join(skillsRoot, RecordsLockName), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		if !createRoot && os.IsNotExist(err) {
 			return nil, nil

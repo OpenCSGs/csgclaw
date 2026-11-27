@@ -1,3 +1,10 @@
+import { usePersistedComposerDraft } from "@/hooks/usePersistedComposerDraft";
+import {
+  composerDraftKey,
+  isStoredComposerSegment,
+  getComposerDraft,
+  subscribeToComposerDraft,
+} from "@/shared/storage/composerDrafts";
 import { cloudResourceScope } from "@/models/cloudResourceScope";
 import { useCloudSendConsent } from "./useCloudSendConsent";
 import { withCloudAgentAvatars } from "@/models/cloudAgents";
@@ -69,6 +76,7 @@ import {
   parseComposerSegments,
   placeCaretAtEnd,
   normalizeComposerSegmentsForDisplay,
+  normalizeComposerSegments,
   removeAdjacentMentionToken,
   renderComposerSegments,
   updateComposerResourceLabels,
@@ -98,6 +106,10 @@ import {
   attachmentSelectionError,
   createAttachmentDrafts,
   selectAttachmentFiles,
+  selectComposerAttachmentFiles,
+  hasAttachmentFile,
+  mergeComposerAttachments,
+  type ComposerAttachmentDraft,
   type AttachmentDraft,
 } from "@/models/attachments";
 import {
@@ -125,7 +137,14 @@ type ComposerMentionState = {
   textNode: Node;
 };
 
-type DraftsByConversationId = Record<string, ComposerSegment[]>;
+function readConversationDraft(stored: Record<string, unknown>): ComposerSegment[] {
+  return Array.isArray(stored.segments) ? stored.segments.filter(isStoredComposerSegment) : [];
+}
+
+function serializeConversationDraft(segments: ComposerSegment[]) {
+  const normalized = normalizeComposerSegments(segments);
+  return normalized.length ? { segments: normalized } : null;
+}
 type DraftsByThreadKey = Record<string, ComposerSegment[]>;
 type AttachmentDraftsByKey = Record<string, AttachmentDraft[]>;
 type ComposerErrorsByKey = Record<string, string>;
@@ -140,7 +159,7 @@ type PendingClientMessage = {
   id: string;
 };
 type RemovedAttachment = {
-  draft: AttachmentDraft;
+  draft: ComposerAttachmentDraft;
   index: number;
 };
 type RemovedAttachmentBatch = {
@@ -453,9 +472,21 @@ export function useConversationController({
     requireAuthentication: requireOpenCSGAuthentication,
   } = openCSGAuthGuard;
   const queryClient = useQueryClient();
-  const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
+  const userID = data?.current_user_id ?? "";
+  const roomDraftKey = activeConversationId ? composerDraftKey(userID, activeConversationId) : "";
+  const {
+    draft: roomDraft,
+    update: updateRoomDraft,
+    snapshot: roomDraftSnapshot,
+    retrySave: retrySaveRoomDraft,
+    dismissSaveError: dismissRoomDraftSaveError,
+  } = usePersistedComposerDraft(
+    roomDraftKey,
+    readConversationDraft,
+    serializeConversationDraft,
+    messageListActive && activePane.type === WorkspacePaneTypes.conversation && Boolean(activePane.id),
+  );
   const [threadDraftsByKey, setThreadDraftsByKey] = useState<DraftsByThreadKey>({});
-  const [attachmentDraftsByConversationId, setAttachmentDraftsByConversationId] = useState<AttachmentDraftsByKey>({});
   const [threadAttachmentDraftsByKey, setThreadAttachmentDraftsByKey] = useState<AttachmentDraftsByKey>({});
   const [composerSendStatesByConversationId, setComposerSendStatesByConversationId] = useState<ComposerSendStatesByKey>(
     {},
@@ -813,15 +844,9 @@ export function useConversationController({
     return result;
   }, [data, activeConversation]);
 
-  const draftSegments = useMemo(
-    () => normalizeComposerSegmentsForDisplay(draftsByConversationId[activeConversationId] ?? []),
-    [draftsByConversationId, activeConversationId],
-  );
+  const draftSegments = useMemo(() => normalizeComposerSegmentsForDisplay(roomDraft.content), [roomDraft.content]);
   const draftText = useMemo(() => segmentsToPlainText(draftSegments), [draftSegments]);
-  const attachmentDrafts = useMemo(
-    () => attachmentDraftsByConversationId[activeConversationId] ?? [],
-    [attachmentDraftsByConversationId, activeConversationId],
-  );
+  const attachmentDrafts = roomDraft.attachments;
   const composerSendState = composerSendStatesByConversationId[activeConversationId] ?? idleComposerSendState;
   const removedAttachment = removedAttachmentsByConversationId[activeConversationId];
   const cloudResourceAgent =
@@ -1198,7 +1223,9 @@ export function useConversationController({
 
     const roomID = activeConversation.id;
     const senderID = data.current_user_id;
-    const attachments = attachmentDrafts.map((draft) => draft.file);
+    const selectedAttachments = attachmentDrafts.filter(hasAttachmentFile);
+    if (selectedAttachments.length !== attachmentDrafts.length) return;
+    const attachments = selectedAttachments.map((draft) => draft.file);
     const serializedDraft = serializeComposerSegments(draftSegments);
     const { content, resource_refs } =
       cloudTask && !draftSegments.some((segment) => segment.type === "resource")
@@ -1211,7 +1238,11 @@ export function useConversationController({
       if (!confirmed && cloudConsent.request(() => void sendMessage(true), attachments.length > 0)) return;
     }
     const fileReferences = cloudTask ? [] : composerFileReferences(draftSegments);
-    const fingerprint = messageFingerprint(content + JSON.stringify(fileReferences), attachmentDrafts, resource_refs);
+    const fingerprint = messageFingerprint(
+      content + JSON.stringify(fileReferences),
+      selectedAttachments,
+      resource_refs,
+    );
     if (sendLocksRef.current[roomID]) {
       return;
     }
@@ -1227,6 +1258,7 @@ export function useConversationController({
       ...current,
       [roomID]: { error: "", progress: attachments.length > 0 ? 0 : 100, status: "sending" },
     }));
+    const releaseDraft = subscribeToComposerDraft(roomDraftKey, () => {});
     try {
       const created = await sendMessageRequest(
         {
@@ -1253,7 +1285,7 @@ export function useConversationController({
         },
       );
       setBootstrapData((current) => appendMessageToData(current, roomID, created));
-      clearComposer(roomID);
+      if (getComposerDraft(roomDraftKey) === roomDraftSnapshot) clearComposer(roomID);
       delete pendingClientMessagesRef.current[roomID];
       setComposerSendStatesByConversationId((current) => ({
         ...current,
@@ -1275,6 +1307,7 @@ export function useConversationController({
         [roomID]: { error: message, progress: current[roomID]?.progress ?? 0, status: "failed" },
       }));
     } finally {
+      releaseDraft();
       delete sendLocksRef.current[roomID];
       if (sendAbortControllersRef.current[roomID] === abortController) {
         delete sendAbortControllersRef.current[roomID];
@@ -1617,15 +1650,7 @@ export function useConversationController({
 
     const remainingRooms = rooms.filter((item) => item.id !== roomID);
     setBootstrapData((current) => removeConversationFromData(current, roomID));
-    setDraftsByConversationId((current) => {
-      if (!current[roomID]) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[roomID];
-      return next;
-    });
-    setAttachmentDraftsByConversationId((current) => clearAttachmentDraftsForConversation(current, roomID));
+    clearComposer(roomID);
     setThreadAttachmentDraftsByKey((current) => clearAttachmentDraftsForConversation(current, roomID));
     setComposerError("", roomID);
     setSubmitError("");
@@ -1689,7 +1714,7 @@ export function useConversationController({
           ]
         : slashCommandInputSegments(slashCommandLabel(skillName, t));
     applySlashSuggestionToComposer(editor ?? editorRef.current, nextSegments, (committedSegments) =>
-      setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, committedSegments)),
+      updateRoomDraft(roomDraftKey, (current) => ({ ...current, content: committedSegments })),
     );
     setComposerSlashQuery(null);
     setSlashIndex(0);
@@ -1823,20 +1848,21 @@ export function useConversationController({
       return;
     }
     const segments = parseComposerSegments(editor) as ComposerSegment[];
-    setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, segments));
+    updateRoomDraft(roomDraftKey, (current) =>
+      areComposerSegmentsEqual(current.content, segments) ? current : { ...current, content: segments },
+    );
     setComposerMentionState(getComposerMentionState(editor) as ComposerMentionState | null);
     setComposerSlashQuery(getComposerSlashQueryAtSelection(editor));
   }
 
   function clearComposer(conversationID = activeConversationId) {
     const editor = editorRef.current;
-    if (editor && conversationID === activeConversationId) {
+    if (editor && conversationID === activeRoomIDRef.current) {
       editor.innerHTML = "";
       editor.focus();
     }
     if (conversationID) {
-      setDraftsByConversationId((current) => updateDrafts(current, conversationID, []));
-      setAttachmentDraftsByConversationId((current) => updateAttachmentDrafts(current, conversationID, []));
+      updateRoomDraft(composerDraftKey(userID, conversationID), () => ({ content: [], attachments: [] }));
       setRemovedAttachmentsByConversationId((current) => {
         if (!current[conversationID]) {
           return current;
@@ -1845,7 +1871,7 @@ export function useConversationController({
         return rest;
       });
     }
-    if (conversationID === activeConversationId) {
+    if (conversationID === activeRoomIDRef.current) {
       setComposerMentionState(null);
       setComposerSlashQuery(null);
     }
@@ -1855,16 +1881,16 @@ export function useConversationController({
     if (!activeConversationId || files.length === 0) {
       return;
     }
-    const selection = selectAttachmentFiles(files, attachmentDrafts);
+    const selection = selectComposerAttachmentFiles(files, attachmentDrafts);
     setAttachmentWarning(attachmentSelectionError(selection, t));
     if (selection.files.length === 0) {
       return;
     }
     const nextDrafts = createAttachmentDrafts(selection.files, attachmentDrafts.length);
-    setAttachmentDraftsByConversationId((current) => {
-      const existing = current[activeConversationId] ?? [];
-      return updateAttachmentDrafts(current, activeConversationId, [...existing, ...nextDrafts]);
-    });
+    updateRoomDraft(roomDraftKey, (current) => ({
+      ...current,
+      attachments: mergeComposerAttachments(current.attachments, nextDrafts),
+    }));
     setComposerSendStatesByConversationId((current) => ({
       ...current,
       [activeConversationId]: idleComposerSendState,
@@ -1890,13 +1916,10 @@ export function useConversationController({
         },
       };
     });
-    setAttachmentDraftsByConversationId((current) =>
-      updateAttachmentDrafts(
-        current,
-        activeConversationId,
-        (current[activeConversationId] ?? []).filter((draft) => draft.id !== id),
-      ),
-    );
+    updateRoomDraft(roomDraftKey, (current) => ({
+      ...current,
+      attachments: current.attachments.filter((draft) => draft.id !== id),
+    }));
     setComposerSendStatesByConversationId((current) => ({
       ...current,
       [activeConversationId]: idleComposerSendState,
@@ -1911,13 +1934,12 @@ export function useConversationController({
     if (!removed || removed.attachments.length === 0) {
       return;
     }
-    setAttachmentDraftsByConversationId((current) => {
-      let restored = current[activeConversationId] ?? [];
+    updateRoomDraft(roomDraftKey, (current) => {
+      const restored = [...current.attachments];
       for (const attachment of [...removed.attachments].reverse()) {
-        const insertAt = Math.max(0, Math.min(attachment.index, restored.length));
-        restored = [...restored.slice(0, insertAt), attachment.draft, ...restored.slice(insertAt)];
+        restored.splice(attachment.index, 0, attachment.draft);
       }
-      return updateAttachmentDrafts(current, activeConversationId, restored);
+      return { ...current, attachments: restored };
     });
     setRemovedAttachmentsByConversationId((current) => {
       const { [activeConversationId]: _removed, ...rest } = current;
@@ -2074,13 +2096,10 @@ export function useConversationController({
       onProviderLogin,
       resourceAgentID,
       onPickResources: (resources: ResourceSnapshot[]) =>
-        setDraftsByConversationId((current) =>
-          updateDrafts(
-            current,
-            activeConversationId,
-            addResources(current[activeConversationId] ?? [], resources, resourceAgentID),
-          ),
-        ),
+        updateRoomDraft(roomDraftKey, (current) => ({
+          ...current,
+          content: addResources(current.content, resources, resourceAgentID),
+        })),
       onPickThreadResources: (resources: ResourceSnapshot[]) =>
         setThreadDraftsByKey((current) =>
           updateDrafts(
@@ -2100,6 +2119,15 @@ export function useConversationController({
       sendStatus: composerSendState.status,
       onAddAttachments: addComposerAttachments,
       onRemoveAttachment: removeComposerAttachment,
+      onClearDraft: () => {
+        if (sendLocksRef.current[activeConversationId]) return;
+        clearComposer();
+        setComposerError("");
+        setComposerSendStatesByConversationId((current) => ({
+          ...current,
+          [activeConversationId]: idleComposerSendState,
+        }));
+      },
       onUndoRemoveAttachment: undoRemoveComposerAttachment,
       mentionableUsersByName,
       onSyncComposer: syncComposerFromEditor,
@@ -2111,6 +2139,8 @@ export function useConversationController({
       onRetrySend: () => sendMessage(),
       onStopSend: stopSending,
       composerError: (draftSegments.length ? cloudDisabledReason : "") || composerError,
+      onRetrySaveDraft: retrySaveRoomDraft,
+      onDismissDraftSaveError: dismissRoomDraftSaveError,
       messageActionBusy,
       messageActionFeedback,
       onMessageAction,
@@ -2199,6 +2229,7 @@ export function buildSlashPickerState(input: SlashPickerStateInput): SlashPicker
         )
         .map((name) => ({ description: slashCommandDescription(name), name, type: "command" as const })),
       ...input.skillOptions
+        .map((skill) => ({ ...skill, name: skill.id ?? skill.name }))
         .filter(
           (skill) =>
             !builtinSlashCommandNames.includes(skill.name) &&

@@ -29,7 +29,8 @@ func newModelAcceptanceFixture(t *testing.T) *modelAcceptanceFixture {
 	selected := contract.TurnModel{ModelID: "model-b", Metadata: modelcap.Resolved{ContextWindow: 64000, ContextSource: "provider"}}
 	requests := make(quietTurnRequests, 8)
 	live := &liveSession{
-		session: &Session{RuntimeID: "runtime", SessionID: "thread"},
+		defaultThreadLoaded: true,
+		session:             &Session{RuntimeID: "runtime", SessionID: "thread"},
 		spec: SessionSpec{RuntimeID: "runtime", Profile: profile, ModelCatalog: []codexmodel.Profile{
 			{Provider: profile.Provider, ModelID: selected.ModelID, Metadata: selected.Metadata},
 		}},

@@ -74,3 +74,32 @@ func TestUserForParticipantResolvesStableHashAliases(t *testing.T) {
 		t.Fatalf("userForParticipantLocked(pt-agent-zaha7h-d59735ad) = %+v, %v; want ux", user, ok)
 	}
 }
+
+func TestUpdateAgentUserUsesBoundID(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{Users: []User{{ID: "user-other", Name: "user-qa", Role: "worker"}}})
+	updated, _, err := svc.UpdateAgentUser(UpdateAgentUserRequest{ID: "user-qa", Name: "QA"})
+	if err != nil || updated.ID != "user-qa" {
+		t.Fatalf("update by bound ID: %+v, %v", updated, err)
+	}
+	if u, ok := svc.LocalUserByID("u-qa"); !ok || u.ID != updated.ID {
+		t.Fatalf("legacy lookup returned %+v", u)
+	}
+	other, ok := svc.LocalUserByID("user-other")
+	if !ok || other.Name != "user-qa" {
+		t.Fatalf("updated the wrong user: %+v", other)
+	}
+}
+
+func TestUpdateAgentUserPreservesIDSuffix(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{Users: []User{{ID: "user-qa", Name: "Original", Role: "worker"}}})
+	if user, ok := svc.LocalUserByID("u-qa-1a2b3c4d"); ok {
+		t.Fatalf("missing identity resolved to %+v", user)
+	}
+	updated, _, err := svc.UpdateAgentUser(UpdateAgentUserRequest{ID: "u-qa-1a2b3c4d", Name: "New"})
+	if err != nil || updated.ID != "user-qa-1a2b3c4d" {
+		t.Fatalf("update with full ID: %+v, %v", updated, err)
+	}
+	if other, ok := svc.LocalUserByID("user-qa"); !ok || other.Name != "Original" {
+		t.Fatalf("changed unrelated user: %+v", other)
+	}
+}

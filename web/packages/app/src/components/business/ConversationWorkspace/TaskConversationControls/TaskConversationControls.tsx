@@ -4,7 +4,7 @@ import { pathForNewCloudTask } from "@/models/routing";
 import { hasPendingCloudTask } from "@/models/cloudTasks";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
-import { Plus } from "lucide-react";
+import { SquarePen } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import { resolveAgentChannelUserID, type AgentLike } from "@/models/agents";
@@ -74,19 +74,6 @@ export function TaskConversationControls({
           {t("autonomousPaused")}
         </span>
       ) : null}
-      {onNewTask && !conversation.cloud_agent && conversation.type !== "autonomous" && hasChatMessages ? (
-        <Button
-          variant="tertiaryGray"
-          size="sm"
-          aria-label={t("taskEntryNew")}
-          onClick={() =>
-            conversation.is_direct ? onNewTask(agent?.id || undefined, conversation.configuration) : onNewTask()
-          }
-        >
-          <Plus size={15} />
-          {t("taskEntryNew")}
-        </Button>
-      ) : null}
       <ConversationContextUsage
         key={`usage:${conversation.id}`}
         onCompactingChange={onCompactingChange}
@@ -96,6 +83,20 @@ export function TaskConversationControls({
         agents={agents}
         t={t}
       />
+      {onNewTask && !conversation.cloud_agent && conversation.type !== "autonomous" && hasChatMessages ? (
+        <Button
+          variant="tertiaryGray"
+          size="sm"
+          aria-label={t("taskEntryNew")}
+          title={t("taskEntryNew")}
+          onClick={() =>
+            conversation.is_direct ? onNewTask(agent?.id || undefined, conversation.configuration) : onNewTask()
+          }
+        >
+          <SquarePen size={16} aria-hidden="true" />
+          <span className={styles.label}>{t("taskEntryNew")}</span>
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -103,9 +104,16 @@ export function TaskConversationControls({
 function NewCloudTaskButton({ agentID, disabled, t }: { agentID: string; disabled: boolean; t: TranslateFn }) {
   const navigate = useNavigate();
   return (
-    <Button variant="tertiaryGray" size="sm" disabled={disabled} onClick={() => navigate(pathForNewCloudTask(agentID))}>
-      <Plus size={15} />
-      {t("taskEntryNew")}
+    <Button
+      aria-label={t("taskEntryNew")}
+      title={t("taskEntryNew")}
+      variant="tertiaryGray"
+      size="sm"
+      disabled={disabled}
+      onClick={() => navigate(pathForNewCloudTask(agentID))}
+    >
+      <SquarePen size={16} aria-hidden="true" />
+      <span className={styles.label}>{t("taskEntryNew")}</span>
     </Button>
   );
 }

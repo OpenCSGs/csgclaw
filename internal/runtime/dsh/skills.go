@@ -8,7 +8,9 @@ import (
 
 	agentruntime "csgclaw/internal/runtime"
 	runtimeworkspace "csgclaw/internal/runtime/workspace"
+	"csgclaw/internal/skill/discovery"
 	"csgclaw/internal/skill/installstate"
+	"csgclaw/internal/skill/skillpath"
 	skill "csgclaw/internal/skill/state"
 )
 
@@ -65,8 +67,8 @@ func (r *Runtime) ReconcileSkills(_ context.Context, h agentruntime.Handle, stat
 // projectSkills 在完整文件目录之外生成 DSH 使用的 Skill 目录。
 // 调用者与其他配置写入互斥；更新磁盘不要求中断当前会话。
 func projectSkills(root, source string, states map[string]skill.State) error {
-	entries, err := os.ReadDir(source)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	ids, err := skillpath.Installed(source)
+	if err != nil {
 		return err
 	}
 	stage, err := os.MkdirTemp(root, ".skill-view-")
@@ -78,16 +80,12 @@ func projectSkills(root, source string, states map[string]skill.State) error {
 	if err := os.MkdirAll(targetSkills, 0o700); err != nil {
 		return err
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() || !skill.Enabled(states, entry.Name()) {
+	tree := discovery.BoundedFS(source)
+	for _, id := range ids {
+		if !skill.Enabled(states, id) {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(source, entry.Name(), "SKILL.md")); errors.Is(err, os.ErrNotExist) {
-			continue
-		} else if err != nil {
-			return err
-		}
-		if err := runtimeworkspace.OverlayWorkspaceTree(filepath.Join(source, entry.Name()), filepath.Join(targetSkills, entry.Name())); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceSubtree(tree, id, filepath.Join(targetSkills, id)); err != nil {
 			return err
 		}
 	}

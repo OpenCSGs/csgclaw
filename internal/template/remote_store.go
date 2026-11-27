@@ -425,30 +425,37 @@ func (s *RemoteStore) fetchManifest(ctx context.Context, id, branch string) (tem
 }
 
 func (s *RemoteStore) FetchWorkspace(ctx context.Context, id string) (WorkspaceRef, error) {
-	id, err := normalizeRemoteTemplateID(id)
+	root, err := s.downloadTemplateDir(ctx, id)
 	if err != nil {
 		return WorkspaceRef{}, err
+	}
+	defer os.RemoveAll(root)
+	return materializeTemplateDir(root, "")
+}
+
+func (s *RemoteStore) downloadTemplateDir(ctx context.Context, id string) (string, error) {
+	id, err := normalizeRemoteTemplateID(id)
+	if err != nil {
+		return "", err
 	}
 
 	branch, err := s.defaultBranch(ctx, id)
 	if err != nil {
-		return WorkspaceRef{}, err
+		return "", err
 	}
 	archive, err := s.downloadArchive(ctx, id, branch)
 	if err != nil {
-		return WorkspaceRef{}, err
+		return "", err
 	}
 	templateDir, err := mkdirHubWorkspaceTemp("csgclaw-hub-remote-*")
 	if err != nil {
-		return WorkspaceRef{}, fmt.Errorf("create remote hub workspace temp dir: %w", err)
+		return "", fmt.Errorf("create remote hub workspace temp dir: %w", err)
 	}
 	if err := extractRemoteTemplateArchive(archive, templateDir, s.maxWorkspace); err != nil {
 		_ = os.RemoveAll(templateDir)
-		return WorkspaceRef{}, err
+		return "", err
 	}
-	workspace, err := materializeTemplateDir(templateDir, "")
-	_ = os.RemoveAll(templateDir)
-	return workspace, err
+	return templateDir, nil
 }
 
 func (s *RemoteStore) downloadArchive(ctx context.Context, id, branch string) ([]byte, error) {
@@ -591,6 +598,10 @@ func (s *RemoteStore) ListWorkspace(
 		return apitypes.WorkspaceListing{}, err
 	}
 
+	return s.listWorkspaceAtBranch(ctx, id, branch, cleanPath)
+}
+
+func (s *RemoteStore) listWorkspaceAtBranch(ctx context.Context, id, branch, cleanPath string) (apitypes.WorkspaceListing, error) {
 	treePath := cleanPath
 	entries := make([]apitypes.WorkspaceEntry, 0)
 	cursor := ""

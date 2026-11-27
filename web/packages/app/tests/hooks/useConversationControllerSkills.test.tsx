@@ -1,3 +1,4 @@
+import { clearTestComposerDrafts } from "../helpers/composerDrafts";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { useState } from "react";
@@ -26,6 +27,8 @@ import type { IMConversation, IMData, IMUser, TranslateFn } from "@/models/conve
 import { WorkspacePaneTypes } from "@/models/routing";
 import { FloatingChat } from "@/pages/WorkspacePage/components/FloatingChat";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
+
+afterEach(clearTestComposerDrafts);
 
 vi.mock("@/api/agentResources", () => ({ fetchConversationResourceBatch: vi.fn() }));
 

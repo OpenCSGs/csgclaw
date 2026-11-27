@@ -256,6 +256,19 @@ func TestInstallArchiveWithOptionsReplacesDuplicate(t *testing.T) {
 	}
 }
 
+func TestArchiveReplacementPreservesSkillGroup(t *testing.T) {
+	root := t.TempDir()
+	definition := filepath.Join(root, "team", "tools", "review", "SKILL.md")
+	mustWriteFile(t, definition, "# Existing")
+	_, err := InstallArchiveWithOptions(root, "team.zip", mustZip(t, map[string]string{"team/SKILL.md": "# Team"}), InstallArchiveOptions{Replace: true})
+	if !errors.Is(err, ErrSkillAlreadyExists) {
+		t.Fatalf("replacement error = %v", err)
+	}
+	if data, err := os.ReadFile(definition); err != nil || string(data) != "# Existing" {
+		t.Fatalf("group contents = %q, %v", data, err)
+	}
+}
+
 func TestInstallArchiveRejectsSystemSkillName(t *testing.T) {
 	root := t.TempDir()
 

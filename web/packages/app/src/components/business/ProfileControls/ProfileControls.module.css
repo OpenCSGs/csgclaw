@@ -104,3 +104,16 @@
 .notifier-copy-button {
   width: fit-content;
 }
+.model-qualifier {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+
+.model-list-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+  column-gap: var(--space-1);
+}

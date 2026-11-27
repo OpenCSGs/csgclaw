@@ -1,7 +1,8 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useContext, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   closeDialogSearch,
+  feedbackDialogSearch,
   openWorkspaceDialog,
   profileDialogSearch,
   settingsDialogSearch,
@@ -9,9 +10,14 @@ import {
 } from "@/models/workspaceDialogs";
 import type { WorkspaceDialogName } from "@/models/workspaceDialogs";
 
+import { FeedbackTriggerContext } from "./workspaceControllerContextValue";
+
 export type UseWorkspaceDialogsResult = {
   current: WorkspaceDialogName | "";
-  openSettings: (section?: string, options?: { mark?: "version" }) => void;
+  openSettings: (section?: string, highlight?: boolean) => void;
+  feedbackOpen: boolean;
+  setFeedbackOpen: (open: boolean, trigger?: HTMLElement | null) => void;
+  feedbackTrigger: HTMLElement | null;
   openProfile: (humanID: string) => void;
   close: () => void;
 };
@@ -19,38 +25,55 @@ export type UseWorkspaceDialogsResult = {
 export function useWorkspaceDialogs(): UseWorkspaceDialogsResult {
   const location = useLocation();
   const navigate = useNavigate();
-  const search = location.search;
+  const { search, state } = location;
+  const feedbackTrigger = useContext(FeedbackTriggerContext);
 
   const current = useMemo(() => openWorkspaceDialog(search), [search]);
 
   const openSettings = useCallback(
-    (section?: string, options?: { mark?: "version" }) => {
-      const fromUpdateNotice = section === "version" && options?.mark === "version" && !current;
+    (section?: string, highlight?: boolean) => {
+      const fromUpdateNotice = section === "version" && highlight === true && !current;
       navigate(
-        { search: settingsDialogSearch(search, section, options?.mark) },
+        { search: settingsDialogSearch(search, section, highlight) },
         {
           replace: !fromUpdateNotice,
-          state: fromUpdateNotice ? { ...location.state, settingsOpenedFromUpdateNotice: true } : location.state,
+          state: fromUpdateNotice ? { ...state, settingsOpenedFromUpdateNotice: true } : state,
         },
       );
     },
-    [current, location.state, navigate, search],
+    [current, navigate, search, state],
   );
 
   const openProfile = useCallback(
     (humanID: string) => {
-      navigate({ search: profileDialogSearch(search, humanID) }, { replace: true });
+      navigate({ search: profileDialogSearch(search, humanID) }, { replace: true, state });
     },
-    [navigate, search],
+    [navigate, search, state],
   );
 
   const close = useCallback(() => {
-    if (current === WorkspaceDialogNames.settings && location.state?.settingsOpenedFromUpdateNotice === true) {
+    if (current === WorkspaceDialogNames.settings && state?.settingsOpenedFromUpdateNotice === true) {
       navigate(-1);
     } else {
-      navigate({ search: closeDialogSearch(search) }, { replace: true });
+      navigate({ search: closeDialogSearch(search) }, { replace: true, state });
     }
-  }, [current, location.state, navigate, search]);
+  }, [current, navigate, search, state]);
 
-  return { current, openSettings, openProfile, close };
+  const setFeedbackOpen = useCallback(
+    (open: boolean, trigger?: HTMLElement | null) => {
+      if (feedbackTrigger) feedbackTrigger.current = open ? (trigger ?? null) : null;
+      navigate({ search: feedbackDialogSearch(search, open) }, { replace: true, state });
+    },
+    [feedbackTrigger, navigate, search, state],
+  );
+
+  return {
+    current,
+    openSettings,
+    openProfile,
+    close,
+    feedbackOpen: new URLSearchParams(search).get("feedback") === "1",
+    setFeedbackOpen,
+    feedbackTrigger: feedbackTrigger?.current ?? null,
+  };
 }

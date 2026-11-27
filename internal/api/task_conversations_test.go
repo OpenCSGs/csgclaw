@@ -11,6 +11,7 @@ import (
 
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
+	"csgclaw/internal/taskconfig"
 	"csgclaw/internal/worklease"
 )
 
@@ -54,6 +55,118 @@ func TestTaskConversationSearchPaginationAndArchive(t *testing.T) {
 	archived := query("/api/v1/conversations?q=needle&archived=true")
 	if len(archived.Rooms) != 1 || archived.Rooms[0].ID != "archived" {
 		t.Fatalf("archived = %+v", archived)
+	}
+}
+
+func TestTaskConversationFiltersApplyBeforePagination(t *testing.T) {
+	members := []string{"user-admin", "user-worker"}
+	rooms := []im.Room{
+		{ID: "other", Pinned: true, Members: []string{"user-admin"}, Configuration: &taskconfig.Config{WorkspaceDir: "/project"}},
+		{ID: "wrong-directory", Pinned: true, IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{WorkspaceDir: "/other"}},
+		{ID: "explicit-empty", Pinned: true, IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{}},
+		{ID: "legacy", Title: "needle", IsDirect: true, TaskSession: true, Members: members},
+		{ID: "configured", Title: "needle", IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{WorkspaceDir: "/project"}},
+		{ID: "archived", Archived: true, IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{WorkspaceDir: "/project"}},
+	}
+	h := &Handler{im: im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "user-admin",
+		Users:         []im.User{{ID: "user-admin", Role: "admin"}, {ID: "user-worker", Role: "worker"}},
+		Rooms:         rooms,
+	})}
+	for _, tc := range []struct {
+		query, id string
+		total     int
+		more      bool
+	}{
+		{"", "configured", 1, false},
+		{"&legacy_peer=user-worker", "configured", 2, true},
+		{"&legacy_peer=user-worker&offset=1", "legacy", 2, false},
+		{"&archived=true", "archived", 1, false},
+	} {
+		rec := httptest.NewRecorder()
+		url := "/api/v1/conversations?owner=direct:user-worker&directory=%2Fproject&limit=1" + tc.query
+		h.listTaskConversations(rec, httptest.NewRequest(http.MethodGet, url, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d: %s", url, rec.Code, rec.Body.String())
+		}
+		var page taskConversationPage
+		if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Rooms) != 1 || page.Rooms[0].ID != tc.id || page.Total != tc.total || page.HasMore != tc.more {
+			t.Fatalf("%s: unexpected page %+v", url, page)
+		}
+	}
+}
+
+func TestTaskConversationFilterGroups(t *testing.T) {
+	members := []string{"user-admin", "user-worker"}
+	config := &taskconfig.Config{WorkspaceDir: "/project"}
+	svc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "user-admin",
+		Users:         []im.User{{ID: "user-admin", Role: "admin"}, {ID: "user-worker", Role: "worker"}},
+		Rooms: []im.Room{
+			{ID: "first", Title: "Project notes", IsDirect: true, TaskSession: true, Members: members, Configuration: config, Messages: []im.Message{{Content: "needle in history"}, {Content: "latest message"}}},
+			{ID: "second", IsDirect: true, TaskSession: true, Members: members, Configuration: config},
+			{ID: "legacy", IsDirect: true, TaskSession: true, Members: members},
+			{ID: "explicit-empty", IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{}},
+			{ID: "team", Title: "Project collaboration", Members: members, Configuration: config},
+			{ID: "archived", Title: "Project notes", IsDirect: true, Archived: true, Members: members, Configuration: config},
+			{ID: "provisioned", IsDirect: true, Members: members},
+			{ID: "not-mine", Members: []string{"user-worker"}, Configuration: config},
+		},
+	})
+	h := &Handler{im: svc}
+	query := func(suffix string) []taskConversationFilterGroup {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.listTaskConversationFilters(rec, httptest.NewRequest(http.MethodGet, "/api/v1/conversations/filters"+suffix, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%d: %s", rec.Code, rec.Body.String())
+		}
+		var groups []taskConversationFilterGroup
+		if err := json.Unmarshal(rec.Body.Bytes(), &groups); err != nil {
+			t.Fatal(err)
+		}
+		return groups
+	}
+	groups := query("?limit=1")
+	if len(groups) != 4 {
+		t.Fatalf("expected four groups, got %+v", groups)
+	}
+	for _, group := range groups {
+		wantCount := 1
+		if group.Direct {
+			if group.Peer != "user-worker" {
+				t.Fatalf("unexpected peer: %+v", group)
+			}
+			if group.WorkspaceDir != nil && *group.WorkspaceDir == "/project" {
+				wantCount = 2
+			}
+		}
+		if group.Count != wantCount {
+			t.Fatalf("expected count %d, got %+v", wantCount, group)
+		}
+	}
+	archived := query("?archived=true")
+	if len(archived) != 1 || archived[0].Count != 1 || !archived[0].Direct {
+		t.Fatalf("unexpected archived groups: %+v", archived)
+	}
+	for _, tc := range []struct {
+		suffix string
+		direct bool
+	}{
+		{"?q=PROJECT+needle", true},
+		{"?q=collaboration", false},
+		{"?q=project+notes&archived=true", true},
+	} {
+		matched := query(tc.suffix)
+		if len(matched) != 1 || matched[0].Count != 1 || matched[0].Direct != tc.direct {
+			t.Errorf("%s: unexpected search groups: %+v", tc.suffix, matched)
+		}
+	}
+	if matched := query("?q=unknown"); len(matched) != 0 {
+		t.Errorf("expected no matching groups, got %+v", matched)
 	}
 }
 

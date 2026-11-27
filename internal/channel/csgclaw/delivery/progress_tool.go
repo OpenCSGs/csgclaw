@@ -58,7 +58,7 @@ func progressToolDetails(tool agentengine.ToolActivity, previous *activity.Progr
 	for _, field := range []struct {
 		key  string
 		dest *string
-	}{{"command", &value.Command}, {"cwd", &value.Cwd}, {"aggregatedOutput", &value.Output}, {"output", &value.Output}} {
+	}{{"command", &value.Command}, {"workdir", &value.Cwd}, {"cwd", &value.Cwd}, {"aggregatedOutput", &value.Output}, {"output", &value.Output}} {
 		if text, ok := payload[field.key].(string); ok {
 			*field.dest = text
 		}
@@ -80,12 +80,18 @@ func progressToolDetails(tool agentengine.ToolActivity, previous *activity.Progr
 			value.Output = string(b)
 		}
 	}
-	if n, ok := progressNumber(payload["exitCode"]); ok {
+	if n, ok := progressNumberField(payload, "exitCode", "exit_code"); ok {
 		v := int(n)
 		value.ExitCode = &v
 	}
-	if n, ok := progressNumber(payload["durationMs"]); ok {
+	if n, ok := progressNumberField(payload, "durationMs", "duration_ms"); ok {
 		value.DurationMS = &n
+	} else if duration, ok := payload["duration"].(map[string]any); ok {
+		if seconds, ok := progressNumber(duration["secs"]); ok {
+			nanos, _ := progressNumber(duration["nanos"])
+			n := seconds*1000 + nanos/1_000_000
+			value.DurationMS = &n
+		}
 	}
 	actions := []string{}
 	add := func(action string) {
@@ -100,6 +106,14 @@ func progressToolDetails(tool agentengine.ToolActivity, previous *activity.Progr
 		for _, item := range raw {
 			v, _ := item.(map[string]any)
 			kind, _ := v["type"].(string)
+			if value.Summary == "" {
+				value.Summary = progressToolText(v, "query", "name", "path")
+				if kind == "search" && progressToolText(v, "query") != "" {
+					if path := progressToolText(v, "path"); path != "" {
+						value.Summary += " " + path
+					}
+				}
+			}
 			switch kind {
 			case "read":
 				add("read")
@@ -132,13 +146,23 @@ func progressToolDetails(tool agentengine.ToolActivity, previous *activity.Progr
 			add("tool")
 		}
 	}
+	if value.Summary == "" {
+		action, _ := payload["action"].(map[string]any)
+		arguments, _ := payload["arguments"].(map[string]any)
+		for _, fields := range []map[string]any{action, arguments, payload} {
+			if summary := progressToolText(fields, "query", "q", "url"); summary != "" {
+				value.Summary = summary
+				break
+			}
+		}
+	}
 	if previous == nil || payload["commandActions"] != nil {
 		value.Actions = actions
 	}
 	if truncated, _ := payload["preview_truncated"].(bool); truncated {
 		value.Truncated = true
 	}
-	for _, s := range []*string{&value.Input, &value.Output, &value.Command, &value.Cwd} {
+	for _, s := range []*string{&value.Input, &value.Output, &value.Command, &value.Cwd, &value.Summary} {
 		if len(*s) > 64<<10 {
 			n := 64 << 10
 			for n > 0 && !utf8.ValidString((*s)[:n]) {
@@ -165,6 +189,24 @@ func progressDetailJSON(value any) string {
 	}
 	return formatted.String()
 }
+func progressToolText(fields map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := fields[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func progressNumberField(fields map[string]any, keys ...string) (int64, bool) {
+	for _, key := range keys {
+		if value, ok := progressNumber(fields[key]); ok {
+			return value, true
+		}
+	}
+	return 0, false
+}
+
 func progressNumber(value any) (int64, bool) {
 	switch n := value.(type) {
 	case float64:
@@ -173,6 +215,9 @@ func progressNumber(value any) (int64, bool) {
 		return int64(n), true
 	case int64:
 		return n, true
+	case json.Number:
+		value, err := n.Int64()
+		return value, err == nil
 	}
 	return 0, false
 }

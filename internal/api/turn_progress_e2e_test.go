@@ -3,13 +3,16 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,7 +22,10 @@ import (
 	"csgclaw/internal/auth"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/delivery"
+	"csgclaw/internal/config"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/im"
+	"csgclaw/internal/llm"
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
@@ -42,6 +48,9 @@ func (r *progressBrowserRuntime) Resolve(context.Context, agentengine.Interactio
 }
 func (r *progressBrowserRuntime) Run(ctx context.Context, req agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 	id := string(req.ID)
+	if strings.HasPrefix(id, "gateway-") {
+		return gatewayBrowserTurn(ctx, id)
+	}
 	phase := "commentary"
 	if strings.HasPrefix(id, "unphased") {
 		phase = ""
@@ -127,6 +136,67 @@ func (r *progressBrowserRuntime) Run(ctx context.Context, req agentengine.TurnRe
 	return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "**验证结果**：文件已读取，命令执行成功。"}
 }
 
+func gatewayBrowserTurn(ctx context.Context, id string) agentengine.TurnResult {
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Request-ID", "gateway-browser-fixture")
+		attempt := calls.Add(1)
+		if id == "gateway-timeout" {
+			w.WriteHeader(http.StatusGatewayTimeout)
+			fmt.Fprint(w, `{"error":{"code":"upstream_timeout","message":"fixture upstream timeout"}}`)
+			return
+		}
+		if id == "gateway-rejected" {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":{"code":"unsupported_feature","message":"fixture rejection","param":"tools"}}`)
+			return
+		}
+		if id == "gateway-upstream" {
+			w.WriteHeader(http.StatusBadGateway)
+			fmt.Fprint(w, `{"error":{"code":"upstream_response_invalid","message":"fixture bad gateway"}}`)
+			return
+		}
+		if id == "gateway-rate" || id == "gateway-stop" || strings.HasPrefix(id, "gateway-recover") && attempt <= 2 {
+			w.Header().Set("Retry-After", "1")
+			if id == "gateway-stop" {
+				w.Header().Set("Retry-After", "8")
+			}
+			w.WriteHeader(http.StatusTooManyRequests)
+			fmt.Fprint(w, `{"error":{"code":"rate_limit_exceeded","message":"fixture rate limit"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"fixture reply\"}\n\n")
+		if id != "gateway-truncated" {
+			fmt.Fprint(w, "data: {\"type\":\"response.completed\"}\n\n")
+		}
+	}))
+	defer upstream.Close()
+	base := upstream.URL
+	if id == "gateway-connection" {
+		upstream.Close()
+	}
+	profile := agent.AgentProfile{Provider: agent.ProviderAPI, ModelProviderID: agent.ModelProviderIDOpenCSG, BaseURL: base + "/v1", ModelID: "qwen3.7-plus", APIProtocol: "responses", ProfileComplete: true}
+	result, err := llm.NewService(config.ModelConfig{}, nil).Responses(llm.WithTaskProfile(ctx, profile), "agent-e2e", []byte(`{"input":"fixture","stream":true}`))
+	if result != nil {
+		_, err = io.Copy(io.Discard, result.Body)
+		result.Body.Close()
+		if result.StatusCode >= 400 && err == nil {
+			err = fmt.Errorf("gateway HTTP %d", result.StatusCode)
+		}
+	}
+	if ctx.Err() == context.Canceled {
+		return agentengine.TurnResult{Status: agentengine.TurnCanceled}
+	}
+	if err == nil && id == "gateway-recover-then-fail" {
+		err = errors.New("fixture tool failed after model recovery")
+	}
+	if err != nil {
+		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: err.Error()}}
+	}
+	return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "fixture reply"}
+}
+
 // Explicit opt-in fixture exercises the real Engine, renderer, HTTP, SSE and
 // built UI with deterministic provider events and without accessing credentials.
 func TestTurnProgressBrowserFixture(t *testing.T) {
@@ -179,6 +249,11 @@ func TestTurnProgressBrowserFixture(t *testing.T) {
 			turn := channel.TurnContext{AgentID: "agent-e2e", BindingID: "e2e", ParticipantID: "pt-e2e", RoomID: "room-progress", ThreadRootID: thread, ConversationKey: agentengine.ConversationKey(id), TurnID: agentengine.TurnID(id), SourceMessageID: id, Locale: "zh"}
 			turnCtx, cancelTurn := context.WithCancel(ctx)
 			defer cancelTurn()
+			if strings.HasPrefix(id, "gateway-") {
+				record := service.Diagnostics().Begin(turn.RoomID, turn.SourceMessageID, thread, turn.AgentID, id)
+				record.Running()
+				turnCtx = diagnostics.WithRecord(turnCtx, record)
+			}
 			leaseID := worklease.NewID()
 			unregister := workRegistry.RegisterTurnController("pt-e2e", apiTurnControllerFunc(func(stopCtx context.Context, ref agentruntime.TurnRef) error {
 				if ref.LeaseID != leaseID {
@@ -223,12 +298,12 @@ func TestTurnProgressBrowserFixture(t *testing.T) {
 					return
 				}
 			}
-			if err := renderer.Start(ctx, turn); err != nil {
+			if err := renderer.Start(turnCtx, turn); err != nil {
 				t.Error(err)
 				return
 			}
 			result := engine.Conversations(turn.AgentID).Run(turnCtx, agentengine.TurnRequest{ID: turn.TurnID, ConversationKey: turn.ConversationKey, Input: []agentengine.InputPart{{Kind: agentengine.InputPartText, Text: id}}}, agentengine.EventSinkFunc(func(ctx context.Context, event agentengine.TurnEvent) error { return renderer.Emit(ctx, turn, event) }))
-			if err := renderer.Complete(ctx, turn, result); err != nil {
+			if err := renderer.Complete(turnCtx, turn, result); err != nil {
 				t.Error(err)
 			}
 		}()

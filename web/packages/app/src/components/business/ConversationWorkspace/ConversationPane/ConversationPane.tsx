@@ -14,10 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import {
   Conversation,
-  AgentQuestionComposer,
   type ConversationWorkingParticipant,
   type ConversationPaneProps,
-  useQuestionAnswerMode,
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
@@ -51,9 +49,10 @@ import {
 } from "@/components/business/ConversationActivityPanel/conversationActivity";
 
 function hasBlockingAgentDetailChangesAfterMetadataCommit(
-  props: Pick<AgentDetailSidePanelProps, "draft" | "hasUnsavedChanges" | "savedDraft">,
+  props: Pick<AgentDetailSidePanelProps, "draft" | "hasUnsavedChanges" | "hasUnsavedDescription" | "savedDraft">,
   committedFields: Array<"description" | "name">,
 ): boolean {
+  if (props.hasUnsavedDescription) return true;
   if (!props.hasUnsavedChanges) {
     return false;
   }
@@ -296,7 +295,10 @@ function ConversationPaneContent({
   onUndoRemoveAttachment,
   onAddAttachments,
   onRemoveAttachment,
+  onClearDraft,
   composerError,
+  onRetrySaveDraft,
+  onDismissDraftSaveError,
   messageActionBusy,
   messageActionFeedback,
   onMessageAction,
@@ -351,22 +353,6 @@ function ConversationPaneContent({
     () => conversation.messages.filter((message) => !message.relates_to),
     [conversation.messages],
   );
-  const threadMessages = useMemo(
-    () => (activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : []),
-    [activeThreadView],
-  );
-  const questionMode = useQuestionAnswerMode({
-    messages: mainMessages,
-    responderID: currentUserID,
-    roomID: conversation.id,
-    t,
-  });
-  const threadQuestionMode = useQuestionAnswerMode({
-    messages: threadMessages,
-    responderID: currentUserID,
-    roomID: conversation.id,
-    t,
-  });
   const activityAgents = useMemo(() => conversationActivityAgents(conversation, agents), [agents, conversation]);
   const showWorkingActivity = activityActive && workingParticipants.length > 0;
   const activityEntries = useMemo(() => {
@@ -441,7 +427,6 @@ function ConversationPaneContent({
   const roomTurns = workingParticipantsWithActivity.filter((participant) => !participant.threadRootID);
   const stoppableParticipant =
     !conversation.cloud_agent &&
-    !questionMode.pending.length &&
     onStopWorkingTurn &&
     !collaboration &&
     (isDirectConversation(conversation) || activityAgents.length === 1) &&
@@ -500,13 +485,13 @@ function ConversationPaneContent({
   );
 
   const openCollaborationActivity = useCallback(
-    (senderID?: string, turnID?: string, requestID?: string) => {
+    (senderID?: string, turnID?: string, requestID?: string, messageID?: string) => {
       onToggleChannelTools(false);
       memberPanelProps?.onClose();
       const actor = senderID
         ? activityAgents.find((agent) => agent.identities.some((identity) => localIdentitiesMatch(identity, senderID)))
         : undefined;
-      openActivity(undefined, actor?.id, turnID, requestID);
+      openActivity(undefined, actor?.id, turnID, requestID, messageID);
     },
     [activityAgents, memberPanelProps, onToggleChannelTools, openActivity],
   );
@@ -614,9 +599,7 @@ function ConversationPaneContent({
         mentionableUsers={conversationMembers}
         onPreviewUser={onPreviewUser}
         onPreviewAttachment={handlePreviewAttachment}
-        onQuestionSelect={threadQuestionMode.select}
         onCitationSelect={handleOpenCitation}
-        questionMode={threadQuestionMode}
         onSend={onSendThreadReply}
       />
     ) : null;
@@ -708,77 +691,75 @@ function ConversationPaneContent({
         }}
         onPreviewUser={onPreviewUser}
         onPreviewAttachment={handlePreviewAttachment}
-        onQuestionSelect={questionMode.select}
         onCitationSelect={handleOpenCitation}
       />
 
-      {!conversation.cloud_agent && questionMode.pending.length > 0 ? (
-        <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} statusSlot={collaborationStatus} />
-      ) : (
-        <Conversation.Composer
-          statusSlot={collaborationStatus}
-          textOnly={Boolean(conversation.cloud_agent)}
-          resourceAgentID={resourceAgentID}
-          onPickResources={onPickResources}
-          fileScope={conversation.cloud_agent ? undefined : tools.fileScope}
-          authBusyProvider={authBusyProvider}
-          authStatuses={authStatuses}
-          composerDisabled={composerDisabled}
-          composerDisabledReason={compacting ? t("contextCompacting") : composerDisabledReason}
-          composerError={composerError}
-          draftSegments={draftSegments}
-          draftText={draftText}
-          attachmentDrafts={attachmentDrafts}
-          removedAttachmentCount={removedAttachmentCount}
-          removedAttachmentName={removedAttachmentName}
-          sendError={sendError}
-          sendProgress={sendProgress}
-          sendStatus={sendStatus}
-          editorRef={editorRef}
-          managerProfile={managerProfile}
-          managerProvider={managerProvider}
-          mentionCandidates={mentionCandidates}
-          mentionIndex={mentionIndex}
-          mentionableUsersByName={mentionableUsersByName}
-          slashCandidates={slashCandidates}
-          slashIndex={slashIndex}
-          slashContinuation={slashContinuation}
-          slashPickerLoading={slashPickerLoading}
-          slashPickerOpen={slashPickerOpen}
-          t={t}
-          toolbar={
-            <TaskConversationControls
-              conversation={conversation}
-              participants={workingParticipantsWithActivity}
-              agents={agents}
-              t={t}
-              onNewTask={onNewTask}
-              cloudSendDisabled={composerDisabled}
-              onCompactingChange={(busy) => setCompactionSubmission(busy ? conversation.id : "")}
-              onCompactionAccepted={onFollowLatest}
-            />
-          }
-          hideWorkingContextUsage
-          stoppableParticipant={stoppableParticipant}
-          workingParticipants={conversation.cloud_agent || collaboration ? [] : messageControls.composerParticipants}
-          onApplyMention={onApplyMention}
-          onApplySlashCandidate={onApplySlashCandidate}
-          onAddAttachments={onAddAttachments}
-          onComposerCompositionEnd={onComposerCompositionEnd}
-          onComposerCompositionStart={onComposerCompositionStart}
-          onComposerKeyDown={onComposerKeyDown}
-          onProviderLogin={onProviderLogin}
-          onPreviewAttachment={handlePreviewAttachment}
-          onRetrySend={onRetrySend}
-          onSendMessage={onSendMessage}
-          onStopSend={onStopSend}
-          onUndoRemoveAttachment={onUndoRemoveAttachment}
-          onStopWorkingTurn={onStopWorkingTurn}
-          onRemoveAttachment={onRemoveAttachment}
-          onSyncComposer={onSyncComposer}
-          onWorkingAction={handleOpenActivityPanel}
-        />
-      )}
+      <Conversation.Composer
+        statusSlot={collaborationStatus}
+        textOnly={Boolean(conversation.cloud_agent)}
+        resourceAgentID={resourceAgentID}
+        onPickResources={onPickResources}
+        fileScope={conversation.cloud_agent ? undefined : tools.fileScope}
+        authBusyProvider={authBusyProvider}
+        authStatuses={authStatuses}
+        composerDisabled={composerDisabled}
+        composerDisabledReason={compacting ? t("contextCompacting") : composerDisabledReason}
+        composerError={composerError}
+        onRetrySaveDraft={onRetrySaveDraft}
+        onDismissDraftSaveError={onDismissDraftSaveError}
+        draftSegments={draftSegments}
+        draftText={draftText}
+        attachmentDrafts={attachmentDrafts}
+        removedAttachmentCount={removedAttachmentCount}
+        removedAttachmentName={removedAttachmentName}
+        sendError={sendError}
+        sendProgress={sendProgress}
+        sendStatus={sendStatus}
+        editorRef={editorRef}
+        managerProfile={managerProfile}
+        managerProvider={managerProvider}
+        mentionCandidates={mentionCandidates}
+        mentionIndex={mentionIndex}
+        mentionableUsersByName={mentionableUsersByName}
+        slashCandidates={slashCandidates}
+        slashIndex={slashIndex}
+        slashContinuation={slashContinuation}
+        slashPickerLoading={slashPickerLoading}
+        slashPickerOpen={slashPickerOpen}
+        t={t}
+        toolbar={
+          <TaskConversationControls
+            conversation={conversation}
+            participants={workingParticipantsWithActivity}
+            agents={agents}
+            t={t}
+            onNewTask={onNewTask}
+            cloudSendDisabled={composerDisabled}
+            onCompactingChange={(busy) => setCompactionSubmission(busy ? conversation.id : "")}
+            onCompactionAccepted={onFollowLatest}
+          />
+        }
+        hideWorkingContextUsage
+        stoppableParticipant={stoppableParticipant}
+        workingParticipants={conversation.cloud_agent || collaboration ? [] : messageControls.composerParticipants}
+        onApplyMention={onApplyMention}
+        onApplySlashCandidate={onApplySlashCandidate}
+        onAddAttachments={onAddAttachments}
+        onComposerCompositionEnd={onComposerCompositionEnd}
+        onComposerCompositionStart={onComposerCompositionStart}
+        onComposerKeyDown={onComposerKeyDown}
+        onProviderLogin={onProviderLogin}
+        onPreviewAttachment={handlePreviewAttachment}
+        onRetrySend={onRetrySend}
+        onSendMessage={onSendMessage}
+        onStopSend={onStopSend}
+        onUndoRemoveAttachment={onUndoRemoveAttachment}
+        onStopWorkingTurn={onStopWorkingTurn}
+        onRemoveAttachment={onRemoveAttachment}
+        onClearDraft={onClearDraft}
+        onSyncComposer={onSyncComposer}
+        onWorkingAction={handleOpenActivityPanel}
+      />
       {agentDetailPanel}
       {memberPanelProps ? <RoomMembersPanel {...memberPanelProps} /> : null}
       <ChatSidePanel

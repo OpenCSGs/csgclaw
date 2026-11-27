@@ -169,9 +169,11 @@
 }
 
 .menuValue {
-  margin-left: 16px;
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .hintDot {
@@ -207,4 +209,10 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.footer {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }

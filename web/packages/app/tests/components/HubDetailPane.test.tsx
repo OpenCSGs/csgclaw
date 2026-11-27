@@ -1043,7 +1043,7 @@ describe("HubDetailPane", () => {
         templates: [official],
         inlineTemplateDetail: true,
       });
-      const title = screen.getByRole("heading", { level: 2 }).parentElement!;
+      const title = screen.getByRole("heading", { level: 2, name: official.name }).parentElement!;
       expect(title.querySelector("img")).toHaveAttribute("src", "avatar/template.png");
     },
   );

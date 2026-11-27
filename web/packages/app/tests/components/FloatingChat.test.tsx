@@ -336,12 +336,12 @@ describe("FloatingChat manager prompts", () => {
     });
 
     const composer = within(screen.getByRole("region", { name: "questionAnswerMode" }));
-    expect(screen.getAllByText("Choose a scope").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Choose a scope")).toHaveLength(1);
     expect(screen.getByRole("timer")).toBeInTheDocument();
     expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
     expect(composer.getByRole("button", { name: "questionPrevious" })).toBeDisabled();
     expect(composer.getByRole("button", { name: "questionNext" })).toBeEnabled();
-    expect(screen.queryByLabelText("Type a message. Use / for commands or skills")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Type a message. Use / for commands or skills")).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Workspace/ }));
     await user.click(composer.getByRole("button", { name: "questionPrevious" }));

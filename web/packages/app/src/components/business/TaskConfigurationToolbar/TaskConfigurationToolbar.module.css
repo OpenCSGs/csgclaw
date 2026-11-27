@@ -1,8 +1,8 @@
 .root {
   display: flex;
   align-items: center;
-  flex: 1 1 240px;
-  flex-wrap: wrap;
+  flex: 1 0 auto;
+  flex-wrap: nowrap;
   min-width: 0;
   gap: 8px;
 }
@@ -35,7 +35,7 @@
 }
 .modelGroup {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   min-width: 0;
   align-items: center;
   gap: 6px;
@@ -136,12 +136,6 @@
   color: var(--primary);
 }
 @media (max-width: 600px) {
-  .root {
-    flex-wrap: wrap;
-  }
-  .modelGroup {
-    margin-left: 0;
-  }
   .trigger {
     max-width: 150px;
   }
@@ -405,29 +399,46 @@
   }
 }
 
-@container start-task-composer (max-width: 480px) {
-  .directoryTrigger,
-  .modelTrigger,
-  .trigger,
-  .lockedDirectory {
-    flex: none;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    justify-content: center;
-  }
+[data-compact] .directoryTrigger,
+[data-compact] .modelTrigger,
+[data-compact] .trigger,
+[data-compact] .lockedDirectory {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+}
 
-  .modelGroup {
-    margin-left: auto;
-  }
+[data-compact] .modelTrigger :global(.csg-select-value) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
 
-  .directoryTrigger .directoryLabel > span,
-  .lockedDirectory > span,
-  .modelTrigger :global(.csg-select-value) > :global(.model-option-label.single-line) > :global(.model-option-copy),
-  .modelTrigger :global(.csg-select-chevron),
-  .directoryTrigger :global(.csg-select-chevron),
-  .trigger > span,
-  .trigger > svg:last-child {
-    display: none;
-  }
+[data-compact] .directoryTrigger .directoryLabel > span,
+[data-compact] .lockedDirectory > span,
+[data-compact]
+  .modelTrigger
+  :global(.csg-select-value)
+  > :global(.model-option-label.single-line)
+  > :global(.model-option-copy),
+[data-compact] .modelTrigger :global(.csg-select-chevron),
+[data-compact] .directoryTrigger :global(.csg-select-chevron),
+[data-compact] .trigger > span,
+[data-compact] .trigger > svg:last-child {
+  display: none;
+}
+
+.root > *,
+.modelGroup > * {
+  flex-shrink: 0;
+}
+
+[data-compact="all"] .root,
+[data-compact="all"] .modelGroup {
+  gap: 4px;
+}
+[data-compact="all"] :is(.directoryTrigger, .modelTrigger, .trigger, .lockedDirectory) {
+  width: 28px;
 }

@@ -28,6 +28,18 @@
   margin-bottom: 14px;
 }
 
+.headerControls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--csgclaw-ui-space-2);
+  margin-inline-start: auto;
+}
+
+.pageIndicator {
+  white-space: nowrap;
+}
+
 .glyph {
   --glyph-size: 20px;
   --glyph-font-size: 9px;
@@ -188,6 +200,10 @@
 .meta {
   flex: 1;
   min-width: 0;
+}
+
+.meta,
+.pageIndicator {
   color: var(--csgclaw-ui-muted);
   font: var(--csgclaw-ui-font-weight-normal) var(--csgclaw-ui-text-xs-size) /
     var(--csgclaw-ui-text-xs-line-height) var(--csgclaw-ui-font-mono);

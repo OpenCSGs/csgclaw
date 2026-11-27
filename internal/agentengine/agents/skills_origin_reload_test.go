@@ -183,7 +183,7 @@ func TestControllerReloadRecoversSkillOriginsAtInterruptionPoints(t *testing.T) 
 	}
 }
 
-func TestEmptySkillReplacementDoesNotReadGlobalOrigins(t *testing.T) {
+func TestWorkerOnlySkillReplacementDoesNotReadGlobalOrigins(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "", filepath.Join(t.TempDir(), "agents.json"))
 	if err != nil {
@@ -202,11 +202,66 @@ func TestEmptySkillReplacementDoesNotReadGlobalOrigins(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeWorkspaceFileAt(t, globalRoot, ".skillhub-lock.json", "invalid JSON", 0600)
+	const id = "team/tools/review"
+	writeWorkspaceFileAt(t, layout.SkillsRoot, id+"/SKILL.md", "# Review", 0600)
+	if err := svc.ReplaceSkills(t.Context(), item.ID, []string{"team", id}); !errors.Is(err, ErrAgentSkillInvalid) {
+		t.Fatalf("overlapping selection: %v", err)
+	}
+	if err := svc.ReplaceSkills(t.Context(), item.ID, []string{id}); err != nil {
+		t.Fatalf("grouped skill needs unrelated global origins: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(layout.SkillsRoot, id, "SKILL.md")); err != nil || string(data) != "# Review" {
+		t.Fatalf("grouped skill = %q, %v", data, err)
+	}
 	if err := svc.ReplaceSkills(context.Background(), item.ID, nil); err != nil {
 		t.Fatalf("empty skill replacement depends on unrelated global origins: %v", err)
 	}
 	names, err := svc.Skills(item.ID)
 	if err != nil || len(names) != 0 {
 		t.Fatalf("skills after empty replacement = %v, error = %v", names, err)
+	}
+}
+
+func TestPreparedReplacementPreservesSkillGroup(t *testing.T) {
+	root := t.TempDir()
+	stage := t.TempDir()
+	const manifest = "team/tools/review/SKILL.md"
+	writeWorkspaceFileAt(t, root, manifest, "# Review", 0600)
+	writeWorkspaceFileAt(t, stage, "next/team/SKILL.md", "# Team", 0600)
+	p := preparedSkillReplacement{targetRoot: root, stageRoot: stage, names: []string{"team"}, origins: map[string]*skillinstall.Record{"team": {Source: skillinstall.SourceLocal}}}
+	if err := p.apply(); !errors.Is(err, ErrAgentSkillAlreadyExists) {
+		t.Fatalf("replacement error = %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, manifest)); err != nil || string(data) != "# Review" {
+		t.Fatalf("grouped skill = %q, %v", data, err)
+	}
+	records, err := skillinstall.Read(root)
+	if _, exists := records["team"]; err != nil || exists {
+		t.Fatalf("rejected origin persisted: %+v, %v", records, err)
+	}
+}
+
+func TestDefaultSystemSkillsPreserveGroupWithSameName(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "", filepath.Join(t.TempDir(), "agents.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+	root, err := svc.agentSkillsRoot("group-worker", RuntimeKindCodex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const manifest = "skill-creator/review/SKILL.md"
+	writeWorkspaceFileAt(t, root, manifest, "# Review", 0600)
+	if err := svc.installDefaultSystemSkills("group-worker", RuntimeKindCodex); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, manifest)); err != nil || string(data) != "# Review" {
+		t.Fatalf("grouped skill = %q, %v", data, err)
+	}
+	records, err := skillinstall.Read(root)
+	if _, exists := records["skill-creator"]; err != nil || exists || records["skill-installer"].Source != skillinstall.SourceBuiltin {
+		t.Fatalf("default skill records = %+v, %v", records, err)
 	}
 }

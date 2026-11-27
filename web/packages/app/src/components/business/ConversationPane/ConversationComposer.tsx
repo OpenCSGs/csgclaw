@@ -1,3 +1,5 @@
+import composerTokenStyles from "./ComposerTokens.module.css";
+import { useComposerCompact } from "@/shared/layout/useComposerCompact";
 import conversationSendButtonStyles from "./ConversationSendButton.module.css";
 import conversationComposerStyles from "./ConversationComposer.module.css";
 import workingTurnStyles from "./WorkingTurn.module.css";
@@ -15,13 +17,14 @@ import type { SkillContinuation } from "@/models/slashCommands";
 import { WorkingTurnStatus } from "./WorkingTurnStatus";
 import { memo, useId, useMemo, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject, ReactNode } from "react";
-import { ArrowUp, RotateCcw, Square, Undo2 } from "lucide-react";
+import { ArrowUp, Eraser, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
+import { ComposerDraftSaveNotice } from "@/components/business/ComposerDraftSaveNotice";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { DismissibleInlineError, Button, Tooltip } from "@/components/ui";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentProfileLike } from "@/models/agents";
-import type { AttachmentDraft } from "@/models/attachments";
+import type { ComposerAttachmentDraft } from "@/models/attachments";
 import { providerNeedsAuth } from "@/models/agents";
 import {
   insertComposerSegmentsAtSelection,
@@ -59,7 +62,7 @@ export type ConversationComposerProps = ComposerResourceProps & {
   composerError: string;
   draftSegments: ComposerSegment[];
   draftText: string;
-  attachmentDrafts?: AttachmentDraft[];
+  attachmentDrafts?: ComposerAttachmentDraft[];
   removedAttachmentCount?: number;
   removedAttachmentName?: string;
   sendError?: string;
@@ -80,11 +83,14 @@ export type ConversationComposerProps = ComposerResourceProps & {
   onProviderLogin: (provider: string) => VoidOrPromise;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onRetrySend?: () => VoidOrPromise;
+  onRetrySaveDraft?: () => void;
+  onDismissDraftSaveError?: () => void;
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;
   onStopWorkingTurn?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
   onRemoveAttachment?: (id: string) => void;
+  onClearDraft?: () => void;
   onSyncComposer: () => void;
   onWorkingAction?: (participant?: ConversationWorkingParticipant) => void;
   slashCandidates: SlashPickerCandidate[];
@@ -110,6 +116,8 @@ export const ConversationComposer = memo(function ConversationComposer({
   composerDisabled,
   composerDisabledReason = "",
   composerError,
+  onRetrySaveDraft,
+  onDismissDraftSaveError,
   draftSegments,
   draftText,
   attachmentDrafts = [],
@@ -145,6 +153,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   onPreviewAttachment,
   onRetrySend,
   onRemoveAttachment = () => {},
+  onClearDraft,
   onSendMessage,
   onStopSend,
   onStopWorkingTurn,
@@ -166,6 +175,9 @@ export const ConversationComposer = memo(function ConversationComposer({
     fileMentions.sync();
   };
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const composerBoxRef = useRef<HTMLDivElement>(null);
+  const composerRowRef = useRef<HTMLDivElement>(null);
+  useComposerCompact(composerBoxRef, composerRowRef);
   const composerHelpId = useId();
   const isSending = sendStatus === "sending";
   const interactionDisabled = composerDisabled || isSending;
@@ -177,7 +189,8 @@ export const ConversationComposer = memo(function ConversationComposer({
     disabled: interactionDisabled,
   });
   const canSend = canSendComposer(draftSegments, attachmentDrafts.length);
-  const sendDisabled = interactionDisabled || resourcePicker.active || !canSend;
+  const needsAttachmentReselection = attachmentDrafts.some((draft) => !draft.file);
+  const sendDisabled = interactionDisabled || resourcePicker.active || !canSend || needsAttachmentReselection;
   const stopTarget =
     !isSending && !resourcePicker.active && !draftText.trim() && !canSend && onStopWorkingTurn
       ? stoppableParticipant
@@ -245,7 +258,19 @@ export const ConversationComposer = memo(function ConversationComposer({
           onStop={onStopWorkingTurn}
         />
       ) : null}
+      <ComposerDraftSaveNotice
+        onRetry={onRetrySaveDraft}
+        onDismiss={
+          onDismissDraftSaveError &&
+          (() => {
+            onDismissDraftSaveError();
+            editorRef.current?.focus({ preventScroll: true });
+          })
+        }
+        t={t}
+      />
       <div
+        ref={composerBoxRef}
         className={`composer-box ${conversationComposerStyles["composer-box"]}`}
         onDragOver={(event) => {
           if (!dataTransferHasFiles(event.dataTransfer)) {
@@ -286,7 +311,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           ) : null}
           <div
             ref={editorRef}
-            className={`composer-editor ${conversationComposerStyles["composer-editor"]} ${interactionDisabled ? "disabled" : ""}`}
+            className={`${composerTokenStyles.editor} composer-editor ${conversationComposerStyles["composer-editor"]} ${interactionDisabled ? "disabled" : ""}`}
             contentEditable={interactionDisabled ? "false" : "true"}
             tabIndex={interactionDisabled ? -1 : 0}
             suppressContentEditableWarning={true}
@@ -347,6 +372,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           </div>
         ) : null}
         <div
+          ref={composerRowRef}
           className={
             textOnly
               ? `${conversationComposerStyles["composer-toolbar"]} ${conversationComposerStyles["composer-toolbar-text-only"]}`
@@ -398,6 +424,20 @@ export const ConversationComposer = memo(function ConversationComposer({
                   onClick={onRetrySend}
                 >
                   <RotateCcw aria-hidden="true" size={16} />
+                </Button>
+              </Tooltip>
+            ) : null}
+            {onClearDraft && (draftSegments.length > 0 || attachmentDrafts.length > 0 || removedAttachmentCount > 0) ? (
+              <Tooltip content={t("clearDraft")}>
+                <Button
+                  aria-label={t("clearDraft")}
+                  iconOnly
+                  size="sm"
+                  variant="tertiaryGray"
+                  disabled={isSending}
+                  onClick={onClearDraft}
+                >
+                  <Eraser aria-hidden="true" size={16} />
                 </Button>
               </Tooltip>
             ) : null}

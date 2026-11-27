@@ -197,6 +197,7 @@ type Service struct {
 	currentUserID        string
 	users                map[string]User
 	byName               map[string]string
+	heldNames            map[string]string
 	rooms                map[string]*Room
 	taskTitleClaims      map[string]string // Room ID to source message ID. Survives Reload.
 	sessionRooms         map[string]string
@@ -1410,6 +1411,15 @@ func (s *Service) ListRooms() []Room {
 }
 
 func (s *Service) ListRoomsWithOptions(opts ListMessagesOptions) []Room {
+	rooms := s.ListUnsortedRooms(opts)
+	slices.SortFunc(rooms, func(a, b Room) int {
+		return latestRoomMessageAt(b).Compare(latestRoomMessageAt(a))
+	})
+	return rooms
+}
+
+// ListUnsortedRooms lets callers filter room snapshots before applying their own ordering.
+func (s *Service) ListUnsortedRooms(opts ListMessagesOptions) []Room {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1425,9 +1435,6 @@ func (s *Service) ListRoomsWithOptions(opts ListMessagesOptions) []Room {
 		}
 		rooms = append(rooms, presented)
 	}
-	slices.SortFunc(rooms, func(a, b Room) int {
-		return latestRoomMessageAt(b).Compare(latestRoomMessageAt(a))
-	})
 	return rooms
 }
 
@@ -2022,12 +2029,13 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	id = s.resolveUserIDLocked(id)
-	user, ok := s.users[id]
-	if ok && user.AgentState == "deleted" {
+	id = canonicalIMUserID(id)
+	previous, existed := s.users[id]
+	user := previous
+	if existed && user.AgentState == "deleted" {
 		return User{}, false, ErrAgentIdentityDeleted
 	}
-	if !ok {
+	if !existed {
 		name := strings.TrimSpace(req.Name)
 		if name == "" {
 			name = strings.TrimSpace(strings.TrimPrefix(id, "user-"))
@@ -2052,18 +2060,16 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 			AccentHex:   accentHexForID(id),
 			CreatedAt:   time.Now().UTC(),
 		}
-		ok = true
 	}
-	if name := strings.TrimSpace(req.Name); name != "" {
+	name := strings.TrimSpace(req.Name)
+	if name != "" {
 		if err := identity.ValidateMentionName(name); err != nil {
 			return User{}, false, err
 		}
-		if existingID, ok := s.byName[strings.ToLower(name)]; ok && s.resolveUserIDLocked(existingID) != id {
-			return User{}, false, fmt.Errorf("name %q already exists", name)
+		if existingID, ok := s.nameOwnerLocked(name); ok && s.resolveUserIDLocked(existingID) != id {
+			return User{}, false, fmt.Errorf("name %q %w", name, identity.ErrNameExists)
 		}
-		delete(s.byName, strings.ToLower(strings.TrimSpace(user.Name)))
 		user.Name = name
-		s.byName[strings.ToLower(name)] = id
 	}
 	if description := strings.TrimSpace(req.Description); description != "" {
 		user.Description = description
@@ -2080,7 +2086,16 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 	}
 	s.users[id] = user
 	if err := s.saveLocked(); err != nil {
+		if existed {
+			s.users[id] = previous
+		} else {
+			delete(s.users, id)
+		}
 		return User{}, false, err
+	}
+	if name != "" {
+		delete(s.byName, strings.ToLower(strings.TrimSpace(previous.Name)))
+		s.byName[strings.ToLower(name)] = id
 	}
 	return user, true, nil
 }
@@ -2107,7 +2122,7 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 		if err := identity.ValidateMentionName(name); err != nil {
 			return User{}, false, err
 		}
-		if existingID, ok := s.byName[strings.ToLower(name)]; ok && s.resolveUserIDLocked(existingID) != id {
+		if existingID, ok := s.nameOwnerLocked(name); ok && s.resolveUserIDLocked(existingID) != id {
 			return User{}, false, fmt.Errorf("name %q already exists", name)
 		}
 		delete(s.byName, strings.ToLower(strings.TrimSpace(user.Name)))

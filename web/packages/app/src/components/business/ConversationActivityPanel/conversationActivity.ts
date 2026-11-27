@@ -1,4 +1,4 @@
-import { expandProgressMessage, newerProgressMessage } from "@/models/turnProgress";
+import { expandProgressMessage, isExecutionToolKind, newerProgressMessage } from "@/models/turnProgress";
 import {
   agentActivityMessageToolMergeKey,
   agentActivityToolMergeKeys,
@@ -68,7 +68,7 @@ const MAX_POINT_EVENT_WEIGHT_MS = 1_000;
 const MAX_WORKING_SUMMARY_LENGTH = 72;
 
 export function conversationActivityAgents(
-  conversation: IMConversation,
+  conversation: Pick<IMConversation, "members">,
   agents: readonly AgentLike[],
 ): ConversationActivityAgent[] {
   const matched = new Map<string, ConversationActivityAgent>();
@@ -88,6 +88,47 @@ export function conversationActivityAgents(
     });
   }
   return Array.from(matched.values());
+}
+
+export function activityEntryHasMessage(entryID: string, messageID: string | undefined): boolean {
+  return Boolean(messageID && (entryID.endsWith(`:${messageID}`) || entryID.includes(`:${messageID}:`)));
+}
+
+// A conversation can open the inspector at an activity link already visible
+// in its transcript, even before that part of history is fetched.
+export function activityTargetMessages(
+  messages: readonly IMMessage[],
+  entryID: string | null,
+  turnID: string | undefined,
+  requestID: string | undefined,
+): IMMessage[] {
+  if (!entryID && !turnID && !requestID) return [];
+  const sources = new Set<string>();
+  const selected = messages.filter((message) => {
+    const metadata = recordValue(message.metadata);
+    const csg = recordValue(metadata?.csgclaw);
+    const codex = recordValue(metadata?.codex);
+    const diagnostics = recordValue(metadata?.diagnostics);
+    const progress = recordValue(csg?.turn_progress);
+    const messageTurn = firstNonEmpty(progress?.id, csg?.turn_id, codex?.turn_id, diagnostics?.turn_id);
+    const source = firstNonEmpty(
+      csg?.source_message_id,
+      csg?.request_id,
+      codex?.source_message_id,
+      codex?.request_id,
+      codex?.requestId,
+      messageTurn && diagnostics?.source_id,
+    );
+    const matches =
+      (entryID && activityEntryHasMessage(entryID, message.id)) ||
+      (turnID && turnID === messageTurn) ||
+      (requestID && requestID === source);
+    if (matches && source) sources.add(source);
+    return matches;
+  });
+  return sources.size
+    ? [...selected, ...messages.filter((message) => message.id && sources.has(message.id))]
+    : selected;
 }
 
 export function conversationActivityEntries(
@@ -213,18 +254,20 @@ export function conversationActivityEntrySummary(entry: ConversationActivityEntr
     return runtimeErrorDetail;
   }
   if (entry.command) {
-    return firstNonEmpty(entry.command.command, entry.command.title, entry.command.output);
+    return "";
   }
   const activity = entry.activity;
   if (activity?.content.msgtype === AgentActivityMsgTypes.tool && activity.content.tool) {
     const tool = activity.content.tool;
-    return firstNonEmpty(
-      toolCommandText(tool),
-      toolInputText(tool),
-      toolOutputText(tool),
-      tool.title,
-      activity.content.body,
+    if (isExecutionToolKind(tool.kind) || isExecutionToolKind(tool.title)) return "";
+    const command = toolCommandText(tool);
+    const fields = ["query", "q", "url", "path", "file"];
+    const summary = firstNonEmpty(
+      tool.progress_summary,
+      summaryValue(tool.input_summary, ...fields),
+      summaryValue(tool.input, ...fields),
     );
+    return command && summary.includes(command) ? "" : summary;
   }
   if (activity?.content.msgtype === AgentActivityMsgTypes.action) {
     const action = activity.content.action;
@@ -303,7 +346,7 @@ export function conversationWorkingParticipantsWithActivity(
             action: conversationWorkingActionForEntry(entry),
             entryID: entry.id,
             summary: compactWorkingSummary(conversationActivityEntrySummary(entry)),
-            toolName: entry.tone === "tool" ? entry.eventType : undefined,
+            toolName: entry.tone === "tool" && !isExecutionToolKind(entry.eventType) ? entry.eventType : undefined,
             updatedAt: entry.updatedAt || entry.createdAt,
           },
         },
@@ -553,7 +596,7 @@ function activityEventType(entry: MutableConversationActivityEntry, autonomous: 
   const activity = entry.activity;
   if (activity?.content.msgtype === AgentActivityMsgTypes.tool && activity.content.tool) {
     const tool = activity.content.tool;
-    if (isFailedTool(tool)) {
+    if (isFailedActivityTool(tool)) {
       return "error";
     }
     const kind = normalizeEventType(tool.kind || "");
@@ -625,7 +668,7 @@ function matchesWorkingSignal(signal: string, candidates: readonly string[]): bo
   return candidates.some((candidate) => signal.includes(candidate));
 }
 
-function isFailedTool(tool: AgentActivityTool): boolean {
+export function isFailedActivityTool(tool: Pick<AgentActivityTool, "status" | "exit_code">): boolean {
   const status = String(tool.status || "")
     .trim()
     .toLowerCase();
@@ -767,9 +810,7 @@ function truncateText(value: string, maxLength: number): string {
 }
 
 function compactWorkingSummary(value: string): string {
-  const compact = value.replace(/\s+/g, " ").trim();
-  const shellCommand = compact.match(/^\/(?:usr\/)?bin\/(?:ba|z|)sh\s+-lc\s+(['"])(.*)\1$/)?.[2] || compact;
-  return truncateText(shellCommand, MAX_WORKING_SUMMARY_LENGTH);
+  return truncateText(value.replace(/\s+/g, " ").trim(), MAX_WORKING_SUMMARY_LENGTH);
 }
 
 function normalizeEventType(value: string): string {

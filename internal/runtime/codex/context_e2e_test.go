@@ -23,7 +23,7 @@ import (
 
 // Exercises the bundled process, real Responses transport and event subscription.
 func TestContextUsageBundledCodexE2E(t *testing.T) {
-	for _, mode := range []string{"diagnostics", "usage", "manual_compact", "auto_compact", "overflow", "cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure", "output_budget"} {
+	for _, mode := range []string{"diagnostics", "usage", "unsent_cold_resume", "missing_used_rollout", "manual_compact", "auto_compact", "overflow", "cold_resume", "default_cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure", "output_budget"} {
 		t.Run(mode, func(t *testing.T) { testContextBundledCodex(t, mode) })
 	}
 }
@@ -85,6 +85,9 @@ func testContextBundledCodex(t *testing.T, mode string) {
 			}
 		}
 		input, _ := json.Marshal(body["input"])
+		if mode == "missing_used_rollout" && n == 2 && strings.Contains(string(input), "CSG_CONTEXT_SENTINEL") {
+			t.Error("replacement thread included input from the missing rollout")
+		}
 		if strings.Count(string(input), "CSG_CONTEXT_SENTINEL") > 1 {
 			t.Errorf("user input duplicated in request: %s", input)
 		}
@@ -146,13 +149,30 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	coldResume := mode == "cold_resume" || mode == "default_cold_resume"
 	conversationBinding := "room:test"
 	if mode == "manual_compact" {
 		conversationBinding = "csgclaw-memory:managed-v2-fixture:room:test"
 	}
-	thread, err := rt.EnsureEngineSession(ctx, h.RuntimeID, conversationBinding)
-	if err != nil {
-		t.Fatal(err)
+	var thread string
+	if mode == "default_cold_resume" {
+		conversationBinding = ""
+	} else {
+		thread, err = rt.EnsureEngineSession(ctx, h.RuntimeID, conversationBinding)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if mode == "unsent_cold_resume" {
+		fresh := thread
+		if _, err := rt.Stop(ctx, h); err != nil {
+			t.Fatal(err)
+		}
+		thread, err = rt.EnsureEngineSession(ctx, h.RuntimeID, conversationBinding)
+		if err != nil || thread == "" {
+			t.Fatalf("restart after saving unused thread %q: %q %v", fresh, thread, err)
+		}
+		t.Logf("unused native binding before restart %q, after first use %q", fresh, thread)
 	}
 	if mode == "sol61_auto_compact" || mode == "sol61_history" {
 		live := rt.SessionManager().(*appServerManager).liveSession(h.RuntimeID)
@@ -179,6 +199,30 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	}
 	if err := rt.Prompt(ctx, h.RuntimeID, thread, "CSG_CONTEXT_SENTINEL Reply done."); err != nil {
 		t.Fatal(err)
+	}
+	if mode == "missing_used_rollout" {
+		manager := rt.SessionManager().(*appServerManager)
+		dir := manager.liveSession(h.RuntimeID).spec.CodexHomeDir
+		if _, err := rt.Stop(ctx, h); err != nil {
+			t.Fatal(err)
+		}
+		files, err := filepath.Glob(filepath.Join(dir, "sessions", "*", "*", "*", "rollout-*-"+thread+".jsonl"))
+		if err != nil || len(files) != 1 {
+			t.Fatalf("rollouts for %q: %v %v", thread, files, err)
+		}
+		if err := os.Rename(files[0], filepath.Join(home, "withheld-rollout.jsonl")); err != nil {
+			t.Fatal(err)
+		}
+		key := contract.ConversationKey(conversationBinding)
+		result := rt.Conversation(h.RuntimeID).Run(ctx, contract.TurnRequest{ID: "next-message", ConversationKey: key, Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "Continue in the new thread."}}}, nil)
+		if result.Status != contract.TurnSucceeded || result.Output != "done" || requests.Load() != 2 {
+			t.Fatalf("send after missing rollout: %+v, calls=%d", result, requests.Load())
+		}
+		meta, err := rt.readSessionMetadata(h.RuntimeID)
+		if id := meta.ConversationSessions[conversationBinding]; err != nil || id == "" || id == thread {
+			t.Fatalf("replacement binding = %q; old=%q err=%v", id, thread, err)
+		}
+		return
 	}
 	if diagnostic != nil {
 		time.Sleep(20 * time.Millisecond)
@@ -243,7 +287,14 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		}
 
 	}
-	if mode == "cold_resume" {
+	if mode == "default_cold_resume" {
+		meta, err := rt.readSessionMetadata(h.RuntimeID)
+		if err != nil || meta.SessionID == "" {
+			t.Fatalf("default ID after first message = %q, %v", meta.SessionID, err)
+		}
+		thread = meta.SessionID
+	}
+	if coldResume {
 		manager := rt.SessionManager().(*appServerManager)
 		live := manager.liveSession(h.RuntimeID)
 		params := appServerThreadResumeParams(live.spec, thread)
@@ -251,13 +302,11 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		if _, err := live.appClient.request(ctx, "thread/resume", params); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if mode == "cold_resume" {
 		if _, err := rt.Stop(ctx, h); err != nil {
 			t.Fatal(err)
 		}
 		profile.ModelMetadata = modelcap.Resolved{ContextWindow: 65536, ContextSource: "user"}
-		resumed, err := rt.EnsureEngineSession(ctx, h.RuntimeID, "room:test")
+		resumed, err := rt.EnsureEngineSession(ctx, h.RuntimeID, conversationBinding)
 		if err != nil || resumed != thread {
 			t.Fatalf("cold resume %q %v", resumed, err)
 		}
@@ -280,7 +329,7 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	completed := 0
 	successfulCommand := false
 	target := 1
-	if mode == "auto_compact" || mode == "cold_resume" || mode == "luna_history" || mode == "sol61_auto_compact" || mode == "sol61_history" {
+	if mode == "auto_compact" || coldResume || mode == "luna_history" || mode == "sol61_auto_compact" || mode == "sol61_history" {
 		target = 2
 	}
 	var latest modelcap.ContextUsage
@@ -324,7 +373,7 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	if (mode == "auto_compact" || mode == "sol61_auto_compact" || mode == "overflow") && (!sawCompaction || requests.Load() < 3) {
 		t.Fatalf("compaction=%v requests=%d", sawCompaction, requests.Load())
 	}
-	if mode == "cold_resume" && latest.ContextWindow < 40000 {
+	if coldResume && latest.ContextWindow < 40000 {
 		t.Fatalf("capacity not refreshed: %+v", latest)
 	}
 	if mode == "luna_history" && (sawCompaction || requests.Load() != 2 || latest.ContextWindow < 900000 || latest.CompactThreshold < 700000) {

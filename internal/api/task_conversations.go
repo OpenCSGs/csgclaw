@@ -127,7 +127,6 @@ func (h *Handler) listTaskConversations(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	currentUserID := h.im.CurrentUserID()
 	query := r.URL.Query()
 	limit, offset := 20, 0
 	for key, dst := range map[string]*int{"limit": &limit, "offset": &offset} {
@@ -146,28 +145,31 @@ func (h *Handler) listTaskConversations(w http.ResponseWriter, r *http.Request) 
 	}
 	archived := query.Get("archived") == "true"
 	terms := strings.Fields(strings.ToLower(query.Get("q")))
-	rooms := make([]im.Room, 0)
-	for _, room := range h.im.ListRoomsWithOptions(im.ListMessagesOptions{IncludeThreadReplies: true}) {
-		if !slices.Contains(room.Members, currentUserID) {
-			continue
-		}
-		if room.IsAutonomous() {
-			messages := make([]im.Message, 0, len(room.Messages))
-			for _, message := range room.Messages {
-				if !im.IsAutonomousCoordinationNotice(message) {
-					messages = append(messages, message)
-				}
+	owner, directory := query.Get("owner"), query.Get("directory")
+	currentUserID := taskConversationLocalUser(h.im.CurrentUserID())
+	legacyPeers := make(map[string]bool)
+	if directory != "" {
+		for _, peer := range query["legacy_peer"] {
+			if id := taskConversationLocalUser(peer); id != "" {
+				legacyPeers[id] = true
 			}
-			room.Messages = messages
-		}
-		// Automatically provisioned agent DMs are preparation, not task history.
-		if room.IsDirect && !room.TaskSession && !room.CustomTitle && !room.Pinned && !room.Archived && !hasConversationHistory(room) {
-			continue
-		}
-		if room.Archived == archived && conversationMatches(room, terms) {
-			rooms = append(rooms, room)
 		}
 	}
+	rooms := make([]im.Room, 0)
+	h.visitTaskConversations(archived, func(room im.Room) {
+		if owner != "" || directory != "" {
+			key := taskConversationDimensions(room, currentUserID)
+			if owner != "" && owner != key.owner() {
+				return
+			}
+			if directory != "" && !key.matchesDirectory(directory, legacyPeers) {
+				return
+			}
+		}
+		if conversationMatches(room, terms) {
+			rooms = append(rooms, room)
+		}
+	})
 	sort.Slice(rooms, func(i, j int) bool {
 		if rooms[i].Pinned != rooms[j].Pinned {
 			return rooms[i].Pinned
@@ -194,6 +196,132 @@ func (h *Handler) listTaskConversations(w http.ResponseWriter, r *http.Request) 
 		page = append(page, taskConversationRoom{Room: room, SearchMatch: match})
 	}
 	writeJSON(w, http.StatusOK, taskConversationPage{Rooms: page, Total: total, HasMore: end < total})
+}
+
+// Group history by the dimensions the filter needs. A nil directory allows the
+// client to apply the current Agent directory to rooms predating task configuration.
+type taskConversationFilterGroup struct {
+	Direct       bool    `json:"is_direct"`
+	Peer         string  `json:"peer,omitempty"`
+	CloudUser    *string `json:"cloud_user,omitempty"`
+	WorkspaceDir *string `json:"workspace_dir,omitempty"`
+	Count        int     `json:"count"`
+}
+
+func (h *Handler) listTaskConversationFilters(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireLocalChannel(w); !ok {
+		return
+	}
+	if err := h.reloadIM(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	currentUserID := taskConversationLocalUser(h.im.CurrentUserID())
+	query := r.URL.Query()
+	terms := strings.Fields(strings.ToLower(query.Get("q")))
+	counts := make(map[taskConversationFilterKey]int)
+	h.visitTaskConversations(query.Get("archived") == "true", func(room im.Room) {
+		if conversationMatches(room, terms) {
+			counts[taskConversationDimensions(room, currentUserID)]++
+		}
+	})
+	groups := make([]taskConversationFilterGroup, 0, len(counts))
+	for key, count := range counts {
+		group := taskConversationFilterGroup{Direct: key.direct, Peer: key.peer, Count: count}
+		if key.cloud {
+			group.CloudUser = &key.cloudUser
+		}
+		if key.configured {
+			group.WorkspaceDir = &key.directory
+		}
+		groups = append(groups, group)
+	}
+	writeJSON(w, http.StatusOK, groups)
+}
+
+type taskConversationFilterKey struct {
+	direct, cloud, configured  bool
+	peer, cloudUser, directory string
+}
+
+func taskConversationDimensions(room im.Room, currentUserID string) taskConversationFilterKey {
+	key := taskConversationFilterKey{direct: room.IsDirect}
+	if room.CloudAgent != nil {
+		key.cloud, key.cloudUser = true, room.CloudAgent.UserID
+	} else if room.IsDirect {
+		for _, member := range room.Members {
+			if id := taskConversationLocalUser(member); id != "" && id != currentUserID {
+				key.peer = member
+				break
+			}
+		}
+	}
+	if room.Configuration != nil {
+		key.configured, key.directory = true, room.Configuration.WorkspaceDir
+	}
+	return key
+}
+
+func (key taskConversationFilterKey) owner() string {
+	switch {
+	case key.cloud && key.cloudUser != "":
+		return "cloud:" + key.cloudUser
+	case key.cloud:
+		return ""
+	case !key.direct:
+		return "collaboration"
+	case key.peer != "":
+		return "direct:" + taskConversationLocalUser(key.peer)
+	default:
+		return ""
+	}
+}
+
+func (key taskConversationFilterKey) matchesDirectory(directory string, legacyPeers map[string]bool) bool {
+	if key.configured {
+		return key.directory == directory
+	}
+	// The sidebar resolves legacy directories from the current Agent catalog.
+	return !key.cloud && legacyPeers[taskConversationLocalUser(key.peer)]
+}
+
+// Keep local owner IDs aligned with the sidebar's legacy identity aliases.
+func taskConversationLocalUser(id string) string {
+	id = localIdentitySuffix(id)
+	for {
+		index := strings.LastIndexByte(id, '-')
+		if index <= 0 || len(id)-index-1 != 8 || strings.Trim(id[index+1:], "0123456789abcdef") != "" {
+			break
+		}
+		id = localIdentitySuffix(id[:index])
+	}
+	if id == "" {
+		return ""
+	}
+	return "user-" + id
+}
+
+func (h *Handler) visitTaskConversations(archived bool, visit func(im.Room)) {
+	currentUserID := h.im.CurrentUserID()
+	for _, room := range h.im.ListUnsortedRooms(im.ListMessagesOptions{IncludeThreadReplies: true}) {
+		if room.Archived != archived || !slices.Contains(room.Members, currentUserID) {
+			continue
+		}
+		if room.IsAutonomous() {
+			messages := make([]im.Message, 0, len(room.Messages))
+			for _, message := range room.Messages {
+				if !im.IsAutonomousCoordinationNotice(message) {
+					messages = append(messages, message)
+				}
+			}
+			room.Messages = messages
+		}
+		// Automatically provisioned agent DMs are preparation, not task history.
+		if room.IsDirect && !room.TaskSession && !room.CustomTitle && !room.Pinned && !room.Archived && !hasConversationHistory(room) {
+			continue
+		}
+		visit(room)
+	}
 }
 
 func hasConversationHistory(room im.Room) bool {

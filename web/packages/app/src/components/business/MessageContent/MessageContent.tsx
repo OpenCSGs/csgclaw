@@ -1,11 +1,12 @@
 import messageContentStyles from "./MessageContent.module.css";
 import { ResourceTag } from "@/components/business/ResourceTag";
 import { messageResources, resourceKey } from "@/models/conversationResources";
-import { TurnProgress } from "@/components/business/TurnProgress";
-import { parseTurnProgress } from "@/models/turnProgress";
+import { ModelRequestFeedback, StandaloneToolStep, TurnProgress } from "@/components/business/TurnProgress";
+import { createTranslator } from "@/shared/i18n";
+import { parseTurnProgress, progressActive } from "@/models/turnProgress";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionCard } from "./ActionCard";
-import { AgentActivityCard, ToolActivityOutput } from "./AgentActivityCard";
+import { AgentActivityCard } from "./AgentActivityCard";
 import { LongMessageCollapse } from "./LongMessageCollapse";
 import { CitationSources } from "./CitationSources";
 import { renderMarkdownWithCitations } from "./markdown";
@@ -24,17 +25,21 @@ import {
 } from "@/models/agentActivity";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
+import { useStreamingText } from "./useStreamingText";
 import "./MessageContent.css";
 
 export const MessageContent = memo(function MessageContent(props: MessageContentProps) {
   const { t, onCitationSelect } = props;
   const renderProgressText = useCallback(
-    (content: string) => <MessageBody content={content} t={t} onCitationSelect={onCitationSelect} />,
+    (content: string, streaming: boolean) => (
+      <MessageBody content={content} streaming={streaming} t={t} onCitationSelect={onCitationSelect} />
+    ),
     [t, onCitationSelect],
   );
   const progress = parseTurnProgress(props.message);
+  const streaming = progress?.status === "running" && !progress.private_output;
+  const hasAnswer = Boolean(props.content?.replace(/\u200b/g, "").trim());
   if (progress && props.t && props.showTurnProgress !== false) {
-    const hasAnswer = Boolean(props.content?.replace(/\u200b/g, "").trim());
     return (
       <TurnProgress
         progress={progress}
@@ -42,7 +47,7 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
         headerControls={props.progressControls?.header}
         controls={props.progressControls?.footer}
         t={props.t}
-        answer={hasAnswer ? <MessageBody {...props} diagnosticText /> : null}
+        answer={hasAnswer ? <MessageBody {...props} diagnosticText streaming={streaming} /> : null}
         renderText={renderProgressText}
       />
     );
@@ -50,6 +55,14 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
   const resources = messageResources(props.message?.metadata);
   return (
     <>
+      {progress?.model_request && t ? (
+        <ModelRequestFeedback
+          status={progress.model_request}
+          active={progressActive(progress)}
+          controls={props.progressControls?.header}
+          t={t}
+        />
+      ) : null}
       {resources.length ? (
         <div className="flex flex-wrap gap-2" aria-label={t?.("composerAddResources")}>
           {resources.map((resource) => (
@@ -57,7 +70,7 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
           ))}
         </div>
       ) : null}
-      <MessageBody {...props} diagnosticText />
+      {!progress?.model_request || hasAnswer ? <MessageBody {...props} diagnosticText streaming={streaming} /> : null}
     </>
   );
 });
@@ -75,8 +88,9 @@ function MessageBody({
   onCitationSelect,
   onLongMessageExpandedChange,
   onQuestionSelect,
+  streaming = false,
   t,
-}: MessageContentProps & { diagnosticText?: boolean }) {
+}: MessageContentProps & { diagnosticText?: boolean; streaming?: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeCitationID, setActiveCitationID] = useState<string | null>(null);
   const blankTurnPlaceholder = isBlankTurnPlaceholder(content);
@@ -94,7 +108,15 @@ function MessageBody({
     () => (activity || slashCommandText ? null : parseStructuredMessage(content)),
     [activity, content, slashCommandText],
   );
-  const displayContent = String(content ?? "");
+  const delivery = message?.metadata?.csgclaw;
+  const interrupted =
+    delivery &&
+    typeof delivery === "object" &&
+    "delivery_kind" in delivery &&
+    delivery.delivery_kind === "turn_stopped";
+  const fullContent = interrupted && t ? t("conversationInterrupted") : String(content ?? "");
+  const displayContent = useStreamingText(fullContent, streaming);
+  const collapseLongMessage = enableLongMessageCollapse && !streaming;
   const rendered = useMemo(
     () =>
       renderMarkdownWithCitations(
@@ -115,7 +137,7 @@ function MessageBody({
   const markdownHTML = useMemo(() => ({ __html: markup }), [markup]);
 
   useEffect(() => {
-    if (enableLongMessageCollapse) {
+    if (collapseLongMessage) {
       return undefined;
     }
 
@@ -135,7 +157,7 @@ function MessageBody({
     return () => {
       cancelled = true;
     };
-  }, [enableLongMessageCollapse, markup]);
+  }, [collapseLongMessage, markup]);
 
   if (blankTurnPlaceholder) {
     return (
@@ -152,10 +174,19 @@ function MessageBody({
   }
 
   const parseCommand = allowLegacyToolFormat ? parseMessageActivityCommand : parseDeliveryCommand;
-  const command = message && parseCommand({ content: displayContent, metadata: message.metadata });
-  if (command?.output) {
+  const command = message && parseCommand({ content: fullContent, metadata: message.metadata });
+  if (command) {
     return (
-      <ToolActivityOutput name={command.command} label={t?.("progressOutput") ?? "Output"} text={command.output} />
+      <StandaloneToolStep
+        tool={{
+          name: "exec",
+          actions: ["execute"],
+          status: command.output ? "completed" : "",
+          command: command.command,
+          output: command.output,
+        }}
+        t={t ?? createTranslator("en")}
+      />
     );
   }
 
@@ -183,7 +214,7 @@ function MessageBody({
   }
 
   const markdownContent =
-    enableLongMessageCollapse && t ? (
+    collapseLongMessage && t ? (
       <LongMessageCollapse
         expanded={longMessageExpanded}
         html={markup}
@@ -194,6 +225,7 @@ function MessageBody({
       <div
         ref={rendered.cited.length ? undefined : containerRef}
         data-diagnostic-response-text={diagnosticText || undefined}
+        data-streaming-text={streaming || undefined}
         className="message-content"
         dangerouslySetInnerHTML={markdownHTML}
       />

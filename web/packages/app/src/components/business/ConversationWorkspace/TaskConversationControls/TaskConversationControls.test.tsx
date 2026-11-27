@@ -27,6 +27,9 @@ describe("task conversation controls", () => {
         conversation={{ ...conversation, messages: [{ id: "message-1", sender_id: "u-admin", content: "Hello" }] }}
       />,
     );
+    const newTask = screen.getByRole("button", { name: "taskEntryNew" });
+    const context = screen.getByRole("button", { name: "contextCompactContext" });
+    expect(context.compareDocumentPosition(newTask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "taskEntryNew" }));
     expect(onNewTask).toHaveBeenCalledExactlyOnceWith(agent.id, conversation.configuration);
 

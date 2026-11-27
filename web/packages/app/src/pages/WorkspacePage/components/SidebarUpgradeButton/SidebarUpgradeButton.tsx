@@ -11,7 +11,7 @@ type SidebarUpgradeButtonProps = {
 };
 
 export function SidebarUpgradeButton({ collapsed, version, t, onClick }: SidebarUpgradeButtonProps) {
-  const label = t("sidebarUpdateAvailable", { version });
+  const label = t("sidebarNewVersion", { version });
 
   return (
     <Tooltip content={label} contentProps={{ side: "right" }}>

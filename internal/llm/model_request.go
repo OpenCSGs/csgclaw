@@ -3,9 +3,12 @@ package llm
 import (
 	"bytes"
 	"context"
+	"csgclaw/internal/diagnostics"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"strconv"
@@ -17,25 +20,59 @@ import (
 // known to precede model execution may be replayed. Once a response stream has
 // been handed to a caller, its failures are never replayed by this layer.
 func (s *Service) modelRequest(req *http.Request, stream bool) (*http.Response, error) {
+	if s.managedGateway.matches(req) {
+		return s.managedGatewayRequest(req, stream)
+	}
+	return s.modelRequestWithRecovery(s.client, req, stream)
+}
+
+func (s *Service) modelRequestWithRecovery(client *http.Client, req *http.Request, stream bool) (*http.Response, error) {
 	const attempts = 5
 	original := req
+	exchange, _ := req.Context().Value(modelExchangeKey{}).(*modelExchange)
+	managed := exchange != nil && exchange.openCSG
+	if managed {
+		// Preserve client policies, including the CSGHub gateway redirect guard.
+		tracedClient := *client
+		tracedClient.Transport = s.gatewayClient.Transport
+		client = &tracedClient
+	}
 	connectionFailed := false
+	var recovery diagnostics.ModelRequestStatus
 	for attempt := 0; ; attempt++ {
-		response, err := s.modelRequestAttempt(req, stream)
-		if attempt == attempts-1 || original.Context().Err() != nil || (original.Body != nil && original.GetBody == nil) {
+		response, err := s.modelRequestAttempt(client, req, stream)
+		if original.Context().Err() != nil {
 			return response, err
+		}
+		if err == nil && response.StatusCode < 400 {
+			if recovery.State != "" {
+				recovery.State, recovery.RetryAt = "recovered", nil
+				recovery.GatewayRequestID = upstreamRequestID(response.Header)
+				if body, ok := response.Body.(*observedModelBody); ok && body.stream {
+					body.recovery = &recovery
+				} else {
+					diagnostics.ReportModelRequest(original.Context(), recovery)
+				}
+			}
+			return response, nil
 		}
 		delay := 250 * time.Millisecond << attempt
 		retry := false
+		canReplay := attempt < attempts-1 && (original.Body == nil || original.GetBody != nil)
+		var body []byte
 		if err != nil {
 			var operation *net.OpError
-			retry = transientTLSFailure(err.Error()) || errors.As(err, &operation) && operation.Op == "dial"
-		} else if response.StatusCode >= 500 || response.StatusCode == http.StatusTooManyRequests {
-			var body []byte
-			body, err = peekModelError(response)
-			if err != nil {
+			retry = canReplay && (transientTLSFailure(err.Error()) || errors.As(err, &operation) && operation.Op == "dial")
+		} else if exchange != nil || canReplay && (response.StatusCode >= 500 || response.StatusCode == http.StatusTooManyRequests) {
+			var readErr error
+			body, readErr = peekModelError(response)
+			if readErr != nil {
+				if exchange != nil {
+					failure := modelRequestFailure(original.Context(), response, nil, readErr)
+					exchange.failure.Store(&failure)
+				}
 				_ = response.Body.Close()
-				return nil, err
+				return nil, readErr
 			}
 			var failure struct {
 				Error struct {
@@ -45,31 +82,32 @@ func (s *Service) modelRequest(req *http.Request, stream bool) (*http.Response, 
 					ResetSeconds      int    `json:"reset_seconds"`
 				} `json:"error"`
 			}
-			if json.Unmarshal(body, &failure) == nil {
-				if response.StatusCode >= 500 {
-					retry = transientTLSFailure(failure.Error.Message)
-				} else if failure.Error.Code == "model_cooldown" && (connectionFailed || transientTLSFailure(failure.Error.LastUpstreamError)) {
-					retry = true
-					if failure.Error.ResetSeconds > 30 {
-						return response, nil
-					}
-					delay = max(delay, time.Duration(max(0, failure.Error.ResetSeconds))*time.Second)
-					if seconds, err := strconv.Atoi(response.Header.Get("Retry-After")); err == nil {
-						if seconds > 30 {
-							return response, nil
-						}
-						delay = max(delay, time.Duration(max(0, seconds))*time.Second)
-					} else if at, err := http.ParseTime(response.Header.Get("Retry-After")); err == nil {
-						delay = max(delay, time.Until(at))
-					}
-					if delay > 30*time.Second {
-						retry = false
-					}
+			decodeErr := json.Unmarshal(body, &failure)
+			if canReplay && response.StatusCode == http.StatusTooManyRequests {
+				retryAfter := modelRetryAfter(response.Header.Get("Retry-After"), failure.Error.ResetSeconds, time.Now())
+				if managed && !permanentRateLimit(failure.Error.Code) {
+					delay, retry = gatewayRateLimitBackoff(attempt, retryAfter)
+				} else if decodeErr == nil && failure.Error.Code == "model_cooldown" && (connectionFailed || transientTLSFailure(failure.Error.LastUpstreamError)) {
+					delay = max(delay, retryAfter)
+					retry = delay <= 30*time.Second
 				}
+			} else if canReplay && response.StatusCode >= 500 && decodeErr == nil {
+				retry = transientTLSFailure(failure.Error.Message)
 			}
 		}
+		status := modelRequestFailure(original.Context(), response, body, err)
 		if !retry {
+			if exchange != nil {
+				exchange.failure.Store(&status)
+			}
 			return response, err
+		}
+		retryAt := time.Now().Add(delay)
+		status.State, status.Attempt, status.MaxAttempts, status.RetryAt = "retrying", attempt+2, attempts, &retryAt
+		if status.RequestID != "" {
+			diagnostics.ReportModelRequest(original.Context(), status)
+			slog.InfoContext(original.Context(), "model request retry scheduled", "request_id", status.RequestID, "trace_id", modelTraceID(original.Context()), "gateway_request_id", status.GatewayRequestID, "category", status.Category, "source", status.Source, "attempt", status.Attempt, "max_attempts", attempts, "retry_at", status.RetryAt)
+			recovery = status
 		}
 		connectionFailed = true
 		if response != nil {
@@ -85,6 +123,45 @@ func (s *Service) modelRequest(req *http.Request, stream bool) (*http.Response, 
 				return nil, err
 			}
 		}
+	}
+}
+
+func gatewayRateLimitBackoff(attempt int, retryAfter time.Duration) (time.Duration, bool) {
+	const maxWait = 30 * time.Second
+	// Spread retries from clients throttled at the same time. Each successive
+	// retry doubles its base wait, and never precedes Retry-After.
+	base := time.Second << attempt
+	delay := max(retryAfter, min(maxWait, base+rand.N(base/4)))
+	return delay, delay <= maxWait
+}
+
+func modelRetryAfter(header string, resetSeconds int, now time.Time) time.Duration {
+	const aboveLimit = 31
+	delay := time.Duration(min(aboveLimit, max(0, resetSeconds))) * time.Second
+	if seconds, err := strconv.ParseUint(strings.TrimSpace(header), 10, 64); err == nil {
+		return max(delay, time.Duration(min(aboveLimit, seconds))*time.Second)
+	}
+	if at, err := http.ParseTime(header); err == nil {
+		return max(delay, at.Sub(now))
+	}
+	return delay
+}
+
+func permanentRateLimit(code string) bool {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "insufficient_quota", "insufficient_balance", "token_plan_quota_exceeded", "billing_hard_limit_reached":
+		return true
+	default:
+		return false
+	}
+}
+
+func temporaryRateLimit(code string) bool {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "rate_limit_exceeded", "rate_limit_error", "queue_full", "capacity_exceeded", "user_rate_limit_exceeded", "user_g_rate_limit_exceeded", "model_cooldown", "upstream_rate_limit_exceeded", "too_many_requests":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -1,9 +1,0 @@
-.image-generation-error-details {
-  width: 100%;
-  max-width: 600px;
-  overflow-wrap: anywhere;
-}
-
-.image-generation-error-details small {
-  color: var(--text-muted);
-}

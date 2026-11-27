@@ -22,6 +22,16 @@ func (h *Handler) localChatParticipants() []apitypes.Participant {
 // Bindings are authoritative, including bindings whose chat user is missing.
 // Never turn an unrelated same-suffix user into the agent's chat identity.
 func (h *Handler) agentChatUserIDs(agentID string) []string {
+	ids, bound := h.boundAgentChatUserIDs(agentID)
+	if !bound {
+		if id := h.legacyAgentChatUserID(agent.CanonicalID(agentID)); id != "" {
+			return []string{id}
+		}
+	}
+	return ids
+}
+
+func (h *Handler) boundAgentChatUserIDs(agentID string) ([]string, bool) {
 	agentID = agent.CanonicalID(agentID)
 	var ids []string
 	bound := false
@@ -34,13 +44,8 @@ func (h *Handler) agentChatUserIDs(agentID string) []string {
 			ids = append(ids, localUserIDFromAny(p.ChannelUserRef))
 		}
 	}
-	if !bound {
-		if id := h.legacyAgentChatUserID(agentID); id != "" {
-			ids = append(ids, id)
-		}
-	}
 	slices.Sort(ids)
-	return slices.Compact(ids)
+	return slices.Compact(ids), bound
 }
 
 func (h *Handler) legacyAgentChatUserID(agentID string) string {

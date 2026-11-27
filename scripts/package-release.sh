@@ -14,7 +14,6 @@ VERSION="${VERSION:-dev}"
 COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 DIST_DIR="${DIST_DIR:-dist}"
-GOCACHE="${GOCACHE:-$(pwd)/.gocache}"
 GO_BUILD_TAGS="${GO_BUILD_TAGS:-}"
 VERSION_PKG="${VERSION_PKG:-csgclaw/internal/version}"
 WEB_STATIC_DIST_DIR="${WEB_STATIC_DIST_DIR:-web/static-dist}"
@@ -91,10 +90,10 @@ EOF
 fi
 
 if [ -n "$GO_BUILD_TAGS" ]; then
-  env GOOS="$GOOS_TARGET" GOARCH="$GOARCH_TARGET" GOCACHE="$GOCACHE" \
+  env GOOS="$GOOS_TARGET" GOARCH="$GOARCH_TARGET" \
     go build -tags "$GO_BUILD_TAGS" -ldflags "${LDFLAGS}" -o "${binary_output}" "${CMD_PATH}"
 else
-  env GOOS="$GOOS_TARGET" GOARCH="$GOARCH_TARGET" GOCACHE="$GOCACHE" \
+  env GOOS="$GOOS_TARGET" GOARCH="$GOARCH_TARGET" \
     go build -ldflags "${LDFLAGS}" -o "${binary_output}" "${CMD_PATH}"
 fi
 
@@ -103,7 +102,7 @@ if [ "$APP" = "csgclaw" ]; then
   if [ "$GOOS_TARGET" = "windows" ]; then
     host_cli_name="csgclaw-cli.exe"
   fi
-  env CGO_ENABLED=0 GOOS="$GOOS_TARGET" GOARCH="$GOARCH_TARGET" GOCACHE="$GOCACHE" \
+  env CGO_ENABLED=0 GOOS="$GOOS_TARGET" GOARCH="$GOARCH_TARGET" \
     go build -ldflags "-s -w ${LDFLAGS}" -o "${stage_dir}/${host_cli_name}" "${HOST_CLI_CMD_PATH}"
 fi
 

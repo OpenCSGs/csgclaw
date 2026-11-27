@@ -164,12 +164,12 @@
 }
 .compact .avatar {
   order: 5;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
 }
 .compact .avatar img {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
 }
 .compact .titleLine {
   justify-content: space-between;
@@ -278,57 +278,259 @@
   height: 34px;
   min-height: 34px;
 }
-.root .searchBar .directory {
-  height: 34px;
-  min-height: 34px;
-  width: 92px;
-  padding: 6px 8px;
+.filterTrigger {
   flex-shrink: 0;
-  font: var(--text-xs-normal);
-  background: var(--input-background);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  position: relative;
 }
 
-.directoryMenu {
-  --csgclaw-ui-popover-background: var(--surface);
+.filterTrigger[data-active="true"] {
+  background: var(--control-selected-background);
+  color: var(--primary);
+}
+
+.filterBadge {
+  position: absolute;
+  inset: calc(-1 * var(--space-1)) calc(-1 * var(--space-1)) auto auto;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding-inline: 3px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: var(--on-primary);
+  font: var(--text-xs-medium);
+  line-height: 1;
+}
+
+.filterPanel {
+  --csgclaw-ui-popover-background: var(--panel-soft);
+  width: min(252px, calc(100vw - var(--space-4)));
+  min-width: 0;
+  max-height: min(440px, var(--radix-popover-content-available-height));
+  overflow-y: auto;
+  padding: 6px;
+}
+
+:global(:root[data-theme="light"]) .filterPanel {
+  --csgclaw-ui-popover-background: var(--popover-background);
   --csgclaw-ui-popover-border: color-mix(in srgb, var(--text) 12%, transparent);
   --csgclaw-ui-shadow: 0 8px 24px -4px color-mix(in srgb, var(--gray-950) 26%, transparent);
-  width: min(208px, calc(100vw - 16px));
-  max-width: calc(100vw - 16px);
-  min-width: 0;
 }
 
-:global([data-theme="dark"]) .directoryMenu {
-  --csgclaw-ui-popover-background: var(--panel-soft);
-  --csgclaw-ui-shadow: 0 8px 24px -4px color-mix(in srgb, var(--black) 64%, transparent);
+.filterPanel .searchField .search {
+  padding-inline-start: 30px;
 }
 
-.directoryMenu [role="option"][data-state="checked"] {
-  background: var(--control-selected-background);
-}
-
-.directoryPath {
+.filterHead {
   display: flex;
-  min-width: 0;
-  max-width: 100%;
-  white-space: nowrap;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-1) var(--space-2) 6px;
+  color: var(--muted);
+  font: var(--text-xs-medium);
 }
 
-.directoryPrefix,
-.directoryCurrent {
+.filterReset {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  padding: var(--space-0-5) 6px;
+  cursor: pointer;
+}
+
+.filterSection + .filterSection {
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.filterSection p {
+  margin: var(--space-1) 0 var(--space-0-5);
+  padding-inline: var(--space-2);
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+
+.filterOption,
+.filterSkeletonRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 30px;
+  padding: 5px var(--space-2);
+}
+
+.filterOption {
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: var(--text-xs-normal);
+  text-align: start;
+  cursor: pointer;
+}
+
+.filterOption:enabled:hover:not([aria-pressed="true"]) {
+  background: var(--control-hover-background);
+}
+
+.filterOption[aria-pressed="true"] {
+  background: var(--control-selected-background);
+  font: var(--text-xs-medium);
+}
+
+:global(:root[data-theme="light"]) .filterOption:enabled:hover:not([aria-pressed="true"]) {
+  background: var(--panel-soft);
+}
+
+.filterOption[data-empty="true"]:not([aria-pressed="true"], :hover, :focus-visible) {
+  opacity: 0.55;
+}
+
+.filterOption:disabled {
+  cursor: default;
+}
+
+.filterReset:focus-visible,
+.filterOption:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.filterOptionIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+  height: 18px;
+  color: var(--muted);
+  overflow: hidden;
+}
+
+.filterOption[aria-pressed="true"] .filterOptionIcon {
+  color: var(--primary);
+}
+
+.filterOptionIcon img,
+.filterOptionIcon :global(.agent-avatar-fallback) {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+}
+
+.filterOptionIcon img {
+  object-fit: cover;
+}
+
+.filterOptionIcon :global(.agent-avatar-fallback) {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  line-height: 1;
+}
+
+.filterOptionName {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.directoryPrefix {
-  flex: 0 1000 auto;
+.filterOptionCount,
+.filterPath > span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.directoryCurrent {
-  flex: 0 1 auto;
+.filterSkeletonHeading,
+.filterSkeletonRow > span {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--line);
+}
+
+.filterSkeletonHeading {
+  width: 48px;
+  height: 10px;
+  margin: 6px var(--space-2) var(--space-1);
+}
+
+.filterSkeletonIcon {
+  flex: 0 0 18px;
+  height: 18px;
+}
+
+.filterSkeletonLabel {
+  width: 44%;
+  height: 10px;
+}
+
+.filterSkeletonRow:last-child .filterSkeletonLabel {
+  width: 32%;
+}
+
+.filterSkeletonCount {
+  width: 12px;
+  height: 10px;
+  margin-inline-start: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .filterSkeletonHeading,
+  .filterSkeletonRow > span {
+    background-image: linear-gradient(100deg, transparent 35%, var(--panel-soft) 50%, transparent 65%);
+    background-size: 220% 100%;
+    animation: filterSkeletonShimmer 1.6s linear infinite;
+  }
+}
+
+@keyframes filterSkeletonShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -85% 0;
+  }
+}
+
+.collapsed {
+  --task-conversation-inline-padding: 4px;
+}
+
+.collapsed .searchBar {
+  justify-content: center;
+}
+
+.collapsed .list {
+  scrollbar-width: thin;
+}
+
+.collapsed .open {
+  justify-content: center;
+  padding: 0;
+}
+
+.collapsed .avatar,
+.collapsed .avatar img {
+  width: 28px;
+  height: 28px;
+}
+
+.collapsed .actions,
+.collapsed .timestamp,
+.collapsed .text,
+.collapsed .pinnedIndicator,
+.collapsed .workingDot {
+  display: none;
+}
+
+.collapsed .empty,
+.collapsed .list > p {
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .searchField {
@@ -345,8 +547,7 @@
   pointer-events: none;
 }
 .root .searchBar .search {
-  padding-left: 32px;
-  padding-right: 32px;
+  padding-inline: var(--space-8);
 }
 
 .clearSearch {
@@ -392,4 +593,124 @@
   max-width: min(360px, calc(100vw - 24px));
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* A single mounted list owns pagination and filtering in both sidebar states. */
+.searchBar[hidden] {
+  display: none;
+}
+.collapsed {
+  gap: 0;
+}
+.railControls {
+  display: grid;
+  justify-items: center;
+  gap: var(--rail-gap, var(--space-2));
+  padding: var(--space-2) 0;
+  flex-shrink: 0;
+}
+.railControls button {
+  display: grid;
+  place-items: center;
+  width: var(--rail-control-size, 44px);
+  height: var(--rail-control-size, 44px);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.railControls button:hover {
+  background: var(--panel-soft);
+}
+.railControls button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.collapsed .list {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--rail-pitch, 52px) - 32px);
+  padding: 10px 0 12px 4px;
+  scrollbar-gutter: stable;
+}
+.collapsed .list::-webkit-scrollbar {
+  width: 4px;
+}
+.collapsed .list::-webkit-scrollbar-track,
+.collapsed .list::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.collapsed .list.pointerOver::-webkit-scrollbar-thumb,
+.collapsed .list:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  border-radius: 4px;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .collapsed .list {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .collapsed .list.pointerOver,
+  .collapsed .list:focus-within {
+    scrollbar-color: var(--muted) transparent;
+  }
+}
+.collapsed .row {
+  min-height: 32px;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  border-radius: 50%;
+}
+.collapsed .open {
+  min-height: 32px;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  gap: 0;
+}
+.collapsed .active .open {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.collapsed .open:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.collapsed .text,
+.collapsed .actions,
+.collapsed .timestamp,
+.collapsed .pinnedIndicator,
+.collapsed .workingDot {
+  display: none;
+}
+.collapsed .list > button {
+  flex-shrink: 0;
+  width: 40px;
+  min-width: 0;
+  padding-inline: 2px;
+  white-space: normal;
+}
+.collapsed .list > p {
+  font: var(--text-xs-normal);
+  overflow-wrap: anywhere;
+  margin-inline: 4px;
+}
+
+.railFilter {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-full);
+  background: var(--control-selected-background);
+  color: var(--primary);
 }

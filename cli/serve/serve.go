@@ -645,7 +645,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	}
 	restoreAuthDetect := applyNoAuthDetectEnv(serveOpts.NoAuthDetect)
 	defer restoreAuthDetect()
-	_ = EnsureCLIProxy(ctx)
+	// The desktop can serve local state before any provider needs CLIProxy.
+	if serveOpts.Distribution != "electron" {
+		_ = EnsureCLIProxy(ctx)
+	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -1605,6 +1608,15 @@ func newLLMService(cfg config.Config, svc *agent.Controller) (*llm.Service, erro
 	_, modelCfg, err := effectiveLLMConfig(cfg).Resolve("")
 	if err != nil {
 		modelCfg = config.ModelConfig{}
+	}
+	if cfg.IsCSGHubDeployment() {
+		return llm.NewCSGHubService(modelCfg, svc, llm.CSGHubGatewayConfig{
+			GatewayURL: os.Getenv("CSGCLAW_LLM_BASE_URL"),
+			HubURL:     os.Getenv("CSGHUB_API_BASE_URL"),
+			UserToken:  os.Getenv("CSGHUB_USER_TOKEN"),
+			UserName:   os.Getenv("CSGHUB_USER_NAME"),
+			UserUUID:   os.Getenv("CSGHUB_USER_UUID"),
+		}), nil
 	}
 	return llm.NewService(modelCfg, svc), nil
 }

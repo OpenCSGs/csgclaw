@@ -9,6 +9,7 @@ import (
 
 	"csgclaw/internal/skill/catalog"
 	"csgclaw/internal/skill/installstate"
+	"csgclaw/internal/skill/skillpath"
 	"csgclaw/internal/skill/system"
 )
 
@@ -118,6 +119,12 @@ func installPrepared(root, name string, force bool, worker *installstate.WorkerI
 		}
 		if !force {
 			return fmt.Errorf("%w: %s", ErrSkillDirExists, dest)
+		}
+		if err := skillpath.CheckReplacement(dest); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				return fmt.Errorf("%w: %w", ErrSkillDirExists, err)
+			}
+			return err
 		}
 		backup := filepath.Join(tmp, "previous")
 		if err := os.Rename(dest, backup); err != nil {

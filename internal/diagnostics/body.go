@@ -30,6 +30,16 @@ func NewRecorder(ctx context.Context, secrets ...string) *Recorder {
 	}
 	return &Recorder{ctx: ctx, secrets: secrets}
 }
+
+func (r *Recorder) AddSecret(secret string) {
+	if r == nil || secret == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.secrets = append(r.secrets, secret)
+}
+
 func (r *Recorder) Capture(kind string, value any) {
 	if r == nil {
 		return
