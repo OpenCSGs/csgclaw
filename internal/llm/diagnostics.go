@@ -182,6 +182,7 @@ type observedModelBody struct {
 	ended          sync.Once
 	update         func(int, *float64)
 	finish         func(string)
+	recovery       *diagnostics.ModelRequestStatus
 }
 
 func (b *observedModelBody) Read(p []byte) (int, error) {
@@ -237,6 +238,9 @@ func (b *observedModelBody) Close() error {
 func (b *observedModelBody) complete(outcome string, err error) {
 	if b.finish != nil {
 		b.finish(outcome)
+	}
+	if outcome == "completed" && b.recovery != nil && b.ctx.Err() == nil {
+		diagnostics.ReportModelRequest(b.ctx, *b.recovery)
 	}
 	if outcome != "failed" || !b.stream || b.status >= 400 || b.ctx == nil {
 		return

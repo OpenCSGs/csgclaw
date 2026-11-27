@@ -117,6 +117,77 @@ func TestGatewayRequestFeedback(t *testing.T) {
 	}
 }
 
+func TestGatewayStreamRecoveryWaitsForTerminalEvent(t *testing.T) {
+	const delta = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"
+	for _, test := range []struct {
+		name, terminal, want string
+	}{
+		{"completed", "data: {\"type\":\"response.completed\"}\n\n", "recovered"},
+		{"failed", "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"unsupported_feature\"}}}\n\n", "failed"},
+		{"disconnected", "", "failed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var calls atomic.Int32
+			finish := make(chan struct{})
+			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if calls.Add(1) == 1 {
+					w.Header().Set("X-Request-ID", "original-gateway-request")
+					w.WriteHeader(http.StatusTooManyRequests)
+					_, _ = io.WriteString(w, `{"error":{"code":"rate_limit_exceeded"}}`)
+					return
+				}
+				w.Header().Set("X-Request-ID", "retried-gateway-request")
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, delta)
+				w.(http.Flusher).Flush()
+				select {
+				case <-finish:
+					_, _ = io.WriteString(w, test.terminal)
+				case <-r.Context().Done():
+				}
+			}))
+			t.Cleanup(gateway.Close)
+			record := diagnostics.New("").Begin("room", "source", "", "agent", "turn")
+			record.Running()
+			updates := make(chan diagnostics.ModelRequestStatus, 4)
+			record.ObserveModelRequest(func(status diagnostics.ModelRequestStatus) { updates <- status })
+			ctx := WithTaskProfile(diagnostics.WithRecord(t.Context(), record), openCSGTestProfile(gateway.URL))
+			response, err := NewService(config.ModelConfig{}, nil).Responses(ctx, "agent", []byte(`{"input":"test","stream":true}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			select {
+			case retry := <-updates:
+				if retry.State != "retrying" || retry.GatewayRequestID != "original-gateway-request" {
+					t.Fatalf("unexpected retry feedback: %+v", retry)
+				}
+			default:
+				t.Fatal("expected retry feedback")
+			}
+			if _, err := io.ReadFull(response.Body, make([]byte, len(delta))); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case update := <-updates:
+				t.Fatalf("premature feedback before the terminal event: %+v", update)
+			default:
+			}
+			close(finish)
+			_, _ = io.Copy(io.Discard, response.Body)
+			select {
+			case update := <-updates:
+				if update.State != test.want || update.GatewayRequestID != "retried-gateway-request" {
+					t.Fatalf("unexpected terminal feedback: %+v", update)
+				}
+			default:
+				t.Fatal("stream ended without terminal feedback")
+			}
+		})
+	}
+}
+
 func TestGatewayErrorDetailsStayInDiagnostics(t *testing.T) {
 	const private = "quoted private task text"
 	const providerError = `{"code":"unsupported_feature","message":"rejected ` + private + `","param":"tools"}`

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -155,7 +156,7 @@ func gatewayBrowserTurn(ctx context.Context, id string) agentengine.TurnResult {
 			fmt.Fprint(w, `{"error":{"code":"upstream_response_invalid","message":"fixture bad gateway"}}`)
 			return
 		}
-		if id == "gateway-rate" || id == "gateway-stop" || id == "gateway-recover" && attempt <= 2 {
+		if id == "gateway-rate" || id == "gateway-stop" || strings.HasPrefix(id, "gateway-recover") && attempt <= 2 {
 			w.Header().Set("Retry-After", "1")
 			if id == "gateway-stop" {
 				w.Header().Set("Retry-After", "8")
@@ -186,6 +187,9 @@ func gatewayBrowserTurn(ctx context.Context, id string) agentengine.TurnResult {
 	}
 	if ctx.Err() == context.Canceled {
 		return agentengine.TurnResult{Status: agentengine.TurnCanceled}
+	}
+	if err == nil && id == "gateway-recover-then-fail" {
+		err = errors.New("fixture tool failed after model recovery")
 	}
 	if err != nil {
 		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: err.Error()}}

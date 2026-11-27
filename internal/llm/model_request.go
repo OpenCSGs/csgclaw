@@ -48,7 +48,11 @@ func (s *Service) modelRequestWithRecovery(client *http.Client, req *http.Reques
 			if recovery.State != "" {
 				recovery.State, recovery.RetryAt = "recovered", nil
 				recovery.GatewayRequestID = upstreamRequestID(response.Header)
-				diagnostics.ReportModelRequest(original.Context(), recovery)
+				if body, ok := response.Body.(*observedModelBody); ok && body.stream {
+					body.recovery = &recovery
+				} else {
+					diagnostics.ReportModelRequest(original.Context(), recovery)
+				}
 			}
 			return response, nil
 		}

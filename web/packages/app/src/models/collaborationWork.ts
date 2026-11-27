@@ -40,10 +40,10 @@ export function collaborationWork(
       active.push({ id: participant.leaseID || participant.id, senderID: participant.id, participant });
     }
   }
-  // Keep the latest failure visible, but retire it once that member starts again.
+  // Keep the latest failure visible unless the transcript has a model failure card.
   const problems = [...latest.values()].filter(
     (work) =>
-      !work.progress?.model_request &&
+      work.progress?.model_request?.state !== "failed" &&
       (work.progress?.error || ["failed", "interrupted"].includes(work.progress?.status || "")) &&
       !active.some((item) => localIdentitiesMatch(item.senderID, work.senderID)),
   );

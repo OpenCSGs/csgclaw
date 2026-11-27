@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { collaborationTranscript } from "@/models/collaborationTranscript";
 import { collaborationWork, collaborationWorkSummary } from "@/models/collaborationWork";
 import type { IMMessage } from "@/models/conversations";
 import type { TurnProgress } from "@/models/turnProgress";
@@ -86,6 +87,19 @@ describe("collaboration work status", () => {
     expect(collaborationWork("room", [failure, next], [])).toEqual([]);
     expect(collaborationWorkSummary(collaborationWork("room", [message("waiting")], [lease])[0]).label).toBe(
       "progressStatus_waiting",
+    );
+  });
+  it.each(["recovered", "failed"] as const)("shows a failed turn with a %s model request once", (state) => {
+    const failure = message("failed");
+    const progress = (failure.metadata!.csgclaw as { turn_progress: TurnProgress }).turn_progress;
+    progress.private_output = true;
+    progress.error = "Tool execution failed";
+    progress.model_request = { state, category: "rate_limit", source: "gateway", request_id: "model-request" };
+
+    expect(collaborationTranscript([failure]).messages).toHaveLength(state === "failed" ? 1 : 0);
+    const work = collaborationWork("room", [failure], []);
+    expect(work.map(collaborationWorkSummary)).toEqual(
+      state === "recovered" ? [{ label: "progressStatus_failed", detail: "Tool execution failed" }] : [],
     );
   });
 });
