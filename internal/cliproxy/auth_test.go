@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestAuthStatusImportsCodexHomeAuth(t *testing.T) {
@@ -307,13 +308,18 @@ func TestAuthStatusImportDoesNotRestartRunningService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	svc := &Service{
-		started: true,
-		baseURL: "http://127.0.0.1:1",
-		cancel:  func() {},
-		errCh:   make(chan error, 1),
+	runCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	run := &serviceRun{
+		ctx: runCtx, baseURL: "http://127.0.0.1:1",
+		ready: make(chan struct{}), done: make(chan struct{}),
 	}
-	svc.errCh <- nil
+	run.cancel = func() {
+		cancel()
+		close(run.done)
+	}
+	close(run.ready)
+	svc := &Service{run: run}
 
 	status, err := svc.AuthStatus(context.Background(), ProviderCodex)
 	if err != nil {
@@ -323,11 +329,10 @@ func TestAuthStatusImportDoesNotRestartRunningService(t *testing.T) {
 		t.Fatalf("status = %+v, want imported codex-home", status)
 	}
 	svc.mu.Lock()
-	started := svc.started
-	baseURL := svc.baseURL
+	active := svc.run
 	svc.mu.Unlock()
-	if !started || baseURL == "" {
-		t.Fatalf("AuthStatus restarted service: started=%v baseURL=%q", started, baseURL)
+	if active != run || runCtx.Err() != nil {
+		t.Fatal("AuthStatus restarted the running service")
 	}
 }
 
@@ -466,6 +471,50 @@ func TestAuthStatusClaudeKeychainMissingDoesNotFail(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join(authDir, "*.json"))
 	if err != nil || len(files) != 0 {
 		t.Fatalf("files = %v, %v; want no auth files", files, err)
+	}
+}
+
+func TestAuthStatusBoundsAutomaticKeychainImport(t *testing.T) {
+	t.Setenv(authDirEnv, t.TempDir())
+	t.Setenv(autoLoginEnv, "true")
+	t.Setenv(disableKeychainEnv, "false")
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	calls := 0
+	defer stubKeychain(t, func(probeCtx context.Context, _, _ string) ([]byte, error) {
+		calls++
+		deadline, ok := probeCtx.Deadline()
+		if !ok || time.Until(deadline) > automaticKeychainImportTimeout {
+			t.Error("automatic status import is missing the shared Keychain deadline")
+		}
+		cancel()
+		return nil, probeCtx.Err()
+	})()
+
+	status, err := (&Service{}).AuthStatus(ctx, "claude_code")
+	if err != nil || status.Authenticated || !status.LoginRequired {
+		t.Fatalf("AuthStatus() = %+v, %v; want login required", status, err)
+	}
+	if calls != 1 {
+		t.Fatalf("Keychain probes after cancellation = %d, want 1 total", calls)
+	}
+}
+
+func TestExplicitLoginKeepsCallerKeychainContext(t *testing.T) {
+	t.Setenv(authDirEnv, t.TempDir())
+	t.Setenv(disableKeychainEnv, "false")
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	defer stubKeychain(t, func(probeCtx context.Context, _, _ string) ([]byte, error) {
+		if probeCtx != ctx {
+			t.Error("explicit Login did not keep the caller context")
+		}
+		return []byte(`{"claudeAiOauth":{"accessToken":"access","refreshToken":"refresh","expiresAt":1893456000000}}`), nil
+	})()
+
+	status, err := (&Service{}).Login(ctx, "claude_code", LoginOptions{})
+	if err != nil || !status.Authenticated || status.Source != "macos-keychain" {
+		t.Fatalf("Login() = %+v, %v; want authenticated macos-keychain", status, err)
 	}
 }
 

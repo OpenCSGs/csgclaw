@@ -2,6 +2,7 @@ package cliproxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -54,12 +55,18 @@ const (
 )
 
 type Service struct {
-	mu      sync.Mutex
-	started bool
-	baseURL string
+	mu     sync.Mutex
+	run    *serviceRun
+	client *http.Client
+}
+
+type serviceRun struct {
+	ctx     context.Context
 	cancel  context.CancelFunc
-	errCh   chan error
-	client  *http.Client
+	ready   chan struct{}
+	done    chan struct{}
+	baseURL string // Published by closing ready.
+	err     error  // Published by closing done.
 }
 
 var defaultService = &Service{
@@ -71,35 +78,79 @@ func Default() *Service {
 }
 
 func (s *Service) EnsureStarted(ctx context.Context) error {
-	return s.ensureStarted(ctx)
+	_, err := s.ensureStarted(ctx)
+	return err
 }
 
-func (s *Service) ensureStarted(ctx context.Context, serverOptions ...cliproxyapi.ServerOption) error {
+func (s *Service) ensureStarted(ctx context.Context, serverOptions ...cliproxyapi.ServerOption) (string, error) {
 	if s == nil {
-		return fmt.Errorf("cliproxy service is nil")
+		return "", fmt.Errorf("cliproxy service is nil")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
-	s.mu.Lock()
-	if s.started {
-		baseURL := s.baseURL
-		errCh := s.errCh
-		s.mu.Unlock()
-		return s.waitHealthy(ctx, baseURL, errCh)
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
 
+	s.mu.Lock()
+	run := s.run
+	if run == nil {
+		// Shutdown owns this lifetime. Request contexts only bound readiness
+		// waits, even when the first request starts the daemon.
+		runCtx, cancel := context.WithCancel(context.Background())
+		run = &serviceRun{
+			ctx: runCtx, cancel: cancel,
+			ready: make(chan struct{}), done: make(chan struct{}),
+		}
+		s.run = run
+		go s.runService(run, serverOptions)
+	}
+	s.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-run.ready:
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if err := run.ctx.Err(); err != nil {
+			return "", err
+		}
+		return run.baseURL, nil
+	case <-run.done:
+		if run.err != nil {
+			return "", run.err
+		}
+		return "", fmt.Errorf("embedded cliproxy stopped before becoming ready")
+	}
+}
+
+func (s *Service) runService(run *serviceRun, serverOptions []cliproxyapi.ServerOption) {
+	err := s.serve(run, serverOptions)
+	if !errors.Is(err, context.Canceled) {
+		run.err = err
+	}
+	run.cancel()
+	s.mu.Lock()
+	s.run = nil
+	close(run.done)
+	s.mu.Unlock()
+}
+
+func (s *Service) serve(run *serviceRun, serverOptions []cliproxyapi.ServerOption) error {
 	cfg, cfgPath, baseURL, err := buildConfig()
 	if err != nil {
-		s.mu.Unlock()
 		return err
 	}
 	if err = writeConfigFile(cfgPath, cfg); err != nil {
-		s.mu.Unlock()
 		return err
 	}
-	importExistingAuth(ctx, cfg.AuthDir)
+	importExistingAuth(run.ctx, cfg.AuthDir)
+	if err := run.ctx.Err(); err != nil {
+		return err
+	}
 
 	serverOptions = append(serverOptions, cliproxyapi.WithMiddleware(skipEmbeddedHealthzAccessLog()))
 	svc, err := cliproxysdk.NewBuilder().
@@ -108,40 +159,32 @@ func (s *Service) ensureStarted(ctx context.Context, serverOptions ...cliproxyap
 		WithServerOptions(serverOptions...).
 		Build()
 	if err != nil {
-		s.mu.Unlock()
 		return fmt.Errorf("build embedded cliproxy: %w", err)
 	}
 
-	runCtx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
+	stopped := make(chan struct{})
+	var daemonErr error
 	go func() {
-		err := svc.Run(runCtx)
-		if err == context.Canceled {
-			err = nil
-		}
-		errCh <- err
+		daemonErr = svc.Run(run.ctx)
+		close(stopped)
 	}()
 
-	s.started = true
-	s.baseURL = baseURL
-	s.cancel = cancel
-	s.errCh = errCh
-	s.mu.Unlock()
-
-	if err = s.waitHealthy(ctx, baseURL, errCh); err != nil {
-		_ = s.Shutdown(context.Background())
+	if err = s.waitHealthy(run.ctx, baseURL, stopped); err != nil {
+		run.cancel()
+		<-stopped
+		if daemonErr != nil && !errors.Is(daemonErr, context.Canceled) {
+			return fmt.Errorf("embedded cliproxy stopped during startup: %w", daemonErr)
+		}
 		return err
 	}
-	return nil
+	run.baseURL = baseURL
+	close(run.ready)
+	<-stopped
+	return daemonErr
 }
 
 func (s *Service) BaseURL(ctx context.Context) (string, error) {
-	if err := s.EnsureStarted(ctx); err != nil {
-		return "", err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.baseURL, nil
+	return s.ensureStarted(ctx)
 }
 
 func (s *Service) ProviderBaseURL(ctx context.Context, provider string) (string, error) {
@@ -308,21 +351,18 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	}
 
 	s.mu.Lock()
-	cancel := s.cancel
-	errCh := s.errCh
-	s.started = false
-	s.baseURL = ""
-	s.cancel = nil
-	s.errCh = nil
+	run := s.run
+	if run != nil {
+		run.cancel()
+	}
 	s.mu.Unlock()
 
-	if cancel == nil {
+	if run == nil {
 		return nil
 	}
-	cancel()
 	select {
-	case err := <-errCh:
-		return err
+	case <-run.done:
+		return run.err
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -337,26 +377,24 @@ func skipEmbeddedHealthzAccessLog() gin.HandlerFunc {
 	}
 }
 
-func (s *Service) waitHealthy(ctx context.Context, baseURL string, errCh <-chan error) error {
+func (s *Service) waitHealthy(ctx context.Context, baseURL string, stopped <-chan struct{}) error {
 	client := s.client
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	poll := time.NewTicker(100 * time.Millisecond)
+	defer poll.Stop()
 	var lastErr error
-	for time.Now().Before(deadline) {
+	for healthCtx.Err() == nil {
 		select {
-		case err := <-errCh:
-			if err == nil {
-				return nil
-			}
-			return fmt.Errorf("embedded cliproxy stopped during startup: %w", err)
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-stopped:
+			return fmt.Errorf("embedded cliproxy stopped before becoming healthy")
 		default:
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/healthz", nil)
+		req, err := http.NewRequestWithContext(healthCtx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/healthz", nil)
 		if err != nil {
 			return fmt.Errorf("build embedded cliproxy health request: %w", err)
 		}
@@ -371,12 +409,15 @@ func (s *Service) waitHealthy(ctx context.Context, baseURL string, errCh <-chan 
 		} else {
 			lastErr = err
 		}
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-healthCtx.Done():
+		case <-poll.C:
+		}
 	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("timed out")
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	return fmt.Errorf("embedded cliproxy did not become healthy at %s: %w", baseURL, lastErr)
+	return fmt.Errorf("embedded cliproxy did not become healthy at %s: %w", baseURL, errors.Join(healthCtx.Err(), lastErr))
 }
 
 func buildConfig() (*sdkconfig.Config, string, string, error) {

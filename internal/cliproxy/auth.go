@@ -170,7 +170,7 @@ func (s *Service) authStatus(ctx context.Context, provider string, allowImport b
 
 	var importMessage string
 	if allowImport && autoAuthImportEnabled() && authProvider == ProviderCodex {
-		imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider)
+		imported, _ := importAuthAutomatically(ctx, cfg.AuthDir, authProvider)
 		importMessage = imported.message
 		if imported.imported {
 			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
@@ -182,7 +182,7 @@ func (s *Service) authStatus(ctx context.Context, provider string, allowImport b
 	}
 
 	if allowImport && autoAuthImportEnabled() && authProvider != ProviderCodex {
-		imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider)
+		imported, _ := importAuthAutomatically(ctx, cfg.AuthDir, authProvider)
 		importMessage = imported.message
 		if imported.imported {
 			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
@@ -203,11 +203,19 @@ func importExistingAuth(ctx context.Context, authDir string) {
 	if !autoAuthImportEnabled() {
 		return
 	}
-	_, _ = importExternalAuth(ctx, authDir, ProviderCodex)
-	// Opportunistic startup import must yield if Keychain is waiting for access.
-	probeCtx, cancel := context.WithTimeout(ctx, automaticKeychainImportTimeout)
-	defer cancel()
-	_, _ = importExternalAuth(probeCtx, authDir, authProviderClaude)
+	for _, provider := range []string{ProviderCodex, authProviderClaude} {
+		_, _ = importAuthAutomatically(ctx, authDir, provider)
+	}
+}
+
+func importAuthAutomatically(ctx context.Context, authDir, provider string) (authImportResult, error) {
+	if provider == authProviderClaude {
+		// Share one budget across all Keychain candidates for automatic probes.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, automaticKeychainImportTimeout)
+		defer cancel()
+	}
+	return importExternalAuth(ctx, authDir, provider)
 }
 
 func importExternalAuth(ctx context.Context, authDir, provider string) (authImportResult, error) {
