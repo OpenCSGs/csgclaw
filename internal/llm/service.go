@@ -285,7 +285,7 @@ func (s *Service) resolveProfile(ctx context.Context, botID string) (agent.Agent
 		}
 		profile.ReasoningEffort = selection.ReasoningEffort
 		if selection.AutoProfile != "" {
-			if profile.ModelID != "auto" || profile.Provider != agent.ProviderCSGHub {
+			if profile.ModelID != "auto" || !profile.UsesOpenCSGAIGateway() {
 				return agent.AgentProfile{}, &HTTPError{Status: http.StatusConflict, Message: "Auto routing profile requires the OpenCSG Auto model"}
 			}
 			profile.Headers = autoProfileHeaders(profile.Headers, selection.AutoProfile)

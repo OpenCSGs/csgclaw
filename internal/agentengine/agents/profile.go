@@ -435,6 +435,13 @@ func ProfileBaseURL(profile AgentProfile) string {
 	return profileBaseURL(profile)
 }
 
+// UsesOpenCSGAIGateway reports whether the resolved profile uses the built-in
+// OpenCSG connection or a custom provider pointed at a known OpenCSG gateway.
+func (profile AgentProfile) UsesOpenCSGAIGateway() bool {
+	return profile.Provider == ProviderCSGHub ||
+		(profile.Provider == ProviderAPI && isOpenCSGAIGatewayURL(profileBaseURL(profile)))
+}
+
 func profileAPIKey(profile AgentProfile) string {
 	switch normalizeProfileProvider(profile.Provider) {
 	case ProviderAPI:

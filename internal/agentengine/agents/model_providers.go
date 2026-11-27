@@ -718,25 +718,28 @@ func ModelProviderConfigForProfile(llm config.LLMConfig, profile AgentProfile) (
 	}
 }
 
+func isOpenCSGAIGatewayURL(baseURL string) bool {
+	endpoint, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(endpoint.Hostname()) {
+	case "ai.space.opencsg.com", "aigateway.opencsg.com", "aigateway.opencsg-stg.com":
+		return true
+	case "opencsg-stg.com":
+		return strings.TrimRight(endpoint.EscapedPath(), "/") == "/aigateway/v1"
+	default:
+		return false
+	}
+}
+
 // OpenCSG's auto route chooses the concrete model. Keep it first so callers
 // that need an initial selection use the gateway default, regardless of the
 // catalog order or the name of a custom staging/production provider.
 func prioritizeOpenCSGAutoModel(providerID, baseURL string, models []string) []string {
 	out := append([]string(nil), models...)
-	if NormalizeModelProviderID(providerID) != ModelProviderIDOpenCSG {
-		endpoint, err := url.Parse(baseURL)
-		if err != nil {
-			return out
-		}
-		switch strings.ToLower(endpoint.Hostname()) {
-		case "ai.space.opencsg.com", "aigateway.opencsg.com", "aigateway.opencsg-stg.com":
-		case "opencsg-stg.com":
-			if strings.TrimRight(endpoint.EscapedPath(), "/") != "/aigateway/v1" {
-				return out
-			}
-		default:
-			return out
-		}
+	if NormalizeModelProviderID(providerID) != ModelProviderIDOpenCSG && !isOpenCSGAIGatewayURL(baseURL) {
+		return out
 	}
 	for i, model := range out {
 		if model == "auto" {

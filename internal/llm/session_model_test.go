@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,7 +39,7 @@ func (f sessionProfileFixture) ResolvedAgentProfile(string) (agent.AgentProfile,
 
 func (f sessionProfileFixture) ResolvedSessionProfile(id, model, effort string) (agent.AgentProfile, error) {
 	profile, _ := f.ResolvedAgentProfile(id)
-	if model != "model-b" && !(model == "auto" && f.provider == agent.ProviderCSGHub) {
+	if model != "model-b" && model != "auto" {
 		return profile, fmt.Errorf("model unavailable")
 	}
 	profile.ModelID, profile.ReasoningEffort = model, effort
@@ -104,6 +105,49 @@ func TestSessionModelAutoProfileIsScopedToGatewayRequestsForItsTurn(t *testing.T
 	resp.Body.Close()
 	if got := <-requests; got != (observed{"", "model-b", "high"}) {
 		t.Fatalf("physical model request = %+v", got)
+	}
+}
+
+type sessionModelRoundTripper func(*http.Request) (*http.Response, error)
+
+func (send sessionModelRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	return send(r)
+}
+
+func TestSessionModelAutoProfileUsesCustomOpenCSGGateway(t *testing.T) {
+	const baseURL = "https://opencsg-stg.com/aigateway/v1"
+	service := NewService(config.ModelConfig{}, sessionProfileFixture{base: baseURL, provider: agent.ProviderAPI})
+	calls := 0
+	service.client.Transport = sessionModelRoundTripper(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.URL.String() != baseURL+"/responses" ||
+			r.Header.Get("Authorization") != "Bearer test-key" ||
+			r.Header.Get("CSG-Router-Auto-Profile") != "quality" {
+			t.Error("custom request did not use the configured gateway, API key, and routing profile")
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": {"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"id":"test","object":"response","status":"completed","output":[]}`)),
+		}, nil
+	})
+
+	ctx := WithSessionModel(t.Context(), contract.TurnModel{ModelID: "auto", AutoProfile: "quality"})
+	body := []byte(`{"model":"auto","input":"hello"}`)
+	resp, err := service.Responses(ctx, "agent", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if calls != 1 {
+		t.Fatalf("made %d upstream requests, want 1", calls)
+	}
+
+	service.agents = sessionProfileFixture{base: "https://opencsg-stg.com.example/aigateway/v1", provider: agent.ProviderAPI}
+	_, err = service.Responses(ctx, "agent", body)
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) || httpErr.Status != http.StatusConflict || calls != 1 {
+		t.Fatalf("third-party selection error = %v, total upstream requests = %d", err, calls)
 	}
 }
 

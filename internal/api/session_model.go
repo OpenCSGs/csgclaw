@@ -48,7 +48,7 @@ func (h *Handler) sessionTurnModel(selected agentengine.Agent, model, reasoningE
 		}
 		return invalid(err.Error())
 	}
-	if autoProfile != "" && profile.Provider != agent.ProviderCSGHub {
+	if autoProfile != "" && !profile.UsesOpenCSGAIGateway() {
 		param = "auto_profile"
 		return invalid("auto_profile requires the OpenCSG model provider")
 	}
