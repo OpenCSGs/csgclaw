@@ -62,10 +62,13 @@ export function FeedbackDialog(props: Props) {
   const loading = props.ready === false;
   const awaiting = Boolean(props.awaitingStatus);
   const editsDisabled = busy || loading || awaiting;
-  let submissionMessage = "";
-  if (busy) submissionMessage = t("feedbackSubmitting");
-  else if (props.checking) submissionMessage = t("feedbackCheckingStatus");
-  else if (awaiting) submissionMessage = props.error || t("feedbackOutcomeUnknown");
+  const showForm = !receipt && !loading;
+  let statusMessage = "";
+  if (receipt) statusMessage = t("feedbackSuccess");
+  else if (loading) statusMessage = t("feedbackDraftLoading");
+  else if (busy) statusMessage = t("feedbackSubmitting");
+  else if (props.checking) statusMessage = t("feedbackCheckingStatus");
+  else if (awaiting) statusMessage = props.error || t("feedbackOutcomeUnknown");
   let attachmentDisabledReason = "";
   if (busy) attachmentDisabledReason = t("feedbackSubmitting");
   else if (props.checking) attachmentDisabledReason = t("feedbackCheckingStatus");
@@ -111,8 +114,17 @@ export function FeedbackDialog(props: Props) {
     if (!open || !receipt) setCopyResult(undefined);
   }, [open, awaiting, receipt]);
   useEffect(() => {
-    if (open && bodyRef.current && (submissionMessage || props.error)) bodyRef.current.scrollTop = 0;
-  }, [open, submissionMessage, props.error]);
+    if (open && bodyRef.current && (statusMessage || props.error || props.storageUnavailable || copyResult)) {
+      bodyRef.current.scrollTop = 0;
+    }
+  }, [open, statusMessage, props.error, props.storageUnavailable, copyResult]);
+
+  const previousRejections = useRef(props.rejections);
+  useEffect(() => {
+    const hasNewRejections = props.rejections?.some((rejection) => !previousRejections.current?.includes(rejection));
+    previousRejections.current = props.rejections;
+    if (open && hasNewRejections && bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [open, props.rejections]);
 
   return (
     <DialogRoot
@@ -124,6 +136,7 @@ export function FeedbackDialog(props: Props) {
       <DialogContent
         className={styles.dialog}
         scrollBody
+        {...(receipt ? { "aria-describedby": undefined } : {})}
         onDragOver={(event) => {
           if (!event.dataTransfer.types.includes("Files")) return;
           event.preventDefault();
@@ -146,10 +159,7 @@ export function FeedbackDialog(props: Props) {
         <DialogHeader>
           <div className={styles.headerCopy}>
             <DialogTitle>{t("feedbackTitle")}</DialogTitle>
-            <DialogDescription>
-              {receipt ? null : t("settingsFeedbackDescription")}
-              <span role="status">{receipt ? t("feedbackSuccess") : null}</span>
-            </DialogDescription>
+            {receipt ? null : <DialogDescription>{t("settingsFeedbackDescription")}</DialogDescription>}
           </div>
           <DialogCloseButton
             label={t("close")}
@@ -159,258 +169,254 @@ export function FeedbackDialog(props: Props) {
             disabled={busy || props.checking}
           />
         </DialogHeader>
-        {receipt ? (
-          issueNumber || issueURL ? (
-            <DialogBody className={styles.body}>
-              <div className={styles.inlineActions}>
-                {issueNumber ? <span>{t("feedbackIssueNumber", { number: issueNumber })}</span> : null}
-                {issueNumber ? (
-                  <Button
-                    variant="secondaryGray"
-                    size="sm"
-                    onClick={async () => {
-                      setCopyResult((await writeTextToClipboard(issueNumber)) ? "copied" : "failed");
-                    }}
-                  >
-                    {t("feedbackCopyIssueNumber")}
-                  </Button>
-                ) : null}
-                {issueURL ? (
-                  <LinkButton
-                    href={issueURL.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="secondaryGray"
-                    size="sm"
-                  >
-                    {t("feedbackViewIssue")}
-                  </LinkButton>
-                ) : null}
-              </div>
-              {copyResult ? (
-                <p role="status" className={styles.imageHint}>
-                  {t(copyResult === "copied" ? "feedbackIssueCopied" : "feedbackIssueCopyFailed")}
-                </p>
-              ) : null}
-            </DialogBody>
-          ) : null
-        ) : loading ? (
-          <DialogBody>
-            <p className={styles.imageHint} role="status">
-              {t("feedbackDraftLoading")}
-            </p>
-          </DialogBody>
-        ) : (
-          <DialogBody ref={bodyRef} className={styles.body}>
-            <div role="status" className={styles.submissionStatus} data-warning={awaiting && !busy && !props.checking}>
-              {submissionMessage ? (
-                <>
-                  <Info size={16} aria-hidden="true" />
-                  <span>{submissionMessage}</span>
-                </>
-              ) : null}
-            </div>
-            {props.error && !awaiting ? (
-              <FeedbackErrorNotice
-                dismissLabel={t("feedbackDismissSubmissionError")}
-                onDismiss={
-                  props.onClearError &&
-                  (() => {
-                    props.onClearError?.();
-                    descriptionRef.current?.focus({ preventScroll: true });
-                  })
-                }
-              >
-                {props.error}
-              </FeedbackErrorNotice>
-            ) : null}
-            {!busy && awaiting ? (
+        <DialogBody ref={bodyRef} className={styles.body}>
+          <div
+            role="status"
+            className={styles.submissionStatus}
+            data-warning={showForm && awaiting && !busy && !props.checking}
+          >
+            {statusMessage ? (
               <>
-                <div className={styles.submissionActions}>
-                  {props.requestID ? (
-                    <p className={styles.imageHint}>
-                      {t("feedbackSubmissionReference")} <code>{props.requestID}</code>
-                    </p>
-                  ) : null}
-                  {!discarding ? (
-                    <Button
-                      variant="secondaryGray"
-                      size="sm"
-                      disabled={props.checking}
-                      onClick={() => setDiscarding(true)}
-                    >
-                      {t("feedbackStartAnother")}
-                    </Button>
-                  ) : null}
-                </div>
-                {discarding && !props.checking ? (
-                  <div className={styles.inlineActions}>
-                    <p>{t("feedbackDiscardUnconfirmedHint")}</p>
-                    <Button variant="secondaryGray" size="sm" onClick={() => setDiscarding(false)}>
-                      {t("cancel")}
-                    </Button>
-                    <Button variant="outlineDanger" size="sm" onClick={props.onDiscardDraft}>
-                      {t("feedbackDiscardDraft")}
-                    </Button>
-                  </div>
-                ) : null}
+                <Info size={16} aria-hidden="true" />
+                <span>{statusMessage}</span>
               </>
             ) : null}
-            {props.storageUnavailable ? (
-              <InlineError role="status">{t("feedbackDraftStorageUnavailable")}</InlineError>
-            ) : null}
-            <label className={styles.label}>
-              {t("settingsFeedbackLabel")}
-              <TextArea
-                ref={descriptionRef}
-                value={props.description}
-                disabled={busy}
-                readOnly={awaiting}
-                rows={5}
-                maxLength={MAX_FEEDBACK_DESCRIPTION_LENGTH}
-                placeholder={t("settingsFeedbackPlaceholder")}
-                onChange={(event) => props.onDescriptionChange(event.target.value)}
-              />
-            </label>
-            <div className={styles.attachments}>
-              <div className={styles.attachmentsHead}>
-                <span className={styles.attachmentsTitle}>
-                  <Paperclip size={14} aria-hidden="true" />
-                  {t("feedbackAttachments")}
-                </span>
-                <span className={styles.attachmentsCount} aria-live="polite">
-                  {t("feedbackImageCountLabel")} {images.length}/{MAX_FEEDBACK_IMAGES} ·{" "}
-                  {t("feedbackArchiveCountLabel")} {archives.length}/{MAX_FEEDBACK_ARCHIVES}
-                </span>
-              </div>
-              <input
-                ref={attachmentInputRef}
-                className={styles.fileInput}
-                type="file"
-                accept={FEEDBACK_ATTACHMENT_ACCEPT}
-                multiple
-                disabled={editsDisabled}
-                tabIndex={-1}
-                aria-hidden="true"
-                onChange={(event) => {
-                  onAddAttachments(Array.from(event.target.files || []));
-                  event.target.value = "";
-                }}
-              />
-              <div className={styles.dropzone}>
-                <span className={styles.dropzoneIcon} aria-hidden="true">
-                  <ImagePlus size={18} strokeWidth={1.8} />
-                </span>
-                <div className={styles.dropzoneCopy} id={attachmentHintID}>
-                  <p className={styles.dropzoneTitle}>{t("feedbackDropTitle")}</p>
-                  <p className={styles.dropzoneHint}>{t("feedbackDropHint")}</p>
-                </div>
-                <Tooltip content={attachmentDisabledReason} contentProps={{ side: "top", align: "start" }}>
-                  <span
-                    className={styles.chooseFilesButton}
-                    role={attachmentDisabledReason ? "group" : undefined}
-                    aria-label={attachmentDisabledReason ? t("feedbackChooseFiles") : undefined}
-                    tabIndex={attachmentDisabledReason ? 0 : undefined}
-                  >
-                    <Button
-                      ref={chooseFilesButtonRef}
-                      variant="secondaryGray"
-                      size="sm"
-                      disabled={Boolean(attachmentDisabledReason)}
-                      aria-describedby={`${attachmentHintID} ${attachmentUsageID}`}
-                      onClick={() => attachmentInputRef.current?.click()}
-                    >
-                      {t("feedbackChooseFiles")}
-                    </Button>
-                  </span>
-                </Tooltip>
-              </div>
-              <p id={attachmentUsageID} className={styles.limitHint}>
-                {t("feedbackAttachmentLimits")}
-              </p>
-              <details className={`${styles.attachmentFormats} ${styles.imageHint}`}>
-                <summary>{t("feedbackAttachmentFormats")}</summary>
-                <div className={styles.attachmentUsage}>
-                  <span>{t("feedbackImageFormats")}</span>
-                  <span>{t("feedbackArchiveFormats")}</span>
-                </div>
-              </details>
-              {props.rejections?.length ? (
-                <FeedbackErrorNotice
-                  dismissLabel={t("feedbackDismissAttachmentWarnings")}
-                  onDismiss={
-                    props.onClearRejections &&
-                    (() => {
-                      props.onClearRejections?.();
-                      const chooser = chooseFilesButtonRef.current;
-                      (chooser && !chooser.disabled ? chooser : descriptionRef.current)?.focus();
-                    })
-                  }
+          </div>
+          {receipt && copyResult ? (
+            <p role="status" className={styles.imageHint}>
+              {t(copyResult === "copied" ? "feedbackIssueCopied" : "feedbackIssueCopyFailed")}
+            </p>
+          ) : null}
+          {showForm && props.error && !awaiting ? (
+            <FeedbackErrorNotice
+              dismissLabel={t("feedbackDismissSubmissionError")}
+              onDismiss={
+                props.onClearError &&
+                (() => {
+                  props.onClearError?.();
+                  descriptionRef.current?.focus({ preventScroll: true });
+                })
+              }
+            >
+              {props.error}
+            </FeedbackErrorNotice>
+          ) : null}
+          {showForm && props.storageUnavailable ? (
+            <InlineError role="status">{t("feedbackDraftStorageUnavailable")}</InlineError>
+          ) : null}
+          {showForm && props.rejections?.length ? (
+            <FeedbackErrorNotice
+              dismissLabel={t("feedbackDismissAttachmentWarnings")}
+              onDismiss={
+                props.onClearRejections &&
+                (() => {
+                  props.onClearRejections?.();
+                  const chooser = chooseFilesButtonRef.current;
+                  (chooser && !chooser.disabled ? chooser : descriptionRef.current)?.focus();
+                })
+              }
+            >
+              <p className={styles.noticeTitle}>{t("feedbackRejectedAttachments")}</p>
+              <ul className={styles.rejections}>
+                {Array.from(countWarnings, (reason) => (
+                  <li key={reason}>{t(reason)}</li>
+                ))}
+                {fileRejections?.map(({ file, reason }, index) => (
+                  <li key={`${index}-${file}`}>
+                    {file || t("feedbackUnnamedAttachment")}: {t(reason)}
+                  </li>
+                ))}
+              </ul>
+            </FeedbackErrorNotice>
+          ) : null}
+          {receipt && (issueNumber || issueURL) ? (
+            <div className={styles.inlineActions}>
+              {issueNumber ? <span>{t("feedbackIssueNumber", { number: issueNumber })}</span> : null}
+              {issueNumber ? (
+                <Button
+                  variant="secondaryGray"
+                  size="sm"
+                  onClick={async () => {
+                    setCopyResult((await writeTextToClipboard(issueNumber)) ? "copied" : "failed");
+                  }}
                 >
-                  <p className={styles.noticeTitle}>{t("feedbackRejectedAttachments")}</p>
-                  <ul className={styles.rejections}>
-                    {Array.from(countWarnings, (reason) => (
-                      <li key={reason}>{t(reason)}</li>
-                    ))}
-                    {fileRejections?.map(({ file, reason }, index) => (
-                      <li key={`${index}-${file}`}>
-                        {file || t("feedbackUnnamedAttachment")}: {t(reason)}
-                      </li>
-                    ))}
-                  </ul>
-                </FeedbackErrorNotice>
+                  {t("feedbackCopyIssueNumber")}
+                </Button>
+              ) : null}
+              {issueURL ? (
+                <LinkButton
+                  href={issueURL.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="secondaryGray"
+                  size="sm"
+                >
+                  {t("feedbackViewIssue")}
+                </LinkButton>
               ) : null}
             </div>
-            {images.length ? (
-              <div className={styles.images}>
-                {images.map((file, index) => (
-                  <div className={styles.image} key={`${index}-${file.name}`}>
-                    <Preview file={file} t={t} />
-                    <Button
-                      iconOnly
-                      variant="secondaryGray"
-                      size="sm"
-                      className={styles.removeImage}
-                      disabled={editsDisabled}
-                      aria-label={`${t("feedbackRemoveImage")} ${index + 1}`}
-                      onClick={() => props.onRemoveAttachment("image", index)}
-                    >
-                      <X size={14} strokeWidth={2} aria-hidden="true" />
-                    </Button>
+          ) : showForm ? (
+            <>
+              {!busy && awaiting ? (
+                <>
+                  <div className={styles.submissionActions}>
+                    {props.requestID ? (
+                      <p className={styles.imageHint}>
+                        {t("feedbackSubmissionReference")} <code>{props.requestID}</code>
+                      </p>
+                    ) : null}
+                    {!discarding ? (
+                      <Button
+                        variant="secondaryGray"
+                        size="sm"
+                        disabled={props.checking}
+                        onClick={() => setDiscarding(true)}
+                      >
+                        {t("feedbackStartAnother")}
+                      </Button>
+                    ) : null}
                   </div>
-                ))}
-              </div>
-            ) : null}
-            {archives.length ? (
-              <div className={styles.label}>
-                <p id={archiveDestinationID} className={`${styles.archiveHint} ${styles.imageHint}`}>
-                  <Info size={14} aria-hidden="true" />
-                  <span>
-                    {site ? t("feedbackArchiveDestination", { site }) : t("feedbackArchiveDestinationGeneric")}
+                  {discarding && !props.checking ? (
+                    <div className={styles.inlineActions}>
+                      <p>{t("feedbackDiscardUnconfirmedHint")}</p>
+                      <Button variant="secondaryGray" size="sm" onClick={() => setDiscarding(false)}>
+                        {t("cancel")}
+                      </Button>
+                      <Button variant="outlineDanger" size="sm" onClick={props.onDiscardDraft}>
+                        {t("feedbackDiscardDraft")}
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+              <label className={styles.label}>
+                {t("settingsFeedbackLabel")}
+                <TextArea
+                  ref={descriptionRef}
+                  value={props.description}
+                  disabled={busy}
+                  readOnly={awaiting}
+                  rows={5}
+                  maxLength={MAX_FEEDBACK_DESCRIPTION_LENGTH}
+                  placeholder={t("settingsFeedbackPlaceholder")}
+                  onChange={(event) => props.onDescriptionChange(event.target.value)}
+                />
+              </label>
+              <div className={styles.attachments}>
+                <div className={styles.attachmentsHead}>
+                  <span className={styles.attachmentsTitle}>
+                    <Paperclip size={14} aria-hidden="true" />
+                    {t("feedbackAttachments")}
                   </span>
+                  <span className={styles.attachmentsCount} aria-live="polite">
+                    {t("feedbackImageCountLabel")} {images.length}/{MAX_FEEDBACK_IMAGES} ·{" "}
+                    {t("feedbackArchiveCountLabel")} {archives.length}/{MAX_FEEDBACK_ARCHIVES}
+                  </span>
+                </div>
+                <input
+                  ref={attachmentInputRef}
+                  className={styles.fileInput}
+                  type="file"
+                  accept={FEEDBACK_ATTACHMENT_ACCEPT}
+                  multiple
+                  disabled={editsDisabled}
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  onChange={(event) => {
+                    onAddAttachments(Array.from(event.target.files || []));
+                    event.target.value = "";
+                  }}
+                />
+                <div className={styles.dropzone}>
+                  <span className={styles.dropzoneIcon} aria-hidden="true">
+                    <ImagePlus size={18} strokeWidth={1.8} />
+                  </span>
+                  <div className={styles.dropzoneCopy} id={attachmentHintID}>
+                    <p className={styles.dropzoneTitle}>{t("feedbackDropTitle")}</p>
+                    <p className={styles.dropzoneHint}>{t("feedbackDropHint")}</p>
+                  </div>
+                  <Tooltip content={attachmentDisabledReason} contentProps={{ side: "top", align: "start" }}>
+                    <span
+                      className={styles.chooseFilesButton}
+                      role={attachmentDisabledReason ? "group" : undefined}
+                      aria-label={attachmentDisabledReason ? t("feedbackChooseFiles") : undefined}
+                      tabIndex={attachmentDisabledReason ? 0 : undefined}
+                    >
+                      <Button
+                        ref={chooseFilesButtonRef}
+                        variant="secondaryGray"
+                        size="sm"
+                        disabled={Boolean(attachmentDisabledReason)}
+                        aria-describedby={`${attachmentHintID} ${attachmentUsageID}`}
+                        onClick={() => attachmentInputRef.current?.click()}
+                      >
+                        {t("feedbackChooseFiles")}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </div>
+                <p id={attachmentUsageID} className={styles.limitHint}>
+                  {t("feedbackAttachmentLimits")}
                 </p>
-                <ul className={styles.archives}>
-                  {archives.map((file, index) => (
-                    <li className={styles.archive} key={`${index}-${file.name}`}>
-                      <FileArchive size={16} aria-hidden="true" />
-                      <span title={file.name}>{file.name}</span>
+                <details className={`${styles.attachmentFormats} ${styles.imageHint}`}>
+                  <summary>{t("feedbackAttachmentFormats")}</summary>
+                  <div className={styles.attachmentUsage}>
+                    <span>{t("feedbackImageFormats")}</span>
+                    <span>{t("feedbackArchiveFormats")}</span>
+                  </div>
+                </details>
+              </div>
+              {images.length ? (
+                <div className={styles.images}>
+                  {images.map((file, index) => (
+                    <div className={styles.image} key={`${index}-${file.name}`}>
+                      <Preview file={file} t={t} />
                       <Button
                         iconOnly
                         variant="secondaryGray"
                         size="sm"
+                        className={styles.removeImage}
                         disabled={editsDisabled}
-                        aria-label={t("feedbackRemoveAttachment", { file: file.name })}
-                        onClick={() => props.onRemoveAttachment("archive", index)}
+                        aria-label={`${t("feedbackRemoveImage")} ${index + 1}`}
+                        onClick={() => props.onRemoveAttachment("image", index)}
                       >
-                        <X size={14} aria-hidden="true" />
+                        <X size={14} strokeWidth={2} aria-hidden="true" />
                       </Button>
-                    </li>
+                    </div>
                   ))}
-                </ul>
-              </div>
-            ) : null}
-          </DialogBody>
-        )}
+                </div>
+              ) : null}
+              {archives.length ? (
+                <div className={styles.label}>
+                  <p id={archiveDestinationID} className={`${styles.archiveHint} ${styles.imageHint}`}>
+                    <Info size={14} aria-hidden="true" />
+                    <span>
+                      {site ? t("feedbackArchiveDestination", { site }) : t("feedbackArchiveDestinationGeneric")}
+                    </span>
+                  </p>
+                  <ul className={styles.archives}>
+                    {archives.map((file, index) => (
+                      <li className={styles.archive} key={`${index}-${file.name}`}>
+                        <FileArchive size={16} aria-hidden="true" />
+                        <span title={file.name}>{file.name}</span>
+                        <Button
+                          iconOnly
+                          variant="secondaryGray"
+                          size="sm"
+                          disabled={editsDisabled}
+                          aria-label={t("feedbackRemoveAttachment", { file: file.name })}
+                          onClick={() => props.onRemoveAttachment("archive", index)}
+                        >
+                          <X size={14} aria-hidden="true" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </DialogBody>
         <DialogFooter className={styles.footer}>
           <Button
             variant="secondaryGray"
