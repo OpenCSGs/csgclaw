@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DiagnosticMessageAction, TurnDiagnostics } from "./TurnDiagnostics";
+import { DiagnosticCalls } from "./DiagnosticAnalysis";
 import { fetchDiagnostic, fetchDiagnostics, fetchDiagnosticBundle, fetchDiagnosticArchive } from "@/api/diagnostics";
 import { createTranslator } from "@/shared/i18n";
 vi.mock("@/api/diagnostics", () => ({
@@ -42,6 +43,32 @@ const record = {
   ],
 };
 afterEach(() => vi.clearAllMocks());
+it("shows the Gateway Trace ID for an LLM request", async () => {
+  const traceID = "0791f842581dab01119569e83c8dd380";
+  const user = userEvent.setup();
+  render(
+    <DiagnosticCalls
+      record={{
+        ...record,
+        spans: [
+          {
+            id: "model",
+            name: "llm.request",
+            owner: "llm",
+            start_ms: 100,
+            end_ms: 200,
+            status: "completed",
+            details: { trace_id: traceID, label: "responses" },
+          },
+        ],
+      }}
+      t={createTranslator("en")}
+    />,
+  );
+  await user.click(screen.getByText("LLM #1"));
+  expect(screen.getByText("Trace ID")).toBeVisible();
+  expect(screen.getByText(traceID)).toBeVisible();
+});
 it.each(["zh", "en"] as const)(
   "keeps the error disclosure label accurate when expanded and collapsed in %s",
   async (locale) => {
@@ -308,6 +335,22 @@ it("shows a waiting source instead of selecting an unrelated execution", async (
   expect(await screen.findByText("diagWaitingExecution")).toBeInTheDocument();
   expect(fetchDiagnostic).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { pressed: true })).not.toBeInTheDocument();
+  view.unmount();
+});
+
+it("copies the visible turn ID by itself from the diagnostic header", async () => {
+  vi.mocked(fetchDiagnostics).mockResolvedValue({ items: [record], next_cursor: "", total: 1, agents: [] });
+  vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+  const user = userEvent.setup();
+  const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const view = render(<TurnDiagnostics room="r" source="s" t={createTranslator("zh")} onClose={() => {}} />);
+  expect(screen.getByRole("heading", { level: 2 }).parentElement).toContainElement(
+    await screen.findByText(record.turn_id, { selector: "code" }),
+  );
+  await user.click(screen.getByRole("button", { name: "复制本轮 ID" }));
+  expect(clipboard).toHaveBeenCalledExactlyOnceWith(record.turn_id);
+  expect(await screen.findByRole("button", { name: "已复制" })).toBeVisible();
+  expect(fetchDiagnosticBundle).not.toHaveBeenCalled();
   view.unmount();
 });
 

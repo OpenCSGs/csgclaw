@@ -3,7 +3,12 @@ import { Cpu, Settings2 } from "lucide-react";
 import { Button, Combobox } from "@/components/ui";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
-import { isOpenCSGAutoModel, type ModelProviderSelectOption } from "@/models/modelProviders";
+import {
+  isOpenCSGAutoModel,
+  isRecommendedOpenCSGModel,
+  modelIDsForPicker,
+  type ModelProviderSelectOption,
+} from "@/models/modelProviders";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./TaskConfigurationToolbar.module.css";
 
@@ -37,6 +42,17 @@ export function TaskModelPicker({
   const label = (id: string, model: string) => (isOpenCSGAutoModel(id, model) ? t("modelProviderAutoName") : model);
   const selectedModelLabel = label(providerID, modelID) || t("iaModelUnset");
   const encode = (id: string, model: string) => JSON.stringify([id, model]);
+  const directories = providers
+    .filter((provider) => !provider.disabled)
+    .map((provider) => ({
+      provider,
+      models: modelIDsForPicker(
+        provider.id,
+        provider.models.filter(
+          (model) => !provider.imageModels?.includes(model) && !provider.videoModels?.includes(model),
+        ),
+      ),
+    }));
   return (
     <Combobox
       open={open}
@@ -61,6 +77,7 @@ export function TaskModelPicker({
       contentClassName={styles.modelMenu}
       contentProps={{ side: "top", align: "end" }}
       searchPlaceholder={t("iaModelSearch")}
+      tabIntoFooter
       emptyLabel={t("iaModelEmpty")}
       options={[
         {
@@ -75,18 +92,23 @@ export function TaskModelPicker({
             />
           ),
         },
-        ...providers
-          .filter((provider) => !provider.disabled)
-          .flatMap((provider) =>
-            provider.models
-              .filter((model) => !provider.imageModels?.includes(model) && !provider.videoModels?.includes(model))
-              .map((model) => ({
-                value: encode(provider.id, model),
-                group: provider.displayName,
-                textValue: `${model} ${provider.displayName}`,
-                label: <ModelOptionLabel avatar={provider.avatar} model={label(provider.id, model)} />,
-              })),
-          ),
+        ...directories.flatMap(({ provider, models }) =>
+          models.map((model) => {
+            const recommended = isRecommendedOpenCSGModel(provider.id, model);
+            return {
+              value: encode(provider.id, model),
+              group: provider.displayName,
+              textValue: `${model} ${provider.displayName}`,
+              label: (
+                <ModelOptionLabel
+                  avatar={provider.avatar}
+                  model={label(provider.id, model)}
+                  qualifier={recommended ? t("modelRecommended") : undefined}
+                />
+              ),
+            };
+          }),
+        ),
       ]}
       onValueChange={async (value) => {
         setError("");

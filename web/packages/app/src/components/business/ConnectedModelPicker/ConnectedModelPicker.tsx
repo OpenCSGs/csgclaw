@@ -9,6 +9,8 @@ import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
 import { localizeAPIError } from "@/shared/i18n";
 import {
   isOpenCSGAutoModel,
+  isRecommendedOpenCSGModel,
+  modelIDsForPicker,
   modelProviderMessageLabel,
   type ModelProvider,
   type ModelProviderSelectOption,
@@ -80,25 +82,37 @@ export function ConnectedModelPicker({
     group.push(provider);
     providerGroups.set(name, group);
   }
-  const options: ComboboxOption[] = [...providerGroups].flatMap(([group, connections]) =>
-    connections.flatMap((provider) =>
-      provider.models
-        .filter((model) => !provider.imageModels?.includes(model) && !provider.videoModels?.includes(model))
-        .map((model) => ({
-          value: encode(provider.id, model),
-          group,
-          textValue: `${model} ${detail(provider)} ${group} ${isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : ""}`,
-          description: isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoDescription") : undefined,
-          label: (
-            <ModelOptionLabel
-              avatar={provider.avatar}
-              model={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : model}
-              badge={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoBadge") : undefined}
-              provider={detail(provider)}
-            />
-          ),
-        })),
-    ),
+  const directories = [...providerGroups].flatMap(([group, connections]) =>
+    connections.map((provider) => ({
+      group,
+      provider,
+      models: modelIDsForPicker(
+        provider.id,
+        provider.models.filter(
+          (model) => !provider.imageModels?.includes(model) && !provider.videoModels?.includes(model),
+        ),
+      ),
+    })),
+  );
+  const options: ComboboxOption[] = directories.flatMap(({ group, provider, models }) =>
+    models.map((model) => {
+      const recommended = isRecommendedOpenCSGModel(provider.id, model);
+      return {
+        value: encode(provider.id, model),
+        group,
+        textValue: `${model} ${detail(provider)} ${group} ${isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : ""}`,
+        description: isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoDescription") : undefined,
+        label: (
+          <ModelOptionLabel
+            avatar={provider.avatar}
+            model={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : model}
+            badge={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoBadge") : undefined}
+            provider={detail(provider)}
+            qualifier={recommended ? t("modelRecommended") : undefined}
+          />
+        ),
+      };
+    }),
   );
   if (onFollowDefault)
     options.unshift({

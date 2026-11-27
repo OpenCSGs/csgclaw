@@ -3,8 +3,10 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { classNames } from "@/shared/lib/classNames";
+import styles from "./ProfileControls.module.css";
 
 export type ModelProviderModelListProps = {
+  qualifierForModel?: (model: string) => string | undefined;
   renderDetails?: (model: string) => ReactNode;
   className?: string;
   emptyLabel: string;
@@ -15,6 +17,7 @@ export type ModelProviderModelListProps = {
 
 export function ModelProviderModelList({
   className,
+  qualifierForModel,
   renderDetails,
   emptyLabel,
   modelListLabel,
@@ -45,14 +48,20 @@ export function ModelProviderModelList({
       </label>
       {visibleModels.length ? (
         <div className="model-provider-model-grid" role="list" aria-label={modelListLabel}>
-          {visibleModels.map(({ index, model }) => (
-            <div className="model-provider-model-card" role="listitem" key={`${model}-${index}`}>
-              <span className="model-provider-model-name" title={model}>
-                {model}
-              </span>
-              {renderDetails?.(model)}
-            </div>
-          ))}
+          {visibleModels.map(({ index, model }) => {
+            const qualifier = qualifierForModel?.(model);
+            return (
+              <div className="model-provider-model-card" role="listitem" key={`${model}-${index}`}>
+                <span className={styles["model-list-label"]}>
+                  <span className="model-provider-model-name" title={model}>
+                    {model}
+                  </span>
+                  {qualifier ? <span className={styles["model-qualifier"]}>({qualifier})</span> : null}
+                </span>
+                {renderDetails?.(model)}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="model-provider-model-empty">{emptyLabel}</div>

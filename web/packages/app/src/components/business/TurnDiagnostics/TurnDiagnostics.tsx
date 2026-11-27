@@ -48,6 +48,8 @@ import {
 } from "@/models/diagnostics";
 import type { TranslateFn } from "@/models/conversations";
 import type { AgentLike } from "@/models/agents";
+import { parseTurnProgress } from "@/models/turnProgress";
+import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import styles from "./TurnDiagnostics.module.css";
 
 type Props = {
@@ -104,7 +106,7 @@ export function DiagnosticMessageAction({
         >
           <ExecutionDiagnosticIcon />
         </button>
-      ) : meta?.runtime_error ? (
+      ) : meta?.runtime_error && !parseTurnProgress({ metadata })?.model_request ? (
         <InlineDiagnosticError room={ref.room} source={ref.source} turn={ref.turn} t={t} onOpen={() => setOpen(true)} />
       ) : null}
       {open ? (
@@ -185,6 +187,24 @@ function InlineDiagnosticErrorContent({
       <Button size="sm" variant="tertiaryGray" onClick={onOpen}>
         {t("diagThisTurn")}
       </Button>
+    </div>
+  );
+}
+
+function DiagnosticTurnID({ id, t }: { id: string; t: TranslateFn }) {
+  const [feedback, setFeedback] = useState<"copied" | "failed">();
+  return (
+    <div className={styles.turnId}>
+      <span>{t("diagTurnID")}</span>
+      <code>{id}</code>
+      <Button
+        size="sm"
+        variant="linkGray"
+        onClick={async () => setFeedback((await writeTextToClipboard(id)) ? "copied" : "failed")}
+      >
+        {t(feedback === "copied" ? "diagCopied" : "diagCopyTurnID")}
+      </Button>
+      {feedback === "failed" ? <span role="status">{t("diagCopyTurnIDFailed")}</span> : null}
     </div>
   );
 }
@@ -342,6 +362,7 @@ export function TurnDiagnostics({
                     : "diagDescription",
               )}
             </DialogDescription>
+            {detail?.turn_id && !loading ? <DiagnosticTurnID key={detail.turn_id} id={detail.turn_id} t={t} /> : null}
           </div>
           <div className={styles.headerControls} aria-label={t("diagActions")}>
             <div className={styles.actionButtons}>
@@ -429,9 +450,6 @@ export function TurnDiagnostics({
             ) : (
               <strong>{t(source ? "diagRelatedRecords" : "diagTurns")}</strong>
             )}
-            <span className={styles.turnId} title={detail?.turn_id}>
-              Turn <code>{detail?.turn_id || t("diagNotMeasured")}</code>
-            </span>
           </div>
           <div className={styles.filters}>
             {showAgentFilter && tab === "turns" ? (

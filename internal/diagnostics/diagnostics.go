@@ -75,15 +75,17 @@ type Snapshot struct {
 	Browser          *Timing           `json:"browser,omitempty"`
 }
 type Record struct {
-	captureMu       sync.Mutex
-	captureSequence uint64
-	mu              sync.Mutex
-	store           *Store
-	origin          time.Time
-	data            Snapshot
-	active          map[string]int
-	detailBytes     int
-	eventSpans      int
+	captureMu            sync.Mutex
+	captureSequence      uint64
+	mu                   sync.Mutex
+	store                *Store
+	origin               time.Time
+	data                 Snapshot
+	active               map[string]int
+	detailBytes          int
+	eventSpans           int
+	modelRequestStatus   *ModelRequestStatus
+	modelRequestObserver func(ModelRequestStatus)
 }
 type source struct {
 	started  time.Time

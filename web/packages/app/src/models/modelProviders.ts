@@ -142,6 +142,21 @@ export function isOpenCSGAutoModel(providerID: string, modelID: string): boolean
   );
 }
 
+const openCSGRecommendedModels = ["qwen3.8-flash", "deepseek-v4.1-flash-1017", "glm-5.3-flash"];
+
+export function isRecommendedOpenCSGModel(providerID: string, modelID: string): boolean {
+  return (
+    normalizeModelProviderID(providerID) === MODEL_PROVIDER_IDS.OpenCSG &&
+    openCSGRecommendedModels.includes(modelID.toLowerCase())
+  );
+}
+
+export function modelIDsForPicker(providerID: string, models: readonly string[]): string[] {
+  if (normalizeModelProviderID(providerID) !== MODEL_PROVIDER_IDS.OpenCSG) return [...models];
+  const recommended = openCSGRecommendedModels.flatMap((id) => models.filter((model) => model.toLowerCase() === id));
+  return [...recommended, ...models.filter((model) => !recommended.includes(model))];
+}
+
 export function modelIDsForProviderSelection(providerID: string, modelIDs: readonly string[]): string[] {
   const models = [...modelIDs];
   if (normalizeModelProviderID(providerID) !== MODEL_PROVIDER_IDS.OpenCSG) {

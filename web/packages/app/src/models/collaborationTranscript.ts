@@ -33,6 +33,10 @@ export function collaborationTranscript(messages: readonly IMMessage[]) {
           content,
           created_at: validTime(progress.ended_at) ? progress.ended_at : message.created_at,
         });
+      } else if (progress.model_request && progress.model_request.state !== "recovered") {
+        // Surface failures and retries without exposing an unfinished or
+        // private Agent reply in the collaboration transcript.
+        publicMessages.push({ ...message, content: "\u200b", attachments: [] });
       }
       continue;
     }

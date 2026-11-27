@@ -21,12 +21,15 @@ import (
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/app/runtimewiring"
+	"csgclaw/internal/auth"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/modelcap"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/codex"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type modelSelection struct{ model, effort string }
@@ -133,6 +136,38 @@ func TestNativeSessionModelUpdatedWindowThroughBridge(t *testing.T) {
 	b.turn("a", override, 100, override)
 }
 
+func TestNativeOpenCSGGatewayRetriesHaveASingleOwner(t *testing.T) {
+	b := newNativeSessionModelBridge(t, "none", true)
+	b.mu.Lock()
+	b.rateLimited = true
+	b.mu.Unlock()
+	status, body := b.requestTurn("gateway", modelSelection{}, "Reply done.")
+	if status != http.StatusServiceUnavailable || !bytes.Contains(body, []byte("agent_response_failed")) {
+		t.Fatalf("gateway failure: HTTP %d, response %s", status, body)
+	}
+	b.mu.Lock()
+	contexts := slices.Clone(b.gatewayTraceContexts)
+	incoming := b.nativeTraceContext
+	nativeCalls := len(b.native)
+	b.rateLimited = false
+	b.mu.Unlock()
+	if len(contexts) != 5 || nativeCalls != 1 || !incoming.IsValid() {
+		t.Fatalf("expected five Gateway attempts from one native request, got %d and %d", len(contexts), nativeCalls)
+	}
+	seen := map[trace.SpanID]bool{incoming.SpanID(): true}
+	for _, current := range contexts {
+		if !current.IsValid() || current.TraceID() != incoming.TraceID() || current.TraceState().String() != "qa=burst" || seen[current.SpanID()] {
+			t.Fatalf("invalid context on native Gateway attempt: %v", current)
+		}
+		seen[current.SpanID()] = true
+	}
+	status, body = b.requestTurn("gateway", modelSelection{}, "Continue.")
+	var result agentSessionResponse
+	if err := json.Unmarshal(body, &result); err != nil || status != http.StatusOK || result.Status != "completed" {
+		t.Fatalf("continuation: HTTP %d, response %s, error %v", status, body, err)
+	}
+}
+
 type sessionModelBridgePayload struct {
 	Model     string            `json:"model"`
 	Stream    bool              `json:"stream"`
@@ -143,21 +178,24 @@ type sessionModelBridgePayload struct {
 }
 
 type nativeSessionModelBridge struct {
-	t                  *testing.T
-	ctx                context.Context
-	server             *httptest.Server
-	controller         *agent.Controller
-	runtime            *codex.Runtime
-	agentID, runtimeID string
-	providers          config.LLMConfig
-	bindings           *agentsession.Store
-	threads            map[string]string
-	mu                 sync.Mutex
-	upstream, native   []sessionModelBridgePayload
-	inputTokens        int
+	t                    *testing.T
+	ctx                  context.Context
+	server               *httptest.Server
+	controller           *agent.Controller
+	runtime              *codex.Runtime
+	agentID, runtimeID   string
+	providers            config.LLMConfig
+	bindings             *agentsession.Store
+	threads              map[string]string
+	mu                   sync.Mutex
+	upstream, native     []sessionModelBridgePayload
+	inputTokens          int
+	rateLimited          bool
+	gatewayTraceContexts []trace.SpanContext
+	nativeTraceContext   trace.SpanContext
 }
 
-func newNativeSessionModelBridge(t *testing.T, defaultEffort string) *nativeSessionModelBridge {
+func newNativeSessionModelBridge(t *testing.T, defaultEffort string, officialGateway ...bool) *nativeSessionModelBridge {
 	t.Helper()
 	binary := os.Getenv("CSGCLAW_TEST_CODEX_BINARY")
 	if binary == "" {
@@ -202,9 +240,18 @@ func newNativeSessionModelBridge(t *testing.T, defaultEffort string) *nativeSess
 		}
 		b.mu.Lock()
 		b.upstream = append(b.upstream, payload)
+		b.gatewayTraceContexts = append(b.gatewayTraceContexts, trace.SpanContextFromContext(propagation.TraceContext{}.Extract(r.Context(), propagation.HeaderCarrier(r.Header))))
 		responseID := fmt.Sprintf("fixture-%d", len(b.upstream))
 		inputTokens := b.inputTokens
+		rateLimited := b.rateLimited
 		b.mu.Unlock()
+		if rateLimited {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			fmt.Fprint(w, `{"error":{"code":"rate_limit_exceeded","message":"fixture rate limit"}}`)
+			return
+		}
 		if payload.Model == "model-b" && payload.Reasoning.Effort != "high" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -231,13 +278,26 @@ func newNativeSessionModelBridge(t *testing.T, defaultEffort string) *nativeSess
 	item.Status = string(agentruntime.StateStopped)
 	item.DesiredState = agent.DesiredStateRunning
 	item.AgentProfile = agent.AgentProfile{Provider: agent.ProviderAPI, ModelProviderID: "fixture", ModelID: "model-a", ReasoningEffort: defaultEffort, ProfileComplete: true}
+	if len(officialGateway) > 0 && officialGateway[0] {
+		t.Setenv("HOME", t.TempDir())
+		store, err := auth.DefaultStore()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.SaveCSGHubProviderCredentials(auth.CSGHubProviderCredentials{AIGatewayBaseURL: upstream.URL + "/v1", AIGatewayBuiltinAPIKey: "gk_fixture"}); err != nil {
+			t.Fatal(err)
+		}
+		item.AgentProfile.Provider = agent.ProviderCSGHub
+		item.AgentProfile.ModelProviderID = agent.ModelProviderIDOpenCSG
+	}
 	item.RuntimeOptions = map[string]any{"memory_mode": "disabled", "local_workspace_dir": workspace}
 	statePath := filepath.Join(root, "agents.json")
 	if err := writeSeededAgents(statePath, []agent.Agent{item}); err != nil {
 		t.Fatal(err)
 	}
-	providers := config.LLMConfig{Default: "fixture.model-a", Providers: map[string]config.ProviderConfig{
-		"fixture": {BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", APIProtocol: "responses", Models: []string{"model-a"}, ReasoningEffort: defaultEffort, ModelMetadata: map[string]modelcap.Metadata{"model-a": {ContextWindow: 32000}}},
+	providerID := item.AgentProfile.ModelProviderID
+	providers := config.LLMConfig{Default: providerID + ".model-a", Providers: map[string]config.ProviderConfig{
+		providerID: {BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", APIProtocol: "responses", Models: []string{"model-a"}, ReasoningEffort: defaultEffort, ModelMetadata: map[string]modelcap.Metadata{"model-a": {ContextWindow: 32000}}},
 	}}
 	server := httptest.NewUnstartedServer(nil)
 	t.Cleanup(server.Close)
@@ -279,6 +339,13 @@ func newNativeSessionModelBridge(t *testing.T, defaultEffort string) *nativeSess
 			} else if payload.Stream {
 				b.mu.Lock()
 				b.native = append(b.native, payload)
+				if len(officialGateway) > 0 && officialGateway[0] {
+					if r.Header.Get("Traceparent") == "" {
+						r.Header.Set("Traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+					}
+					r.Header.Set("Tracestate", "qa=burst")
+					b.nativeTraceContext = trace.SpanContextFromContext(propagation.TraceContext{}.Extract(r.Context(), propagation.HeaderCarrier(r.Header)))
+				}
 				b.mu.Unlock()
 			}
 		}
@@ -327,35 +394,10 @@ func (b *nativeSessionModelBridge) turn(session string, request modelSelection, 
 	beforeUpstream, beforeNative := len(b.upstream), len(b.native)
 	b.inputTokens = tokens
 	b.mu.Unlock()
-	payload := map[string]any{"input": "Reply done."}
-	if request.model != "" {
-		payload["model"] = request.model
-	}
-	if request.effort != "" {
-		payload["reasoning_effort"] = request.effort
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req, err := http.NewRequestWithContext(b.ctx, http.MethodPost, b.server.URL+"/api/v1/agents/"+b.agentID+"/sessions/"+session+"/responses", bytes.NewReader(data))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer fixture-token")
-	response, err := b.server.Client().Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
+	status, body := b.requestTurn(session, request, "Reply done.")
 	var result agentSessionResponse
-	if err := json.Unmarshal(body, &result); err != nil || response.StatusCode != http.StatusOK || result.Status != "completed" {
-		t.Fatalf("session %s: HTTP %d body=%s error=%v", session, response.StatusCode, body, err)
+	if err := json.Unmarshal(body, &result); err != nil || status != http.StatusOK || result.Status != "completed" {
+		t.Fatalf("session %s: HTTP %d body=%s error=%v", session, status, body, err)
 	}
 
 	b.mu.Lock()
@@ -390,4 +432,35 @@ func (b *nativeSessionModelBridge) turn(session string, request modelSelection, 
 		}
 	}
 	b.threads[session] = thread
+}
+
+func (b *nativeSessionModelBridge) requestTurn(session string, request modelSelection, text string) (int, []byte) {
+	b.t.Helper()
+	payload := map[string]any{"input": text}
+	if request.model != "" {
+		payload["model"] = request.model
+	}
+	if request.effort != "" {
+		payload["reasoning_effort"] = request.effort
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	req, err := http.NewRequestWithContext(b.ctx, http.MethodPost, b.server.URL+"/api/v1/agents/"+b.agentID+"/sessions/"+session+"/responses", bytes.NewReader(data))
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer fixture-token")
+	response, err := b.server.Client().Do(req)
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	return response.StatusCode, body
 }

@@ -32,6 +32,16 @@ The existing LLM bridge measures each upstream request through response-body con
 The first-response metric records the first response data, not the first model token.
 Requests without reliable native identity, including current DSH requests and WebSocket sessions, remain explicitly unmeasured.
 
+The model bridge uses OpenTelemetry HTTP instrumentation to extract W3C `traceparent` and `tracestate` and create a server span.
+Every outbound OpenCSG Gateway attempt creates a new client span under the bridge span and injects its own W3C context.
+Direct OpenCSG model requests without an incoming context start one logical request span, so all retry attempts share a trace ID.
+The LLM call details and the CSGClaw response log expose the trace ID used to look up the same call in Gateway logs and Tempo.
+The diagnostic header displays the Turn ID and provides a button to copy it.
+The model bridge span carries the `csgclaw.turn_id` attribute when the model request can be correlated to a diagnostic record.
+In Grafana Explore, query the Tempo data source with `{ span.csgclaw.turn_id = "TURN_ID" }` to find the associated model traces, including turns that span multiple traces.
+To export CSGClaw's spans to the deployment's Collector, point `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` at its OTLP/HTTP traces endpoint, for example `http://collector:4318/v1/traces`.
+The service defaults to `csgclaw` and can be configured with `OTEL_SERVICE_NAME`.
+
 Codex exports native OpenTelemetry traces to a per-process loopback HTTP receiver, with a random unguessable path and bounded request bodies.
 The receiver associates native turn IDs and trace IDs with the original diagnostic record, including asynchronous exports after the turn has finished.
 It admits only known preparation, dispatch, request, stream, tool-wait, persistence, and turn-boundary spans; it never copies arbitrary telemetry attributes, prompts, reasoning, or tool output.

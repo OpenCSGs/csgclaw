@@ -31,6 +31,20 @@ export type TurnProgress = {
   ended_at?: string;
   items: ProgressItem[];
   error?: string;
+  model_request?: ModelRequestStatus;
+};
+export type ModelRequestStatus = {
+  state: "retrying" | "failed" | "recovered" | "stopped";
+  category: string;
+  source: string;
+  request_id: string;
+  gateway_request_id?: string;
+  code?: string;
+  http_status?: number;
+  details?: string;
+  attempt?: number;
+  max_attempts?: number;
+  retry_at?: string;
 };
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)

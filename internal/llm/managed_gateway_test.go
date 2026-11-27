@@ -6,13 +6,103 @@ import (
 	"csgclaw/internal/config"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
+
+func TestCSGHubGatewayTracingPreservesKeyRefreshAndRedirectGuard(t *testing.T) {
+	var lookups, redirects atomic.Int32
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lookups.Add(1)
+		if r.Header.Get("Authorization") != "Bearer hub-token" {
+			t.Error("incorrect Hub credential")
+		}
+		fmt.Fprint(w, `{"data":{"token":"gk_refreshed"}}`)
+	}))
+	defer hub.Close()
+	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		redirects.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer destination.Close()
+	var redirect atomic.Bool
+	var mu sync.Mutex
+	var spans []trace.SpanContext
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := propagation.TraceContext{}.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		mu.Lock()
+		spans = append(spans, trace.SpanContextFromContext(ctx))
+		mu.Unlock()
+		if r.Header.Get("Authorization") != "Bearer gk_refreshed" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if redirect.Load() {
+			http.Redirect(w, r, destination.URL, http.StatusTemporaryRedirect)
+			return
+		}
+		fmt.Fprint(w, `{"id":"reply","output":[]}`)
+	}))
+	defer gateway.Close()
+	_, port, err := net.SplitHostPort(gateway.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	gatewayAddress := net.JoinHostPort("aigateway.opencsg.com", port)
+	gatewayURL := "http://" + gatewayAddress + "/v1"
+
+	service := NewCSGHubService(config.ModelConfig{}, nil, CSGHubGatewayConfig{
+		GatewayURL: gatewayURL, HubURL: hub.URL,
+		UserToken: "hub-token", UserName: "owner", UserUUID: "owner-uuid",
+	})
+	dialer := &net.Dialer{}
+	transport := &http.Transport{DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+		switch address {
+		case gatewayAddress:
+			address = gateway.Listener.Addr().String()
+		case destination.Listener.Addr().String():
+		default:
+			return nil, fmt.Errorf("unexpected test connection to %s", address)
+		}
+		return dialer.DialContext(ctx, network, address)
+	}}
+	defer transport.CloseIdleConnections()
+	service.gatewayClient.Transport = otelhttp.NewTransport(transport,
+		otelhttp.WithTracerProvider(service.gatewayTracer), otelhttp.WithPropagators(propagation.TraceContext{}))
+	ctx := WithTaskProfile(t.Context(), agents.AgentProfile{
+		Provider: agents.ProviderAPI, ModelProviderID: "remote", BaseURL: gatewayURL,
+		APIKey: "gk_stale", ModelID: "fixture",
+	})
+	for _, status := range []int{http.StatusOK, http.StatusTemporaryRedirect} {
+		redirect.Store(status == http.StatusTemporaryRedirect)
+		response, err := service.Responses(ctx, "manager", []byte(`{"input":"hello"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != status {
+			t.Fatalf("Responses status = %d, want %d", response.StatusCode, status)
+		}
+	}
+	if lookups.Load() != 1 || redirects.Load() != 0 {
+		t.Fatalf("Hub lookups = %d, followed redirects = %d", lookups.Load(), redirects.Load())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(spans) != 3 || !spans[0].IsValid() || !spans[1].IsValid() || !spans[2].IsValid() ||
+		spans[0].TraceID() != spans[1].TraceID() || spans[0].SpanID() == spans[1].SpanID() {
+		t.Fatalf("rotated-key attempts did not preserve tracing: %+v", spans)
+	}
+}
 
 func TestCSGHubGatewayRefreshesRotatedKey(t *testing.T) {
 	var generation atomic.Int32

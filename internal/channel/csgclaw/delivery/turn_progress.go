@@ -90,8 +90,29 @@ func (r *TranscriptRenderer) Start(ctx context.Context, turn channel.TurnContext
 	r.mu.Unlock()
 	p.mu.Lock()
 	p.diagnostic = diagnostics.From(ctx)
+	err := p.flush(ctx, true, nil)
+	p.mu.Unlock()
+	if err == nil {
+		p.diagnostic.ObserveModelRequest(p.observeModelRequest)
+	}
+	return err
+}
+
+func (p *progressState) observeModelRequest(status diagnostics.ModelRequestStatus) {
+	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.flush(ctx, true, nil)
+	if p.done || (p.snapshot.ModelRequest != nil && !p.snapshot.ModelRequest.At.Before(status.At)) {
+		return
+	}
+	if status.State == "recovered" && (p.snapshot.ModelRequest == nil || p.snapshot.ModelRequest.RequestID != status.RequestID) {
+		return
+	}
+	p.snapshot.ModelRequest = &status
+	ctx, cancel := context.WithTimeout(diagnostics.WithRecord(context.Background(), p.diagnostic), 5*time.Second)
+	defer cancel()
+	if err := p.flush(ctx, p.pendingPersist, nil); err != nil {
+		p.diagnostic.Issue("model_request_progress_delivery_failed")
+	}
 }
 
 func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent) error {
@@ -307,6 +328,19 @@ func (p *progressState) finish(ctx context.Context, result agentengine.TurnResul
 		return nil
 	}
 	p.done = true
+	p.diagnostic.ObserveModelRequest(nil)
+	if current := p.snapshot.ModelRequest; current != nil {
+		switch result.Status {
+		case agentengine.TurnSucceeded:
+			if current.State != "recovered" {
+				p.snapshot.ModelRequest = nil
+			}
+		case agentengine.TurnCanceled:
+			stopped := *current
+			stopped.State = "stopped"
+			p.snapshot.ModelRequest = &stopped
+		}
+	}
 	if p.timer != nil {
 		p.timer.Stop()
 		p.timer = nil
