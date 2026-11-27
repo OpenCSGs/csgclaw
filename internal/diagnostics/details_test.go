@@ -1,10 +1,12 @@
 package diagnostics
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestToolDetailsWhitelistsAndRedactsInputs(t *testing.T) {
@@ -68,11 +70,18 @@ func TestRequestModelSurvivesLateNativeBinding(t *testing.T) {
 	record := store.Begin("room", "source", "", "agent", "turn")
 	record.Running()
 	record.RuntimeInfo("codex", "old-model")
-	ctx := WithNativeLookup(WithRequestModel(context.Background(), "glm-5.3-flash"), store, "agent", "session", "native-turn")
+	spans := tracetest.NewSpanRecorder()
+	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)).Tracer("test")
+	ctx, span := tracer.Start(t.Context(), "model bridge")
+	ctx = WithNativeLookup(WithRequestModel(ctx, "glm-5.3-flash"), store, "agent", "session", "native-turn")
 	update, finish := ObserveRequest(ctx, "responses")
 	update(400, nil)
 	record.RuntimeRef("session", "native-turn", "")
 	finish("failed")
+	span.End()
+	if got := spans.Ended()[0].Attributes(); len(got) != 1 || got[0].Key != "csgclaw.turn_id" || got[0].Value.AsString() != "turn" {
+		t.Fatalf("late request span has wrong turn attributes: %v", got)
+	}
 	snapshot := record.Snapshot()
 	if snapshot.Runtime != "codex" || snapshot.Model != "glm-5.3-flash" {
 		t.Fatalf("wrong execution identity: %+v", snapshot)

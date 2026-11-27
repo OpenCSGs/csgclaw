@@ -119,5 +119,5 @@ func (s *Store) flushNativeFailures(record *Record, agent, session, turn string)
 	}
 }
 func deferrableFailureKind(kind string) bool {
-	return strings.HasPrefix(kind, "llm.ingress") || kind == "execution.failure" || kind == "llm.failed_request"
+	return strings.HasPrefix(kind, "llm.ingress") || kind == "execution.failure" || kind == "llm.failed_request" || kind == modelRequestEvent
 }

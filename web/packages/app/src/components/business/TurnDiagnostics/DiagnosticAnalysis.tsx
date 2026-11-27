@@ -89,6 +89,14 @@ export function DiagnosticSpanFields({ span, t }: { span: DiagnosticSpan; t: Tra
         <dl>
           <dt>{t("diagOperation")}</dt>
           <dd>{details?.label || "LLM"}</dd>
+          {details?.trace_id ? (
+            <>
+              <dt>Trace ID</dt>
+              <dd>
+                <code>{details.trace_id}</code>
+              </dd>
+            </>
+          ) : null}
           <dt>HTTP</dt>
           <dd>{details?.http_status || t("diagNotMeasured")}</dd>
           <dt>{t("diagFirstResponse")}</dt>

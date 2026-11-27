@@ -3,6 +3,35 @@ import userEvent from "@testing-library/user-event";
 import { createTranslator } from "@/shared/i18n";
 import { ConnectedModelPicker } from "./ConnectedModelPicker";
 const t = createTranslator("en");
+
+it("pins the three recommended Flash models and keeps the current OpenCSG model selectable", async () => {
+  const user = userEvent.setup();
+  const provider = {
+    id: "opencsg",
+    value: "opencsg",
+    displayName: "OpenCSG",
+    avatar: "",
+    models: ["auto", "legacy-model", "glm-5.3-flash", "qwen3.8-flash", "deepseek-v4.1-flash-1017"],
+  };
+  render(
+    <ConnectedModelPicker
+      providers={[provider]}
+      providerID="opencsg"
+      modelID="legacy-model"
+      onChoose={vi.fn()}
+      t={t}
+    />,
+  );
+  const trigger = screen.getByRole("combobox", { name: "Model" });
+  expect(trigger).toHaveTextContent("legacy-model");
+  await user.click(trigger);
+  const options = screen.getAllByRole("option");
+  expect(options).toHaveLength(5);
+  expect(options[0]).toHaveTextContent(/qwen3\.8-flash\s*\(Recommended\)/);
+  expect(options[1]).toHaveTextContent(/deepseek-v4\.1-flash-1017\s*\(Recommended\)/);
+  expect(options[2]).toHaveTextContent(/glm-5\.3-flash\s*\(Recommended\)/);
+  expect(screen.getByRole("option", { name: /legacy-model/ })).toBeVisible();
+});
 const providers = [
   {
     id: "api",

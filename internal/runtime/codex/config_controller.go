@@ -20,6 +20,7 @@ import (
 )
 
 var checkResponsesAPIForProvider = modelprovider.CheckResponsesOrChatCompletionsAPI
+var checkOpenCSGResponsesAPI = modelprovider.CheckResponsesAPI
 var codexMCPServerNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 var openCSGCredentialsForResponsesProbe = func(ctx context.Context) (string, string, bool, error) {
 	store, err := auth.DefaultStore()
@@ -37,11 +38,13 @@ type modelProbeCache struct {
 var codexModelProbeCache = modelProbeCache{results: make(map[string]struct{})}
 
 func TestOnlySetResponsesAPIProbe(probe func(context.Context, string, string, string, map[string]string) error) func() {
-	previous := checkResponsesAPIForProvider
+	previous, previousOpenCSG := checkResponsesAPIForProvider, checkOpenCSGResponsesAPI
 	checkResponsesAPIForProvider = probe
+	checkOpenCSGResponsesAPI = probe
 	codexModelProbeCache.clear()
 	return func() {
 		checkResponsesAPIForProvider = previous
+		checkOpenCSGResponsesAPI = previousOpenCSG
 		codexModelProbeCache.clear()
 	}
 }
@@ -272,6 +275,9 @@ func (c *modelProbeCache) validate(ctx context.Context, target modelProbeTargetC
 	c.mu.Unlock()
 
 	probe := checkResponsesAPIForProvider
+	if target.provider == "csghub" || target.provider == "opencsg" {
+		probe = checkOpenCSGResponsesAPI
+	}
 	switch target.protocol {
 	case modelpreset.AnthropicMessages:
 		probe = modelprovider.CheckAnthropicMessagesAPI

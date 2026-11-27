@@ -20,6 +20,7 @@ import type { ProgressGroup, ProgressTool, TurnProgress as Progress } from "@/mo
 import { videoProgressTiming } from "@/models/videoGeneration";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
 import styles from "./TurnProgress.module.css";
+import { ModelRequestFeedback } from "./ModelRequestFeedback";
 
 type ActionIconProps = {
   "aria-hidden"?: boolean | "true" | "false";
@@ -278,7 +279,8 @@ export const TurnProgress = memo(function TurnProgress({
           ) : null}
         </>
       ) : null}
-      {progress.error ? (
+      {progress.model_request ? <ModelRequestFeedback status={progress.model_request} active={active} t={t} /> : null}
+      {progress.error && (!progress.model_request || progress.model_request.state === "recovered") ? (
         <p className={styles.error} role="status">
           {progress.error}
         </p>

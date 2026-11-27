@@ -268,16 +268,20 @@ func (r *Record) captureAt(kind string, value any, at time.Time) {
 		return
 	}
 	r.captureMu.Lock()
-	defer r.captureMu.Unlock()
 	r.captureSequence++
 	entry := ContextEntry{At: at, Sequence: r.captureSequence, Kind: kind, Data: Protect(value)}
 	raw, err := json.Marshal(entry)
 	if err != nil {
+		r.captureMu.Unlock()
 		r.Issue("context_encode_failed")
 		return
 	}
 	raw = append(raw, '\n')
 	r.store.context.enqueue(captureWrite{id: r.data.ID, data: raw, record: r})
+	r.captureMu.Unlock()
+	if kind == modelRequestEvent {
+		r.updateModelRequest(entry)
+	}
 }
 
 func (c *contextStore) enqueue(item captureWrite) {

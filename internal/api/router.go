@@ -107,6 +107,9 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 					r.Put("/", h.updateAgentProfile)
 				})
 				r.Route("/llm", func(r chi.Router) {
+					if h.llm != nil {
+						r.Use(h.llm.TraceModelBridge)
+					}
 					r.Get("/models", h.getAgentLLMModels)
 					r.Get("/v1/models", h.getAgentLLMModels)
 					r.Post("/chat/completions", h.createAgentLLMChatCompletions)
@@ -117,6 +120,9 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 					r.Get("/v1/responses", h.getAgentLLMResponsesWebsocket)
 				})
 				r.Route("/tasks/{task_id}/llm", func(r chi.Router) {
+					if h.llm != nil {
+						r.Use(h.llm.TraceModelBridge)
+					}
 					r.Get("/models", h.getAgentLLMModels)
 					r.Get("/v1/models", h.getAgentLLMModels)
 					r.Post("/chat/completions", h.createAgentLLMChatCompletions)

@@ -1,9 +1,9 @@
 import messageContentStyles from "./MessageContent.module.css";
 import { ResourceTag } from "@/components/business/ResourceTag";
 import { messageResources, resourceKey } from "@/models/conversationResources";
-import { StandaloneToolStep, TurnProgress } from "@/components/business/TurnProgress";
+import { ModelRequestFeedback, StandaloneToolStep, TurnProgress } from "@/components/business/TurnProgress";
 import { createTranslator } from "@/shared/i18n";
-import { parseTurnProgress } from "@/models/turnProgress";
+import { parseTurnProgress, progressActive } from "@/models/turnProgress";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionCard } from "./ActionCard";
 import { AgentActivityCard } from "./AgentActivityCard";
@@ -38,8 +38,8 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
   );
   const progress = parseTurnProgress(props.message);
   const streaming = progress?.status === "running" && !progress.private_output;
+  const hasAnswer = Boolean(props.content?.replace(/\u200b/g, "").trim());
   if (progress && props.t && props.showTurnProgress !== false) {
-    const hasAnswer = Boolean(props.content?.replace(/\u200b/g, "").trim());
     return (
       <TurnProgress
         progress={progress}
@@ -55,6 +55,14 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
   const resources = messageResources(props.message?.metadata);
   return (
     <>
+      {progress?.model_request && t ? (
+        <ModelRequestFeedback
+          status={progress.model_request}
+          active={progressActive(progress)}
+          controls={props.progressControls?.header}
+          t={t}
+        />
+      ) : null}
       {resources.length ? (
         <div className="flex flex-wrap gap-2" aria-label={t?.("composerAddResources")}>
           {resources.map((resource) => (
@@ -62,7 +70,7 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
           ))}
         </div>
       ) : null}
-      <MessageBody {...props} diagnosticText streaming={streaming} />
+      {!progress?.model_request || hasAnswer ? <MessageBody {...props} diagnosticText streaming={streaming} /> : null}
     </>
   );
 });

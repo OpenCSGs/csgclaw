@@ -106,6 +106,11 @@ func buildProviderConfigBlock(profile agentruntime.Profile) string {
 	fmt.Fprintf(&b, "base_url = %s\n", strconv.Quote(profile.BaseURL))
 	fmt.Fprintf(&b, "wire_api = %s\n", strconv.Quote("responses"))
 	fmt.Fprintf(&b, "supports_websockets = false\n")
+	if profile.Provider == "csghub" || profile.Provider == "opencsg" {
+		// The CSGClaw bridge owns Gateway retries and publishes their progress.
+		// Replaying here would hide extra attempts and could repeat a partial stream.
+		b.WriteString("request_max_retries = 0\nstream_max_retries = 0\n")
+	}
 	if profile.APIKey != "" {
 		fmt.Fprintf(&b, "env_key = %s\n", strconv.Quote("OPENAI_API_KEY"))
 	}

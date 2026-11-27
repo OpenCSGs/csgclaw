@@ -56,6 +56,7 @@ const labels: Record<string, string> = {
   modelProviderModelSearch: "Search models",
   modelProviderModels: "Models",
   modelProviderNoModels: "No models",
+  modelRecommended: "Recommended",
   modelsSection: "Models",
   profileAPIKey: "API Key",
   profileBaseURL: "Base URL",
@@ -475,6 +476,34 @@ describe("ModelProviderPage", () => {
 
     expect(screen.queryByText("gpt-4.1")).not.toBeInTheDocument();
     expect(screen.getByText("No models")).toBeInTheDocument();
+  });
+
+  it("shows recommended models first in the complete OpenCSG catalog and in search results", async () => {
+    const user = userEvent.setup();
+    const recommended = ["qwen3.8-flash", "deepseek-v4.1-flash-1017", "glm-5.3-flash"];
+    renderModelProviderPage(
+      createCatalog({
+        id: "opencsg",
+        kind: "opencsg",
+        builtin: true,
+        display_name: "OpenCSG",
+        models: ["auto", "qwen3.8-max", "glm-5.3", ...[...recommended].reverse()],
+      }),
+      "opencsg",
+    );
+    const list = screen.getByRole("list", { name: "Models" });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows).toHaveLength(6);
+    for (const [index, id] of recommended.entries()) {
+      expect(within(rows[index]).getByText(id, { exact: true })).toBeVisible();
+      expect(within(rows[index]).getByText("(Recommended)", { exact: true })).toBeVisible();
+    }
+    expect(within(list).getAllByText("(Recommended)")).toHaveLength(3);
+    await user.type(screen.getByLabelText("Search models"), "glm-5.3");
+    const filtered = within(list).getAllByRole("listitem");
+    expect(filtered).toHaveLength(2);
+    expect(within(filtered[0]).getByText("glm-5.3-flash", { exact: true })).toBeVisible();
+    expect(within(filtered[1]).getByText("glm-5.3", { exact: true })).toBeVisible();
   });
 
   it("restores all OpenCSG model defaults even when search hides customized models, then saves", async () => {

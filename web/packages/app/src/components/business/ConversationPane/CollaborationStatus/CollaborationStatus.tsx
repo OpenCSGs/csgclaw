@@ -118,8 +118,10 @@ function Member({
       (item) => item.tool && ["completed", "complete", "success", "succeeded"].includes(item.tool.status),
     ).length || 0;
   const detail =
-    summary.detail.replace(/\s+/g, " ").trim() ||
-    (completedTools ? t("collaborationWorkSteps", { count: completedTools }) : t("collaborationWorkStarting"));
+    summary.label === "modelRequestWorkWaiting"
+      ? ""
+      : summary.detail.replace(/\s+/g, " ").trim() ||
+        (completedTools ? t("collaborationWorkSteps", { count: completedTools }) : t("collaborationWorkStarting"));
   const problem = !active || Boolean(participant?.stopError);
   const content = (
     <>
@@ -141,9 +143,11 @@ function Member({
             ) : null}
           </span>
         </span>
-        <span className={styles.detail} title={detail}>
-          {detail}
-        </span>
+        {detail ? (
+          <span className={styles.detail} title={detail}>
+            {detail}
+          </span>
+        ) : null}
       </span>
     </>
   );

@@ -44,7 +44,9 @@ import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
   MODEL_PROVIDER_IDS,
+  isRecommendedOpenCSGModel,
   mergeModelProviderModelIDs,
+  modelIDsForPicker,
   modelProviderMessageLabel,
   modelProviderStatusLabel,
   modelProviderAvatarPath,
@@ -336,10 +338,13 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const providerSubtitle = isBuiltinCLI ? provider.kind : provider.base_url || draft.baseURL || provider.kind;
   const imageModels = new Set(provider.imageModels || []);
   const videoModels = new Set(provider.videoModels || []);
-  const modelList = mergeModelProviderModelIDs(
-    isOpenCSG || isBuiltinCLI ? provider.models : parseModelProviderModelsText(draft.modelsText),
-    provider.imageModels,
-    provider.videoModels,
+  const modelList = modelIDsForPicker(
+    provider.id,
+    mergeModelProviderModelIDs(
+      isOpenCSG || isBuiltinCLI ? provider.models : parseModelProviderModelsText(draft.modelsText),
+      provider.imageModels,
+      provider.videoModels,
+    ),
   );
   const dirty =
     draft.apiProtocol !== savedDraft.apiProtocol ||
@@ -766,6 +771,9 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                   </Tooltip>
                 </div>
                 <ModelProviderModelList
+                  qualifierForModel={(model) =>
+                    isRecommendedOpenCSGModel(provider.id, model) ? t("modelRecommended") : undefined
+                  }
                   renderDetails={(model) => {
                     const imageModel = imageModels.has(model);
                     const videoModel = videoModels.has(model);

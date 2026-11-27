@@ -96,7 +96,7 @@ func TestModelTransportFailureRetainsSafeRequestIdentity(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	selected := &selectedModelFixture{base: "http://fixture.invalid", model: "glm-5.3-flash"}
 	service := NewService(config.ModelConfig{}, selected)
-	service.client = &http.Client{Transport: failingModelTransport{}}
+	service.gatewayClient.Transport = failingModelTransport{}
 	_, err := service.Responses(WithNativeRequestMetadata(context.Background(), "session-fixture", "turn-fixture"), "agent-a", []byte(`{"model":"stale-model","input":"private-prompt"}`))
 	if err == nil {
 		t.Fatal("transport failure missing")

@@ -116,6 +116,18 @@ func Run(opts Options) error {
 	defer cancelRun()
 	streamCtx, cancelStreams := context.WithCancel(context.Background())
 	defer cancelStreams()
+	if opts.LLM != nil {
+		if err := opts.LLM.ConfigureGatewayTracing(runCtx); err != nil {
+			slog.Warn("initialize Gateway trace export", "error", err)
+		}
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := opts.LLM.ShutdownGatewayTracing(ctx); err != nil {
+				slog.Warn("flush Gateway traces", "error", err)
+			}
+		}()
+	}
 
 	listener := opts.Listener
 	if listener == nil {

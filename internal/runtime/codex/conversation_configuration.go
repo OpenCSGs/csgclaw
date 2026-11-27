@@ -227,6 +227,10 @@ func roomThreadParams(ctx context.Context, params map[string]any) map[string]any
 		params["config"] = config
 	}
 	config["model_providers."+codexProxyProviderName+".base_url"] = room.Profile.BaseURL
+	if room.Profile.Provider == "csghub" || room.Profile.Provider == "opencsg" {
+		config["model_providers."+codexProxyProviderName+".request_max_retries"] = 0
+		config["model_providers."+codexProxyProviderName+".stream_max_retries"] = 0
+	}
 	return params
 }
 
