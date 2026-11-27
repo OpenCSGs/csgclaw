@@ -1,0 +1,23 @@
+.rowButton {
+  width: 100%;
+  min-height: 32px;
+  justify-content: flex-start;
+  padding-inline: 8px;
+  margin-bottom: 4px;
+}
+
+.railButton {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 4px;
+}
+
+.label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: start;
+}

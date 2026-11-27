@@ -138,7 +138,6 @@ export function useWorkspaceData() {
       setUpgradeStatusData(payload);
       return payload;
     } catch (_) {
-      setUpgradeStatusData(null);
       return null;
     }
   }, [setUpgradeStatusData]);

@@ -1,6 +1,6 @@
+import { useRef } from "react";
 import { OperationStatus } from "./OperationStatus";
 import {
-  InlineError,
   Button,
   DialogRoot,
   DialogContent,
@@ -42,18 +42,18 @@ export function UpgradeModal({
   onClose,
   onApply,
 }: UpgradeModalProps) {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const currentVersion = upgradeStatus?.current_version || appVersion || "dev";
   const manualUpgradeRequired = Boolean(
     upgradeStatus?.update_available && upgradeStatus.auto_upgrade_supported === false,
   );
+  const visibleError = upgradeError || upgradeErrorMessage(upgradeStatus, t);
   const statusLabel = isLocalBuildVersion(currentVersion)
     ? t("upgradeStatusLocal")
     : manualUpgradeRequired
       ? t("upgradeStatusManualUpgrade")
-      : upgradeStatusLabel(upgradePhase, t);
+      : upgradeStatusLabel(visibleError ? "error" : upgradePhase, t);
   const subtitle = manualUpgradeRequired ? t("upgradeManualUpgradeSubtitle") : t("upgradeSubtitle");
-  const statusError = upgradeErrorMessage(upgradeStatus, t);
-  const visibleError = upgradeError || statusError;
   const desktopApp = Boolean(getDesktopBridge());
   return (
     <DialogRoot
@@ -62,7 +62,19 @@ export function UpgradeModal({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="upgrade-modal">
+      <DialogContent
+        className="upgrade-modal"
+        onOpenAutoFocus={() => {
+          const trigger = document.activeElement;
+          if (trigger instanceof HTMLElement && trigger.closest('[role="dialog"]')) returnFocusRef.current = trigger;
+        }}
+        onCloseAutoFocus={(event) => {
+          const trigger = returnFocusRef.current;
+          if (!trigger?.isConnected || trigger.matches(":disabled")) return;
+          event.preventDefault();
+          trigger.focus({ preventScroll: true });
+        }}
+      >
         <DialogHeader>
           <div>
             <DialogTitle>{t("upgradeTitle")}</DialogTitle>
@@ -70,7 +82,7 @@ export function UpgradeModal({
           </div>
           <DialogCloseButton label={t("close")} />
         </DialogHeader>
-        <DialogBody>
+        <DialogBody className="flex flex-col gap-3">
           <div className="upgrade-summary">
             <div className="upgrade-summary-row">
               <span>{t("upgradeCurrentVersion")}</span>
@@ -89,34 +101,35 @@ export function UpgradeModal({
               <strong>{statusLabel}</strong>
             </div>
           </div>
-          <OperationStatus phase={upgradePhase}>
-            {upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required
-              ? t("upgradeManualRestartBody")
-              : manualUpgradeRequired
-                ? t("upgradeManualUpgradeBody")
-                : upgradePhase === "done"
-                  ? t("upgradeDoneBody")
-                  : upgradePhase === "restarting" ||
-                      upgradePhase === "starting" ||
-                      upgradeBusy ||
-                      upgradeStatus?.upgrading
-                    ? t("upgradeContinueUsing")
-                    : desktopApp
-                      ? t(upgradeStatus?.downloaded ? "upgradeDesktopDownloadedBody" : "upgradeDesktopConfirmBody")
-                      : t("upgradeConfirmBody")}
+          <OperationStatus phase={visibleError ? "error" : upgradePhase} role={visibleError ? "alert" : "status"}>
+            {visibleError ||
+              (upgradePhase === "unconfirmed"
+                ? t("upgradeUnconfirmedBody")
+                : upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required
+                  ? t("upgradeManualRestartBody")
+                  : manualUpgradeRequired
+                    ? t("upgradeManualUpgradeBody")
+                    : upgradePhase === "done"
+                      ? t("upgradeDoneBody")
+                      : upgradePhase === "restarting" ||
+                          upgradePhase === "starting" ||
+                          upgradeBusy ||
+                          upgradeStatus?.upgrading
+                        ? t(desktopApp ? "upgradeContinueUsing" : "upgradeRestartingBody")
+                        : desktopApp
+                          ? t(upgradeStatus?.downloaded ? "upgradeDesktopDownloadedBody" : "upgradeDesktopConfirmBody")
+                          : t("upgradeConfirmBody"))}
           </OperationStatus>
-          {visibleError ? <InlineError role="alert">{visibleError}</InlineError> : null}
         </DialogBody>
         <DialogFooter>
           {upgradePhase === "done" ? (
             <Button variant="primary" size="md" onClick={() => window.location.reload()}>
               {t("upgradeRefresh")}
             </Button>
-          ) : manualUpgradeRequired ? (
-            <Button variant="secondaryGray" size="md" onClick={onClose}>
-              {t("close")}
-            </Button>
-          ) : upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required ? (
+          ) : manualUpgradeRequired ||
+            upgradePhase === "unconfirmed" ||
+            upgradePhase === "manual_restart" ||
+            upgradeStatus?.manual_restart_required ? (
             <Button variant="secondaryGray" size="md" onClick={onClose}>
               {t("close")}
             </Button>

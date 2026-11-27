@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { ChevronLeft } from "lucide-react";
 import { useWorkspaceControllerContext, useWorkspaceDialogs } from "@/hooks/workspace";
-import { WorkspaceDialogNames } from "@/models/workspaceDialogs";
+import { SETTINGS_HIGHLIGHT_PARAM, WorkspaceDialogNames } from "@/models/workspaceDialogs";
 import { classNames } from "@/shared/lib/classNames";
 import {
   DEFAULT_SETTINGS_SECTION,
@@ -55,25 +55,23 @@ export function SettingsPage() {
   const t = controller.sidebarProps.t;
   // CSS uses this URL state to switch between catalog and details on narrow screens.
   const navigating = location.search.includes("section=");
-  const activeSection = settingsSectionFromSearch(location.search);
-
-  const highlightVersion =
-    activeSection === "version" && new URLSearchParams(location.search).get("highlight") === "version";
+  const versionHighlighted =
+    section === "version" && new URLSearchParams(location.search).get(SETTINGS_HIGHLIGHT_PARAM) === "version";
 
   function closeSettings() {
     close();
   }
 
-  // Replace history so Back does not reopen settings after the dialog closes.
+  // Section changes stay in the same settings history entry.
   function goToSection(id: SettingsSectionID | null) {
     const next = new URLSearchParams(location.search);
-    if (id !== activeSection) next.delete("highlight");
+    if (id !== section) next.delete(SETTINGS_HIGHLIGHT_PARAM);
     if (!id || id === DEFAULT_SETTINGS_SECTION) {
       next.delete("section");
     } else {
       next.set("section", id);
     }
-    void navigate({ search: next.toString() }, { replace: true });
+    void navigate({ search: next.toString() }, { replace: true, state: location.state });
   }
 
   return (
@@ -119,10 +117,11 @@ export function SettingsPage() {
                   <p className={styles.groupLabel}>{t(group.labelKey)}</p>
                   {group.cards.map((card) => {
                     const Icon = card.icon;
-                    const active = card.id === activeSection;
+                    const active = card.id === section;
                     return (
                       <button
                         key={card.id}
+                        ref={active && card.id === "version" ? revealVersionCatalogItem : undefined}
                         type="button"
                         className={classNames(styles.card, active && styles.cardActive)}
                         aria-current={active ? "true" : undefined}
@@ -147,7 +146,7 @@ export function SettingsPage() {
                 <ChevronLeft size={15} strokeWidth={2} aria-hidden="true" />
                 {t("iaSettingsBackToCatalog")}
               </button>
-              <SettingsSectionBody section={activeSection} highlightVersion={highlightVersion} />
+              <SettingsSectionBody section={section} versionHighlighted={versionHighlighted} />
             </div>
           </div>
         </section>
@@ -156,7 +155,19 @@ export function SettingsPage() {
   );
 }
 
-function SettingsSectionBody({ section, highlightVersion }: { section: SettingsSectionID; highlightVersion: boolean }) {
+function revealVersionCatalogItem(item: HTMLButtonElement | null) {
+  if (item?.getClientRects().length) {
+    item.scrollIntoView({ block: "center", inline: "nearest" });
+  }
+}
+
+function SettingsSectionBody({
+  section,
+  versionHighlighted,
+}: {
+  section: SettingsSectionID;
+  versionHighlighted: boolean;
+}) {
   switch (section) {
     case "account":
       return <AccountSection />;
@@ -181,7 +192,7 @@ function SettingsSectionBody({ section, highlightVersion }: { section: SettingsS
     case "archived":
       return <ArchivedSection />;
     case "version":
-      return <VersionSection highlighted={highlightVersion} />;
+      return <VersionSection highlighted={versionHighlighted} />;
     case "feedback":
       return <FeedbackSection />;
     default:

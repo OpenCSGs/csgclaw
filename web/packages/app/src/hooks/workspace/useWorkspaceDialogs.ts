@@ -6,6 +6,7 @@ import {
   openWorkspaceDialog,
   profileDialogSearch,
   settingsDialogSearch,
+  WorkspaceDialogNames,
 } from "@/models/workspaceDialogs";
 import type { WorkspaceDialogName } from "@/models/workspaceDialogs";
 
@@ -31,9 +32,16 @@ export function useWorkspaceDialogs(): UseWorkspaceDialogsResult {
 
   const openSettings = useCallback(
     (section?: string, highlight?: boolean) => {
-      navigate({ search: settingsDialogSearch(search, section, highlight) }, { replace: true, state });
+      const fromUpdateNotice = section === "version" && highlight === true && !current;
+      navigate(
+        { search: settingsDialogSearch(search, section, highlight) },
+        {
+          replace: !fromUpdateNotice,
+          state: fromUpdateNotice ? { ...state, settingsOpenedFromUpdateNotice: true } : state,
+        },
+      );
     },
-    [navigate, search, state],
+    [current, navigate, search, state],
   );
 
   const openProfile = useCallback(
@@ -44,8 +52,12 @@ export function useWorkspaceDialogs(): UseWorkspaceDialogsResult {
   );
 
   const close = useCallback(() => {
-    navigate({ search: closeDialogSearch(search) }, { replace: true, state });
-  }, [navigate, search, state]);
+    if (current === WorkspaceDialogNames.settings && state?.settingsOpenedFromUpdateNotice === true) {
+      navigate(-1);
+    } else {
+      navigate({ search: closeDialogSearch(search) }, { replace: true, state });
+    }
+  }, [current, navigate, search, state]);
 
   const setFeedbackOpen = useCallback(
     (open: boolean, trigger?: HTMLElement | null) => {

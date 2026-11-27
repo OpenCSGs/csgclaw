@@ -8,45 +8,6 @@
   gap: 8px;
 }
 
-.upgradeProgressRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin-top: -8px;
-}
-
-.upgradeProgressTrack {
-  width: 100%;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--gray-200);
-}
-
-.upgradeProgressTrack span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--brand-500);
-  transition: width 350ms linear;
-}
-
-.upgradeProgressValue {
-  color: var(--gray-500);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  line-height: 18px;
-  text-align: right;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .upgradeProgressTrack span {
-    transition: none;
-  }
-}
-
 .versionValue {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -62,9 +23,33 @@
   gap: 12px;
 }
 
-.versionChannelLink {
+.versionFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px 20px;
+  margin-top: 6px;
+}
+
+.versionFields > div {
+  row-gap: 4px;
+}
+
+.versionFields > div > strong {
+  min-height: 0;
+}
+
+@container (min-width: 440px) {
+  .versionFields {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  }
+}
+
+.versionFields button.versionChannelLink {
+  min-height: 40px;
   justify-self: start;
-  align-self: center;
+  align-items: flex-start;
+  line-height: 20px;
 }
 
 .versionLabel {
@@ -139,14 +124,24 @@
   }
 }
 
-.highlighted {
-  box-sizing: border-box;
-  width: calc(100% + 24px);
-  margin: -12px;
-  padding: 12px;
-  border: 0;
-  outline: 1.5px solid color-mix(in srgb, var(--primary) 45%, transparent);
-  outline-offset: -1.5px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+:root:not([data-theme="dark"]) .highlightedVersion {
+  --version-card-padding: clamp(16px, 3cqi, 24px);
+
+  width: calc(100% + 16px);
+  margin-top: -8px;
+  margin-inline: -8px;
+  padding: var(--version-card-padding);
+  border-bottom: 0;
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--primary) 7%, transparent);
+}
+
+:root:not([data-theme="dark"]) section.highlightedVersion:last-child {
+  padding-bottom: var(--version-card-padding);
+}
+
+.upgradeNote {
+  color: var(--muted);
+  font-size: var(--field-label-font-size);
+  line-height: var(--field-label-line-height);
 }

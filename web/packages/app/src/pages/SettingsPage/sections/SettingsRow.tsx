@@ -1,5 +1,5 @@
 import { classNames } from "@/shared/lib/classNames";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import styles from "../SettingsPage.module.css";
 
 export type SettingsRowProps = {
@@ -9,11 +9,20 @@ export type SettingsRowProps = {
   children: ReactNode;
   className?: string;
   contentClassName?: string;
+  ref?: Ref<HTMLElement>;
 };
 
-export function SettingsRow({ title, description, actions, children, className, contentClassName }: SettingsRowProps) {
+export function SettingsRow({
+  title,
+  description,
+  actions,
+  children,
+  className,
+  contentClassName,
+  ref,
+}: SettingsRowProps) {
   return (
-    <section className={classNames(styles.row, className)}>
+    <section ref={ref} className={classNames(styles.row, className)}>
       <div className={styles.rowHead}>
         <div className={styles.rowIntro}>
           <h2>{title}</h2>

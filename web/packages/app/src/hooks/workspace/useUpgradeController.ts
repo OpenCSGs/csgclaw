@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage as apiErrorMessage } from "@/api/client";
+import { apiErrorCode, errorMessage as apiErrorMessage } from "@/api/client";
 import {
-  formatClassifiedUpgradeError,
+  classifyDesktopUpdateErrorKind,
+  formatSidebarVersionLabel,
+  hasUpgradeStatusError,
   inferUpgradeChannelFromVersion,
   isLocalBuildUpgradeStatus,
   normalizeUpgradeStatus,
+  upgradeErrorKey,
   upgradeErrorMessage,
 } from "@/models/upgradeStatus";
-import type { UpgradeChannel, UpgradePhase } from "@/models/upgradeStatus";
+import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import {
   applyPlatformUpgrade,
   setPlatformUpgradeChannel,
@@ -17,6 +20,10 @@ import { getDesktopBridge } from "@/shared/platform/desktopBridge";
 import type { UpgradeController, UseUpgradeControllerArgs } from "./types";
 
 export const UPGRADE_PAGE_RELOAD_DELAY_MS = 600;
+const UPGRADE_POLL_INTERVAL_MS = 2000;
+const UPGRADE_POLL_TIMEOUT_MS = 120_000;
+
+type UpgradeFailure = UpgradeStatus | string | null;
 
 export function useUpgradeController({
   appVersion,
@@ -29,8 +36,10 @@ export function useUpgradeController({
 }: UseUpgradeControllerArgs): UpgradeController {
   const [upgradeBusy, setUpgradeBusy] = useState(false);
   const [upgradeChannelBusy, setUpgradeChannelBusy] = useState(false);
-  const [upgradeChannelError, setUpgradeChannelError] = useState("");
-  const [upgradeError, setUpgradeError] = useState("");
+  const [channelFailure, setChannelFailure] = useState<UpgradeFailure>(null);
+  const [upgradeFailure, setUpgradeFailure] = useState<UpgradeFailure>(null);
+  const upgradeChannelError = formatUpgradeFailure(channelFailure, t);
+  const upgradeError = formatUpgradeFailure(upgradeFailure, t);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradePhase, setUpgradePhase] = useState<UpgradePhase>("idle");
   const upgradePollTimerRef = useRef<number | null>(null);
@@ -47,14 +56,13 @@ export function useUpgradeController({
     (payload: unknown) => {
       const next = normalizeUpgradeStatus(payload);
       setUpgradeStatusData(next);
-      const statusMessage = upgradeErrorMessage(next, t);
-      if (statusMessage) {
+      if (next && hasUpgradeStatusError(next)) {
         setUpgradeBusy(false);
         setUpgradePhase("error");
-        setUpgradeError(statusMessage);
+        setUpgradeFailure(next);
         return;
       }
-      setUpgradeError("");
+      setUpgradeFailure(null);
       if (next?.manual_restart_required) {
         setUpgradeBusy(false);
         setUpgradePhase("manual_restart");
@@ -62,12 +70,12 @@ export function useUpgradeController({
       } else if (next?.upgrading) {
         setUpgradeBusy(true);
         setUpgradePhase((phase) => (phase === "done" ? phase : "restarting"));
-      } else {
+      } else if (upgradePollTimerRef.current === null) {
         setUpgradeBusy(false);
-        setUpgradePhase((phase) => (phase === "done" ? phase : "idle"));
+        setUpgradePhase((phase) => (phase === "done" || phase === "unconfirmed" ? phase : "idle"));
       }
     },
-    [setUpgradeStatusData, t],
+    [setUpgradeStatusData],
   );
 
   const refreshUpgradeStatus = useCallback(async () => {
@@ -75,26 +83,36 @@ export function useUpgradeController({
       const payload = await refreshWorkspaceUpgradeStatus();
       if (payload) {
         handleUpgradeStatusChange(payload);
-        if (!upgradeErrorMessage(payload, t)) {
-          setUpgradeChannelError("");
+        if (!hasUpgradeStatusError(payload)) {
+          setChannelFailure(null);
         }
       }
       return payload;
     } catch (_) {
       return null;
     }
-  }, [handleUpgradeStatusChange, refreshWorkspaceUpgradeStatus, t]);
+  }, [handleUpgradeStatusChange, refreshWorkspaceUpgradeStatus]);
 
   const startUpgradeReconnectPoll = useCallback(
     (expectedVersion?: string | null) => {
       stopUpgradePoll();
-      let attempts = 0;
+      const expected = expectedVersion?.trim();
+      const deadline = Date.now() + UPGRADE_POLL_TIMEOUT_MS;
+      let inFlight = false;
       const poll = async () => {
-        attempts += 1;
+        if (Date.now() >= deadline) {
+          stopUpgradePoll();
+          setUpgradeBusy(false);
+          setUpgradePhase("unconfirmed");
+          setShowUpgradeModal(true);
+          return;
+        }
+        if (inFlight) return;
+        inFlight = true;
         try {
-          const version = await refreshWorkspaceAppVersion({ cacheBust: true });
-          const expected = (expectedVersion || "").trim();
-          if (version && (!expected || version === expected)) {
+          const version = await refreshWorkspaceAppVersion({ cacheBust: true }).catch(() => "");
+          if (upgradePollTimerRef.current !== timer) return;
+          if (version && expected && formatSidebarVersionLabel(version) === formatSidebarVersionLabel(expected)) {
             stopUpgradePoll();
             setAppVersionData(version);
             setUpgradeBusy(false);
@@ -118,55 +136,47 @@ export function useUpgradeController({
             scheduleUpgradePageReload();
             return;
           }
-          const latest = await refreshUpgradeStatus();
-          if (latest?.manual_restart_required) {
+          const latest = await refreshWorkspaceUpgradeStatus();
+          if (upgradePollTimerRef.current !== timer) return;
+          if (latest?.manual_restart_required || hasUpgradeStatusError(latest)) {
             stopUpgradePoll();
-            setUpgradeBusy(false);
-            setUpgradePhase("manual_restart");
+            handleUpgradeStatusChange(latest);
             setShowUpgradeModal(true);
-            return;
           }
-          const statusMessage = upgradeErrorMessage(latest, t);
-          if (statusMessage) {
-            stopUpgradePoll();
-            setUpgradeBusy(false);
-            setUpgradePhase("error");
-            setShowUpgradeModal(true);
-            setUpgradeError(statusMessage);
-            return;
-          }
-        } catch (_) {
-          // The daemon is expected to be unavailable while the upgrade helper restarts it.
-        }
-        if (attempts >= 60) {
-          stopUpgradePoll();
-          setUpgradeBusy(false);
-          setUpgradePhase("error");
-          setShowUpgradeModal(true);
-          const latest = await refreshUpgradeStatus();
-          setUpgradeError(upgradeErrorMessage(latest, t) || t("upgradeApplyFailed"));
+        } catch {
+          // A request can fail while the local service restarts.
+        } finally {
+          inFlight = false;
         }
       };
-      poll();
-      upgradePollTimerRef.current = window.setInterval(poll, 2000);
+      const timer = window.setInterval(() => void poll(), UPGRADE_POLL_INTERVAL_MS);
+      upgradePollTimerRef.current = timer;
+      void poll();
     },
-    [refreshUpgradeStatus, refreshWorkspaceAppVersion, setAppVersionData, setUpgradeStatusData, stopUpgradePoll, t],
+    [
+      handleUpgradeStatusChange,
+      refreshWorkspaceAppVersion,
+      refreshWorkspaceUpgradeStatus,
+      setAppVersionData,
+      setUpgradeStatusData,
+      stopUpgradePoll,
+    ],
   );
 
   const applyUpgrade = useCallback(async () => {
-    if (upgradeBusy || upgradeStatus?.upgrading) {
+    if (upgradeBusy || upgradeChannelBusy || upgradeStatus?.checking || upgradeStatus?.upgrading) {
       return;
     }
     if (upgradeStatus?.update_available && upgradeStatus.auto_upgrade_supported === false) {
       setUpgradeBusy(false);
-      setUpgradeError("");
+      setUpgradeFailure(null);
       setUpgradePhase("idle");
       setShowUpgradeModal(true);
       return;
     }
 
     setUpgradeBusy(true);
-    setUpgradeError("");
+    setUpgradeFailure(null);
     setUpgradePhase("starting");
     setShowUpgradeModal(true);
     try {
@@ -194,24 +204,26 @@ export function useUpgradeController({
       }
       setShowUpgradeModal(false);
     } catch (err: unknown) {
-      setUpgradeBusy(false);
-      setUpgradePhase("error");
-      const latest = await refreshUpgradeStatus().catch(() => null);
-      const statusMessage = upgradeErrorMessage(latest, t);
-      if (statusMessage) {
-        setUpgradeError(statusMessage);
+      const latest = await refreshUpgradeStatus();
+      if (latest?.upgrading || latest?.manual_restart_required) {
+        if (latest.upgrading && !getDesktopBridge()) {
+          startUpgradeReconnectPoll(latest.latest_version);
+        }
         return;
       }
-      const detail = upgradeErrorDetail(err);
-      setUpgradeError(`${t("upgradeApplyFailed")}${detail}`);
+      setUpgradeBusy(false);
+      setUpgradePhase("error");
+      setUpgradeFailure(
+        latest && hasUpgradeStatusError(latest) ? latest : requestUpgradeErrorKey(err, "upgradeApplyFailed"),
+      );
     }
   }, [
     appVersion,
     refreshUpgradeStatus,
     setUpgradeStatusData,
     startUpgradeReconnectPoll,
-    t,
     upgradeBusy,
+    upgradeChannelBusy,
     upgradeStatus,
   ]);
 
@@ -220,11 +232,11 @@ export function useUpgradeController({
       const currentVersion = upgradeStatus?.current_version || appVersion;
       const inferredChannel = inferUpgradeChannelFromVersion(currentVersion);
       if (isLocalBuildUpgradeStatus(upgradeStatus, currentVersion)) {
-        setUpgradeChannelError(t("upgradeLocalBuildUnsupported"));
+        setChannelFailure("upgradeLocalBuildUnsupported");
         return false;
       }
       const retryCurrentChannel = Boolean(
-        channel === inferredChannel && (upgradeChannelError || upgradeError || upgradeErrorMessage(upgradeStatus, t)),
+        channel === inferredChannel && (channelFailure || upgradeFailure || hasUpgradeStatusError(upgradeStatus)),
       );
       if (upgradeChannelBusy || upgradeBusy || upgradeStatus?.checking || upgradeStatus?.upgrading) {
         return false;
@@ -233,13 +245,12 @@ export function useUpgradeController({
         return true;
       }
       setUpgradeChannelBusy(true);
-      setUpgradeChannelError("");
+      setChannelFailure(null);
       try {
         const next = await setPlatformUpgradeChannel(channel);
         handleUpgradeStatusChange(next);
-        const statusMessage = upgradeErrorMessage(next, t);
-        if (statusMessage) {
-          setUpgradeChannelError(`${t("upgradeChannelSwitchFailed")} ${statusMessage}`.trim());
+        if (hasUpgradeStatusError(next)) {
+          setChannelFailure(next);
           return false;
         }
         if (!getDesktopBridge() && channel !== inferredChannel && next.upgrading) {
@@ -247,9 +258,7 @@ export function useUpgradeController({
         }
         return true;
       } catch (error) {
-        const detail = upgradeErrorDetail(error).trim();
-        const classified = formatClassifiedUpgradeError(detail, t);
-        setUpgradeChannelError(`${t("upgradeChannelSwitchFailed")} ${classified}`.trim());
+        setChannelFailure(requestUpgradeErrorKey(error, "upgradeChannelSwitchFailed"));
         return false;
       } finally {
         setUpgradeChannelBusy(false);
@@ -259,21 +268,20 @@ export function useUpgradeController({
       appVersion,
       handleUpgradeStatusChange,
       startUpgradeReconnectPoll,
-      t,
+      channelFailure,
       upgradeBusy,
       upgradeChannelBusy,
-      upgradeChannelError,
-      upgradeError,
+      upgradeFailure,
       upgradeStatus,
     ],
   );
 
   const openUpgradeModal = useCallback(() => {
-    if (upgradePhase !== "error") {
-      setUpgradeError("");
+    if (upgradePhase !== "error" && upgradePhase !== "unconfirmed") {
+      setUpgradeFailure(null);
     }
     setUpgradePhase((phase) => {
-      if (phase === "done" || phase === "error" || phase === "manual_restart") {
+      if (phase === "done" || phase === "error" || phase === "manual_restart" || phase === "unconfirmed") {
         return phase;
       }
       if (upgradeStatus?.manual_restart_required) {
@@ -321,9 +329,13 @@ export function useUpgradeController({
   };
 }
 
-function upgradeErrorDetail(err: unknown): string {
-  const message = apiErrorMessage(err).trim();
-  return message && message !== "upgrade apply failed" ? ` ${message}` : "";
+function formatUpgradeFailure(failure: UpgradeFailure, t: UseUpgradeControllerArgs["t"]): string {
+  return typeof failure === "string" ? t(failure) : upgradeErrorMessage(failure, t);
+}
+
+function requestUpgradeErrorKey(error: unknown, fallback: string): string {
+  const classified = classifyDesktopUpdateErrorKind(apiErrorMessage(error));
+  return upgradeErrorKey(apiErrorCode(error), upgradeErrorKey(classified, fallback));
 }
 
 export function scheduleUpgradePageReload(reloadPage?: () => void): ReturnType<typeof setTimeout> {

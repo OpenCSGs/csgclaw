@@ -21,6 +21,7 @@ export function AppearanceSection() {
             value={sidebar.theme}
             onChange={sidebar.onThemeChange}
             label={t("themeSwitcher")}
+            tooltipSide="top"
             options={[
               { value: "system", accessibleName: t("themeSystem"), label: <Monitor size={20} aria-hidden="true" /> },
               { value: "light", accessibleName: t("themeLight"), label: <Sun size={20} aria-hidden="true" /> },

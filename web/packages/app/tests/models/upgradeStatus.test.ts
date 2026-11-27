@@ -1,11 +1,11 @@
 import {
   classifyDesktopUpdateErrorKind,
-  formatClassifiedUpgradeError,
   formatSidebarVersionLabel,
   hasUpgradeAttention,
   inferUpgradeChannelFromVersion,
   isLocalBuildUpgradeStatus,
   isLocalBuildVersion,
+  latestSidebarUpdateVersion,
   normalizeUpgradeStatus,
   upgradeErrorMessage,
   upgradeStatusLabel,
@@ -53,6 +53,29 @@ describe("upgrade status helpers", () => {
         "v0.3.11",
       ),
     ).toBe(true);
+  });
+
+  it("returns a sidebar notice only for a known, available update", () => {
+    const upgradeStatus = {
+      ...baseUpgradeStatus,
+      current_version: "v0.3.11",
+      latest_version: "0.3.12",
+      update_available: true,
+    };
+    const state = { appVersion: "v0.3.11", showUpgradeControls: true, upgradePhase: "idle" as const, upgradeStatus };
+
+    expect(latestSidebarUpdateVersion(state)).toBe("v0.3.12");
+    expect(latestSidebarUpdateVersion({ ...state, showUpgradeControls: false })).toBe("");
+    expect(latestSidebarUpdateVersion({ ...state, upgradePhase: "done" })).toBe("");
+    for (const status of [
+      null,
+      { ...upgradeStatus, current_version: "dev+local" },
+      { ...upgradeStatus, latest_version: " " },
+      { ...upgradeStatus, update_available: false },
+      { ...upgradeStatus, auto_upgrade_supported: false },
+    ]) {
+      expect(latestSidebarUpdateVersion({ ...state, upgradeStatus: status })).toBe("");
+    }
   });
 
   it("normalizes loose upgrade status payloads", () => {
@@ -109,7 +132,6 @@ describe("upgrade status helpers", () => {
   it("formats classified upgrade errors through translations", () => {
     const t = (key: string, params: Record<string, string | number> = {}) => {
       const labels: Record<string, string> = {
-        upgradeErrorDetails: "Details: {detail}",
         upgradeErrorLocalInstall: "Local install is abnormal.",
         upgradeErrorLogPath: "Log: {path}",
         upgradeErrorNetworkOrService: "Network or service failed.",
@@ -127,7 +149,7 @@ describe("upgrade status helpers", () => {
         },
         t,
       ),
-    ).toBe("Network or service failed.\nDetails: write archive: stream error\nLog: /tmp/upgrade-helper.log");
+    ).toBe("Network or service failed.\nLog: /tmp/upgrade-helper.log");
     expect(
       upgradeErrorMessage(
         {
@@ -137,7 +159,7 @@ describe("upgrade status helpers", () => {
         },
         t,
       ),
-    ).toBe("Network or service failed.\nDetails: fetch latest release metadata: unexpected status 503");
+    ).toBe("Network or service failed.");
     expect(
       upgradeErrorMessage(
         {
@@ -161,10 +183,6 @@ describe("upgrade status helpers", () => {
     expect(classifyDesktopUpdateErrorKind("网络连接已中断。")).toBe("network_download");
     expect(classifyDesktopUpdateErrorKind("current installation is not an official csgclaw bundle")).toBe(
       "local_build",
-    );
-    expect(formatClassifiedUpgradeError("preview feed unavailable", t)).toBe("preview feed unavailable");
-    expect(formatClassifiedUpgradeError("current installation is not an official csgclaw bundle", t)).toBe(
-      "upgradeLocalBuildUnsupported",
     );
     expect(
       upgradeErrorMessage(
@@ -201,7 +219,7 @@ describe("upgrade status helpers", () => {
         },
         t,
       ),
-    ).toBe("restart daemon: boom\nLog: /tmp/upgrade-helper.log");
+    ).toBe("upgradeErrorUnknown\nLog: /tmp/upgrade-helper.log");
   });
 
   it("detects upgrade states that need settings attention", () => {

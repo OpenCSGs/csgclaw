@@ -507,7 +507,6 @@
 .upgrade-summary {
   display: grid;
   gap: 12px;
-  margin-top: 20px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;

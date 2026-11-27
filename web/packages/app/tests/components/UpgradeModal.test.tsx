@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DialogRoot, DialogContent, DialogTitle, Button } from "@/components/ui";
 import { UpgradeModal } from "@/pages/WorkspacePage/components/WorkspaceModals/UpgradeModal";
@@ -14,7 +14,6 @@ const labels: Record<string, string> = {
   upgradeLatestVersion: "Latest version",
   upgradeManualUpgradeBody: "Use the official installer or release bundle to upgrade manually.",
   upgradeManualUpgradeSubtitle: "Manual upgrade is required for this installation.",
-  upgradeErrorDetails: "Details: {detail}",
   upgradeErrorLogPath: "Log: {path}",
   upgradeErrorNetworkOrService: "Network or service issue.",
   upgradeNoLatest: "Unknown",
@@ -77,7 +76,9 @@ describe("UpgradeModal", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "New version available" })).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Update" }));
+    const trigger = screen.getByRole("button", { name: "Update" });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await user.click(trigger);
     await user.click(
       within(screen.getByRole("dialog", { name: "New version available" })).getByRole("button", { name: "Close" }),
     );
@@ -117,9 +118,11 @@ describe("UpgradeModal", () => {
       />,
     );
 
-    expect(screen.getByText(/Network or service issue/)).toBeInTheDocument();
-    expect(screen.getByText(/Details: write archive: stream error/)).toBeInTheDocument();
-    expect(screen.getByText(/Log: \/tmp\/upgrade-helper.log/)).toBeInTheDocument();
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Network or service issue.");
+    expect(alert).toHaveTextContent("Log: /tmp/upgrade-helper.log");
+    expect(alert).not.toHaveTextContent("write archive: stream error");
+    expect(screen.queryByText("upgradeConfirmBody")).not.toBeInTheDocument();
   });
 
   it("keeps channel switching out of the confirm-upgrade dialog", () => {

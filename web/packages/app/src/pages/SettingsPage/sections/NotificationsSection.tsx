@@ -31,19 +31,16 @@ export function NotificationsSection() {
   return (
     <SettingsRow title={t("notificationSettings")} description={t("settingsNotificationDescription")}>
       <div className={notificationsSectionStyles.notificationControls}>
-        <div className={notificationsSectionStyles.notificationModeControl}>
-          <Select
-            size="sm"
-            contentClassName={notificationsSectionStyles.notificationSelectContent}
-            options={turnNotificationOptions}
-            selectedLabel={selectedTurnNotificationLabel}
-            triggerClassName={notificationsSectionStyles.notificationSelectTrigger}
-            triggerProps={{ "aria-label": t("turnCompletionNotifications") }}
-            value={turnNotificationMode}
-            onValueChange={(value) => void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))}
-          />
-          <p className={notificationsSectionStyles.notificationModeHint}>{t("notificationPermissionDeniedHint")}</p>
-        </div>
+        <Select
+          size="sm"
+          contentClassName={notificationsSectionStyles.notificationSelectContent}
+          options={turnNotificationOptions}
+          selectedLabel={selectedTurnNotificationLabel}
+          triggerClassName={notificationsSectionStyles.notificationSelectTrigger}
+          triggerProps={{ "aria-label": t("turnCompletionNotifications") }}
+          value={turnNotificationMode}
+          onValueChange={(value) => void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))}
+        />
         <label className={notificationsSectionStyles.notificationSoundControl} title={t("turnNotificationSoundHint")}>
           <span>{t("turnNotificationSound")}</span>
           <Switch
@@ -81,6 +78,7 @@ export function NotificationsSection() {
             </Button>
           ) : null}
         </div>
+        <p className={notificationsSectionStyles.permissionHint}>{t("notificationPermissionDeniedHint")}</p>
       </div>
     </SettingsRow>
   );

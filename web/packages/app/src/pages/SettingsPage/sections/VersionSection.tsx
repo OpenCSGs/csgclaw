@@ -8,7 +8,6 @@ import {
   isLocalBuildUpgradeStatus,
   upgradeErrorMessage,
 } from "@/models/upgradeStatus";
-import { nextSimulatedUpgradeProgress } from "@/models/upgradeProgress";
 import { SwitchVersionDialog } from "../components/SwitchVersionDialog";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
@@ -16,15 +15,12 @@ import versionSectionStyles from "./VersionSection.module.css";
 import accountSectionStyles from "./AccountSection.module.css";
 
 export function VersionSection({ highlighted = false }: { highlighted?: boolean }) {
+  const rowRef = useRef<HTMLElement>(null);
   const controller = useWorkspaceControllerContext();
   const sidebar = controller.sidebarProps;
   const [switchVersionOpen, setSwitchVersionOpen] = useState(false);
 
   const upgradeStatus = sidebar?.upgradeStatus;
-  const progressActive = Boolean(
-    sidebar && (sidebar.upgradeChannelBusy || upgradeStatus?.checking || upgradeStatus?.upgrading),
-  );
-  const upgradeProgress = useSimulatedUpgradeProgress(progressActive, Boolean(upgradeStatus?.downloaded));
   const refreshUpgradeStatus = sidebar?.onRefreshUpgradeStatus;
 
   useEffect(() => {
@@ -33,6 +29,10 @@ export function VersionSection({ highlighted = false }: { highlighted?: boolean 
     }
     void refreshUpgradeStatus();
   }, [controller.ready, refreshUpgradeStatus, sidebar?.showUpgradeControls]);
+
+  useEffect(() => {
+    if (highlighted) rowRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [highlighted]);
 
   if (!sidebar) {
     return null;
@@ -52,9 +52,23 @@ export function VersionSection({ highlighted = false }: { highlighted?: boolean 
   const showUpgradeChannel = sidebar.showUpgradeControls;
   const inferredUpgradeChannel = inferUpgradeChannelFromVersion(currentVersion);
   const upgradeChannelDisabled = Boolean(
-    sidebar.upgradeChannelBusy || sidebar.upgradeBusy || upgradeStatus?.checking || upgradeStatus?.upgrading,
+    sidebar.upgradeChannelBusy ||
+    sidebar.upgradeBusy ||
+    sidebar.upgradePhase === "unconfirmed" ||
+    upgradeStatus?.checking ||
+    upgradeStatus?.upgrading,
   );
-  const showUpgradeProgress = upgradeProgress.visible;
+  const updateInProgress = sidebar.upgradeBusy || upgradeStatus?.upgrading;
+  const pendingStatus =
+    sidebar.upgradePhase === "unconfirmed"
+      ? t("upgradeUnconfirmedBody")
+      : updateInProgress
+        ? t(sidebar.upgradePhase === "starting" ? "upgradeStatusStarting" : "upgradeActionBusy")
+        : sidebar.upgradeChannelBusy
+          ? t("upgradeProgressLabel")
+          : upgradeStatus?.checking
+            ? t("upgradeStatusChecking")
+            : "";
   const versionError = sidebar.upgradeError || upgradeErrorMessage(upgradeStatus, t);
   const showNewVersionBadge = Boolean(
     sidebar.showUpgradeControls &&
@@ -62,10 +76,13 @@ export function VersionSection({ highlighted = false }: { highlighted?: boolean 
     sidebar.upgradePhase !== "done",
   );
 
+  const latestVersion = showNewVersionBadge ? upgradeStatus?.latest_version?.trim() : "";
+
   return (
     <>
       <SettingsRow
-        className={highlighted ? versionSectionStyles.highlighted : undefined}
+        ref={rowRef}
+        className={highlighted ? versionSectionStyles.highlightedVersion : undefined}
         title={
           <span className={versionSectionStyles.versionTitle}>
             <span>{t("versionInfo")}</span>
@@ -80,40 +97,41 @@ export function VersionSection({ highlighted = false }: { highlighted?: boolean 
         description={t("settingsVersionDescription")}
       >
         <div className={styles.formGrid}>
-          <div className={styles.formItem}>
-            <span>{t("settingsCurrentVersion")}</span>
-            <strong className={accountSectionStyles.fieldValue}>{version}</strong>
-          </div>
-          <div className={styles.formItem}>
-            <span>{t("upgradeChannelLabel")}</span>
-            {showUpgradeChannel ? (
-              <Button
-                variant="linkGray"
-                size="sm"
-                className={versionSectionStyles.versionChannelLink}
-                disabled={upgradeChannelDisabled}
-                onClick={() => setSwitchVersionOpen(true)}
-              >
-                {t("upgradeChannelSwitch")}
-              </Button>
-            ) : (
-              <strong className={accountSectionStyles.fieldValue}>{inferredUpgradeChannel || "-"}</strong>
-            )}
-          </div>
-          {showUpgradeChannel && showUpgradeProgress ? (
-            <div
-              className={`${versionSectionStyles.upgradeProgressRow} ${styles.spanAll}`}
-              role="progressbar"
-              aria-label={t("upgradeProgressLabel")}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={upgradeProgress.percent}
-            >
-              <div className={versionSectionStyles.upgradeProgressTrack} aria-hidden="true">
-                <span style={{ width: `${upgradeProgress.percent}%` }}></span>
-              </div>
-              <span className={versionSectionStyles.upgradeProgressValue}>{upgradeProgress.percent}%</span>
+          <div className={`${versionSectionStyles.versionFields} ${styles.spanAll}`}>
+            <div className={styles.formItem}>
+              <span>{t("settingsCurrentVersion")}</span>
+              <strong className={accountSectionStyles.fieldValue}>{version}</strong>
             </div>
+            {latestVersion ? (
+              <div className={styles.formItem}>
+                <span>{t("upgradeLatestVersion")}</span>
+                <strong className={accountSectionStyles.fieldValue}>{formatSidebarVersionLabel(latestVersion)}</strong>
+              </div>
+            ) : null}
+            <div className={styles.formItem}>
+              <span>{t("upgradeChannelLabel")}</span>
+              {showUpgradeChannel ? (
+                <Button
+                  variant="linkGray"
+                  size="sm"
+                  className={versionSectionStyles.versionChannelLink}
+                  disabled={upgradeChannelDisabled}
+                  onClick={() => setSwitchVersionOpen(true)}
+                >
+                  {t("upgradeChannelSwitch")}
+                </Button>
+              ) : (
+                <strong className={accountSectionStyles.fieldValue}>{inferredUpgradeChannel || "-"}</strong>
+              )}
+            </div>
+          </div>
+          {showUpgradeChannel && pendingStatus ? (
+            <p className={`${versionSectionStyles.upgradeNote} ${styles.spanAll}`} role="status">
+              {pendingStatus}
+            </p>
+          ) : null}
+          {showNewVersionBadge && upgradeStatus?.auto_upgrade_unsupported_reason === "not_official_bundle" ? (
+            <p className={`${versionSectionStyles.upgradeNote} ${styles.spanAll}`}>{t("upgradeManualUpgradeBody")}</p>
           ) : null}
           {versionError ? (
             <p className={accountSectionStyles.inlineError} role="alert">
@@ -122,13 +140,8 @@ export function VersionSection({ highlighted = false }: { highlighted?: boolean 
           ) : null}
           {showUpgradeAction ? (
             <div className={`${styles.formActions} ${styles.spanAll}`}>
-              <Button
-                variant="primary"
-                size="md"
-                disabled={sidebar.upgradeBusy || upgradeStatus?.upgrading}
-                onClick={sidebar.onOpenUpgrade}
-              >
-                {t(upgradeStatus?.downloaded ? "upgradeAction" : "upgradeDownloadAction")}
+              <Button variant="primary" size="md" disabled={upgradeChannelDisabled} onClick={sidebar.onOpenUpgrade}>
+                {t("upgradeDownloadAction")}
               </Button>
             </div>
           ) : null}
@@ -157,38 +170,4 @@ function isMockUpgradePreviewEnabled(): boolean {
   }
   const hashQuery = window.location.hash.split("?")[1] || "";
   return new URLSearchParams(hashQuery).get("mockUpgrade") === "1";
-}
-
-/** Simulated display progress; does not measure download progress. */
-function useSimulatedUpgradeProgress(active: boolean, completed: boolean) {
-  const [percent, setPercent] = useState(0);
-  const [visible, setVisible] = useState(false);
-  const activeRunRef = useRef(false);
-
-  useEffect(() => {
-    if (active) {
-      activeRunRef.current = true;
-      setVisible(true);
-      setPercent((current) => (current > 0 && current < 100 ? current : 3));
-      const timer = window.setInterval(() => {
-        setPercent((current) => nextSimulatedUpgradeProgress(current));
-      }, 1000);
-      return () => window.clearInterval(timer);
-    }
-    if (completed && activeRunRef.current) {
-      setPercent(100);
-      setVisible(true);
-      const timer = window.setTimeout(() => {
-        activeRunRef.current = false;
-        setVisible(false);
-      }, 600);
-      return () => window.clearTimeout(timer);
-    }
-    activeRunRef.current = false;
-    setPercent(0);
-    setVisible(false);
-    return undefined;
-  }, [active, completed]);
-
-  return { percent, visible };
 }

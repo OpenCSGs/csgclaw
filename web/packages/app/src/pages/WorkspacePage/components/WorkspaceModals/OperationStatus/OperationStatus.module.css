@@ -26,6 +26,25 @@
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
 }
 
+.status[role="alert"] {
+  grid-template-columns: 16px minmax(0, 1fr);
+}
+
+.status[role="alert"] p {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.alertIcon {
+  margin-top: 2px;
+  color: var(--error-700);
+}
+
+:global(:root[data-theme="dark"]) .alertIcon {
+  color: var(--error-300);
+}
+
 .status[data-phase="starting"] .dot,
 .status[data-phase="restarting"] .dot {
   animation: pulse 1.4s ease-in-out infinite;

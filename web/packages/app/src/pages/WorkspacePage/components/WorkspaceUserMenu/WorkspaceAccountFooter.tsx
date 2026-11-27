@@ -1,8 +1,7 @@
-import { ArrowRight, CircleArrowUp } from "lucide-react";
-import { Tooltip } from "@/components/ui";
 import { useWorkspaceDialogs } from "@/hooks/workspace";
 import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
-import { formatSidebarVersionLabel, isLocalBuildUpgradeStatus } from "@/models/upgradeStatus";
+import { latestSidebarUpdateVersion } from "@/models/upgradeStatus";
+import { SidebarUpgradeButton } from "../SidebarUpgradeButton";
 import { WorkspaceUserMenu } from "./WorkspaceUserMenu";
 import styles from "./WorkspaceUserMenu.module.css";
 
@@ -17,6 +16,7 @@ type FooterProps = Pick<
   | "onLogout"
   | "onOpenSettings"
   | "showUpgradeControls"
+  | "appVersion"
   | "upgradeStatus"
   | "upgradePhase"
   | "currentUserID"
@@ -27,36 +27,18 @@ type FooterProps = Pick<
 
 export function WorkspaceAccountFooter({ onSelectDestination = (action) => action(), ...props }: FooterProps) {
   const { openProfile, openSettings, setFeedbackOpen } = useWorkspaceDialogs();
-  const { upgradeStatus, t, isSidebarCollapsed } = props;
-  const latest = upgradeStatus?.latest_version;
-  const upgradeAvailable =
-    props.showUpgradeControls &&
-    latest &&
-    upgradeStatus.update_available &&
-    upgradeStatus.auto_upgrade_supported !== false &&
-    !isLocalBuildUpgradeStatus(upgradeStatus, upgradeStatus.current_version) &&
-    props.upgradePhase !== "done";
-  const label = t("sidebarNewVersion", { version: formatSidebarVersionLabel(latest) });
+  const { t, isSidebarCollapsed } = props;
+  const updateVersion = latestSidebarUpdateVersion(props);
 
   return (
     <div className={styles.footer}>
-      {upgradeAvailable ? (
-        <Tooltip content={isSidebarCollapsed ? label : null}>
-          <button
-            type="button"
-            className={styles.upgradeLink}
-            aria-label={label}
-            onClick={() => onSelectDestination(() => openSettings("version", true))}
-          >
-            {isSidebarCollapsed ? (
-              <CircleArrowUp size={18} aria-hidden="true" />
-            ) : (
-              <>
-                {label} <ArrowRight size={14} aria-hidden="true" />
-              </>
-            )}
-          </button>
-        </Tooltip>
+      {updateVersion ? (
+        <SidebarUpgradeButton
+          collapsed={isSidebarCollapsed}
+          version={updateVersion}
+          t={t}
+          onClick={() => onSelectDestination(() => openSettings("version", true))}
+        />
       ) : null}
       <WorkspaceUserMenu
         currentUser={props.usersById.get(props.currentUserID)}

@@ -3476,9 +3476,10 @@ export const messages = {
     upgradeChannelRetryCurrent: "重新检查当前通道",
     upgradeChannelCurrentActive: "当前通道已生效",
     upgradeChannelSwitchFailed: "切换版本通道失败，请重试。",
+    upgradeStatusChecking: "正在检查更新",
     upgradeProgressLabel: "正在检查并准备更新",
     upgradeErrorArchiveInvalid: "下载的升级包无效或已损坏，请重试；如果持续失败，请反馈该版本安装包问题。",
-    upgradeErrorDetails: "详情：{detail}",
+    upgradePreviewOnly: "预览模式下无法执行升级。",
     upgradeErrorDiskSpace: "磁盘空间不足，无法完成升级。请清理临时目录或安装目录所在磁盘后重试。",
     upgradeErrorLocalInstall: "本地安装目录或升级状态异常，请确认安装是否完整后重试。",
     upgradeErrorLogPath: "日志：{path}",
@@ -3487,7 +3488,7 @@ export const messages = {
     upgradeErrorNetworkOrService: "网络或服务访问失败，请检查网络、代理或稍后重试。",
     upgradeErrorPermission: "本地权限不足，无法准备或安装升级。请检查安装目录、配置/日志目录和系统临时目录的写入权限。",
     upgradeErrorSignature: "目标版本未完成签名或公证，无法自动更新。请改用已签名的安装包，或继续使用当前版本。",
-    upgradeErrorUnknown: "升级失败。请查看详情并重试。",
+    upgradeErrorUnknown: "升级失败，请重试。",
     upgradeTitle: "发现新版本",
     upgradeSubtitle: "可以直接在界面中完成升级，升级过程会短暂重启本地服务。",
     upgradeManualUpgradeSubtitle: "当前安装方式不支持界面内自动升级，需要手动完成升级。",
@@ -3502,13 +3503,15 @@ export const messages = {
     upgradeStatusManualUpgrade: "需要手动升级",
     upgradeStatusDone: "升级完成",
     upgradeStatusError: "升级失败",
+    upgradeStatusUnconfirmed: "升级结果待确认",
+    upgradeUnconfirmedBody: "请等待本地服务恢复，再刷新页面查看当前版本。",
     upgradeStatusLocal: "本地编译，不检查更新",
     upgradeLocalBuild: "本地编译",
     upgradeLocalBuildUnsupported: "当前是本地开发构建，不支持应用内升级或切换版本通道。请安装官方发布包后再试。",
     upgradeConfirmBody: "点击更新后会运行 csgclaw upgrade，并在完成后重启本地服务。",
     upgradeDesktopConfirmBody: "点击更新后会在后台下载新版本，下载完成后应用将自动重启。",
     upgradeDesktopDownloadedBody: "新版本已经下载完成，点击后应用将立即重启并完成更新。",
-    upgradeRestartingBody: "升级 helper 已启动。页面会自动等待服务恢复，期间连接短暂中断是正常现象。",
+    upgradeRestartingBody: "更新期间本地服务会短暂断开。页面会在服务恢复后自动确认版本。",
     upgradeManualRestartBody:
       "升级已经完成，但当前服务不会自动重启。请手动重新执行 csgclaw serve，然后刷新页面进入新版本。",
     upgradeManualUpgradeBody: "当前为非官方安装，无法在界面中自动升级。请使用官方安装脚本或下载 release 包手动升级。",
@@ -6407,7 +6410,8 @@ export const messages = {
     sending: "Sending",
     sendingWithProgress: "Sending {progress}%",
     retrySend: "Retry send",
-    composerDraftSaveFailed: "Your draft hasn’t been saved. If you close this notice and leave, the draft will be lost.",
+    composerDraftSaveFailed:
+      "Your draft hasn’t been saved. If you close this notice and leave, the draft will be lost.",
     composerDraftRetrySave: "Retry saving",
     stopSending: "Stop sending",
     sendStopped: "Sending stopped. You can retry.",
@@ -7330,10 +7334,11 @@ export const messages = {
     upgradeChannelRetryCurrent: "Check Current Channel Again",
     upgradeChannelCurrentActive: "Current Channel Is Active",
     upgradeChannelSwitchFailed: "Failed to switch the version channel. Please retry.",
+    upgradeStatusChecking: "Checking for updates",
     upgradeProgressLabel: "Checking and preparing the update",
     upgradeErrorArchiveInvalid:
       "The downloaded upgrade package is invalid or corrupted. Retry the upgrade; if it keeps failing, report the release package.",
-    upgradeErrorDetails: "Details: {detail}",
+    upgradePreviewOnly: "Upgrades are unavailable in preview mode.",
     upgradeErrorDiskSpace:
       "There is not enough disk space to complete the upgrade. Free space on the temp or install volume, then retry.",
     upgradeErrorLocalInstall:
@@ -7346,7 +7351,7 @@ export const messages = {
       "A local permission issue prevented the upgrade. Check write access to the install directory, config/log directory, and system temp directory.",
     upgradeErrorSignature:
       "The target version is not signed or notarized, so it cannot be installed automatically. Use a signed installer, or keep the current version.",
-    upgradeErrorUnknown: "The upgrade failed. Review the details and retry.",
+    upgradeErrorUnknown: "The upgrade failed. Please retry.",
     upgradeTitle: "New version available",
     upgradeSubtitle: "Upgrade directly from the app. The local service will restart briefly.",
     upgradeManualUpgradeSubtitle: "This installation does not support in-app upgrade and must be upgraded manually.",
@@ -7361,6 +7366,9 @@ export const messages = {
     upgradeStatusManualUpgrade: "Manual upgrade required",
     upgradeStatusDone: "Upgrade complete",
     upgradeStatusError: "Upgrade failed",
+    upgradeStatusUnconfirmed: "Upgrade status unconfirmed",
+    upgradeUnconfirmedBody:
+      "Wait for the local service to come back online, then refresh the page to check the current version.",
     upgradeStatusLocal: "Local build, update check skipped",
     upgradeLocalBuild: "Local build",
     upgradeLocalBuildUnsupported:
@@ -7370,7 +7378,7 @@ export const messages = {
       "Updating downloads the new version in the background and restarts the app automatically when ready.",
     upgradeDesktopDownloadedBody: "The update is ready. Continue to restart the app and finish installing it.",
     upgradeRestartingBody:
-      "The upgrade helper has started. This page will wait for the service to come back; a brief disconnect is normal.",
+      "The local service will disconnect briefly during the update. This page will check the version when the service reconnects.",
     upgradeManualRestartBody:
       "The upgrade has finished, but this service will not restart automatically. Run csgclaw serve manually, then refresh this page to use the new version.",
     upgradeManualUpgradeBody:

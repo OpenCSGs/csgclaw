@@ -28,7 +28,7 @@ export type UpgradeStatus = {
   upgrading: boolean;
 };
 
-export type UpgradePhase = "idle" | "starting" | "restarting" | "manual_restart" | "done" | "error";
+export type UpgradePhase = "idle" | "starting" | "restarting" | "manual_restart" | "done" | "error" | "unconfirmed";
 
 export function formatSidebarVersionLabel(version: unknown): string {
   const raw = typeof version === "string" ? version.trim() : "";
@@ -111,88 +111,49 @@ export function classifyDesktopUpdateErrorKind(message: string): string {
   return "desktop_update";
 }
 
+export function hasUpgradeStatusError(status: UpgradeStatus | null | undefined): boolean {
+  return Boolean(status?.last_error.trim() || status?.last_error_kind.trim() || status?.last_error_log_path.trim());
+}
+
 export function upgradeErrorMessage(status: UpgradeStatus | null | undefined, t: TranslateFn): string {
-  if (!status?.last_error && !status?.last_error_kind && !status?.last_error_log_path) {
+  if (!status || !hasUpgradeStatusError(status)) {
     return "";
   }
-  const detail = status.last_error.trim();
+  const reportedKind = status.last_error_kind.trim();
+  const kind =
+    !reportedKind || reportedKind === "desktop_update"
+      ? classifyDesktopUpdateErrorKind(status.last_error)
+      : reportedKind;
+  const summary = t(upgradeErrorKey(kind));
   const logPath = status.last_error_log_path.trim();
-  let kind = status.last_error_kind.trim();
-  if (kind === "desktop_update") {
-    kind = classifyDesktopUpdateErrorKind(detail) || kind;
-  } else if (!kind) {
-    const classified = classifyDesktopUpdateErrorKind(detail);
-    if (classified && classified !== "desktop_update") {
-      kind = classified;
-    }
-  }
-  if (!kind) {
-    return [detail, logPath ? t("upgradeErrorLogPath", { path: logPath }) : ""].filter(Boolean).join("\n");
-  }
-
-  const parts = [upgradeErrorSummary(kind, t)];
-  if (detail && kind !== "signature" && kind !== "missing_update_package" && kind !== "local_build") {
-    parts.push(t("upgradeErrorDetails", { detail }));
-  }
-  if (logPath) {
-    parts.push(t("upgradeErrorLogPath", { path: logPath }));
-  }
-  return parts.filter(Boolean).join("\n");
+  return logPath ? `${summary}\n${t("upgradeErrorLogPath", { path: logPath })}` : summary;
 }
 
-export function formatClassifiedUpgradeError(detail: string, t: TranslateFn): string {
-  const normalizedDetail = detail.trim();
-  const kind = classifyDesktopUpdateErrorKind(normalizedDetail);
-  if (!normalizedDetail) {
-    return t("upgradeErrorUnknown");
-  }
-  if (kind === "desktop_update") {
-    return normalizedDetail;
-  }
-  return upgradeErrorMessage(
-    {
-      auto_upgrade_supported: true,
-      auto_upgrade_unsupported_reason: "",
-      channel: "release",
-      checking: false,
-      current_version: "",
-      downloaded: false,
-      last_checked_at: "",
-      last_error: normalizedDetail,
-      last_error_kind: kind,
-      last_error_log_path: "",
-      latest_version: "",
-      manual_restart_required: false,
-      update_available: false,
-      upgrading: false,
-    },
-    t,
-  );
-}
-
-function upgradeErrorSummary(kind: string, t: TranslateFn): string {
+export function upgradeErrorKey(kind: string, fallback = "upgradeErrorUnknown"): string {
   switch (kind) {
+    case "upgrade_preview_only":
+      return "upgradePreviewOnly";
     case "archive_invalid":
-      return t("upgradeErrorArchiveInvalid");
+      return "upgradeErrorArchiveInvalid";
     case "disk_space":
-      return t("upgradeErrorDiskSpace");
+      return "upgradeErrorDiskSpace";
     case "http_asset":
     case "http_metadata":
     case "network_download":
     case "network_check":
-      return t("upgradeErrorNetworkOrService");
+      return "upgradeErrorNetworkOrService";
     case "missing_path":
-      return t("upgradeErrorLocalInstall");
+      return "upgradeErrorLocalInstall";
     case "missing_update_package":
-      return t("upgradeErrorMissingUpdatePackage");
+      return "upgradeErrorMissingUpdatePackage";
     case "permission":
-      return t("upgradeErrorPermission");
+      return "upgradeErrorPermission";
     case "signature":
-      return t("upgradeErrorSignature");
+      return "upgradeErrorSignature";
     case "local_build":
-      return t("upgradeLocalBuildUnsupported");
+      return "upgradeLocalBuildUnsupported";
     default:
-      return t("upgradeErrorUnknown");
+      return fallback;
   }
 }
 
@@ -208,9 +169,36 @@ export function upgradeStatusLabel(phase: UpgradePhase, t: TranslateFn): string 
       return t("upgradeStatusDone");
     case "error":
       return t("upgradeStatusError");
+    case "unconfirmed":
+      return t("upgradeStatusUnconfirmed");
     default:
       return t("upgradeStatusReady");
   }
+}
+
+export function latestSidebarUpdateVersion({
+  appVersion,
+  showUpgradeControls,
+  upgradePhase,
+  upgradeStatus,
+}: {
+  appVersion: string;
+  showUpgradeControls: boolean;
+  upgradePhase: UpgradePhase;
+  upgradeStatus: UpgradeStatus | null | undefined;
+}): string {
+  const latestVersion = upgradeStatus?.latest_version?.trim();
+  if (
+    !showUpgradeControls ||
+    upgradePhase === "done" ||
+    !upgradeStatus?.update_available ||
+    upgradeStatus.auto_upgrade_supported === false ||
+    !latestVersion ||
+    isLocalBuildUpgradeStatus(upgradeStatus, upgradeStatus.current_version || appVersion)
+  ) {
+    return "";
+  }
+  return formatSidebarVersionLabel(latestVersion);
 }
 
 export function hasUpgradeAttention(
