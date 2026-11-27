@@ -506,7 +506,7 @@ Subcommands:
 - `--model-id string`: agent model ID for `--bind create`.
 - `--env KEY=VALUE`: agent image environment variable for `--bind create`; repeatable.
 
-Repeating `participant create --channel csgclaw --type agent --id <participant-id> --bind create --from-template <template-id>` refreshes the worker already bound to that participant. Each request reads the current template. Remote templates use the latest archive from the repository's default branch. Supplied settings and files overwrite local edits. Other settings, files and the existing worker ID are preserved. A different runtime kind causes the request to fail before applying changes.
+Repeating `participant create --channel csgclaw --type agent --id <participant-id> --bind create --from-template <template-id>` refreshes the worker already bound to that participant. Each request reads the current template. Remote templates use the latest archive from the repository's default branch. Supplied settings and files overwrite local edits. Other settings, files and the existing worker ID are preserved. A different runtime kind causes the request to fail before applying changes. If an MCP endpoint changes scheme, host, or effective port, only headers and authentication settings supplied by the new template apply to that endpoint.
 
 `participant delete` usage and flags:
 

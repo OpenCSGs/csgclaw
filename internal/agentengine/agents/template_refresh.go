@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
+	"unicode/utf8"
 
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/knowledgebase"
@@ -200,13 +203,58 @@ func (s *Controller) templateRefreshConfig(ctx context.Context, current Agent, o
 		if err != nil {
 			return UpdateRequest{}, err
 		}
-		merged := overlayConfigMap(stored, servers)
+		merged := mergeTemplateMCPServers(stored, servers)
 		if !reflect.DeepEqual(stored, merged) || current.AgentProfile.EnvRestartRequired {
 			update.MCPServers, update.MCPServersSet = &merged, true
 			update.FieldMask = append(update.FieldMask, "mcpServers")
 		}
 	}
 	return update, nil
+}
+
+// Authentication inherited from a worker belongs to its original HTTP origin.
+// A template can supply authentication for a new endpoint explicitly.
+func mergeTemplateMCPServers(stored, incoming map[string]any) map[string]any {
+	base := maps.Clone(stored)
+	for id, raw := range incoming {
+		patch, _ := raw.(map[string]any)
+		nextURL, supplied := patch["url"]
+		current, ok := stored[id].(map[string]any)
+		if !ok || !supplied {
+			continue
+		}
+		if origin := mcpHTTPOrigin(current["url"]); origin != "" && origin == mcpHTTPOrigin(nextURL) {
+			continue
+		}
+		current = maps.Clone(current)
+		for _, key := range []string{"headers", "http_headers", "env_http_headers", "bearer_token_env_var", "oauth_client_id", "oauth_resource"} {
+			delete(current, key)
+		}
+		base[id] = current
+	}
+	return overlayConfigMap(base, incoming)
+}
+
+func mcpHTTPOrigin(raw any) string {
+	address, _ := raw.(string)
+	u, err := url.Parse(strings.TrimSpace(address))
+	if err != nil || u.Hostname() == "" || u.User != nil || (u.Scheme != "https" && u.Scheme != "http") {
+		return ""
+	}
+	host := u.Hostname()
+	// DNS case folding is safe for ASCII names. Keep Unicode names and IPv6
+	// zone identifiers exact so distinct hosts cannot acquire the same origin.
+	if !strings.Contains(host, "%") && len(host) == utf8.RuneCountInString(host) {
+		host = strings.ToLower(host)
+	}
+	port := u.Port()
+	if port == "" {
+		port = "80"
+		if u.Scheme == "https" {
+			port = "443"
+		}
+	}
+	return u.Scheme + "://" + net.JoinHostPort(host, port)
 }
 
 func overlayConfigMap(current, overlay map[string]any) map[string]any {

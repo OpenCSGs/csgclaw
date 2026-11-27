@@ -3,10 +3,12 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -98,6 +100,9 @@ func refreshTemplateBinding(t *testing.T, kind string) {
 			files["snapshot/skills/review/previous.md"] = "previous"
 			files["snapshot/mcps/mcp.json"] = `{"审查 docs":{"url":"https://example.test/review"}}`
 		}
+		if content == "second" {
+			files["snapshot/mcps/mcp.json"] = `{"审查 docs":{"url":"https://replacement.test/review","headers":{"X-Region":"test"}}}`
+		}
 		archive.Store(mustZipBytes(t, files))
 	}
 	checkReplay := func() {
@@ -125,9 +130,26 @@ func refreshTemplateBinding(t *testing.T, kind string) {
 	if serverID == "" {
 		t.Fatal("template MCP server was not imported")
 	}
+	servers := maps.Clone(first.MCPServers)
+	local := maps.Clone(servers[serverID].(map[string]any))
+	local["headers"] = map[string]any{"Authorization": "local-test-value", "X-Private": "local-test-value"}
+	local["env_http_headers"] = map[string]any{"X-API-Key": "LOCAL_TEST_KEY"}
+	local["bearer_token_env_var"] = "LOCAL_TEST_TOKEN"
+	local["tool_timeout_sec"] = 37
+	servers[serverID] = local
+	if _, err := controller.UpdateRecord(t.Context(), first.ID, agent.UpdateRequest{MCPServers: &servers, MCPServersSet: true}); err != nil {
+		t.Fatal(err)
+	}
 	write("SKILL.md", "locally modified")
 	checkReplay()
 	check(filepath.Join(skill, "SKILL.md"), "first")
+	same, _ := controller.Agent(first.ID)
+	sameServer := same.MCPServers[serverID].(map[string]any)
+	for _, key := range []string{"headers", "env_http_headers", "bearer_token_env_var"} {
+		if !reflect.DeepEqual(sameServer[key], local[key]) {
+			t.Fatalf("same-origin refresh lost %s", key)
+		}
+	}
 	setArchive(kind, "", "second", false)
 	checkReplay()
 	got, _ := controller.Agent("agent-historical")
@@ -139,6 +161,18 @@ func refreshTemplateBinding(t *testing.T, kind string) {
 	check(filepath.Join(skill, "previous.md"), "previous")
 	if _, ok := got.MCPServers[serverID]; !ok || len(got.MCPServers) != len(first.MCPServers) {
 		t.Fatalf("replaying the template changed MCP IDs: %v -> %v", first.MCPServers, got.MCPServers)
+	}
+	replacement := got.MCPServers[serverID].(map[string]any)
+	if replacement["url"] != "https://replacement.test/review" || !reflect.DeepEqual(replacement["headers"], map[string]any{"X-Region": "test"}) {
+		t.Fatal("new MCP endpoint did not receive exactly the template headers")
+	}
+	for _, key := range []string{"env_http_headers", "bearer_token_env_var"} {
+		if _, exists := replacement[key]; exists {
+			t.Fatalf("cross-origin refresh retained %s", key)
+		}
+	}
+	if fmt.Sprint(replacement["tool_timeout_sec"]) != "37" {
+		t.Fatal("cross-origin refresh lost the local timeout")
 	}
 	check(filepath.Join(skill, "personal.md"), "keep")
 	archive.Store(mustZipBytes(t, map[string]string{"snapshot/agent.toml": "name='Template'\nruntime_kind='" + kind + "'\ndescription=''"}))
