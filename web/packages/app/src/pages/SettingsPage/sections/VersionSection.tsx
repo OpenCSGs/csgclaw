@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import {
@@ -15,7 +15,6 @@ import versionSectionStyles from "./VersionSection.module.css";
 import accountSectionStyles from "./AccountSection.module.css";
 
 export function VersionSection({ highlighted = false }: { highlighted?: boolean }) {
-  const restartNoticeId = useId();
   const rowRef = useRef<HTMLElement>(null);
   const controller = useWorkspaceControllerContext();
   const sidebar = controller.sidebarProps;
@@ -127,12 +126,12 @@ export function VersionSection({ highlighted = false }: { highlighted?: boolean 
             </div>
           </div>
           {showUpgradeChannel && pendingStatus ? (
-            <p className={`${versionSectionStyles.restartNotice} ${styles.spanAll}`} role="status">
+            <p className={`${versionSectionStyles.upgradeNote} ${styles.spanAll}`} role="status">
               {pendingStatus}
             </p>
           ) : null}
           {showNewVersionBadge && upgradeStatus?.auto_upgrade_unsupported_reason === "not_official_bundle" ? (
-            <p className={`${versionSectionStyles.restartNotice} ${styles.spanAll}`}>{t("upgradeManualUpgradeBody")}</p>
+            <p className={`${versionSectionStyles.upgradeNote} ${styles.spanAll}`}>{t("upgradeManualUpgradeBody")}</p>
           ) : null}
           {versionError ? (
             <p className={accountSectionStyles.inlineError} role="alert">
@@ -141,20 +140,9 @@ export function VersionSection({ highlighted = false }: { highlighted?: boolean 
           ) : null}
           {showUpgradeAction ? (
             <div className={`${styles.formActions} ${styles.spanAll}`}>
-              <Button
-                variant="primary"
-                size="md"
-                disabled={upgradeChannelDisabled}
-                aria-describedby={latestVersion ? restartNoticeId : undefined}
-                onClick={sidebar.onOpenUpgrade}
-              >
+              <Button variant="primary" size="md" disabled={upgradeChannelDisabled} onClick={sidebar.onOpenUpgrade}>
                 {t("upgradeDownloadAction")}
               </Button>
-              {latestVersion ? (
-                <span id={restartNoticeId} className={versionSectionStyles.restartNotice}>
-                  {t("upgradeRestartNotice")}
-                </span>
-              ) : null}
             </div>
           ) : null}
         </div>

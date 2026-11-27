@@ -2,7 +2,7 @@
 import styles from "./SegmentedControl.module.css";
 import { ToggleGroup } from "radix-ui";
 import type { ReactNode } from "react";
-import { Tooltip } from "../Tooltip/index.js";
+import { Tooltip, type TooltipContentProps } from "../Tooltip/index.js";
 import { classNames } from "../../lib/classNames.js";
 
 export type SegmentedControlOption<Value extends string> = {
@@ -20,6 +20,7 @@ export function SegmentedControl<Value extends string>({
   className,
   size = "md",
   variant = "default",
+  tooltipSide,
 }: {
   value: Value;
   onChange: (value: Value) => void;
@@ -28,6 +29,7 @@ export function SegmentedControl<Value extends string>({
   className?: string;
   size?: "sm" | "md";
   variant?: "default" | "text" | "underline";
+  tooltipSide?: TooltipContentProps["side"];
 }) {
   return (
     <ToggleGroup.Root
@@ -38,12 +40,18 @@ export function SegmentedControl<Value extends string>({
       data-size={size}
       data-variant={variant}
       onValueChange={(next) => {
-        const option = options.find((item) => item.value === next && !item.disabled);
+        const option = options.find(
+          (item) => item.value === next && !item.disabled,
+        );
         if (option) onChange(option.value);
       }}
     >
       {options.map((option) => (
-        <Tooltip key={option.value} content={option.accessibleName}>
+        <Tooltip
+          key={option.value}
+          content={option.accessibleName}
+          contentProps={{ side: tooltipSide }}
+        >
           <ToggleGroup.Item
             data-csg-control="segmented-control"
             value={option.value}

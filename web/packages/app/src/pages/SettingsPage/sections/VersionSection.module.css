@@ -28,6 +28,15 @@
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 12px 20px;
+  margin-top: 6px;
+}
+
+.versionFields > div {
+  row-gap: 4px;
+}
+
+.versionFields > div > strong {
+  min-height: 0;
 }
 
 @container (min-width: 440px) {
@@ -39,6 +48,8 @@
 .versionFields button.versionChannelLink {
   min-height: 40px;
   justify-self: start;
+  align-items: flex-start;
+  line-height: 20px;
 }
 
 .versionLabel {
@@ -113,22 +124,23 @@
   }
 }
 
-.highlightedVersion {
+:root:not([data-theme="dark"]) .highlightedVersion {
+  --version-card-padding: clamp(16px, 3cqi, 24px);
+
   width: calc(100% + 16px);
   margin-top: -8px;
   margin-inline: -8px;
-  padding-block: 8px 12px;
-  padding-inline: 8px;
+  padding: var(--version-card-padding);
   border-bottom: 0;
   border-radius: var(--radius-lg);
   background: color-mix(in oklab, var(--primary) 7%, transparent);
 }
 
-section.highlightedVersion:last-child {
-  padding-bottom: 12px;
+:root:not([data-theme="dark"]) section.highlightedVersion:last-child {
+  padding-bottom: var(--version-card-padding);
 }
 
-.restartNotice {
+.upgradeNote {
   color: var(--muted);
   font-size: var(--field-label-font-size);
   line-height: var(--field-label-line-height);
