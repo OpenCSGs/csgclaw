@@ -48,6 +48,18 @@ export function conversationFilterOptions(
 ) {
   const owners = new Map<string, { value: string; label: string; avatar?: string | null; count: number }>();
   const directories = new Map<string, number>();
+  if (filters.directory) directories.set(filters.directory, 0);
+
+  function addOwner(value: string, peer: string, count: number) {
+    const user = value.startsWith("cloud:") ? usersById.get(peer) : resolveUserByLocalIdentity(peer, usersById);
+    owners.set(value, {
+      value,
+      label: value === collaborationConversationOwner ? t("iaRoomsTab") : user?.name || peer,
+      avatar: user?.avatar,
+      count,
+    });
+  }
+
   let ownerTotal = 0;
   let directoryTotal = 0;
   for (const room of rooms) {
@@ -64,16 +76,13 @@ export function conversationFilterOptions(
         existing.count += matchesDirectory ? count : 0;
       } else {
         const peer = room.cloud_agent?.user_id || conversationPeerID(room, currentUserID);
-        const user = room.cloud_agent ? usersById.get(peer) : resolveUserByLocalIdentity(peer, usersById);
-        owners.set(value, {
-          value,
-          label: value === collaborationConversationOwner ? t("iaRoomsTab") : user?.name || peer,
-          avatar: user?.avatar,
-          count: matchesDirectory ? count : 0,
-        });
+        addOwner(value, peer, matchesDirectory ? count : 0);
       }
     }
-    if (path) directories.set(path, (directories.get(path) ?? 0) + (matchesOwner ? count : 0));
+    if (path && matchesOwner) directories.set(path, (directories.get(path) ?? 0) + count);
+  }
+  if (filters.owner && !owners.has(filters.owner)) {
+    addOwner(filters.owner, filters.owner.slice(filters.owner.indexOf(":") + 1), 0);
   }
   return {
     ownerTotal,

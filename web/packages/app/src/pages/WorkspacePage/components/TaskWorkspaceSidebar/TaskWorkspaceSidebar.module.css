@@ -93,6 +93,8 @@
 }
 
 .badge {
+  display: inline-grid;
+  place-items: center;
   min-width: 24px;
   margin-left: auto;
   padding: 0 7px;

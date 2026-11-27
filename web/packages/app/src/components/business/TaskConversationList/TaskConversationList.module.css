@@ -290,24 +290,32 @@
 
 .filterBadge {
   position: absolute;
-  inset: -4px -4px auto auto;
+  inset: calc(-1 * var(--space-1)) calc(-1 * var(--space-1)) auto auto;
   display: grid;
   place-items: center;
-  min-width: 15px;
-  height: 15px;
-  border-radius: 999px;
+  min-width: 16px;
+  height: 16px;
+  padding-inline: 3px;
+  border-radius: var(--radius-full);
   background: var(--primary);
-  color: var(--white);
+  color: var(--on-primary);
   font: var(--text-xs-medium);
+  line-height: 1;
 }
 
 .filterPanel {
   --csgclaw-ui-popover-background: var(--panel-soft);
-  width: min(252px, calc(100vw - 16px));
+  width: min(252px, calc(100vw - var(--space-4)));
   min-width: 0;
   max-height: min(440px, var(--radix-popover-content-available-height));
   overflow-y: auto;
   padding: 6px;
+}
+
+:global(:root[data-theme="light"]) .filterPanel {
+  --csgclaw-ui-popover-background: var(--popover-background);
+  --csgclaw-ui-popover-border: color-mix(in srgb, var(--text) 12%, transparent);
+  --csgclaw-ui-shadow: 0 8px 24px -4px color-mix(in srgb, var(--gray-950) 26%, transparent);
 }
 
 .filterPanel .searchField .search {
@@ -318,7 +326,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 8px 6px;
+  padding: var(--space-1) var(--space-2) 6px;
   color: var(--muted);
   font: var(--text-xs-medium);
 }
@@ -328,7 +336,7 @@
   background: transparent;
   color: var(--primary);
   font: inherit;
-  padding: 2px 6px;
+  padding: var(--space-0-5) 6px;
   cursor: pointer;
 }
 
@@ -339,19 +347,23 @@
 }
 
 .filterSection p {
-  margin: 4px 0 2px;
-  padding-inline: 8px;
+  margin: var(--space-1) 0 var(--space-0-5);
+  padding-inline: var(--space-2);
   color: var(--muted);
   font: var(--text-xs-normal);
 }
 
-.filterOption {
+.filterOption,
+.filterSkeletonRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   min-height: 30px;
-  padding: 5px 8px;
+  padding: 5px var(--space-2);
+}
+
+.filterOption {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -361,17 +373,25 @@
   cursor: pointer;
 }
 
-.filterOption:hover,
-.filterOption[aria-pressed="true"] {
-  background: var(--control-selected-background);
+.filterOption:enabled:hover:not([aria-pressed="true"]) {
+  background: var(--control-hover-background);
 }
 
 .filterOption[aria-pressed="true"] {
+  background: var(--control-selected-background);
   font: var(--text-xs-medium);
+}
+
+:global(:root[data-theme="light"]) .filterOption:enabled:hover:not([aria-pressed="true"]) {
+  background: var(--panel-soft);
 }
 
 .filterOption[data-empty="true"]:not([aria-pressed="true"], :hover, :focus-visible) {
   opacity: 0.55;
+}
+
+.filterOption:disabled {
+  cursor: default;
 }
 
 .filterReset:focus-visible,
@@ -397,8 +417,18 @@
 .filterOptionIcon :global(.agent-avatar-fallback) {
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
+}
+
+.filterOptionIcon img {
   object-fit: cover;
+}
+
+.filterOptionIcon :global(.agent-avatar-fallback) {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  line-height: 1;
 }
 
 .filterOptionName {
@@ -413,6 +443,57 @@
 .filterPath > span {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.filterSkeletonHeading,
+.filterSkeletonRow > span {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--line);
+}
+
+.filterSkeletonHeading {
+  width: 48px;
+  height: 10px;
+  margin: 6px var(--space-2) var(--space-1);
+}
+
+.filterSkeletonIcon {
+  flex: 0 0 18px;
+  height: 18px;
+}
+
+.filterSkeletonLabel {
+  width: 44%;
+  height: 10px;
+}
+
+.filterSkeletonRow:last-child .filterSkeletonLabel {
+  width: 32%;
+}
+
+.filterSkeletonCount {
+  width: 12px;
+  height: 10px;
+  margin-inline-start: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .filterSkeletonHeading,
+  .filterSkeletonRow > span {
+    background-image: linear-gradient(100deg, transparent 35%, var(--panel-soft) 50%, transparent 65%);
+    background-size: 220% 100%;
+    animation: filterSkeletonShimmer 1.6s linear infinite;
+  }
+}
+
+@keyframes filterSkeletonShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -85% 0;
+  }
 }
 
 .collapsed {
@@ -466,8 +547,7 @@
   pointer-events: none;
 }
 .root .searchBar .search {
-  padding-left: 32px;
-  padding-right: 32px;
+  padding-inline: var(--space-8);
 }
 
 .clearSearch {
@@ -525,8 +605,8 @@
 .railControls {
   display: grid;
   justify-items: center;
-  gap: var(--rail-gap, 8px);
-  padding: 8px 0;
+  gap: var(--rail-gap, var(--space-2));
+  padding: var(--space-2) 0;
   flex-shrink: 0;
 }
 .railControls button {
@@ -630,7 +710,7 @@
   width: 26px;
   height: 26px;
   border: 1px solid var(--primary);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--control-selected-background);
   color: var(--primary);
 }

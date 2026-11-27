@@ -66,6 +66,7 @@ function FilterRow({
   selected,
   onSelect,
   title,
+  disabled,
 }: {
   label: ReactNode;
   icon: ReactNode;
@@ -73,6 +74,7 @@ function FilterRow({
   selected: boolean;
   onSelect: () => void;
   title?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -80,6 +82,7 @@ function FilterRow({
       className={styles.filterOption}
       aria-pressed={selected}
       data-empty={count === 0}
+      disabled={disabled}
       onClick={onSelect}
       title={title}
     >
@@ -88,6 +91,28 @@ function FilterRow({
       </span>
       <span className={styles.filterOptionName}>{label}</span> <span className={styles.filterOptionCount}>{count}</span>
     </button>
+  );
+}
+
+function FilterOptionsSkeleton({ label }: { label: string }) {
+  return (
+    <div role="status">
+      <span className="sr-only">{label}</span>
+      <div aria-hidden="true">
+        {["owner", "directory"].map((group) => (
+          <div key={group} className={styles.filterSection}>
+            <span className={styles.filterSkeletonHeading} />
+            {[0, 1].map((row) => (
+              <div key={row} className={styles.filterSkeletonRow}>
+                <span className={styles.filterSkeletonIcon} />
+                <span className={styles.filterSkeletonLabel} />
+                <span className={styles.filterSkeletonCount} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -175,6 +200,9 @@ export function TaskConversationList({
   const { owner, directory, search } = filters ?? { ...emptyConversationFilters, search: localSearch };
   const filterCount = Number(Boolean(owner)) + Number(Boolean(directory));
   const filtering = filterCount > 0;
+  const expandFilterLabel = filtering
+    ? t(filterCount === 1 ? "iaSessionExpandWithFilter" : "iaSessionExpandWithFilters", { count: filterCount })
+    : t("iaSessionExpandSearchResults");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(search);
   function setSearch(value: string) {
@@ -205,9 +233,9 @@ export function TaskConversationList({
   const rooms = uniqueTaskConversations(list.data?.pages ?? []).filter((room) => room.id !== deletingID);
   const cloudCatalog = useCloudAgentAvatarMetadata(authStatus);
   const filterGroups = useQuery({
-    queryKey: ["task-conversations", archived, "", "filters"],
+    queryKey: ["task-conversations", archived, query, "filters"],
     enabled: filterOpen,
-    queryFn: () => fetchTaskConversationFilters(archived),
+    queryFn: () => fetchTaskConversationFilters(archived, query),
   });
   const options = useMemo(() => {
     const groups = (filterGroups.data ?? []).map((group) => ({
@@ -300,8 +328,8 @@ export function TaskConversationList({
     >
       {collapsed && (filtering || search) ? (
         <div className={styles.railControls}>
-          <Tooltip content={directory || search || t("iaSessionFilters")} contentProps={{ side: "right" }}>
-            <button type="button" aria-label={t("iaSessionDirectoryFilter")} onClick={onExpand}>
+          <Tooltip content={expandFilterLabel} contentProps={{ side: "right" }}>
+            <button type="button" aria-label={expandFilterLabel} onClick={onExpand}>
               <span className={styles.railFilter}>
                 <Filter size={13} aria-hidden="true" />
               </span>
@@ -325,7 +353,7 @@ export function TaskConversationList({
                   aria-label={t("iaSessionFilters")}
                 >
                   <Funnel size={16} aria-hidden="true" />
-                  {filterCount ? <span className={styles.filterBadge}>{filterCount}</span> : null}
+                  {filterCount ? <small className={styles.filterBadge}>{filterCount}</small> : null}
                 </Button>
               </PopoverTrigger>
             </Tooltip>
@@ -372,6 +400,7 @@ export function TaskConversationList({
                         }
                         count={option.count}
                         selected={owner === option.value}
+                        disabled={option.count === 0}
                         onSelect={() => onFiltersChange({ ...filters, owner: option.value })}
                       />
                     ))}
@@ -401,6 +430,7 @@ export function TaskConversationList({
                           icon={<Folder size={14} />}
                           count={count}
                           selected={directory === path}
+                          disabled={count === 0}
                           onSelect={() => onFiltersChange({ ...filters, directory: path })}
                         />
                       );
@@ -408,7 +438,7 @@ export function TaskConversationList({
                   </div>
                 </>
               ) : null}
-              {optionsPending ? <span role="status">{t("loading")}</span> : null}
+              {optionsPending ? <FilterOptionsSkeleton label={t("iaSessionFiltersLoading")} /> : null}
               {optionsError ? (
                 <Button size="sm" variant="secondaryGray" onClick={() => void filterGroups.refetch()}>
                   {t("retry")}

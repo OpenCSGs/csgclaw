@@ -217,9 +217,13 @@ func (h *Handler) listTaskConversationFilters(w http.ResponseWriter, r *http.Req
 		return
 	}
 	currentUserID := taskConversationLocalUser(h.im.CurrentUserID())
+	query := r.URL.Query()
+	terms := strings.Fields(strings.ToLower(query.Get("q")))
 	counts := make(map[taskConversationFilterKey]int)
-	h.visitTaskConversations(r.URL.Query().Get("archived") == "true", func(room im.Room) {
-		counts[taskConversationDimensions(room, currentUserID)]++
+	h.visitTaskConversations(query.Get("archived") == "true", func(room im.Room) {
+		if conversationMatches(room, terms) {
+			counts[taskConversationDimensions(room, currentUserID)]++
+		}
 	})
 	groups := make([]taskConversationFilterGroup, 0, len(counts))
 	for key, count := range counts {

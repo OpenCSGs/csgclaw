@@ -39,8 +39,9 @@ type TaskConversationFilterGroup = {
   count: number;
 };
 
-export function fetchTaskConversationFilters(archived: boolean): Promise<TaskConversationFilterGroup[]> {
-  return get(`/api/v1/conversations/filters?archived=${archived}`);
+export function fetchTaskConversationFilters(archived: boolean, q = ""): Promise<TaskConversationFilterGroup[]> {
+  const params = new URLSearchParams({ archived: String(archived), q });
+  return get(`/api/v1/conversations/filters?${params}`);
 }
 
 export function updateConversationMetadata(id: string, patch: ConversationMetadataPatch): Promise<IMConversation> {
