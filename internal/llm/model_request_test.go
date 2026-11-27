@@ -188,6 +188,61 @@ func TestGatewayStreamRecoveryWaitsForTerminalEvent(t *testing.T) {
 	}
 }
 
+func TestGatewayLargeTerminalEventCompletes(t *testing.T) {
+	// The event type follows the large output so recognizing it requires
+	// inspecting more than a fixed prefix. The event has no SSE event name.
+	terminal := "data: {\"response\":{\"status\":\"completed\",\"output_text\":\"" +
+		strings.Repeat("x", 70<<10) + "\"},\"type\":\"response.completed\"}\n\n"
+	for _, test := range []struct {
+		name  string
+		retry bool
+	}{
+		{"first attempt", false},
+		{"after rate limit", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var calls atomic.Int32
+			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if calls.Add(1) == 1 && test.retry {
+					w.WriteHeader(http.StatusTooManyRequests)
+					_, _ = io.WriteString(w, `{"error":{"code":"rate_limit_exceeded"}}`)
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("X-Request-ID", "large-terminal-request")
+				_, _ = io.WriteString(w, terminal)
+			}))
+			t.Cleanup(gateway.Close)
+			record := diagnostics.New("").Begin("room", "source", "", "agent", "turn")
+			record.Running()
+			var feedback []diagnostics.ModelRequestStatus
+			record.ObserveModelRequest(func(status diagnostics.ModelRequestStatus) { feedback = append(feedback, status) })
+			ctx := WithTaskProfile(diagnostics.WithRecord(t.Context(), record), openCSGTestProfile(gateway.URL))
+			response, err := NewService(config.ModelConfig{}, nil).Responses(ctx, "agent", []byte(`{"input":"test","stream":true}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := io.ReadAll(response.Body)
+			response.Body.Close()
+			if err != nil || string(body) != terminal {
+				t.Errorf("reading terminal event: got %d bytes, want %d; read error: %v", len(body), len(terminal), err)
+			}
+			spans := modelSpans(record)
+			if len(spans) == 0 || spans[len(spans)-1].Status != "completed" {
+				t.Errorf("terminal event did not complete the request: %+v", spans)
+			}
+			if test.retry {
+				if calls.Load() != 2 || len(feedback) != 2 || feedback[0].State != "retrying" || feedback[1].State != "recovered" ||
+					feedback[1].RequestID != feedback[0].RequestID || feedback[1].GatewayRequestID != "large-terminal-request" {
+					t.Errorf("unexpected retry feedback after completion: %+v", feedback)
+				}
+			} else if calls.Load() != 1 || len(feedback) != 0 {
+				t.Errorf("successful first attempt emitted failure or retry feedback: %+v", feedback)
+			}
+		})
+	}
+}
+
 func TestGatewayErrorDetailsStayInDiagnostics(t *testing.T) {
 	const private = "quoted private task text"
 	const providerError = `{"code":"unsupported_feature","message":"rejected ` + private + `","param":"tools"}`

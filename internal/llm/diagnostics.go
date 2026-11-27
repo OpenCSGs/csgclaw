@@ -258,8 +258,8 @@ func (b *observedModelBody) complete(outcome string, err error) {
 	reportModelRequestFailure(b.ctx, status)
 }
 
-// Inspect bounded event metadata only. Large output events are skipped and no
-// model content is retained in diagnostic data.
+// Inspect event metadata up to the stream parser's limit. Error payloads
+// retained for diagnostics have their own smaller limit.
 func (b *observedModelBody) inspect(data []byte) {
 	if !b.stream {
 		return
@@ -269,7 +269,7 @@ func (b *observedModelBody) inspect(data []byte) {
 	for len(data) > 0 {
 		piece, rest, found := bytes.Cut(data, []byte{'\n'})
 		if !b.skipLine {
-			if len(b.line)+len(piece) > 64*1024 {
+			if len(b.line)+len(piece) > maxResponsesSSEEventBytes {
 				b.skipLine = true
 				b.line = nil
 			} else {
