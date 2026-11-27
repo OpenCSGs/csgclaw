@@ -1771,7 +1771,7 @@ describe("ConversationPane", () => {
     expect(threadPanel.querySelector(".thread-section-title")).toBeNull();
   });
 
-  it("shows tool-call replies when enabled without exposing direct conversation tools", () => {
+  it("folds the details of enabled tool-call replies in direct threads", async () => {
     renderThreadPane({
       isDirect: true,
       showToolCalls: true,
@@ -1779,7 +1779,9 @@ describe("ConversationPane", () => {
     });
 
     const threadPanel = screen.getByRole("complementary", { name: "Thread" });
-    expect(within(threadPanel).getByText("visible shell output")).toBeInTheDocument();
+    expect(within(threadPanel).queryByText("visible shell output")).not.toBeInTheDocument();
+    await userEvent.click(within(threadPanel).getByRole("button", { name: "progressToolDetails" }));
+    expect(within(threadPanel).getByText("visible shell output")).toBeVisible();
     expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
   });
 

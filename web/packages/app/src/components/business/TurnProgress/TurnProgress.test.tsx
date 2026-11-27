@@ -16,7 +16,14 @@ const progress: Progress = {
     {
       id: "read",
       kind: "tool",
-      tool: { name: "Shell", actions: ["read"], status: "completed", command: "cat README.md", output: "contents" },
+      tool: {
+        name: "Shell",
+        actions: ["read"],
+        status: "completed",
+        summary: "README.md",
+        command: "cat README.md",
+        output: "contents",
+      },
     },
     { id: "reasoning", kind: "reasoning", text: "Detailed reasoning" },
   ],
@@ -28,7 +35,9 @@ describe("TurnProgress", () => {
     expect(screen.getByText("正在检查文件")).toBeTruthy();
     expect(document.querySelector('[data-preserve-scroll="true"]')).toBeNull();
     expect(document.querySelector("[data-scroll-anchor-toggle]")).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("cat README.md")).toBeTruthy();
+    expect(screen.getByText("README.md")).toBeVisible();
+    expect(screen.getByText("工具进度 1/1")).toBeVisible();
+    expect(screen.queryByText("cat README.md")).not.toBeInTheDocument();
     expect(screen.queryByText("contents")).toBeNull();
     expect(screen.getByText("Detailed reasoning")).toBeTruthy();
     rerender(
@@ -42,6 +51,7 @@ describe("TurnProgress", () => {
     expect(screen.queryByText("正在检查文件")).toBeNull();
     expect(screen.queryByText("Detailed reasoning")).toBeNull();
     expect(screen.getByText("最终答案")).toBeTruthy();
+    expect(screen.getByText("1 个工具步骤")).toBeVisible();
     expect(screen.getByRole("button", { name: /^回复用时/ }).getAttribute("aria-expanded")).toBe("false");
   });
   it("groups consecutive reasoning chunks and allows the reasoning section to collapse independently", async () => {
@@ -51,10 +61,25 @@ describe("TurnProgress", () => {
     expect(within(reasoning).getByText("Detailed reasoning")).toBeVisible();
     expect(within(reasoning).getByText("Next chunk")).toBeVisible();
     const toggle = screen.getByRole("button", { name: "正在思考" });
+    expect(within(toggle).getByText("正在思考")).toHaveAttribute("data-progress-shimmer");
     await userEvent.setup().click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(reasoning).not.toBeInTheDocument();
     expect(screen.getByText("正在检查文件")).toBeVisible();
+  });
+
+  it("shows the title shimmer on running tools and clears it when the turn is waiting", () => {
+    const items: Progress["items"] = [
+      ...progress.items,
+      { id: "executing", kind: "tool", tool: { name: "Shell", actions: ["execute"], status: "running" } },
+    ];
+    const { rerender } = render(<TurnProgress progress={{ ...progress, items }} t={t} renderText={renderText} />);
+    expect(screen.getByText("运行命令")).toHaveAttribute("data-progress-shimmer");
+    expect(screen.getByText("读取文件")).not.toHaveAttribute("data-progress-shimmer");
+    expect(screen.getByText("思考过程")).not.toHaveAttribute("data-progress-shimmer");
+
+    rerender(<TurnProgress progress={{ ...progress, items, status: "waiting" }} t={t} renderText={renderText} />);
+    expect(screen.getByText("运行命令")).not.toHaveAttribute("data-progress-shimmer");
   });
 
   it("follows streamed reasoning only while the reader stays near the bottom", () => {
@@ -88,7 +113,7 @@ describe("TurnProgress", () => {
   it("collapses the whole process even if a command was expanded while running", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<TurnProgress progress={progress} t={t} renderText={renderText} />);
-    await user.click(screen.getByRole("button", { name: /第 1 条：cat README.md/ }));
+    await user.click(screen.getByRole("button", { name: /第 1 步：读取文件.*README.md/ }));
     expect(screen.getByText("contents")).toBeTruthy();
     rerender(
       <TurnProgress progress={{ ...progress, revision: 2, status: "succeeded" }} t={t} renderText={renderText} />,
@@ -96,7 +121,8 @@ describe("TurnProgress", () => {
     expect(screen.queryByText("contents")).toBeNull();
     expect(screen.getByRole("button", { name: /回复用时/ })).toHaveAttribute("aria-expanded", "false");
     await user.click(screen.getByRole("button", { name: /回复用时/ }));
-    expect(screen.getByRole("button", { name: /第 1 条/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /第 1 步/ })).toBeTruthy();
+    expect(screen.queryByText("cat README.md")).not.toBeInTheDocument();
   });
   it("keeps a failure visible outside the collapsed process", () => {
     render(
@@ -140,7 +166,7 @@ describe("TurnProgress", () => {
           tool: {
             name: "Run shell command",
             actions: ["execute"],
-            status: "failed",
+            status: "completed",
             command: "rg missing",
             output: "second output",
             exit_code: 1,
@@ -150,19 +176,24 @@ describe("TurnProgress", () => {
       render(<TurnProgress progress={{ ...progress, items }} t={t} renderText={renderText} />);
       const list = screen.getByRole("list", { name: "工具调用" });
       expect(within(list).getAllByRole("listitem")).toHaveLength(2);
-      expect(screen.queryByText(/次调用/)).toBeNull();
+      expect(screen.getByText("工具进度 2/2")).toBeVisible();
+      expect(screen.getByText("1 个未成功")).toBeVisible();
       expect(within(list).getByText("失败")).toBeTruthy();
+      expect(within(list).queryByText("已完成")).not.toBeInTheDocument();
+      expect(screen.getByText("100 ms")).toBeVisible();
+      expect(screen.queryByText("cat README.md")).not.toBeInTheDocument();
+      expect(screen.queryByText("rg missing")).not.toBeInTheDocument();
       expect(screen.queryByText("first output")).toBeNull();
       expect(screen.queryByText(/工作目录/)).toBeNull();
-      const first = within(list).getByRole("button", { name: /第 1 条：cat README.md/ });
+      const first = within(list).getByRole("button", { name: /第 1 步：运行命令/ });
       first.focus();
       await user.keyboard("{Enter}");
       expect(first.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getByText("cat README.md")).toBeVisible();
       expect(screen.getByText("first output")).toBeTruthy();
       expect(screen.queryByText("second output")).toBeNull();
       expect(screen.getByText(`工作目录：${cwd}`)).toBeTruthy();
       expect(screen.getByText("退出码：0")).toBeTruthy();
-      expect(screen.getByText("用时 0.1 秒")).toBeTruthy();
       await user.click(first);
       expect(screen.queryByText("first output")).toBeNull();
     },
@@ -187,7 +218,7 @@ describe("TurnProgress", () => {
     await user.click(screen.getByRole("button", { name: /回复用时/ }));
     expect(screen.getByText("正在检查文件")).toBeTruthy();
     expect(screen.getByText("Detailed reasoning")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /第 1 条/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /第 1 步/ })).toBeTruthy();
   });
   it("numbers all commands in the turn even when explanations split groups", () => {
     const first: Progress["items"][number] = {
@@ -204,8 +235,8 @@ describe("TurnProgress", () => {
     const { rerender } = render(
       <TurnProgress progress={{ ...progress, items: [first, explanation, last] }} t={t} renderText={renderText} />,
     );
-    expect(screen.getByRole("button", { name: /第 1 条：pwd/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /第 2 条：cat README.md/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /第 1 步：运行命令/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /第 2 步：读取文件/ })).toBeTruthy();
     // The last group's items keep their identity, so its memo must also track the number offset.
     const inserted: Progress["items"][number] = {
       id: "inserted",
@@ -219,8 +250,8 @@ describe("TurnProgress", () => {
         renderText={renderText}
       />,
     );
-    expect(screen.getByRole("button", { name: /第 2 条：ls/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /第 3 条：cat README.md/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /第 2 步：运行命令/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /第 3 步：读取文件/ })).toBeTruthy();
     expect(screen.getAllByRole("list", { name: "工具调用" })[1].getAttribute("start")).toBe("3");
   });
   it("keeps running controls outside the disclosure and removes them at completion", async () => {

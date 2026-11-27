@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui";
 import styles from "./ToolOutput.module.css";
 
 type ToolOutputProps = {
@@ -44,15 +45,16 @@ export function ToolOutput({ label, text, toggleLabels }: ToolOutputProps) {
         <pre ref={content}>{text}</pre>
       </div>
       {toggleLabels && (overflows || expanded) ? (
-        <button
-          type="button"
+        <Button
+          variant="linkColor"
+          size="sm"
           className={styles.toggle}
           aria-controls={id}
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
         >
           {expanded ? toggleLabels.collapse : toggleLabels.expand}
-        </button>
+        </Button>
       ) : null}
     </>
   );

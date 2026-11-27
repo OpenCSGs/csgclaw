@@ -106,8 +106,13 @@ describe("collaboration activity turns", () => {
     expect(screen.queryByRole("button", { name: "Tester · Turn 2" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Developer · Turn 1" }));
     const records = screen.getByRole("list", { name: "This turn · Execution order" });
-    expect(within(records).getByText(/dev-turn-command-0$/)).toBeVisible();
-    expect(within(records).getByText(/dev-turn-command-49$/)).toBeVisible();
+    expect(within(records).queryByText("dev-turn-command-0")).not.toBeInTheDocument();
+    expect(within(records).queryByText("dev-turn-output-0")).not.toBeInTheDocument();
+    const [first] = within(records).getAllByRole("button", { name: "Run commands · Completed" });
+    expect(first).toHaveAttribute("aria-expanded", "false");
+    await user.click(first);
+    expect(within(records).getByText("dev-turn-command-0")).toBeVisible();
+    expect(within(records).queryByText("dev-turn-command-49")).not.toBeInTheDocument();
     expect(screen.queryByText(/test-turn-command-0$/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Expand all" }));
     expect(within(records).getByText("dev-turn-output-0")).toBeVisible();

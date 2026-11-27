@@ -1,1 +1,1 @@
-export { TurnProgress } from "./TurnProgress";
+export { StandaloneToolStep, TurnProgress } from "./TurnProgress";

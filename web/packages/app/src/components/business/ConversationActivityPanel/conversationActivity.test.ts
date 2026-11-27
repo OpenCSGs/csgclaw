@@ -157,7 +157,7 @@ describe("conversation activity model", () => {
     expect(entries.map((entry) => entry.eventType)).toEqual(["message", "message", "exec_command"]);
     expect(conversationActivityEntrySummary(entries[0]!)).toBe("ship it");
     expect(entries[2]).toMatchObject({ eventType: "exec_command", index: 3, updatedAt: "2026-07-16T10:00:05Z" });
-    expect(conversationActivityEntrySummary(entries[2]!)).toBe("npm run test:e2e");
+    expect(conversationActivityEntrySummary(entries[2]!)).toBe("");
     expect(conversationActivityEntryDetails(entries[2]!)).toEqual([
       { kind: "command", value: "npm run test:e2e" },
       { kind: "result", value: "2 failed" },
@@ -304,7 +304,7 @@ describe("conversation activity model", () => {
     expect(working?.activity).toEqual({ action: "preparing_reply" });
   });
 
-  it("keeps the latest tool command visible while the runtime processes its result", () => {
+  it("summarizes the current action without exposing the command in the working dock", () => {
     const roomAgents = conversationActivityAgents(room, agents);
     const entries = conversationActivityEntries(
       [
@@ -345,9 +345,9 @@ describe("conversation activity model", () => {
 
     expect(working?.activity).toMatchObject({
       action: "running",
-      summary: "csgclaw-cli participant list --channel csgclaw",
-      toolName: "exec_command",
+      summary: "",
     });
+    expect(working?.activity?.toolName).toBeUndefined();
   });
 
   it("uses explicit work stages for model waits and final generation", () => {
@@ -398,21 +398,21 @@ describe("conversation activity model", () => {
     expect(afterReply?.activity).toMatchObject({ action: "replying", summary: "Current answer" });
   });
 
-  it("unwraps shell launchers and truncates long working summaries", () => {
+  it("truncates long targets in the compact working summary", () => {
     const roomAgents = conversationActivityAgents(room, agents);
-    const command =
-      "printf 'a deliberately long command that should be shortened before it reaches the compact working status row'";
+    const query =
+      "a deliberately long search query that should be shortened before it reaches the compact working status row";
     const entries = conversationActivityEntries(
       [
         toolMessage(
-          "dev-command",
+          "dev-search",
           "2026-07-16T10:00:00Z",
           {
-            input: { command: `/bin/zsh -lc "${command}"` },
-            kind: "exec_command",
+            input: { query },
+            kind: "web_search",
             status: "running",
-            title: "Run shell command",
-            tool_call_id: "call-long-command",
+            title: "Search the web",
+            tool_call_id: "call-long-search",
           },
           "u-dev",
         ),
@@ -427,7 +427,6 @@ describe("conversation activity model", () => {
       entries,
     );
 
-    expect(working?.activity?.summary).not.toContain("/bin/zsh -lc");
     expect(working?.activity?.summary?.length).toBeLessThanOrEqual(72);
     expect(working?.activity?.summary).toMatch(/…$/);
   });

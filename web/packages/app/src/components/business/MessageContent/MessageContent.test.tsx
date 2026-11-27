@@ -1,9 +1,83 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createTranslator } from "@/shared/i18n";
 import { MessageContent } from "./MessageContent";
+
+const translate = createTranslator("zh");
+
+function streamingFrame(reasoning: string, content = "\u200b", status = "running") {
+  return (
+    <MessageContent
+      t={translate}
+      content={content}
+      message={{
+        content,
+        metadata: {
+          csgclaw: {
+            turn_progress: {
+              id: "streaming-turn",
+              revision: 1,
+              status,
+              started_at: "2026-11-26T08:00:00Z",
+              items: [{ id: "reasoning", kind: "reasoning", text: reasoning }],
+            },
+          },
+        },
+      }}
+    />
+  );
+}
+
+describe("streaming agent messages", () => {
+  it("reveals appended reasoning and answer text with just one active cursor, then renders the final Markdown", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender, container } = render(streamingFrame("先检查"));
+      const activeText = () => container.querySelector("[data-streaming-text]");
+      expect(activeText()).toHaveTextContent("先检查");
+
+      rerender(streamingFrame("先检查配置并运行测试"));
+      expect(screen.queryByText("先检查配置并运行测试")).not.toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(24));
+      expect(activeText()).toHaveTextContent(/^先检查配置并$/);
+
+      rerender(streamingFrame("先检查配置并运行测试", "检查结果"));
+      expect(screen.getByText("先检查配置并运行测试").closest("[data-streaming-text]")).toBeNull();
+      expect(activeText()).toHaveTextContent(/^检查结果$/);
+      expect(container.querySelectorAll("[data-streaming-text]")).toHaveLength(1);
+
+      rerender(streamingFrame("先检查配置并运行测试", "检查结果已发送👩‍💻"));
+      expect(activeText()).toHaveTextContent(/^检查结果$/);
+      act(() => vi.advanceTimersByTime(24));
+      expect(activeText()).toHaveTextContent(/^检查结果已发送$/);
+      act(() => vi.advanceTimersByTime(24));
+      expect(activeText()).toHaveTextContent(/^检查结果已发送👩‍💻$/);
+
+      rerender(streamingFrame("先检查配置并运行测试", "**检查结果已发送👩‍💻**", "succeeded"));
+      expect(activeText()).toBeNull();
+      expect(screen.getByText("检查结果已发送👩‍💻").tagName).toBe("STRONG");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows deltas immediately when reduced motion is enabled", () => {
+    vi.stubGlobal("matchMedia", () => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    try {
+      const { rerender } = render(streamingFrame("先检查"));
+      rerender(streamingFrame("先检查配置并运行测试"));
+      expect(screen.getByText("先检查配置并运行测试")).toBeVisible();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 function questionMessage(status: "pending" | "answered") {
   return {
