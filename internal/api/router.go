@@ -19,6 +19,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 	router.Get("/healthz", h.handleHealthz)
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/version", h.getVersion)
+		r.Post("/description-access", h.getDescriptionAccess)
 		r.Get("/relay/agents", h.handleRelayCatalog)
 		r.Get("/relay/agents/{id}/template", h.handleRelayAgentTemplate)
 		r.Get("/relay/agents/{id}/profile", h.handleCloudProfile)
@@ -57,6 +58,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Handle("/mcp", http.HandlerFunc(h.handleAgentConnectorMCP))
 				r.Get("/", h.getAgent)
 				r.Patch("/", h.updateAgent)
+				r.With(h.authorizeDescriptionRequest).Post("/description:generate", h.generateAgentDescription)
 				r.Delete("/", h.deleteAgent)
 				r.Post("/archive", h.handleArchiveAgent)
 				r.Post("/restore", h.handleRestoreAgent)
@@ -152,6 +154,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Get("/", h.listHubTemplates)
 			r.Post("/", h.createHubTemplate)
 			r.Get("/{id}", h.getHubTemplateByID)
+			r.With(h.authorizeDescriptionRequest).Post("/{id}/description:interpret", h.interpretHubTemplate)
 			r.Delete("/{id}", h.deleteHubTemplateByID)
 			r.Get("/{id}/versions", h.handleHubVersions)
 			r.Get("/{id}/versions/{revision}", h.handleHubVersions)

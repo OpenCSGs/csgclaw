@@ -373,6 +373,10 @@ export async function pickHostDirectoryRequest(): Promise<HostDirectoryPickResul
   }
 }
 
+export function generateAgentDescriptionRequest(agentID: string, locale: string): Promise<{ description: string }> {
+  return post(`api/v1/agents/${encodeURIComponent(agentID)}/description:generate`, { locale });
+}
+
 export function updateAgentRequest(agentID: string, payload: AgentUpdatePayload): Promise<AgentLike> {
   const normalizedPayload = normalizeAgentPayload(payload);
   const fieldMask = Object.keys(normalizedPayload).filter(

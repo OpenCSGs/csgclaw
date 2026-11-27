@@ -28,6 +28,14 @@ export function fetchHubTemplate(templateID: string): Promise<HubTemplate> {
   return get<HubTemplate>(hubTemplatePath(templateID));
 }
 
+export function interpretHubTemplate(
+  templateID: string,
+  locale: string,
+  signal: AbortSignal,
+): Promise<{ description: string }> {
+  return post(`${hubTemplatePath(templateID)}/description:interpret`, { locale }, { signal });
+}
+
 export function fetchHubWorkspace(templateID: string, workspacePath = ""): Promise<HubWorkspaceListing> {
   const query = workspacePath ? `?path=${encodeURIComponent(workspacePath)}` : "";
   return get<HubWorkspaceListing>(`${hubTemplatePath(templateID)}/workspace${query}`);

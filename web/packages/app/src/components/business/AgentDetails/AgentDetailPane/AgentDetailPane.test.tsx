@@ -14,6 +14,12 @@ import buttonStyles from "csgclaw-ui/testing/Button/Button.module.css";
 import { AgentDetailPane } from "./AgentDetailPane";
 import type { AgentDetailPaneHandle, AgentDetailPaneProps } from "./AgentDetailPane";
 
+import { useDescriptionAccess } from "@/hooks/useDescriptionAccess";
+
+vi.mock("@/hooks/useDescriptionAccess", () => ({
+  useDescriptionAccess: vi.fn(() => ({ status: "allowed", retry: vi.fn() })),
+}));
+
 function render(ui: ReactElement, options?: RenderOptions) {
   const ProvidedWrapper = options?.wrapper;
   function Wrapper({ children }: { children: ReactNode }) {
@@ -103,6 +109,95 @@ function Harness({
     />
   );
 }
+
+it("opens generated text for editing and saves it only when Save is clicked", async () => {
+  const user = userEvent.setup();
+  let finishGeneration: (description: string) => void = () => {};
+  const onGenerateDescription = vi.fn(
+    () =>
+      new Promise<string>((resolve) => {
+        finishGeneration = resolve;
+      }),
+  );
+  const onMetadataSave = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const detailPaneRef = createRef<AgentDetailPaneHandle>();
+  render(
+    <Harness
+      onGenerateDescription={onGenerateDescription}
+      onMetadataSave={onMetadataSave}
+      detailPaneRef={detailPaneRef}
+    />,
+  );
+
+  const edit = screen.getByRole("button", { name: t("editDescription") });
+  await user.click(screen.getByRole("button", { name: t("agentDescriptionGenerate") }));
+  expect(onGenerateDescription).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("button", { name: t("agentDescriptionGenerating") })).toBeDisabled();
+  expect(edit).toBeDisabled();
+
+  finishGeneration("Generated introduction");
+  const input = await screen.findByDisplayValue("Generated introduction");
+  await user.type(input, " edited");
+  await user.tab();
+  expect(detailPaneRef.current?.commitActiveMetadataEdit()).toEqual([]);
+  expect(onMetadataSave).not.toHaveBeenCalled();
+
+  const save = screen.getByRole("button", { name: t("save") });
+  await user.click(save);
+  expect(screen.getByDisplayValue("Generated introduction edited")).toBeVisible();
+  await user.click(save);
+  await waitFor(() => expect(screen.queryByDisplayValue("Generated introduction edited")).not.toBeInTheDocument());
+  expect(onMetadataSave).toHaveBeenCalledTimes(2);
+  expect(onMetadataSave).toHaveBeenLastCalledWith({ description: "Generated introduction edited" });
+});
+
+it("discards a generated introduction on Cancel", async () => {
+  const user = userEvent.setup();
+  const onMetadataSave = vi.fn();
+  const markdown = "我负责整理资料。\n\n- **资料整理**：汇总要点。";
+  render(<Harness onGenerateDescription={async () => markdown} onMetadataSave={onMetadataSave} />);
+
+  await user.click(screen.getByRole("button", { name: t("agentDescriptionGenerate") }));
+  expect(await screen.findByRole("textbox", { name: t("agentDescription") })).toHaveValue(markdown);
+  await user.click(screen.getByText(t("agentIntroductionPreview")));
+  expect(screen.getByRole("listitem")).toHaveTextContent("资料整理");
+  expect(screen.getByText("资料整理").tagName).toBe("STRONG");
+  await user.click(screen.getByRole("button", { name: t("cancel") }));
+  expect(screen.getByText("Saved description")).toBeVisible();
+  expect(onMetadataSave).not.toHaveBeenCalled();
+});
+
+it("keeps generation errors inside the introduction card", async () => {
+  const user = userEvent.setup();
+  const onDescriptionDirtyChange = vi.fn();
+  const onGenerateDescription = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("generation failed"))
+    .mockResolvedValueOnce("Draft");
+  render(<Harness onGenerateDescription={onGenerateDescription} onDescriptionDirtyChange={onDescriptionDirtyChange} />);
+  await user.click(screen.getByRole("button", { name: t("agentDescriptionGenerate") }));
+  expect(await screen.findByText(t("agentDescriptionGenerationFailed"))).toBeVisible();
+  expect(onDescriptionDirtyChange).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: t("agentDescriptionGenerate") }));
+  await screen.findByDisplayValue("Draft");
+  expect(screen.queryByText(t("agentDescriptionGenerationFailed"))).not.toBeInTheDocument();
+  expect(onDescriptionDirtyChange).toHaveBeenLastCalledWith(agent.id, true);
+  await user.click(screen.getByRole("button", { name: t("cancel") }));
+  expect(onDescriptionDirtyChange).toHaveBeenLastCalledWith(agent.id, false);
+});
+
+it("keeps manual editing available when AI generation is unavailable", () => {
+  vi.mocked(useDescriptionAccess).mockReturnValue({ status: "denied", retry: vi.fn() });
+  try {
+    render(<Harness onGenerateDescription={vi.fn()} />);
+    const card = within(screen.getByRole("region", { name: t("agentIntroduction") }));
+    expect(card.getByText(t("descriptionAccessUnavailable"))).toBeVisible();
+    expect(card.queryByRole("button", { name: t("agentDescriptionGenerate") })).not.toBeInTheDocument();
+    expect(card.getByRole("button", { name: t("editDescription") })).toBeEnabled();
+  } finally {
+    vi.mocked(useDescriptionAccess).mockReturnValue({ status: "allowed", retry: vi.fn() });
+  }
+});
 
 describe("AgentDetailPane template publishing", () => {
   it("shows community publish progress and restores the controls after a failure", async () => {
@@ -340,7 +435,7 @@ describe("AgentDetailPane metadata editing", () => {
     onOuterKeyDown.mockClear();
     await user.keyboard("{Escape}");
 
-    expect(screen.getByRole("button", { name: "editDescription" })).toHaveTextContent("Saved description");
+    expect(screen.getByText("Saved description")).toBeVisible();
     expect(onOuterKeyDown).not.toHaveBeenCalled();
     await waitFor(() => expect(onMetadataSave).not.toHaveBeenCalled());
   });

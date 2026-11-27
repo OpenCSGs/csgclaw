@@ -49,9 +49,10 @@ import {
 } from "@/components/business/ConversationActivityPanel/conversationActivity";
 
 function hasBlockingAgentDetailChangesAfterMetadataCommit(
-  props: Pick<AgentDetailSidePanelProps, "draft" | "hasUnsavedChanges" | "savedDraft">,
+  props: Pick<AgentDetailSidePanelProps, "draft" | "hasUnsavedChanges" | "hasUnsavedDescription" | "savedDraft">,
   committedFields: Array<"description" | "name">,
 ): boolean {
+  if (props.hasUnsavedDescription) return true;
   if (!props.hasUnsavedChanges) {
     return false;
   }

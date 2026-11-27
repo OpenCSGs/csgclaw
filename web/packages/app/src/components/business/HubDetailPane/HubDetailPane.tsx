@@ -1697,9 +1697,6 @@ export function HubDetailPane({
                         </div>
                       </div>
                     </div>
-                    {selectedTemplate.description ? (
-                      <p className={styles["hub-template-description"]}>{selectedTemplate.description}</p>
-                    ) : null}
                     <div className={styles["hub-template-actions"]}>
                       <Button
                         variant="primary"
@@ -2490,7 +2487,7 @@ export function HubDetailPane({
                     {hubTemplateFullName(selectedTemplate)}
                     {hasCloudTemplateWithSameName ? <StatusBadge kind="tag">{publicationBadge}</StatusBadge> : null}
                   </DialogTitle>
-                  <DialogDescription>{selectedTemplate.description || ""}</DialogDescription>
+                  <DialogDescription className="sr-only">{t("templateIntroduction")}</DialogDescription>
                 </div>
                 <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
               </DialogHeader>
