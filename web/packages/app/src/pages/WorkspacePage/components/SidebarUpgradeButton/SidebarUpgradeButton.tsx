@@ -38,11 +38,13 @@ export function SidebarUpgradeButton({ collapsed, version, t, onClick, onDismiss
           ) : null}
         </Button>
       </Tooltip>
-      <Tooltip content={dismissLabel} contentProps={{ side: tooltipSide }}>
-        <Button variant="tertiaryGray" size="sm" iconOnly aria-label={dismissLabel} onClick={onDismiss}>
-          <X size={16} aria-hidden="true" />
-        </Button>
-      </Tooltip>
+      {!collapsed ? (
+        <Tooltip content={dismissLabel} contentProps={{ side: "top" }}>
+          <Button variant="tertiaryGray" size="sm" iconOnly aria-label={dismissLabel} onClick={onDismiss}>
+            <X size={16} aria-hidden="true" />
+          </Button>
+        </Tooltip>
+      ) : null}
     </div>
   );
 }
