@@ -116,7 +116,7 @@ function renderEntryHarness(updateAvailable: boolean, authenticated = true) {
       onRefreshUpgradeStatus: vi.fn().mockResolvedValue(null),
     },
   } as unknown as WorkspaceController;
-  render(
+  const view = render(
     <MemoryRouter initialEntries={["/agents/agent-1?tab=connectors"]}>
       <TooltipProvider>
         <WorkspaceControllerProvider controller={controller}>
@@ -125,11 +125,11 @@ function renderEntryHarness(updateAvailable: boolean, authenticated = true) {
       </TooltipProvider>
     </MemoryRouter>,
   );
-  return apply;
+  return { ...view, apply };
 }
 
 it("opens version settings with a highlight and clears it on leaving the section", async () => {
-  const apply = renderEntryHarness(true);
+  const { apply } = renderEntryHarness(true);
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "sidebarNewVersion" }));
   expect(screen.getByRole("heading", { name: /versionInfo/ }).closest("section")?.className).toContain("highlighted");
@@ -139,6 +139,28 @@ it("opens version settings with a highlight and clears it on leaving the section
   expect(screen.getByRole("heading", { name: /versionInfo/ }).closest("section")?.className).not.toContain(
     "highlighted",
   );
+});
+
+it("dismisses the update notice until the workspace is opened again", async () => {
+  const { apply, unmount } = renderEntryHarness(true);
+  const user = userEvent.setup();
+  screen.getByRole("button", { name: "sidebarDismissUpdateNotice" }).focus();
+  await user.keyboard("{Enter}");
+
+  expect(screen.queryByRole("button", { name: "sidebarNewVersion" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  const account = screen.getByRole("button", { name: "iaUserMenuLabel" });
+  expect(account).toHaveFocus();
+
+  await user.click(account);
+  await user.click(screen.getByRole("menuitem", { name: "settings" }));
+  await user.click(screen.getByRole("button", { name: /iaSettingsCardVersion/ }));
+  await user.click(screen.getByRole("button", { name: "upgradeDownloadAction" }));
+  expect(apply).toHaveBeenCalledOnce();
+  unmount();
+
+  renderEntryHarness(true);
+  expect(screen.getByRole("button", { name: "sidebarNewVersion" })).toBeVisible();
 });
 
 it("groups menu items and opens the same feedback draft from Settings", async () => {

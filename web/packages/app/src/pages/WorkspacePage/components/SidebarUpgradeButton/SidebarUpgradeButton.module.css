@@ -1,16 +1,28 @@
+.notice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.railNotice {
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+
 .rowButton {
   width: 100%;
+  min-width: 0;
   min-height: 32px;
   justify-content: flex-start;
   padding-inline: 8px;
-  margin-bottom: 4px;
 }
 
 .railButton {
   display: flex;
   width: 44px;
   height: 44px;
-  margin: 0 auto 4px;
 }
 
 .label {
