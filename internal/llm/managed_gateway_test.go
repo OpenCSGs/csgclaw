@@ -1,14 +1,17 @@
 package llm
 
 import (
+	"context"
 	"csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestCSGHubGatewayRefreshesRotatedKey(t *testing.T) {
@@ -46,7 +49,7 @@ func TestCSGHubGatewayRefreshesRotatedKey(t *testing.T) {
 		UserToken: "hub-token", UserName: "owner", UserUUID: "owner-uuid"}
 	service := NewCSGHubService(config.ModelConfig{}, nil, cfg)
 	ctx := WithTaskProfile(t.Context(), agents.AgentProfile{Provider: agents.ProviderAPI,
-		ModelProviderID: "remote", BaseURL: cfg.GatewayURL, APIKey: "gk_deployment", ModelID: "fixture"})
+		ModelProviderID: "remote", BaseURL: cfg.GatewayURL, APIKey: "gk_fixture_1", ModelID: "fixture"})
 
 	responses := func(want int) {
 		response, err := service.Responses(ctx, "manager", []byte(`{"input":"hello"}`))
@@ -59,10 +62,12 @@ func TestCSGHubGatewayRefreshesRotatedKey(t *testing.T) {
 			t.Errorf("responses status = %d, want %d", response.StatusCode, want)
 		}
 	}
+	hubRejectsToken.Store(true)
 	responses(http.StatusOK)
-	if lookups.Load() != 1 || requests.Load() != 1 {
-		t.Fatal("first inference did not resolve the current key before forwarding")
+	if lookups.Load() != 0 || requests.Load() != 1 {
+		t.Fatal("first inference did not use the configured key without contacting the Hub")
 	}
+	hubRejectsToken.Store(false)
 
 	generation.Store(2)
 	var group sync.WaitGroup
@@ -70,8 +75,8 @@ func TestCSGHubGatewayRefreshesRotatedKey(t *testing.T) {
 		group.Go(func() { responses(http.StatusOK) })
 	}
 	group.Wait()
-	if lookups.Load() != 2 {
-		t.Fatalf("concurrent requests made %d total lookups, want 2", lookups.Load())
+	if lookups.Load() != 1 {
+		t.Fatalf("concurrent requests made %d total lookups, want 1", lookups.Load())
 	}
 
 	generation.Store(3)
@@ -83,13 +88,108 @@ func TestCSGHubGatewayRefreshesRotatedKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer chat.Body.Close()
-	if chat.StatusCode != http.StatusOK || lookups.Load() != 4 {
+	if chat.StatusCode != http.StatusOK || lookups.Load() != 3 {
 		t.Fatalf("chat failed to refresh using the recovered Hub access: status %d, lookups %d", chat.StatusCode, lookups.Load())
 	}
 	responses(http.StatusOK)
-	if lookups.Load() != 4 {
+	if lookups.Load() != 3 {
 		t.Fatal("next request did not reuse the refreshed key")
 	}
+}
+
+func TestCSGHubGatewaySharesRefreshResultAndAllowsCancellation(t *testing.T) {
+	for _, lookupFails := range []bool{false, true} {
+		name := "unchanged key"
+		if lookupFails {
+			name = "lookup error"
+		}
+		t.Run(name, func(t *testing.T) {
+			const rejected = "gk_rejected"
+			var lookups atomic.Int32
+			started, release := make(chan struct{}), make(chan struct{})
+			hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if lookups.Add(1) == 1 {
+					close(started)
+				}
+				<-release
+				if lookupFails {
+					http.Error(w, "Hub unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				fmt.Fprintf(w, `{"data":{"token":%q}}`, rejected)
+			}))
+			defer hub.Close()
+			unblock := sync.OnceFunc(func() { close(release) })
+			defer unblock()
+			gateway := &managedGateway{config: CSGHubGatewayConfig{HubURL: hub.URL,
+				UserToken: "hub-token", UserName: "owner", UserUUID: "owner-uuid"}}
+
+			type result struct {
+				key string
+				err error
+			}
+			refresh := func(ctx context.Context) <-chan result {
+				done := make(chan result, 1)
+				go func() {
+					key, err := gateway.key(ctx, hub.Client(), rejected)
+					done <- result{key, err}
+				}()
+				return done
+			}
+			leader, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			leaderResult := refresh(leader)
+			select {
+			case <-started:
+			case <-time.After(2 * time.Second):
+				t.Fatal("the Hub lookup did not start")
+			}
+			var waiters []<-chan result
+			for range 6 {
+				ctx := &gatewayRefreshWaitContext{Context: t.Context(), waiting: make(chan struct{})}
+				waiters = append(waiters, refresh(ctx))
+				select {
+				case <-ctx.waiting:
+				case <-time.After(2 * time.Second):
+					t.Fatal("a waiter could not reach the shared result while the Hub was blocked")
+				}
+			}
+			cancel()
+			select {
+			case got := <-leaderResult:
+				if !errors.Is(got.err, context.Canceled) {
+					t.Errorf("cancelled leader returned %v, want context.Canceled", got.err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("the cancelled caller did not exit while the Hub was blocked")
+			}
+			unblock()
+			for _, waiter := range waiters {
+				select {
+				case got := <-waiter:
+					if lookupFails && got.err == nil || !lookupFails && (got.err != nil || got.key != rejected) {
+						t.Errorf("waiter returned %+v for lookupFails = %t", got, lookupFails)
+					}
+				case <-time.After(2 * time.Second):
+					t.Fatal("a waiter did not receive the shared result")
+				}
+			}
+			if got := lookups.Load(); got != 1 {
+				t.Errorf("Hub lookups = %d, want 1", got)
+			}
+		})
+	}
+}
+
+type gatewayRefreshWaitContext struct {
+	context.Context
+	waiting chan struct{}
+	once    sync.Once
+}
+
+func (c *gatewayRefreshWaitContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.waiting) })
+	return c.Context.Done()
 }
 
 func TestCSGHubGatewayUsesOnlyTheManagedRemoteProvider(t *testing.T) {

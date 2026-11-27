@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // CSGHubGatewayConfig is supplied by the platform for the image's remote provider.
@@ -23,9 +25,10 @@ type CSGHubGatewayConfig struct {
 }
 
 type managedGateway struct {
-	config CSGHubGatewayConfig
-	mu     sync.Mutex
-	apiKey string
+	config  CSGHubGatewayConfig
+	mu      sync.Mutex
+	apiKey  string
+	refresh singleflight.Group
 }
 
 func NewCSGHubService(defaults config.ModelConfig, agents AgentProfileReader, cfg CSGHubGatewayConfig) *Service {
@@ -65,22 +68,46 @@ func (g *managedGateway) matches(req *http.Request) bool {
 	}
 }
 
-func (g *managedGateway) key(ctx context.Context, client *http.Client, rejected string) (string, error) {
+func (g *managedGateway) cachedKey() string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.apiKey != "" && g.apiKey != rejected {
-		return g.apiKey, nil
+	return g.apiKey
+}
+
+func (g *managedGateway) key(ctx context.Context, client *http.Client, rejected string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	cfg := g.config
-	key, err := auth.FetchBuiltinAPIKey(ctx, client, cfg.HubURL, cfg.UserToken, cfg.UserName, cfg.UserUUID)
-	if err != nil {
-		// The Hub's error may contain credential material.
-		return "", errors.New("could not retrieve the AI Gateway key using the sandbox's CSGHub user token")
+	if key := g.cachedKey(); key != "" && key != rejected {
+		return key, nil
 	}
-	g.apiKey = key
-	return key, nil
+	lookup := g.refresh.DoChan("key", func() (any, error) {
+		if key := g.cachedKey(); key != "" && key != rejected {
+			return key, nil
+		}
+		// Each caller can stop waiting while the shared lookup keeps its own deadline.
+		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		cfg := g.config
+		key, err := auth.FetchBuiltinAPIKey(lookupCtx, client, cfg.HubURL, cfg.UserToken, cfg.UserName, cfg.UserUUID)
+		if err != nil {
+			// The Hub's error may contain credential material.
+			return nil, errors.New("could not retrieve the AI Gateway key using the sandbox's CSGHub user token")
+		}
+		g.mu.Lock()
+		g.apiKey = key
+		g.mu.Unlock()
+		return key, nil
+	})
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case result := <-lookup:
+		if result.Err != nil {
+			return "", result.Err
+		}
+		return result.Val.(string), nil
+	}
 }
 
 func (s *Service) managedGatewayRequest(req *http.Request, stream bool) (*http.Response, error) {
@@ -88,12 +115,21 @@ func (s *Service) managedGatewayRequest(req *http.Request, stream bool) (*http.R
 	client := *s.client
 	// Both credentials are scoped to the platform endpoints above.
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	key, err := s.managedGateway.key(ctx, &client, "")
-	if err != nil {
-		if req.Body != nil {
-			_ = req.Body.Close()
+	key := s.managedGateway.cachedKey()
+	if key == "" {
+		if configured, ok := strings.CutPrefix(req.Header.Get("Authorization"), "Bearer "); ok {
+			key = strings.TrimSpace(configured)
 		}
-		return nil, err
+	}
+	if key == "" {
+		var err error
+		key, err = s.managedGateway.key(ctx, &client, "")
+		if err != nil {
+			if req.Body != nil {
+				_ = req.Body.Close()
+			}
+			return nil, err
+		}
 	}
 	exchange, _ := ctx.Value(modelExchangeKey{}).(*modelExchange)
 	if exchange != nil {
