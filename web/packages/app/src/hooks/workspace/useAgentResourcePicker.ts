@@ -93,12 +93,12 @@ export function useAgentResourcePicker({
   const globalServers = mcpServersFromCatalogResponse(servers.data ?? null);
   const installedNames = new Set(
     kind === "skill"
-      ? (agentSkills.data ?? []).map((skill) => skill.name)
+      ? (agentSkills.data ?? []).map((skill) => skill.id ?? skill.name)
       : Object.keys(agentServers.data?.servers ?? {}),
   );
   const enabledNames = new Set(
     kind === "skill"
-      ? (agentSkills.data ?? []).filter((skill) => skill.enabled !== false).map((skill) => skill.name)
+      ? (agentSkills.data ?? []).filter((skill) => skill.enabled !== false).map((skill) => skill.id ?? skill.name)
       : mcpServersFromMap(agentServers.data?.servers)
           .filter((server) => server.config.enabled !== false)
           .map((server) => server.name),

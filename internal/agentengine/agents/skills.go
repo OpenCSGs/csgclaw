@@ -14,6 +14,7 @@ import (
 	"csgclaw/internal/skill/discovery"
 	skillinstall "csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
+	"csgclaw/internal/skill/skillpath"
 	skillsystem "csgclaw/internal/skill/system"
 )
 
@@ -128,7 +129,27 @@ func (s *Controller) DeleteSkill(agentID, skillName string) error {
 	if err != nil {
 		return err
 	}
-	return skilllocal.Delete(targetRoot, skillName)
+	if !strings.Contains(skillName, "/") {
+		return skilllocal.Delete(targetRoot, skillName)
+	}
+	if !skillpath.Valid(skillName) {
+		return ErrAgentSkillInvalid
+	}
+	return skillinstall.Update(targetRoot, skillName, nil, func() error {
+		root, err := os.OpenRoot(targetRoot)
+		if err != nil {
+			return err
+		}
+		defer root.Close()
+		ids, err := skillpath.IDs(context.Background(), root, false)
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(ids, skillName) {
+			return os.ErrNotExist
+		}
+		return root.RemoveAll(filepath.FromSlash(skillName))
+	})
 }
 
 // Skills returns the installed skill names for one Agent.
@@ -142,24 +163,7 @@ func (s *Controller) Skills(agentID string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(targetRoot)
-	if errors.Is(err, os.ErrNotExist) {
-		return []string{}, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read agent skills root %q: %w", targetRoot, err)
-	}
-	names := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		if _, err := skilllocal.ResolveDir(targetRoot, entry.Name()); err == nil {
-			names = append(names, entry.Name())
-		}
-	}
-	slices.Sort(names)
-	return names, nil
+	return skillpath.Installed(targetRoot)
 }
 
 // ReplaceSkills validates and stages the complete desired skill set before an
@@ -189,27 +193,43 @@ func (s *Controller) ReplaceSkills(ctx context.Context, agentID string, skillNam
 	}
 	defer os.RemoveAll(stageRoot)
 
-	globalRoot, err := skilllocal.SkillsRoot()
-	if err != nil {
-		return err
+	var grouped, flat []string
+	seen := make(map[string]struct{}, len(skillNames))
+	for _, rawName := range skillNames {
+		name := strings.TrimSpace(rawName)
+		if _, exists := seen[name]; exists {
+			return fmt.Errorf("duplicate skill name %q", name)
+		}
+		seen[name] = struct{}{}
+		if strings.Contains(name, "/") {
+			grouped = append(grouped, name)
+			continue
+		}
+		name, err := skilllocal.NormalizeName(name)
+		if err != nil {
+			return err
+		}
+		flat = append(flat, name)
 	}
+	for _, id := range grouped {
+		parent, _, _ := strings.Cut(id, "/")
+		if _, exists := seen[parent]; exists {
+			return fmt.Errorf("%w: %q is both a skill and a group", ErrAgentSkillInvalid, parent)
+		}
+	}
+	var globalRoot string
 	var origins map[string]skillinstall.Record
-	if len(skillNames) > 0 {
+	if len(flat) > 0 {
+		globalRoot, err = skilllocal.SkillsRoot()
+		if err != nil {
+			return err
+		}
 		origins, err = skillinstall.Read(globalRoot)
 		if err != nil {
 			return err
 		}
 	}
-	seen := make(map[string]struct{}, len(skillNames))
-	for _, rawName := range skillNames {
-		name, err := skilllocal.NormalizeName(rawName)
-		if err != nil {
-			return err
-		}
-		if _, exists := seen[name]; exists {
-			return fmt.Errorf("duplicate skill name %q", name)
-		}
-		seen[name] = struct{}{}
+	for _, name := range flat {
 		source, err := resolveAgentSkillSource(globalRoot, name)
 		if err != nil {
 			if errors.Is(err, skilllocal.ErrSkillInvalid) {
@@ -230,6 +250,12 @@ func (s *Controller) ReplaceSkills(ctx context.Context, agentID string, skillNam
 			return copyWorkspaceFS(source.FS, source.RootPath, filepath.Join(stageRoot, name), "skill", true)
 		}); err != nil {
 			return fmt.Errorf("stage skill %q: %w", name, err)
+		}
+	}
+
+	if len(grouped) > 0 {
+		if err := stageGroupedSkills(ctx, targetRoot, stageRoot, grouped); err != nil {
+			return err
 		}
 	}
 
@@ -256,6 +282,39 @@ func (s *Controller) ReplaceSkills(ctx context.Context, agentID string, skillNam
 		return fmt.Errorf("remove previous skills: %w", err)
 	}
 	return nil
+}
+
+// Grouped skills may exist only in the Agent workspace. Preserve their installed
+// files and provenance together when replacing that workspace's skill set.
+func stageGroupedSkills(ctx context.Context, root, stage string, ids []string) error {
+	origins := map[string]*skillinstall.Record{}
+	err := skillinstall.ReadSnapshot(root, func(records map[string]skillinstall.Record) error {
+		dir, err := os.OpenRoot(root)
+		if err != nil {
+			return err
+		}
+		defer dir.Close()
+		installed, err := skillpath.IDs(ctx, dir, false)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if _, ok := slices.BinarySearch(installed, id); !ok {
+				return fmt.Errorf("%w: %s", ErrAgentSkillInvalid, id)
+			}
+			if err := copyWorkspaceFS(discovery.BoundedFS(root), id, filepath.Join(stage, id), "skill", true); err != nil {
+				return err
+			}
+			if record, ok := records[id]; ok {
+				origins[id] = &record
+			}
+		}
+		return nil
+	})
+	if err != nil || len(origins) == 0 {
+		return err
+	}
+	return skillinstall.UpdateMany(stage, origins, nil)
 }
 
 func resolveAgentSkillSource(root, name string) (skillsystem.SkillSource, error) {
@@ -294,7 +353,13 @@ func (s *Controller) installDefaultSystemSkills(agentID, runtimeKind string) err
 		}
 		dst := filepath.Join(targetRoot, name)
 		origin := skillinstall.Record{Source: skillinstall.SourceBuiltin}
-		if err := skillinstall.Update(targetRoot, name, &origin, func() error {
+		if err := skillinstall.UpdateIf(targetRoot, name, &origin, func() (bool, error) {
+			err := skillpath.CheckReplacement(dst)
+			if errors.Is(err, os.ErrExist) {
+				return false, nil
+			}
+			return err == nil, err
+		}, func() error {
 			if err := os.RemoveAll(dst); err != nil {
 				return err
 			}

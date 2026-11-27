@@ -388,7 +388,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const canToggleResources = ["codex", "dsh"].includes(String(agentRuntimeKind(item)));
   const detailSkill =
     resourceDetail && resourceDetail.agentID === item?.id && resourceDetail.kind === "skill"
-      ? skills.find((skill) => skill.name === resourceDetail.name)
+      ? skills.find((skill) => (skill.id ?? skill.name) === resourceDetail.name)
       : undefined;
   const detailMCP =
     resourceDetail && resourceDetail.agentID === item?.id && resourceDetail.kind === "mcp"
@@ -1219,10 +1219,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <AgentSkillsPanel
                 continuation={skillContinuation}
                 toggleBusyName={resourceBusy.startsWith("skill:") ? resourceBusy.slice(6) : ""}
-                onOpenDetail={(skill) => openResourceDetail("skill", skill.name)}
+                onOpenDetail={(skill) => openResourceDetail("skill", skill.id ?? skill.name)}
                 onToggle={
                   canToggleResources && onSetResourceEnabled
-                    ? (skill) => onSetResourceEnabled("skill", skill.name, skill.enabled === false)
+                    ? (skill) => onSetResourceEnabled("skill", skill.id ?? skill.name, skill.enabled === false)
                     : undefined
                 }
                 mutationBusy={resourceMutationBusy || Boolean(appsController.busyID)}
@@ -1394,7 +1394,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <div className={agentSkillsStyles["agent-skills-dialog-copy"]}>
               <DialogTitle>{t("agentDeleteSkill")}</DialogTitle>
               <DialogDescription>
-                {t("agentDeleteSkillConfirmMessage", { name: skillPendingDelete?.name || "" })}
+                {t("agentDeleteSkillConfirmMessage", {
+                  name: skillPendingDelete?.id ?? skillPendingDelete?.name ?? "",
+                })}
               </DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
@@ -2537,8 +2539,8 @@ function AgentSkillsPanel({
         <div className={`hub-skill-card-grid ${agentDetailPaneStyles["agent-profile-skill-card-grid"]}`}>
           {skills.map((skill) => (
             <ResourceListCard
-              key={skill.name}
-              title={skill.name}
+              key={skill.id ?? skill.name}
+              title={skill.id ?? skill.name}
               description={skill.description}
               titleMetadata={skillMetadataLabel(skill, t)}
               icon={<AgentSkillFeaturedIcon />}
@@ -2549,9 +2551,9 @@ function AgentSkillsPanel({
                     {skill.enabled === false ? t("appStatusDisabled") : t("resourcesSkillEnabled")}
                   </ResourceStatus>
                   <Switch
-                    aria-busy={toggleBusyName === skill.name}
+                    aria-busy={toggleBusyName === (skill.id ?? skill.name)}
                     className={agentSkillsStyles["agent-skill-card-switch-sm"]}
-                    aria-label={skill.name}
+                    aria-label={skill.id ?? skill.name}
                     checked={skill.enabled !== false}
                     disabled={mutationBusy || !onToggle}
                     onCheckedChange={() => void onToggle?.(skill)}

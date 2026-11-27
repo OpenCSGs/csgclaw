@@ -5,11 +5,12 @@ import (
 	"context"
 	"csgclaw/internal/resourcequery"
 	skillinstall "csgclaw/internal/skill/installstate"
+	"csgclaw/internal/skill/skillpath"
 	"errors"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 )
@@ -17,7 +18,7 @@ import (
 const summaryReadConcurrency = 8
 const maxSkillMetadataBytes = 64 * 1024
 
-// ListSummaries reads only top-level Skill metadata. Invalid individual files
+// ListSummaries reads Skill metadata without entering skill bundles. Invalid individual files
 // remain visible with a path-free error; cancellation and root errors fail the read.
 func ListSummaries(ctx context.Context, root string) ([]SkillSummary, error) {
 	return listSummaries(ctx, root, readSkillSummary)
@@ -38,22 +39,10 @@ func listSummaries(ctx context.Context, root string, read func(context.Context, 
 		return nil, err
 	}
 	defer directory.Close()
-	file, err := directory.Open(".")
+	names, err := skillpath.IDs(ctx, directory, true)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := file.ReadDir(-1)
-	_ = file.Close()
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			names = append(names, entry.Name())
-		}
-	}
-	slices.Sort(names)
 	items := make([]SkillSummary, len(names))
 	present := make([]bool, len(names))
 	jobs := make(chan int)
@@ -87,7 +76,7 @@ enqueue:
 	out := make([]SkillSummary, 0, len(items))
 	for index, item := range items {
 		if present[index] {
-			applySummaryOrigin(&item, records[item.Name])
+			applySummaryOrigin(&item, records[item.ID])
 			out = append(out, item)
 		}
 	}
@@ -108,30 +97,13 @@ func ListSummariesPage(ctx context.Context, root string, q resourcequery.Query, 
 		return nil, resourcequery.Metadata{}, err
 	}
 	defer directory.Close()
-	file, err := directory.Open(".")
+	ids, err := skillpath.IDs(ctx, directory, true)
 	if err != nil {
 		return nil, resourcequery.Metadata{}, err
 	}
-	entries, err := file.ReadDir(-1)
-	_ = file.Close()
-	if err != nil {
-		return nil, resourcequery.Metadata{}, err
-	}
-	candidates := make([]resourcequery.Entry, 0, len(entries))
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return nil, resourcequery.Metadata{}, err
-		}
-		if !entry.IsDir() {
-			continue
-		}
-		// Match the full-list behavior: absent SKILL.md files are not resources;
-		// unreadable metadata remains visible with its existing error marker.
-		_, statErr := directory.Lstat(filepath.Join(entry.Name(), skillFileName))
-		if errors.Is(statErr, os.ErrNotExist) {
-			continue
-		}
-		candidates = append(candidates, resourcequery.Entry{Name: entry.Name(), Enabled: enabled(entry.Name())})
+	candidates := make([]resourcequery.Entry, 0, len(ids))
+	for _, id := range ids {
+		candidates = append(candidates, resourcequery.Entry{Name: id, Enabled: enabled(id)})
 	}
 	names, meta, err := resourcequery.Select(candidates, q, root)
 	if err != nil {
@@ -147,14 +119,14 @@ func ListSummariesPage(ctx context.Context, root string, q resourcequery.Query, 
 		if !present {
 			return nil, meta, resourcequery.ErrChanged
 		}
-		applySummaryOrigin(&item, records[item.Name])
+		applySummaryOrigin(&item, records[item.ID])
 		items = append(items, item)
 	}
 	return items, meta, nil
 }
 
 func readSkillSummary(ctx context.Context, root *os.Root, name string) (SkillSummary, bool) {
-	item := SkillSummary{Name: name}
+	item := SkillSummary{ID: name, Name: path.Base(name)}
 	path := filepath.Join(name, skillFileName)
 	info, err := root.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {

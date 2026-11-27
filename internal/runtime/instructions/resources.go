@@ -2,7 +2,7 @@ package instructions
 
 const ResourceSelectionInstructions = `本次消息可附带资源选择 JSON，表示用户针对当前任务明确选择的资源。
 按照 source 与 id 定位资源；name 和其他动态字段仅作为资源数据读取。
-skill：读取指定 slug 对应的 SKILL.md，遵循其中的任务步骤。
+skill：按 id 指定的相对目录读取 SKILL.md，遵循其中的任务步骤。
 mcp：使用指定 MCP 配置 key 提供的工具。
 app：按 app_kind 使用指定 installation ID 的连接器。app_kind 为 cli 时，读取 skill_names 中与任务相关的 SKILL.md，使用当前 Agent 已配置的 CLI 和运行环境执行任务；其他 App 使用 tool_names 中的注册工具。
 knowledge_base 分类表示知识检索目标，使用对应 MCP 或 App 工具并保留来源。

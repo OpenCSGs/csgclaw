@@ -3,6 +3,7 @@ package local
 import (
 	"archive/zip"
 	"bytes"
+	"csgclaw/internal/skill/skillpath"
 	"errors"
 	"fmt"
 	"io"
@@ -98,6 +99,12 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 			}
 			if !options.Replace {
 				return fmt.Errorf("%w: %s", ErrSkillAlreadyExists, summary.Name)
+			}
+			if err := skillpath.CheckReplacement(destDir); err != nil {
+				if errors.Is(err, os.ErrExist) {
+					return fmt.Errorf("%w: %w", ErrSkillAlreadyExists, err)
+				}
+				return err
 			}
 			return replaceDir(skillDir, destDir, root)
 		} else if !errors.Is(err, os.ErrNotExist) {

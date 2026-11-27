@@ -50,9 +50,7 @@ func TestListSummariesMetadataIsolation(t *testing.T) {
 func TestSummaryReadsBoundedAndCanceled(t *testing.T) {
 	root := t.TempDir()
 	for i := 0; i < 300; i++ {
-		if err := os.Mkdir(filepath.Join(root, fmt.Sprintf("skill-%03d", i)), 0700); err != nil {
-			t.Fatal(err)
-		}
+		mustWriteFile(t, filepath.Join(root, fmt.Sprintf("skill-%03d", i), "SKILL.md"), "# Test")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

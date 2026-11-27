@@ -221,6 +221,7 @@ type AgentStatus struct {
 // SkillSummary is a read-only projection, independent of desired Skill names.
 // Error is a stable per-file code and never contains paths or file contents.
 type SkillSummary struct {
+	ID          string `json:"id"`
 	Enabled     bool   `json:"enabled"`
 	Name        string `json:"name"`
 	Version     string `json:"version,omitempty"`

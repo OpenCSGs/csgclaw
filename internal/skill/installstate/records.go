@@ -173,6 +173,23 @@ func Update(skillsRoot, name string, record *Record, apply func() error) error {
 	return UpdateMany(skillsRoot, map[string]*Record{strings.TrimSpace(name): record}, apply)
 }
 
+// UpdateIf checks the destination under the installation lock. A false result
+// leaves both the files and installation records untouched.
+func UpdateIf(root, name string, record *Record, shouldUpdate func() (bool, error), apply func() error) error {
+	skipped := errors.New("skip installation")
+	err := updateChecked(root, map[string]*Record{name: record}, nil, func(map[string]Record) error {
+		update, err := shouldUpdate()
+		if err == nil && !update {
+			return skipped
+		}
+		return err
+	}, apply)
+	if err == skipped {
+		return nil
+	}
+	return err
+}
+
 // UpdateMany persists related installation records together and restores them
 // when the prepared file operation fails.
 func UpdateMany(skillsRoot string, records map[string]*Record, apply func() error) error {

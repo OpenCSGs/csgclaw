@@ -264,6 +264,7 @@ export function fetchAgentSkills(agentID: string, skillsPath = ""): Promise<Work
 }
 
 export type AgentSkillSummary = {
+  id?: string;
   enabled?: boolean;
   name: string;
   description?: string;
@@ -558,6 +559,7 @@ function participantToAgentLike(participant: ParticipantLike): AgentLike {
 
 export type AgentResourceKind = "skill" | "mcp";
 export type AgentResourceEnabledResult = {
+  id?: string;
   agent_id: string;
   resource_version: string;
   name: string;

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ type agentResourceEnabledRequest struct {
 }
 
 type agentResourceEnabledResponse struct {
+	ID              string                 `json:"id,omitempty"`
 	AgentID         string                 `json:"agent_id"`
 	ResourceVersion string                 `json:"resource_version"`
 	Name            string                 `json:"name"`
@@ -108,8 +110,12 @@ func (h *Handler) handleAgentResourceEnabled(w http.ResponseWriter, r *http.Requ
 	}
 	h.publishUpdatedAgentUser(serviceAgentFromEngine(updated))
 	w.Header().Set("ETag", strconv.Quote(updated.ResourceVersion))
-	writeJSON(w, http.StatusOK, agentResourceEnabledResponse{
+	response := agentResourceEnabledResponse{
 		AgentID: updated.ID, ResourceVersion: updated.ResourceVersion, Name: name, Enabled: enabled,
 		RuntimeKind: updated.Status.RuntimeKind, RuntimeState: updated.Status.State, RestartRequired: updated.Status.Model.EnvRestartRequired,
-	})
+	}
+	if isSkill {
+		response.ID, response.Name = name, path.Base(name)
+	}
+	writeJSON(w, http.StatusOK, response)
 }

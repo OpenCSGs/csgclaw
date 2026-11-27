@@ -56,7 +56,7 @@ export function AgentResourceDetails({
   onToggle,
   onDelete,
 }: Props) {
-  const name = skill?.name || server?.name || "";
+  const name = skill?.id ?? skill?.name ?? server?.name ?? "";
   const [path, setPath] = useState(`${name}/SKILL.md`);
   const tree = useQuery({
     queryKey: ["agent-skill-tree", agentID, name],

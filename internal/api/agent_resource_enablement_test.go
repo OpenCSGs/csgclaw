@@ -4,15 +4,19 @@ import (
 	"context"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/config"
+	"csgclaw/internal/conversationresource"
 	"csgclaw/internal/knowledgebase"
 	agentruntime "csgclaw/internal/runtime"
 	skill "csgclaw/internal/skill/state"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -268,6 +272,98 @@ func TestKnowledgeBaseEnablementPreservesListingAndMetadata(t *testing.T) {
 				if strings.Contains(after.Body.String(), "internal-token") {
 					t.Fatal("knowledge base configuration contains runtime credentials")
 				}
+			}
+		})
+	}
+}
+
+func TestGroupedSkillSelectionAndEnablement(t *testing.T) {
+	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindDSH} {
+		t.Run(kind, func(t *testing.T) {
+			item := completeWorkerAgent("agent-groups", "Groups")
+			item.RuntimeKind, item.RuntimeName = kind, kind
+			item.Status, item.DesiredState = "stopped", "stopped"
+			rt := &resourceEnablementRuntime{snapshotMCPServersRuntime: snapshotMCPServersRuntime{fakeCompatRuntime: fakeCompatRuntime{kind: kind}}}
+			controller := mustNewSeededServiceWithOptions(t, []agent.Agent{item}, agent.WithRuntime(rt))
+			t.Cleanup(func() { _ = controller.Close() })
+			layout, err := controller.AgentLayout(item.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			const first, second = "team/tools/review", "user/review"
+			for _, id := range []string{first, second, second + "/examples/sample"} {
+				dir := filepath.Join(layout.SkillsRoot, id)
+				if err := os.MkdirAll(dir, 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# "+id), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			h := &Handler{svc: controller, agentEngine: agentengine.New(controller), workspace: controller.Workspace(), agentRuntime: controller}
+			h.EnableConversationResources()
+			routes := h.Routes()
+			request := func(method, path, body string) *httptest.ResponseRecorder {
+				t.Helper()
+				rec := httptest.NewRecorder()
+				routes.ServeHTTP(rec, httptest.NewRequest(method, "/api/v1/agents/"+item.ID+path, strings.NewReader(body)))
+				if rec.Code < 200 || rec.Code >= 300 {
+					t.Fatalf("%s %s: %d %s", method, path, rec.Code, rec.Body.String())
+				}
+				return rec
+			}
+			var summaries []agentengine.SkillSummary
+			list := request("GET", "/skill-summaries", "")
+			if err := json.Unmarshal(list.Body.Bytes(), &summaries); err != nil {
+				t.Fatal(err)
+			}
+			if len(summaries) != 2 || summaries[0].ID != first || summaries[1].ID != second || summaries[0].Name != "review" || summaries[1].Name != "review" {
+				t.Fatalf("unexpected summaries: %+v", summaries)
+			}
+			var page resourcePage[agentengine.SkillSummary]
+			for i, want := range []string{first, second} {
+				rec := request("GET", "/skill-summaries?pagination=cursor&limit=1&cursor="+url.QueryEscape(page.NextCursor), "")
+				page = resourcePage[agentengine.SkillSummary]{}
+				if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+					t.Fatal(err)
+				}
+				if page.Total != 2 || len(page.Items) != 1 || page.Items[0].ID != want || page.HasMore != (i == 0) {
+					t.Fatalf("unexpected page: %+v", page)
+				}
+			}
+			refs := []apitypes.ResourceReference{{Source: "skill", ID: first}, {Source: "skill", ID: second}}
+			for _, enabled := range []bool{false, true} {
+				updated := request("PUT", "/skills/"+url.PathEscape(first)+"/enabled", fmt.Sprintf(`{"enabled":%t,"resource_version":%s}`, enabled, list.Header().Get("ETag")))
+				var update agentResourceEnabledResponse
+				if err := json.Unmarshal(updated.Body.Bytes(), &update); err != nil || update.ID != first || update.Name != "review" || update.Enabled != enabled {
+					t.Fatalf("toggle: %+v, %v", update, err)
+				}
+				list = request("GET", "/skill-summaries", "")
+				if err := json.Unmarshal(list.Body.Bytes(), &summaries); err != nil {
+					t.Fatal(err)
+				}
+				if summaries[0].Enabled != enabled || !summaries[1].Enabled {
+					t.Fatalf("unexpected states: %+v", summaries)
+				}
+				if _, err := h.resources.Resolve(t.Context(), item.ID, refs[1:]); err != nil {
+					t.Fatal(err)
+				}
+				result, err := h.resources.Resolve(t.Context(), item.ID, refs)
+				var failure *conversationresource.Error
+				if enabled {
+					if err != nil || len(result.Resources) != 2 || result.Resources[0].ID != first || result.Resources[1].ID != second {
+						t.Fatalf("resolve: %+v %v", result, err)
+					}
+				} else if !errors.As(err, &failure) || failure.Code != conversationresource.ResourceDisabled || failure.Reference.ID != first {
+					t.Fatalf("unexpected disabled result: %v", err)
+				}
+			}
+			request("DELETE", "/skills/"+url.PathEscape(first), "")
+			if _, err := os.Stat(filepath.Join(layout.SkillsRoot, first)); !os.IsNotExist(err) {
+				t.Fatalf("deleted skill: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(layout.SkillsRoot, second, "SKILL.md")); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

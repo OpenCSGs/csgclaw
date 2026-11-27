@@ -23,9 +23,9 @@ Profile 的 Skill 与 MCP 使用资源页面的 `ResourceListCard`：宽屏两�
 
 | 方法与 URI | 用途 |
 | --- | --- |
-| `GET /api/v1/agents/{id}/skill-summaries` | 返回 Skill 摘要数组，每项包含 `name`、`description`、`enabled`；响应头提供 `ETag` |
+| `GET /api/v1/agents/{id}/skill-summaries` | 返回 Skill 摘要数组，每项以相对目录 `id` 标识 Skill，`name` 为末级目录名，`enabled` 为启用状态，`description` 可选；响应头提供 `ETag` |
 | `GET /api/v1/agents/{id}/mcp-servers` | 保持现有响应格式，配置包含 `enabled`；响应头提供 `ETag` |
-| `PUT /api/v1/agents/{id}/skills/{name}/enabled` | 设置已安装 Skill 的状态 |
+| `PUT /api/v1/agents/{id}/skills/{skillID}/enabled` | 按相对目录设置 Skill 状态。将整个 `skillID` 编码为一个 URL 路径段，例如 `team%2Freview` |
 | `PUT /api/v1/agents/{id}/mcp-servers/{name}/enabled` | 设置已安装 MCP 的状态 |
 
 两个 PUT 接口共用请求格式。`enabled` 必须是 boolean；`resource_version` 必须是查询响应 `ETag` 的字符串值，去除 HTTP 引号。

@@ -1089,6 +1089,30 @@ describe("AgentDetailPane MCP snapshots", () => {
 });
 
 describe("Profile 资源交互", () => {
+  it("targets the selected grouped skill when names match", async () => {
+    const user = userEvent.setup();
+    const toggle = vi.fn();
+    render(
+      <Harness
+        item={{ ...agent, runtime_kind: "codex", runtime: { ...agent.runtime, kind: "codex", name: "codex" } }}
+        workspaceSupported
+        skills={[
+          { id: "team/review", name: "review", enabled: true },
+          { id: "user/review", name: "review", enabled: false },
+        ]}
+        onSetResourceEnabled={toggle}
+      />,
+      { wrapper: createQueryWrapper().wrapper },
+    );
+    await user.click(screen.getByRole("button", { name: /agentProfileSkillsTab/ }));
+    await user.click(screen.getByRole("switch", { name: "user/review" }));
+    await user.click(screen.getByRole("switch", { name: "team/review" }));
+    expect(toggle.mock.calls).toEqual([
+      ["skill", "user/review", true],
+      ["skill", "team/review", false],
+    ]);
+  });
+
   it.each(["codex", "dsh"])("%s 的开关与详情入口独立", async (runtimeKind) => {
     const user = userEvent.setup();
     const onSetResourceEnabled = vi.fn().mockResolvedValue(undefined);
