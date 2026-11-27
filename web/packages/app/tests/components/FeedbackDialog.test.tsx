@@ -106,10 +106,16 @@ it("keeps attachment limits visible, reveals formats on demand, and explains whe
 it("dismisses attachment warnings and returns focus to the file chooser", async () => {
   const user = userEvent.setup({ applyAccept: false });
   render(<FeedbackForm locale="zh" />);
-  const input = screen.getByRole("dialog").querySelector<HTMLInputElement>('input[type="file"]');
+  const dialog = screen.getByRole("dialog");
+  const input = dialog.querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error("Feedback file input is missing");
+  const body = dialog.querySelector<HTMLElement>(".csg-dialog-body")!;
+  body.scrollTop = 240;
   await user.upload(input, new File(["text"], "notes.txt", { type: "text/plain" }));
-  expect(screen.getByRole("alert")).toHaveTextContent("notes.txt");
+  const warning = within(body).getByRole("alert");
+  expect(warning).toHaveTextContent("notes.txt");
+  expect(warning.compareDocumentPosition(screen.getByRole("textbox"))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(body.scrollTop).toBe(0);
   await user.click(screen.getByRole("button", { name: "关闭附件提示" }));
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "选择文件" })).toHaveFocus();
@@ -310,8 +316,8 @@ it("accepts window paste and dropped files while the form is open", () => {
 
 it("shows the issue number and a safe link after feedback is submitted", () => {
   const { rerender } = render(<FeedbackDialog {...props} />);
-  const description = () => within(screen.getByRole("dialog").querySelector(".csg-dialog-description") as HTMLElement);
-  const status = description().getByRole("status");
+  const body = within(screen.getByRole("dialog").querySelector(".csg-dialog-body") as HTMLElement);
+  const status = body.getByRole("status");
   expect(status).toBeEmptyDOMElement();
   rerender(
     <FeedbackDialog
@@ -319,7 +325,7 @@ it("shows the issue number and a safe link after feedback is submitted", () => {
       receipt={{ success: true, issue_id: 123, issue_url: "https://example.test/issues/123" }}
     />,
   );
-  expect(description().getByRole("status")).toBe(status);
+  expect(body.getByRole("status")).toBe(status);
   expect(status).toHaveTextContent("feedbackSuccess");
   expect(screen.getByRole("link", { name: "feedbackViewIssue" })).toHaveAttribute(
     "href",
