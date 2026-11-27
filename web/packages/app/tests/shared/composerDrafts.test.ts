@@ -79,6 +79,33 @@ it("retains a failed write after leaving and retries only the latest draft", () 
   leaveAgain();
 });
 
+it.each([
+  ["a newer draft", { text: "newer draft" }],
+  ["a cleared draft", null],
+])("does not overwrite %s from another tab on pagehide", (_description, replacement) => {
+  const key = composerDraftKey("test-user", "cross-tab");
+  const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => {
+    throw new DOMException("Storage is full", "QuotaExceededError");
+  });
+  saveComposerDraft(key, { text: "older unsaved draft" }, []);
+  flushComposerDraft(key);
+  expect(composerDraftSaveFailed(key)).toBe(true);
+
+  storage.mockRestore();
+  const persisted = replacement === null ? null : JSON.stringify(replacement);
+  localStorage.setItem(key, JSON.stringify({ text: "draft saved in another tab" }));
+  if (persisted === null) localStorage.removeItem(key);
+  else localStorage.setItem(key, persisted);
+  try {
+    window.dispatchEvent(new Event("pagehide"));
+    expect(localStorage.getItem(key)).toBe(persisted);
+    expect(composerDraftSaveFailed(key)).toBe(true);
+    expect(getComposerDraft(key).content).toEqual({ text: "older unsaved draft" });
+  } finally {
+    saveComposerDraft(key, null, []);
+  }
+});
+
 it("keeps an explicit clear when storage removal fails instead of restoring stale text", () => {
   const key = composerDraftKey("test-user", "failed-clear");
   localStorage.setItem(key, JSON.stringify({ text: "previously saved" }));
@@ -92,7 +119,14 @@ it("keeps an explicit clear when storage removal fails instead of restoring stal
   expect(getComposerDraft(key).content).toEqual({});
 
   storage.mockRestore();
+  const newerDraft = JSON.stringify({ text: "saved in another tab" });
+  localStorage.setItem(key, newerDraft);
   window.dispatchEvent(new Event("pagehide"));
+  expect(localStorage.getItem(key)).toBe(newerDraft);
+  expect(getComposerDraft(key).content).toEqual({});
+  expect(composerDraftSaveFailed(key)).toBe(true);
+
+  flushComposerDraft(key);
   expect(composerDraftSaveFailed(key)).toBe(false);
   expect(localStorage.getItem(key)).toBeNull();
 });

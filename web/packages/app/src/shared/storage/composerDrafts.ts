@@ -150,7 +150,15 @@ export function flushComposerDraft(key: string) {
 }
 
 function flushAll() {
-  for (const key of pending.keys()) flushComposerDraft(key);
+  for (const [key, item] of pending) {
+    // A failed operation may be older than a save or clear in another tab.
+    if (item.state === "failed" || item.state === "discarding") {
+      window.clearTimeout(item.timer);
+      item.timer = undefined;
+      continue;
+    }
+    flushComposerDraft(key);
+  }
 }
 
 export function saveComposerDraft(
