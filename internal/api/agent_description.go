@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agentengine"
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
 )
 
 const agentDescriptionPrompt = `Write a concise first-person Markdown profile in the requested language. Aim for 180–300 Chinese characters or 90–130 English words. Keep the complete Markdown under 1,000 characters.
@@ -33,6 +34,7 @@ func (h *Handler) generateAgentDescription(w http.ResponseWriter, r *http.Reques
 	defer cancel()
 	agents := h.agentEngine.Agents()
 	item, err := agents.Get(ctx, pathValue(r, "id"), agentengine.AgentGetOptions{
+		IncludeDocuments:      true,
 		IncludeSkillSummaries: true,
 		AdoptMCPServers:       true,
 	})
@@ -76,10 +78,36 @@ func agentDescriptionSource(item agentengine.Agent, language string) ([]byte, er
 		"language":            language,
 		"name":                item.Spec.Name,
 		"description":         limitDescriptionSource(item.Spec.Description, 1000),
-		"instructions":        limitDescriptionSource(item.Spec.Instructions, 5000),
+		"instructions":        limitDescriptionSource(agentDescriptionInstructions(item), 5000),
 		"enabled_skills":      limitDescriptionSource(strings.Join(skills, "\n"), 5000),
 		"enabled_mcp_servers": limitDescriptionSource(strings.Join(servers, "\n"), 1500),
 	})
+}
+
+func agentDescriptionInstructions(item agentengine.Agent) string {
+	document := item.Status.Instructions
+	if document == nil || document.Error != "" {
+		return item.Spec.Instructions
+	}
+	start, end := runtimeinstructions.AgentsInstructionsBlockMarkers()
+	var parts []string
+	remaining := document.Effective
+	for {
+		before, block, found := strings.Cut(remaining, start)
+		parts = append(parts, before)
+		if !found {
+			break
+		}
+		block, remaining, found = strings.Cut(block, end)
+		if !found {
+			break
+		}
+		parts = append(parts, runtimeinstructions.ExtractUserInstructionsFromAgentsDocument(start+block+end))
+	}
+	if instructions := strings.TrimSpace(strings.Join(parts, "\n")); instructions != "" {
+		return instructions
+	}
+	return item.Spec.Instructions
 }
 
 func limitDescriptionSource(text string, limit int) string {

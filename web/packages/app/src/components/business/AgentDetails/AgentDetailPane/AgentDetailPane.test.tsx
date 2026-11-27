@@ -162,7 +162,13 @@ it("discards a generated introduction on Cancel", async () => {
   await user.click(screen.getByText(t("agentIntroductionPreview")));
   expect(screen.getByRole("listitem")).toHaveTextContent("资料整理");
   expect(screen.getByText("资料整理").tagName).toBe("STRONG");
-  await user.click(screen.getByRole("button", { name: t("cancel") }));
+  const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+  const cancel = screen.getByRole("button", { name: t("cancel") });
+  await user.click(cancel);
+  expect(screen.getByRole("textbox", { name: t("agentDescription") })).toHaveValue(markdown);
+  await user.click(cancel);
+  expect(confirm).toHaveBeenCalledTimes(2);
+  confirm.mockRestore();
   expect(screen.getByText("Saved description")).toBeVisible();
   expect(onMetadataSave).not.toHaveBeenCalled();
 });
@@ -182,7 +188,9 @@ it("keeps generation errors inside the introduction card", async () => {
   await screen.findByDisplayValue("Draft");
   expect(screen.queryByText(t("agentDescriptionGenerationFailed"))).not.toBeInTheDocument();
   expect(onDescriptionDirtyChange).toHaveBeenLastCalledWith(agent.id, true);
+  const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(true);
   await user.click(screen.getByRole("button", { name: t("cancel") }));
+  confirm.mockRestore();
   expect(onDescriptionDirtyChange).toHaveBeenLastCalledWith(agent.id, false);
 });
 
@@ -422,9 +430,15 @@ describe("AgentDetailPane metadata editing", () => {
     const user = userEvent.setup();
     const onMetadataSave = vi.fn();
     const onOuterKeyDown = vi.fn();
+    const detailPaneRef = createRef<AgentDetailPaneHandle>();
+    const confirm = vi
+      .spyOn(window, "confirm")
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
     render(
       <div onKeyDown={onOuterKeyDown}>
-        <Harness onMetadataSave={onMetadataSave} />
+        <Harness onMetadataSave={onMetadataSave} detailPaneRef={detailPaneRef} />
       </div>,
     );
 
@@ -434,6 +448,14 @@ describe("AgentDetailPane metadata editing", () => {
     await user.type(textarea, "Draft description");
     onOuterKeyDown.mockClear();
     await user.keyboard("{Escape}");
+    expect(textarea).toHaveValue("Draft description");
+    act(() => {
+      expect(detailPaneRef.current?.cancelActiveMetadataEdit()).toEqual(["description"]);
+    });
+    expect(textarea).toHaveValue("Draft description");
+    await user.keyboard("{Escape}");
+    expect(confirm).toHaveBeenCalledTimes(3);
+    confirm.mockRestore();
 
     expect(screen.getByText("Saved description")).toBeVisible();
     expect(onOuterKeyDown).not.toHaveBeenCalled();

@@ -1,3 +1,4 @@
+import { confirmWithFocusRecovery } from "@/shared/platform/confirm";
 import { useDescriptionAccess } from "@/hooks/useDescriptionAccess";
 import { IntroductionCard, IntroductionMarkdown } from "@/components/business/IntroductionCard";
 import { TemplatePublishProgress } from "@/components/business/TemplatePublishProgress";
@@ -544,7 +545,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     updateDraft({ name: savedDraft?.name ?? item.name ?? "" });
     setIsEditingName(false);
   }, [item.name, savedDraft?.name, updateDraft]);
-  const cancelDescriptionEdit = useCallback(() => setDescriptionEdit(null), []);
+  const cancelDescriptionEdit = useCallback(() => {
+    if (saving || (descriptionDirty && !confirmWithFocusRecovery(t("agentUnsavedChangesWarning")))) return;
+    setDescriptionEdit(null);
+  }, [descriptionDirty, saving, t]);
   useImperativeHandle(
     ref,
     () => ({
@@ -1157,7 +1161,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                             disabled={saving || !onMetadataSave}
                             onClick={async () => {
                               if ((await onMetadataSave?.({ description: descriptionEdit.text })) !== false) {
-                                cancelDescriptionEdit();
+                                setDescriptionEdit(null);
                               }
                             }}
                           >
@@ -1210,7 +1214,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                               event.stopPropagation();
                               event.nativeEvent.stopImmediatePropagation();
                               cancelDescriptionEdit();
-                              event.currentTarget.blur();
                             }
                           }}
                           placeholder={t("agentDescription")}

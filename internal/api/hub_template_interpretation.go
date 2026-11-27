@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"strings"
 	"time"
@@ -65,7 +66,11 @@ func (h *Handler) interpretHubTemplate(w http.ResponseWriter, r *http.Request) {
 	if file, err := hubSvc.ReadWorkspaceFile(ctx, id, "instructions/AGENTS.md"); err == nil && !file.Binary {
 		source["instructions"] = limitDescriptionSource(file.Content, 6000)
 	}
-	if listing, err := hubSvc.ListWorkspace(ctx, id, "skills"); err == nil {
+	listing, skillErr := hubSvc.ListWorkspace(ctx, id, "skills")
+	if errors.Is(skillErr, hub.ErrTemplateNotFound) || errors.Is(skillErr, fs.ErrNotExist) {
+		listing, skillErr = hubSvc.ListWorkspace(ctx, id, "workspace/skills")
+	}
+	if skillErr == nil {
 		var names []string
 		for _, entry := range listing.Entries {
 			names = append(names, entry.Name)

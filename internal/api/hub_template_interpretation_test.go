@@ -22,7 +22,10 @@ func (interpretationTemplateStore) Get(_ context.Context, id string) (hub.Templa
 	return hub.Template{ID: id, Name: "Reviewer", Description: "Original description"}, nil
 }
 
-func (interpretationTemplateStore) ListWorkspace(context.Context, string, string) (apitypes.WorkspaceListing, error) {
+func (interpretationTemplateStore) ListWorkspace(_ context.Context, _ string, path string) (apitypes.WorkspaceListing, error) {
+	if path != "workspace/skills" {
+		return apitypes.WorkspaceListing{}, hub.ErrTemplateNotFound
+	}
 	return apitypes.WorkspaceListing{Entries: []apitypes.WorkspaceEntry{{Name: "review-skill"}}}, nil
 }
 

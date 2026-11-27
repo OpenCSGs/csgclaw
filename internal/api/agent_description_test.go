@@ -12,6 +12,7 @@ import (
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
 )
 
 func TestAgentDescriptionSourceUsesEnabledCapabilities(t *testing.T) {
@@ -44,6 +45,27 @@ func TestAgentDescriptionSourceUsesEnabledCapabilities(t *testing.T) {
 	}
 	if strings.Contains(string(source), "private-token") {
 		t.Fatal("source included MCP credentials")
+	}
+}
+
+func TestAgentDescriptionUsesEffectiveInstructionsWithoutManagedBoilerplate(t *testing.T) {
+	item := agentengine.Agent{
+		Status: agentengine.AgentStatus{Instructions: &agentengine.InstructionsStatus{
+			Effective: "Review customer visit plans.\n\n" + runtimeinstructions.RenderRuntimeAgentsInstructionsBlock("agent-worker", "Summarize public research."),
+		}},
+	}
+	source, err := agentDescriptionSource(item, "English")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]string
+	if err := json.Unmarshal(source, &fields); err != nil {
+		t.Fatal(err)
+	}
+	got := fields["instructions"]
+	if !strings.Contains(got, "Review customer visit plans.") || !strings.Contains(got, "Summarize public research.") ||
+		strings.Contains(got, "Managed Runtime Instructions") || strings.Contains(got, "BEGIN CSGCLAW-INSTRUCTIONS") {
+		t.Fatalf("unexpected effective instructions: %q", got)
 	}
 }
 
