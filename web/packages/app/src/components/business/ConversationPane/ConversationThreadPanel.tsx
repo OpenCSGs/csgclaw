@@ -95,7 +95,7 @@ type ThreadMentionState = {
 export type ConversationThreadPanelProps = ComposerResourceProps & {
   collaboration?: boolean;
   workingParticipants?: ConversationWorkingParticipant[];
-  onOpenCollaborationActivity?: (senderID?: string, turnID?: string, requestID?: string) => void;
+  onOpenCollaborationActivity?: (senderID?: string, turnID?: string, requestID?: string, messageID?: string) => void;
   onStopWorkingTurn?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
   currentUserID?: string;
   memoryAgentID?: string;

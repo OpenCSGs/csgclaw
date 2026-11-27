@@ -44,16 +44,22 @@ function identity(message: IMMessage) {
 
 // Never infer a turn from adjacent timestamps: members and threads can overlap.
 // Request-only legacy records join a known turn only when that association is unique.
-export function collaborationTurns(messages: readonly IMMessage[]): {
+export function collaborationTurns(
+  messages: readonly IMMessage[],
+  sourceMessages: readonly IMMessage[] = [],
+): {
   turns: CollaborationTurn[];
   unassigned: IMMessage[];
 } {
-  messages = messages.filter((message) => !isAutonomousCoordinationNotice(message));
+  const scopedMessages: { message: IMMessage; meta: ReturnType<typeof identity> }[] = [];
   const groups = new Map<string, CollaborationTurn>();
   const sources = new Map<string, Set<string>>();
-  const messageByID = new Map(messages.map((message) => [message.id, message]));
+  const messageByID = new Map(sourceMessages.map((message) => [message.id, message]));
   for (const message of messages) {
+    if (isAutonomousCoordinationNotice(message)) continue;
     const meta = identity(message);
+    scopedMessages.push({ message, meta });
+    messageByID.set(message.id, message);
     if (!meta.turnID) continue;
     const key = JSON.stringify([meta.scope, meta.turnID]);
     if (!groups.has(key))
@@ -76,8 +82,7 @@ export function collaborationTurns(messages: readonly IMMessage[]): {
     }
   }
   const unassigned: IMMessage[] = [];
-  for (const message of messages) {
-    const meta = identity(message);
+  for (const { message, meta } of scopedMessages) {
     let key = meta.turnID ? JSON.stringify([meta.scope, meta.turnID]) : "";
     if (!key && meta.sourceID) {
       const sourceKey = JSON.stringify([meta.scope, meta.sourceID]);

@@ -77,7 +77,7 @@ describe("collaboration status dock", () => {
     const activity = screen.getByRole("button", { name: /View Developer/ });
     expect(activity).toHaveAccessibleDescription("AI news");
     await user.click(activity);
-    expect(onOpenActivity).toHaveBeenCalledWith("dev", "turn", "request");
+    expect(onOpenActivity).toHaveBeenCalledWith("dev", "turn", "request", "turn");
     await user.click(screen.getByRole("button", { name: /Stop Developer/ }));
     expect(onStop).toHaveBeenCalledWith(participant);
     rerender(<CollaborationStatus {...props} messages={[message("succeeded")]} />);

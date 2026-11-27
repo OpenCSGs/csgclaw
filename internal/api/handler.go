@@ -2305,6 +2305,11 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.URL.Query().Has("limit") {
+			h.writeMessagePage(w, r, channel, roomID)
+			return
+		}
+
 		messages, err := channel.ListMessagesWithOptions(roomID, im.ListMessagesOptions{
 			IncludeThreadReplies: parseBoolQuery(r.URL.Query().Get("include_thread_replies")) || r.URL.Query().Get("thread_root_id") != "",
 		})

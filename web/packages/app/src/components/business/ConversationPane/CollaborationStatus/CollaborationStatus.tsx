@@ -27,7 +27,7 @@ type Props = {
   agents?: AgentLike[];
   usersById: UsersById;
   t: TranslateFn;
-  onOpenActivity?: (senderID?: string, turnID?: string, requestID?: string) => void;
+  onOpenActivity?: (senderID?: string, turnID?: string, requestID?: string, messageID?: string) => void;
   onStop?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
 };
 const noParticipants: readonly ConversationWorkingParticipant[] = [];
@@ -161,7 +161,7 @@ function Member({
           className={styles.memberButton}
           aria-label={t("conversationWorkingOpenActivity", { name, detail: label })}
           aria-description={detail}
-          onClick={() => onOpenActivity(work.senderID, progress?.id, participant?.requestID)}
+          onClick={() => onOpenActivity(work.senderID, progress?.id, participant?.requestID, work.message?.id)}
         >
           {content}
         </Button>

@@ -25,7 +25,6 @@ import {
 import { CollaborationActivityTurns } from "./CollaborationActivityTurns";
 import { collaborationTurns } from "@/models/collaborationTurns";
 import { usesCollaborationTranscript } from "@/models/collaborationTranscript";
-import { fetchMessagesRequest } from "@/api/im";
 import { errorMessage } from "@/api/client";
 import { MessageContent } from "@/components/business/MessageContent";
 import type { CitationSelectHandler } from "@/components/business/MessageContent/types";
@@ -56,9 +55,9 @@ import {
   userDisplayName,
 } from "@/models/conversations";
 import { classNames } from "@/shared/lib/classNames";
-import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import { CONVERSATION_ACTIVITY_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import {
+  activityTargetMessages,
   conversationActivityAgents,
   conversationActivityDensitySegments,
   conversationActivityEntries,
@@ -70,6 +69,9 @@ import {
   type ConversationActivityTone,
 } from "./conversationActivity";
 import styles from "./ConversationActivityPanel.module.css";
+import { ActivityHistoryContinuation, ActivityPagination } from "./ActivityPagination";
+import { activityHistoryPageSize, useActivityHistory } from "./useActivityHistory";
+import { useActivityPage } from "./useActivityPage";
 
 type ConversationActivityPanelProps = {
   active?: boolean;
@@ -77,7 +79,7 @@ type ConversationActivityPanelProps = {
   agents: readonly AgentLike[];
   conversation: IMConversation;
   initialEntryID?: string | null;
-  actorSelection?: { agentID?: string; turnID?: string; requestID?: string };
+  actorSelection?: { agentID?: string; turnID?: string; requestID?: string; messageID?: string };
   locale: LocaleCode;
   onClose: () => void;
   onCitationSelect?: CitationSelectHandler;
@@ -141,9 +143,33 @@ function ActivityPanel({
   t,
   usersById,
 }: ConversationActivityPanelProps) {
-  const [messages, setMessages] = useState<IMMessage[]>(() => mergeConversationActivityMessages(conversation.messages));
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState("");
+  const { turnID, requestID, messageID } = actorSelection ?? {};
+  const target = useMemo(
+    () =>
+      messageID
+        ? conversation.messages.filter((message) => message.id === messageID)
+        : activityTargetMessages(conversation.messages, initialEntryID, turnID, requestID),
+    [conversation.messages, initialEntryID, messageID, turnID, requestID],
+  );
+  const targetKey = JSON.stringify([...new Set([messageID, ...target.map((message) => message.id)].filter(Boolean))]);
+  const inspected = useRef<readonly IMMessage[] | undefined>(undefined);
+  const trackInspectedMessages = useCallback((messages: readonly IMMessage[] | undefined) => {
+    inspected.current = messages;
+  }, []);
+  const history = useActivityHistory(conversation.id, active, targetKey, inspected);
+  const { loading, refresh } = history;
+  const earlier = history.before
+    ? { cursor: history.before, load: history.loadOlder, loading: history.loadingOlder }
+    : undefined;
+  const loadError = history.error ? errorMessage(history.error, t("agentActivityLoadFailed")) : "";
+  const messages = useMemo(() => {
+    if (history.loaded) return history.messages;
+    return mergeConversationActivityMessages(
+      conversation.messages.slice(-activityHistoryPageSize),
+      target,
+      history.messages,
+    );
+  }, [history.loaded, history.messages, conversation.messages, target]);
   const [sortMode, setSortMode] = useState<SortMode>("newest_first");
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => new Set());
   const [selectedActorID, setSelectedActorID] = useState(
@@ -153,9 +179,8 @@ function ActivityPanel({
   const [panelWidth, setPanelWidth] = useState(readPanelWidth);
   const [resizing, setResizing] = useState(false);
   const [draggingActorFilters, setDraggingActorFilters] = useState(false);
-  const mountedRef = useRef(true);
-  const requestIDRef = useRef(0);
   const panelRef = useRef<HTMLElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
   const resizeRef = useRef({ pointerID: -1, startWidth: DEFAULT_PANEL_WIDTH, startX: 0 });
   const actorFilterDragRef = useRef({ dragged: false, pointerID: -1, startScrollLeft: 0, startX: 0 });
@@ -163,13 +188,17 @@ function ActivityPanel({
   const collaboration = usesCollaborationTranscript(conversation);
   const autonomous = collaboration && roomType(conversation) === RoomTypes.autonomous;
   const [showEvents, setShowEvents] = useState(false);
-  const turnGroups = useMemo(() => collaborationTurns(messages), [messages]);
-  const showTurns = collaboration && !showEvents && turnGroups.turns.length > 0;
+  const turnGroups = useMemo(
+    () => (collaboration ? collaborationTurns(messages, history.sources) : null),
+    [collaboration, messages, history.sources],
+  );
+  const showTurns = !showEvents && Boolean(turnGroups?.turns.length);
   useEffect(() => {
     if (actorSelection?.turnID || actorSelection?.requestID) setShowEvents(false);
   }, [actorSelection]);
 
-  const activityAgents = useMemo(() => conversationActivityAgents(conversation, agents), [agents, conversation]);
+  const { members } = conversation;
+  const activityAgents = useMemo(() => conversationActivityAgents({ members }, agents), [agents, members]);
   const entries = useMemo(
     () =>
       showTurns
@@ -199,49 +228,12 @@ function ActivityPanel({
     [filteredEntries, sortMode],
   );
   const summary = useMemo(() => activitySummary(entries, filteredEntries.length), [entries, filteredEntries.length]);
-
-  const refresh = useCallback(async () => {
-    const requestID = ++requestIDRef.current;
-    setLoading(true);
-    setLoadError("");
-    try {
-      const fetched = await fetchMessagesRequest(conversation.id, { includeThreadReplies: true });
-      if (!mountedRef.current || requestID !== requestIDRef.current) {
-        return;
-      }
-      setMessages((current) => mergeConversationActivityMessages(fetched, current));
-    } catch (error) {
-      if (mountedRef.current && requestID === requestIDRef.current) {
-        setLoadError(errorMessage(error, t("agentActivityLoadFailed")));
-      }
-    } finally {
-      if (mountedRef.current && requestID === requestIDRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [conversation.id, t]);
-
-  useEffect(() => {
-    if (!active) return;
-    mountedRef.current = true;
-    const unsubscribe = subscribeIMEvents((payload) => {
-      if (payload.type !== "message.created" || payload.room_id !== conversation.id || !payload.message) {
-        return;
-      }
-      const message = payload.message;
-      setMessages((current) => mergeConversationActivityMessages(current, [message]));
-    });
-    void refresh();
-    return () => {
-      mountedRef.current = false;
-      requestIDRef.current += 1;
-      unsubscribe();
-    };
-  }, [active, conversation.id, refresh]);
-
-  useEffect(() => {
-    if (active) setMessages((current) => mergeConversationActivityMessages(current, conversation.messages));
-  }, [active, conversation.messages]);
+  const page = useActivityPage(
+    displayEntries,
+    JSON.stringify([conversation.id, selectedActorID, [...selectedTypes], sortMode, initialEntryID]),
+    initialEntryID ? displayEntries.findIndex((entry) => entry.id === initialEntryID) : -1,
+    sortMode === "chronological" ? (entry) => entry.id : undefined,
+  );
 
   const scrollToEntry = useCallback((entryID: string) => {
     setSelectedEntryID(entryID);
@@ -257,7 +249,7 @@ function ActivityPanel({
       rowRefs.current.get(initialEntryID)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [initialEntryID]);
+  }, [initialEntryID, page.index, history.loaded]);
 
   useEffect(() => {
     if (!actorSelection) return;
@@ -450,7 +442,7 @@ function ActivityPanel({
               value={showTurns ? "turns" : "events"}
               onChange={(value) => setShowEvents(value === "events")}
               options={[
-                { value: "turns", label: t("collaborationTurnViewTurns"), disabled: !turnGroups.turns.length },
+                { value: "turns", label: t("collaborationTurnViewTurns"), disabled: !turnGroups?.turns.length },
                 { value: "events", label: t("collaborationTurnViewEvents") },
               ]}
             />
@@ -471,7 +463,7 @@ function ActivityPanel({
         </div>
       </header>
 
-      {showTurns ? (
+      {showTurns && turnGroups ? (
         <CollaborationActivityTurns
           turns={turnGroups.turns}
           autonomous={autonomous}
@@ -484,7 +476,10 @@ function ActivityPanel({
           initialEntryID={initialEntryID}
           loading={loading}
           loadError={loadError}
-          onRefresh={() => void refresh()}
+          active={active}
+          onRefresh={refresh}
+          onInspect={trackInspectedMessages}
+          earlier={earlier}
           onShowEvents={() => setShowEvents(true)}
           onCitationSelect={onCitationSelect}
           renderEntry={(entry, expandAll, selected) => (
@@ -578,7 +573,7 @@ function ActivityPanel({
             {entries.length ? (
               <ActivityDensityBar
                 autonomous={autonomous}
-                entries={filteredEntries}
+                entries={sortMode === "newest_first" ? [...page.items].reverse() : page.items}
                 locale={locale}
                 selectedEntryID={selectedEntryID}
                 t={t}
@@ -641,16 +636,34 @@ function ActivityPanel({
             ) : null}
           </div>
 
-          <div className={styles.body}>
-            {loadError ? <div className={styles.loadError}>{loadError}</div> : null}
+          <div className={styles.body} ref={bodyRef}>
+            {loadError ? (
+              <div role="alert" className={styles.loadError}>
+                {loadError}
+              </div>
+            ) : null}
+            {earlier && sortMode === "chronological" ? (
+              <ActivityHistoryContinuation
+                earlier={earlier}
+                active={active}
+                busy={loading}
+                failed={Boolean(loadError)}
+                edge="start"
+                scrollRef={bodyRef}
+                onBeforeLoad={page.keepFirst}
+                t={t}
+              />
+            ) : null}
             {loading && entries.length === 0 ? <div className={styles.empty}>{t("agentActivityLoading")}</div> : null}
-            {!loading && entries.length === 0 ? <div className={styles.empty}>{t("agentActivityEmpty")}</div> : null}
+            {!loading && !loadError && entries.length === 0 ? (
+              <div className={styles.empty}>{t("agentActivityEmpty")}</div>
+            ) : null}
             {!loading && entries.length > 0 && displayEntries.length === 0 ? (
               <div className={styles.empty}>{t("agentActivityNoFilteredResults")}</div>
             ) : null}
             {displayEntries.length ? (
               <div className={styles.list} role="list">
-                {displayEntries.map((entry) => (
+                {page.items.map((entry) => (
                   <ActivityRow
                     key={entry.id}
                     autonomous={autonomous}
@@ -672,7 +685,26 @@ function ActivityPanel({
                 ))}
               </div>
             ) : null}
+            {earlier && sortMode === "newest_first" && page.index + 1 >= page.count ? (
+              <ActivityHistoryContinuation
+                earlier={earlier}
+                active={active}
+                busy={loading}
+                failed={Boolean(loadError)}
+                edge="end"
+                scrollRef={bodyRef}
+                t={t}
+              />
+            ) : null}
           </div>
+          <ActivityPagination
+            {...page}
+            t={t}
+            onChange={(index) => {
+              if (bodyRef.current) bodyRef.current.scrollTop = 0;
+              page.onChange(index);
+            }}
+          />
         </>
       )}
     </aside>
