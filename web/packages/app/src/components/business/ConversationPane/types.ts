@@ -149,6 +149,7 @@ export type ConversationPaneProps = {
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onProviderLogin: (provider: string) => VoidOrPromise;
   onRetrySend?: () => VoidOrPromise;
+  onRetrySaveDraft?: () => void;
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;

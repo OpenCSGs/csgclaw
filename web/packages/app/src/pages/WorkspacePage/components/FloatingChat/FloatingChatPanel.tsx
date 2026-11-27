@@ -40,6 +40,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     authStatuses,
     channelToolsRef,
     composerError,
+    onRetrySaveDraft,
     conversation,
     conversationMembers,
     currentUserID = "",
@@ -311,6 +312,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         composerDisabled={composerDisabled}
         composerDisabledReason={composerDisabledReason}
         composerError={composerError}
+        onRetrySaveDraft={onRetrySaveDraft}
         draftSegments={draftSegments}
         draftText={draftText}
         attachmentDrafts={attachmentDrafts}

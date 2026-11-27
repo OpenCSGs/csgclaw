@@ -5,10 +5,11 @@ import type { ComposerSegment } from "@/models/composer";
 import { COMPOSER_DRAFT_STORAGE_PREFIX } from "./keys";
 
 type DraftSnapshot = { content: Record<string, unknown>; attachments: ComposerAttachmentDraft[] };
+type PendingWrite = { timer?: number; value: object | null; failed: boolean };
 const emptyDraft: DraftSnapshot = { content: {}, attachments: [] };
 const drafts = new Map<string, DraftSnapshot>();
 const listeners = new Map<string, Set<() => void>>();
-const pending = new Map<string, { timer: number; draft: object }>();
+const pending = new Map<string, PendingWrite>();
 
 export function composerDraftKey(userID: string, roomID?: string): string {
   return userID
@@ -44,7 +45,7 @@ export function isStoredComposerSegment(value: unknown): value is ComposerSegmen
 function readComposerDraft(key: string): Record<string, unknown> {
   if (!key) return {};
   try {
-    const draft: unknown = pending.get(key)?.draft ?? JSON.parse(window.localStorage.getItem(key) ?? "null");
+    const draft: unknown = JSON.parse(window.localStorage.getItem(key) ?? "null");
     return record(draft) ? draft : {};
   } catch {
     return {};
@@ -91,26 +92,42 @@ export function subscribeToComposerDraft(key: string, listener: () => void) {
     subscribers.delete(listener);
     if (!subscribers.size) {
       listeners.delete(key);
-      if (!drafts.get(key)?.attachments.some((attachment) => attachment.file)) drafts.delete(key);
+      evictUnusedDraft(key);
     }
   };
 }
 
-function flush(key: string) {
-  const item = pending.get(key);
-  if (!item) return;
-  window.clearTimeout(item.timer);
-  pending.delete(key);
-  if (!pending.size) window.removeEventListener("pagehide", flushAll);
-  try {
-    window.localStorage.setItem(key, JSON.stringify(item.draft));
-  } catch {
-    // Storage can be disabled or full. The current editor remains usable.
+function evictUnusedDraft(key: string) {
+  if (!listeners.has(key) && !pending.has(key) && !drafts.get(key)?.attachments.some((attachment) => attachment.file)) {
+    drafts.delete(key);
   }
 }
 
+export function composerDraftSaveFailed(key: string): boolean {
+  return pending.get(key)?.failed ?? false;
+}
+
+export function flushComposerDraft(key: string) {
+  const item = pending.get(key);
+  if (!item) return;
+  window.clearTimeout(item.timer);
+  item.timer = undefined;
+  const wasFailed = item.failed;
+  try {
+    if (item.value === null) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, JSON.stringify(item.value));
+    pending.delete(key);
+    if (!pending.size) window.removeEventListener("pagehide", flushAll);
+    evictUnusedDraft(key);
+  } catch {
+    // Keep the latest draft (or explicit clear) in memory until storage accepts it.
+    item.failed = true;
+  }
+  if (wasFailed !== composerDraftSaveFailed(key)) listeners.get(key)?.forEach((listener) => listener());
+}
+
 function flushAll() {
-  for (const key of pending.keys()) flush(key);
+  for (const key of pending.keys()) flushComposerDraft(key);
 }
 
 export function saveComposerDraft(
@@ -120,20 +137,16 @@ export function saveComposerDraft(
 ) {
   if (!key) return;
   drafts.set(key, content || attachments.length ? { content: content ?? {}, attachments } : emptyDraft);
-  window.clearTimeout(pending.get(key)?.timer);
-  if (!content && !attachments.length) {
-    pending.delete(key);
-    if (!pending.size) window.removeEventListener("pagehide", flushAll);
-    try {
-      window.localStorage.removeItem(key);
-    } catch {
-      // Storage can be disabled.
-    }
+  const previous = pending.get(key);
+  window.clearTimeout(previous?.timer);
+  const value = content || attachments.length ? { ...content, attachments: attachments.map(attachmentMetadata) } : null;
+  const item: PendingWrite = { value, failed: previous?.failed ?? false };
+  pending.set(key, item);
+  window.addEventListener("pagehide", flushAll);
+  if (value === null) {
+    flushComposerDraft(key);
   } else {
-    const draft = { ...content, attachments: attachments.map(attachmentMetadata) };
-    window.addEventListener("pagehide", flushAll);
-    pending.set(key, { draft, timer: window.setTimeout(() => flush(key), 250) });
+    item.timer = window.setTimeout(() => flushComposerDraft(key), 250);
   }
   listeners.get(key)?.forEach((listener) => listener());
-  if (!listeners.has(key) && !attachments.some((attachment) => attachment.file)) drafts.delete(key);
 }

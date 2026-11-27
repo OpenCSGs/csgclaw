@@ -296,6 +296,7 @@ function ConversationPaneContent({
   onRemoveAttachment,
   onClearDraft,
   composerError,
+  onRetrySaveDraft,
   messageActionBusy,
   messageActionFeedback,
   onMessageAction,
@@ -702,6 +703,7 @@ function ConversationPaneContent({
         composerDisabled={composerDisabled}
         composerDisabledReason={compacting ? t("contextCompacting") : composerDisabledReason}
         composerError={composerError}
+        onRetrySaveDraft={onRetrySaveDraft}
         draftSegments={draftSegments}
         draftText={draftText}
         attachmentDrafts={attachmentDrafts}

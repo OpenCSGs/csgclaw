@@ -1,5 +1,6 @@
 import { useComposerCompact } from "@/shared/layout/useComposerCompact";
 import { usePersistedComposerDraft } from "@/hooks/usePersistedComposerDraft";
+import { ComposerDraftSaveNotice } from "@/components/business/ComposerDraftSaveNotice";
 import {
   getComposerDraft,
   saveComposerDraft,
@@ -264,11 +265,11 @@ function StartTaskForm({
           workspaceDir || (selectedAgent ? String(agentRuntimeOptions(selectedAgent).local_workspace_dir || "") : ""),
         ));
   const removedAttachments = removed?.key === draftKey ? removed.attachments : [];
-  const { draft: startDraft, update: updateStartDraft } = usePersistedComposerDraft(
-    draftKey,
-    readStartDraft,
-    serializeStartDraft,
-  );
+  const {
+    draft: startDraft,
+    update: updateStartDraft,
+    retrySave: retrySaveStartDraft,
+  } = usePersistedComposerDraft(draftKey, readStartDraft, serializeStartDraft);
   useEffect(() => {
     if (!selectedAgent || !pendingDraftKey || createdDraftKey.current) return;
     const pending = readStartDraft(getComposerDraft(pendingDraftKey).content);
@@ -1156,6 +1157,7 @@ function StartTaskForm({
                   </Button>
                 </div>
               ) : null}
+              <ComposerDraftSaveNotice onRetry={retrySaveStartDraft} t={t} />
               {attachmentWarning ? (
                 <DismissibleInlineError messageKey={attachmentWarning} closeLabel={t("close")}>
                   <span role="alert">{attachmentWarning}</span>
