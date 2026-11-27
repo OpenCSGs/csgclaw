@@ -115,7 +115,15 @@ func (send sessionModelRoundTripper) RoundTrip(r *http.Request) (*http.Response,
 }
 
 func TestSessionModelAutoProfileUsesCustomOpenCSGGateway(t *testing.T) {
-	const baseURL = "https://opencsg-stg.com/aigateway/v1"
+	t.Setenv("HOME", t.TempDir())
+	const baseURL = "https://gateway.customer.example/team/aigateway/v1"
+	store, err := auth.DefaultStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveCSGHubProviderCredentials(auth.CSGHubProviderCredentials{AIGatewayBaseURL: baseURL}); err != nil {
+		t.Fatal(err)
+	}
 	service := NewService(config.ModelConfig{}, sessionProfileFixture{base: baseURL, provider: agent.ProviderAPI})
 	calls := 0
 	service.client.Transport = sessionModelRoundTripper(func(r *http.Request) (*http.Response, error) {

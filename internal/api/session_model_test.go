@@ -58,6 +58,9 @@ func TestAgentSessionModelValidationPrecedesExecution(t *testing.T) {
 }
 
 func TestAgentSessionAutoProfileReachesNativeTurn(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CSGHUB_AIGATEWAY_BASE_URL", "")
+	t.Setenv("CSGHUB_AIGATEWAY_URL", "https://qa.opencsg.com/aigateway")
 	for _, test := range []struct {
 		name, provider, baseURL string
 		wantStatus              int
@@ -65,6 +68,9 @@ func TestAgentSessionAutoProfileReachesNativeTurn(t *testing.T) {
 		{"built-in", agent.ProviderCSGHub, "", http.StatusOK},
 		{"custom staging", agent.ProviderAPI, "https://opencsg-stg.com/aigateway/v1", http.StatusOK},
 		{"custom production", agent.ProviderAPI, "https://aigateway.opencsg.com/v1", http.StatusOK},
+		{"custom production portal", agent.ProviderAPI, "https://opencsg.com/aigateway/v1", http.StatusOK},
+		{"custom configured QA", agent.ProviderAPI, "https://qa.opencsg.com/aigateway/v1", http.StatusOK},
+		{"another OpenCSG route", agent.ProviderAPI, "https://qa.opencsg.com/other/v1", http.StatusBadRequest},
 		{"third-party", agent.ProviderAPI, "https://api.example/v1", http.StatusBadRequest},
 	} {
 		t.Run(test.name, func(t *testing.T) {
