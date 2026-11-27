@@ -106,6 +106,28 @@ it.each([
   }
 });
 
+it("flushes a fresh edit on pagehide after the previous write fails", () => {
+  vi.useFakeTimers();
+  const key = composerDraftKey("test-user", "fresh-edit-on-exit");
+  localStorage.setItem(key, JSON.stringify({ text: "previously saved" }));
+  const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => {
+    throw new DOMException("Storage is full", "QuotaExceededError");
+  });
+  saveComposerDraft(key, { text: "failed edit" }, []);
+  vi.advanceTimersByTime(250);
+  expect(composerDraftSaveFailed(key)).toBe(true);
+
+  saveComposerDraft(key, { text: "fresh edit" }, []);
+  expect(composerDraftSaveFailed(key)).toBe(true);
+  expect(storage).toHaveBeenCalledTimes(1);
+  window.dispatchEvent(new Event("pagehide"));
+  vi.advanceTimersByTime(250);
+
+  expect(storage).toHaveBeenCalledTimes(2);
+  expect(composerDraftSaveFailed(key)).toBe(false);
+  expect(JSON.parse(localStorage.getItem(key) ?? "{}")).toMatchObject({ text: "fresh edit" });
+});
+
 it("keeps an explicit clear when storage removal fails instead of restoring stale text", () => {
   const key = composerDraftKey("test-user", "failed-clear");
   localStorage.setItem(key, JSON.stringify({ text: "previously saved" }));
@@ -149,6 +171,31 @@ it("keeps acknowledged text in the current editor and discards it on leaving", (
   expect(getComposerDraft(key).content).toEqual({});
   expect(localStorage.getItem(key)).toBeNull();
   expect(storage).toHaveBeenCalledOnce();
+});
+
+it.each(["route exit", "pagehide"])("preserves a newer draft from another tab on %s after dismissal", (exit) => {
+  const key = composerDraftKey("test-user", `dismiss-${exit}`);
+  localStorage.setItem(key, JSON.stringify({ text: "previously saved" }));
+  const leave = subscribeToComposerDraft(key, vi.fn());
+  expect(getComposerDraft(key).content).toEqual({ text: "previously saved" });
+  const savedInOtherTab = JSON.stringify({ text: "newer draft in another tab" });
+  if (exit === "route exit") localStorage.setItem(key, savedInOtherTab);
+
+  vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => {
+    throw new DOMException("Storage is full", "QuotaExceededError");
+  });
+  saveComposerDraft(key, { text: "unsaved edit" }, []);
+  flushComposerDraft(key);
+  acknowledgeComposerDraftSaveFailure(key);
+
+  if (exit === "pagehide") localStorage.setItem(key, savedInOtherTab);
+  if (exit === "pagehide") window.dispatchEvent(new Event("pagehide"));
+  else discardAcknowledgedComposerDraft(key);
+
+  expect(localStorage.getItem(key)).toBe(savedInOtherTab);
+  expect(getComposerDraft(key).content).toEqual({ text: "newer draft in another tab" });
+  expect(composerDraftSaveFailed(key)).toBe(false);
+  leave();
 });
 
 it("saves new edits made after acknowledging a failure", () => {
