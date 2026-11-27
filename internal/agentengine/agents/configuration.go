@@ -34,15 +34,6 @@ func normalizeUpdateFieldMask(fieldMask []string) map[string]struct{} {
 	return out
 }
 
-func updateIncludesMCPServers(req UpdateRequest) bool {
-	fieldMask := normalizeUpdateFieldMask(req.FieldMask)
-	if len(fieldMask) == 0 {
-		return req.MCPServersSet
-	}
-	_, ok := fieldMask["mcpservers"]
-	return ok
-}
-
 func updateIncludesRuntimeOptions(req UpdateRequest) bool {
 	fieldMask := normalizeUpdateFieldMask(req.FieldMask)
 	if len(fieldMask) == 0 {
@@ -201,10 +192,6 @@ func (s *Controller) UpdateRecord(ctx context.Context, id string, req UpdateRequ
 		return Agent{}, err
 	}
 	defer release()
-	if updateIncludesMCPServers(req) {
-		s.mcpServersMu.Lock()
-		defer s.mcpServersMu.Unlock()
-	}
 	return s.update(ctx, id, req)
 }
 
@@ -533,8 +520,11 @@ func (s *Controller) AddMCPServersFromHub(ctx context.Context, id string, names 
 		serverConfigs[name] = serverConfig
 	}
 
-	s.mcpServersMu.Lock()
-	defer s.mcpServersMu.Unlock()
+	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer release()
 
 	s.mu.RLock()
 	current, _, ok := s.agentByIDLocked(id)
@@ -573,8 +563,11 @@ func (s *Controller) DeleteMCPServers(ctx context.Context, id string, names []st
 		return Agent{}, fmt.Errorf("mcp server names are required")
 	}
 
-	s.mcpServersMu.Lock()
-	defer s.mcpServersMu.Unlock()
+	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer release()
 
 	s.mu.RLock()
 	current, _, ok := s.agentByIDLocked(id)

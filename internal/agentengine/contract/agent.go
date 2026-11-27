@@ -55,6 +55,8 @@ type AgentListOptions struct {
 }
 
 type AgentUpdateRequest struct {
+	// RefreshTemplate reapplies an explicitly requested participant template.
+	RefreshTemplate string    `json:"-"`
 	ActorID         string    `json:"-"`
 	Spec            AgentSpec `json:"spec"`
 	FieldMask       []string  `json:"field_mask,omitempty"`

@@ -7,7 +7,6 @@ import (
 	"csgclaw/internal/agentengine/interactionstate"
 	"csgclaw/internal/agentengine/registry"
 	skillbuiltin "csgclaw/internal/skill/builtin"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,8 +26,7 @@ import (
 	"csgclaw/internal/assets"
 	"csgclaw/internal/config"
 	"csgclaw/internal/identity"
-	"csgclaw/internal/knowledgebase"
-	"csgclaw/internal/mcp"
+	"csgclaw/internal/mcpschema"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"csgclaw/internal/sandbox"
@@ -195,12 +193,7 @@ type Controller struct {
 	defaultWorkerTemplate  string
 	managerImage           string
 
-	sandbox sandbox.Provider
-	// mcpServersMu serializes all MCP server mutations. A catalog batch add
-	// first reads the current set before issuing its update, so it must share
-	// the same lock as direct PUT/PATCH-style updates to avoid stale snapshots
-	// overwriting a concurrent edit.
-	mcpServersMu       sync.Mutex
+	sandbox            sandbox.Provider
 	runtimes           map[string]sandbox.Runtime
 	runtimeRegistry    *registry.Registry
 	availability       map[string]RuntimeAvailability
@@ -1097,22 +1090,14 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 			}
 		}
 		if !createSpecSetsMCPServers(spec) && strings.TrimSpace(workspace.MCPServersJSON) != "" {
-			var templateMCPServers map[string]any
-			if err := json.Unmarshal([]byte(workspace.MCPServersJSON), &templateMCPServers); err != nil {
-				return CreateAgentSpec{}, cleanup, fmt.Errorf("decode template mcp servers: %w", err)
-			}
-			hydratedMCPServers, err := knowledgebase.HydrateTemplateServers(ctx, templateMCPServers)
+			templateMCP, err := templateServers(ctx, workspace.MCPServersJSON)
 			if err != nil {
 				return CreateAgentSpec{}, cleanup, err
 			}
-			if availability, ok := ctx.Value(templateMCPAvailabilityContextKey{}).(templateMCPAvailabilityContext); ok {
-				var skipped []mcp.SkippedTemplateResource
-				hydratedMCPServers, skipped = availability.service.FilterAvailableTemplateServers(ctx, hydratedMCPServers)
-				if len(skipped) > 0 {
-					*availability.skipped = append(*availability.skipped, skipped...)
-				}
+			spec.MCPServers, err = mcpschema.TemplateServerIDs(nil, templateMCP)
+			if err != nil {
+				return CreateAgentSpec{}, cleanup, err
 			}
-			spec.MCPServers = hydratedMCPServers
 			spec.MCPServersSet = true
 		}
 	}
@@ -2668,7 +2653,7 @@ func (s *Controller) provisionRuntimeForAgentWithPrevious(ctx context.Context, r
 	if s == nil || rt == nil {
 		return nil
 	}
-	if got.Role == RoleWorker && isHostRuntimeKind(got.RuntimeKind) {
+	if !agentruntime.KeepInstalledSkills(ctx) && got.Role == RoleWorker && isHostRuntimeKind(got.RuntimeKind) {
 		root, err := s.agentSkillsRoot(got.ID, got.RuntimeKind)
 		if err != nil {
 			return err

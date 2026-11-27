@@ -581,6 +581,7 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, model *contr
 		extra = []codexmodel.Profile{{Provider: agentRef.Profile.Provider, ModelID: model.ModelID, Metadata: model.Metadata}}
 	}
 	_, err = r.ensureSession(ctx, SessionSpec{
+		PreserveSkills:              agentruntime.KeepInstalledSkills(ctx),
 		RuntimeID:                   strings.TrimSpace(h.RuntimeID),
 		AgentID:                     strings.TrimSpace(agentRef.ID),
 		AgentName:                   strings.TrimSpace(agentRef.Name),

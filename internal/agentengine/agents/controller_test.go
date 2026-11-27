@@ -2140,6 +2140,9 @@ func TestAddMCPServersSerializesConcurrentNameMerges(t *testing.T) {
 		Instructions: "keep synced",
 		CreatedAt:    time.Date(2026, 5, 18, 9, 0, 0, 0, time.UTC),
 	}
+	other := svc.agents["u-dev"]
+	other.ID, other.Name, other.RuntimeID = "agent-other", "other", "rt-other"
+	svc.agents[other.ID] = other
 	catalogServers := map[string]any{
 		"context7": map[string]any{
 			"command":     "uvx",
@@ -2162,6 +2165,10 @@ func TestAddMCPServersSerializesConcurrentNameMerges(t *testing.T) {
 	case <-firstValidateEntered:
 	case <-ctx.Done():
 		t.Fatalf("first AddMCPServersFromHub did not enter validation: %v", ctx.Err())
+	}
+	// The first worker is still validating. A different worker can finish its update.
+	if _, err := svc.AddMCPServersFromHub(ctx, other.ID, []string{"remote"}, catalogServers); err != nil {
+		t.Fatalf("unrelated worker blocked on MCP validation: %v", err)
 	}
 	go func() {
 		_, err := svc.AddMCPServersFromHub(ctx, "u-dev", []string{"remote"}, catalogServers)
