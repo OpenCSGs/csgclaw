@@ -22,11 +22,29 @@ func (interpretationTemplateStore) Get(_ context.Context, id string) (hub.Templa
 	return hub.Template{ID: id, Name: "Reviewer", Description: "Original description"}, nil
 }
 
-func (interpretationTemplateStore) ListWorkspace(_ context.Context, _ string, path string) (apitypes.WorkspaceListing, error) {
-	if path != "workspace/skills" {
+func (interpretationTemplateStore) ListWorkspace(_ context.Context, id, path string) (apitypes.WorkspaceListing, error) {
+	root := "skills"
+	if strings.HasSuffix(id, "/legacy-reviewer") {
+		root = "workspace/skills"
+	}
+	switch path {
+	case root:
+		return apitypes.WorkspaceListing{Entries: []apitypes.WorkspaceEntry{
+			{Name: "review-skill", Type: "dir"},
+			{Name: "assets-only", Type: "dir"},
+			{Name: "directory-manifest", Type: "dir"},
+			{Name: "README.md", Type: "file"},
+			{Name: ".skillhub-lock.json", Type: "file"},
+		}}, nil
+	case root + "/review-skill":
+		return apitypes.WorkspaceListing{Entries: []apitypes.WorkspaceEntry{{Name: "SKILL.md", Type: "file"}}}, nil
+	case root + "/assets-only":
+		return apitypes.WorkspaceListing{Entries: []apitypes.WorkspaceEntry{{Name: "examples", Type: "dir"}}}, nil
+	case root + "/directory-manifest":
+		return apitypes.WorkspaceListing{Entries: []apitypes.WorkspaceEntry{{Name: "SKILL.md", Type: "dir"}}}, nil
+	default:
 		return apitypes.WorkspaceListing{}, hub.ErrTemplateNotFound
 	}
-	return apitypes.WorkspaceListing{Entries: []apitypes.WorkspaceEntry{{Name: "review-skill"}}}, nil
 }
 
 func (interpretationTemplateStore) ReadWorkspaceFile(_ context.Context, _ string, path string) (apitypes.WorkspaceFile, error) {
@@ -64,6 +82,10 @@ func TestInterpretHubTemplateUsesManagerOnlyForOfficialTemplates(t *testing.T) {
 		if request.Model != "manager-model" || len(request.Messages) != 2 ||
 			!strings.Contains(request.Messages[1]["content"], "Review documents for clarity.") ||
 			!strings.Contains(request.Messages[1]["content"], "review-skill") ||
+			strings.Contains(request.Messages[1]["content"], "assets-only") ||
+			strings.Contains(request.Messages[1]["content"], "directory-manifest") ||
+			strings.Contains(request.Messages[1]["content"], "README.md") ||
+			strings.Contains(request.Messages[1]["content"], ".skillhub-lock.json") ||
 			!strings.Contains(request.Messages[1]["content"], "review-connector") ||
 			strings.Contains(request.Messages[1]["content"], "disabled-connector") ||
 			strings.Contains(request.Messages[1]["content"], "test-private-key") ||
@@ -105,6 +127,7 @@ func TestInterpretHubTemplateUsesManagerOnlyForOfficialTemplates(t *testing.T) {
 		{"local.Reviewer", http.StatusForbidden},
 		{"alice~s~reviewer", http.StatusForbidden},
 		{"agentichub~s~reviewer", http.StatusOK},
+		{"agentichub~s~legacy-reviewer", http.StatusOK},
 		{"agentichub~s~reviewer", http.StatusServiceUnavailable},
 	} {
 		unavailable.Store(tc.status == http.StatusServiceUnavailable)
@@ -126,7 +149,7 @@ func TestInterpretHubTemplateUsesManagerOnlyForOfficialTemplates(t *testing.T) {
 			}
 		}
 	}
-	if calls.Load() != 2 {
-		t.Fatalf("manager calls = %d, want 2", calls.Load())
+	if calls.Load() != 3 {
+		t.Fatalf("manager calls = %d, want 3", calls.Load())
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -66,17 +68,7 @@ func (h *Handler) interpretHubTemplate(w http.ResponseWriter, r *http.Request) {
 	if file, err := hubSvc.ReadWorkspaceFile(ctx, id, "instructions/AGENTS.md"); err == nil && !file.Binary {
 		source["instructions"] = limitDescriptionSource(file.Content, 6000)
 	}
-	listing, skillErr := hubSvc.ListWorkspace(ctx, id, "skills")
-	if errors.Is(skillErr, hub.ErrTemplateNotFound) || errors.Is(skillErr, fs.ErrNotExist) {
-		listing, skillErr = hubSvc.ListWorkspace(ctx, id, "workspace/skills")
-	}
-	if skillErr == nil {
-		var names []string
-		for _, entry := range listing.Entries {
-			names = append(names, entry.Name)
-		}
-		source["skills"] = limitDescriptionSource(strings.Join(names, ", "), 1500)
-	}
+	source["skills"] = limitDescriptionSource(strings.Join(templateInterpretationSkillNames(ctx, hubSvc, id), ", "), 1500)
 	if file, err := hubSvc.ReadWorkspaceFile(ctx, id, "mcps/mcp.json"); err == nil && !file.Binary && !file.Truncated {
 		source["enabled_mcp_servers"] = limitDescriptionSource(strings.Join(hub.EnabledTemplateMCPServerNames([]byte(file.Content)), ", "), 1500)
 	}
@@ -102,4 +94,35 @@ func (h *Handler) interpretHubTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, descriptionResponse{Description: description})
+}
+
+func templateInterpretationSkillNames(ctx context.Context, svc *hub.Service, id string) []string {
+	root := "skills"
+	listing, err := svc.ListWorkspace(ctx, id, root)
+	if errors.Is(err, hub.ErrTemplateNotFound) || errors.Is(err, fs.ErrNotExist) {
+		root = "workspace/skills"
+		listing, err = svc.ListWorkspace(ctx, id, root)
+	}
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, entry := range listing.Entries {
+		name := entry.Name
+		if entry.Type != "dir" || name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
+			continue
+		}
+		files, err := svc.ListWorkspace(ctx, id, path.Join(root, name))
+		if err != nil {
+			continue
+		}
+		for _, file := range files.Entries {
+			if file.Type == "file" && file.Name == "SKILL.md" {
+				names = append(names, name)
+				break
+			}
+		}
+	}
+	slices.Sort(names)
+	return names
 }
