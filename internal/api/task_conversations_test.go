@@ -106,12 +106,12 @@ func TestTaskConversationFilterGroups(t *testing.T) {
 		CurrentUserID: "user-admin",
 		Users:         []im.User{{ID: "user-admin", Role: "admin"}, {ID: "user-worker", Role: "worker"}},
 		Rooms: []im.Room{
-			{ID: "first", IsDirect: true, TaskSession: true, Members: members, Configuration: config},
+			{ID: "first", Title: "Project notes", IsDirect: true, TaskSession: true, Members: members, Configuration: config, Messages: []im.Message{{Content: "needle in history"}, {Content: "latest message"}}},
 			{ID: "second", IsDirect: true, TaskSession: true, Members: members, Configuration: config},
 			{ID: "legacy", IsDirect: true, TaskSession: true, Members: members},
 			{ID: "explicit-empty", IsDirect: true, TaskSession: true, Members: members, Configuration: &taskconfig.Config{}},
-			{ID: "team", Members: members, Configuration: config},
-			{ID: "archived", IsDirect: true, Archived: true, Members: members, Configuration: config},
+			{ID: "team", Title: "Project collaboration", Members: members, Configuration: config},
+			{ID: "archived", Title: "Project notes", IsDirect: true, Archived: true, Members: members, Configuration: config},
 			{ID: "provisioned", IsDirect: true, Members: members},
 			{ID: "not-mine", Members: []string{"user-worker"}, Configuration: config},
 		},
@@ -130,7 +130,7 @@ func TestTaskConversationFilterGroups(t *testing.T) {
 		}
 		return groups
 	}
-	groups := query("?q=ignored&limit=1")
+	groups := query("?limit=1")
 	if len(groups) != 4 {
 		t.Fatalf("expected four groups, got %+v", groups)
 	}
@@ -151,6 +151,22 @@ func TestTaskConversationFilterGroups(t *testing.T) {
 	archived := query("?archived=true")
 	if len(archived) != 1 || archived[0].Count != 1 || !archived[0].Direct {
 		t.Fatalf("unexpected archived groups: %+v", archived)
+	}
+	for _, tc := range []struct {
+		suffix string
+		direct bool
+	}{
+		{"?q=PROJECT+needle", true},
+		{"?q=collaboration", false},
+		{"?q=project+notes&archived=true", true},
+	} {
+		matched := query(tc.suffix)
+		if len(matched) != 1 || matched[0].Count != 1 || matched[0].Direct != tc.direct {
+			t.Errorf("%s: unexpected search groups: %+v", tc.suffix, matched)
+		}
+	}
+	if matched := query("?q=unknown"); len(matched) != 0 {
+		t.Errorf("expected no matching groups, got %+v", matched)
 	}
 }
 

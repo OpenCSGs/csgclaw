@@ -351,11 +351,15 @@ describe("TaskConversationList archive management", () => {
     vi.mocked(fetchTaskConversations).mockClear();
     vi.mocked(fetchTaskConversationFilters)
       .mockReset()
-      .mockResolvedValue([
-        { is_direct: true, peer: "manager", workspace_dir: "/projects/first", count: 1000 },
-        { is_direct: true, peer: "manager", workspace_dir: "/projects/second", count: 1 },
-        { is_direct: false, workspace_dir: "/projects/shared", count: 1 },
-      ]);
+      .mockImplementation(async (_archived, query) =>
+        query === "Shared"
+          ? [{ is_direct: false, workspace_dir: "/projects/shared", count: 1 }]
+          : [
+              { is_direct: true, peer: "manager", workspace_dir: "/projects/first", count: 1000 },
+              { is_direct: true, peer: "manager", workspace_dir: "/projects/second", count: 1 },
+              { is_direct: false, workspace_dir: "/projects/shared", count: 1 },
+            ],
+      );
     const rooms = [
       { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
       { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
@@ -367,9 +371,10 @@ describe("TaskConversationList archive management", () => {
         configuration: { workspace_dir: "/projects/shared" },
       },
     ];
-    vi.mocked(fetchTaskConversations).mockImplementation(async (_q, _archived, _offset, filters) => {
+    vi.mocked(fetchTaskConversations).mockImplementation(async (query, _archived, _offset, filters) => {
       const matches = rooms.filter(
         (item) =>
+          item.title.includes(query) &&
           (!filters?.directory || filters.directory === item.configuration.workspace_dir) &&
           (!filters?.owner || filters.owner === (item.is_direct ? "direct:user-manager" : "collaboration")),
       );
@@ -396,7 +401,7 @@ describe("TaskConversationList archive management", () => {
     await screen.findByText("Review");
     await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));
     const owners = within(await screen.findByRole("group", { name: "iaSessionOwnerFilter" }));
-    expect(fetchTaskConversationFilters).toHaveBeenCalledExactlyOnceWith(false);
+    expect(fetchTaskConversationFilters).toHaveBeenCalledExactlyOnceWith(false, "");
     expect(fetchTaskConversations).toHaveBeenCalledExactlyOnceWith("", false, 0);
     const directories = within(screen.getByRole("group", { name: "iaSessionDirectoryFilter" }));
     await user.click(directories.getByRole("button", { name: /first 1000/ }));
@@ -407,14 +412,28 @@ describe("TaskConversationList archive management", () => {
     expect(screen.queryByText("Second project")).not.toBeInTheDocument();
 
     await user.click(owners.getByRole("button", { name: "manager 1000" }));
-    expect(directories.getByRole("button", { name: /shared 0/ })).toBeVisible();
-    await user.click(directories.getByRole("button", { name: /shared 0/ }));
-    expect(owners.getByRole("button", { name: "manager 0" })).toHaveAttribute("aria-pressed", "true");
-    expect(owners.getByRole("button", { name: "iaRoomsTab 1" })).toBeVisible();
+    expect(directories.queryByRole("button", { name: /shared/ })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    const search = screen.getByRole("textbox", { name: "taskEntrySearchHistory" });
+    await user.type(search, "Shared");
+    await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));
+    const searchedOwners = within(await screen.findByRole("group", { name: "iaSessionOwnerFilter" }));
+    await waitFor(() => expect(fetchTaskConversationFilters).toHaveBeenLastCalledWith(false, "Shared"));
+    const selectedOwner = await screen.findByRole("button", { name: /manager 0/ });
+    expect(selectedOwner).toHaveAttribute("aria-pressed", "true");
+    expect(selectedOwner).toBeDisabled();
+    expect(searchedOwners.queryByRole("button", { name: /iaRoomsTab/ })).not.toBeInTheDocument();
     expect(screen.getByText("iaSessionNoFilterMatches")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "iaSessionClearFilters" }));
-    await user.click(directories.getByRole("button", { name: /second 1/ }));
+    expect(search).toHaveValue("Shared");
+    expect(await screen.findByText("Shared project")).toBeVisible();
+    expect(screen.getByRole("button", { name: "iaRoomsTab 1" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /manager/ })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "taskEntryClearSearch" }));
+    await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));
+    await user.click(await screen.findByRole("button", { name: /second 1/ }));
     expect(await screen.findByText("Second project")).toBeVisible();
     expect(fetchTaskConversations).toHaveBeenLastCalledWith("", false, 0, {
       owner: "",
@@ -472,7 +491,7 @@ describe("TaskConversationList archive management", () => {
     await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
     expect(screen.queryByRole("button", { name: "taskEntrySearchHistory" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "taskEntrySearchHistory" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "iaSessionDirectoryFilter" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "iaSessionExpandWithFilter" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
     await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));
     await user.click(await screen.findByRole("button", { name: /first 1/ }));
@@ -483,7 +502,7 @@ describe("TaskConversationList archive management", () => {
     expect(screen.getByRole("button", { name: "First project" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("button", { name: "Second project" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "taskEntrySearchHistory" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "iaSessionDirectoryFilter" }));
+    await user.click(screen.getByRole("button", { name: "iaSessionExpandWithFilter" }));
     expect(screen.getByText("First project")).toBeVisible();
     expect(screen.queryByText("Second project")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));

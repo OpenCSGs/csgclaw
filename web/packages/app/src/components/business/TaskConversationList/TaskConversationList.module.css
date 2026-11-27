@@ -293,12 +293,14 @@
   inset: -4px -4px auto auto;
   display: grid;
   place-items: center;
-  min-width: 15px;
-  height: 15px;
+  min-width: 16px;
+  height: 16px;
+  padding-inline: 3px;
   border-radius: 999px;
   background: var(--primary);
   color: var(--white);
   font: var(--text-xs-medium);
+  line-height: 1;
 }
 
 .filterPanel {
@@ -345,13 +347,17 @@
   font: var(--text-xs-normal);
 }
 
-.filterOption {
+.filterOption,
+.filterSkeletonRow {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
   min-height: 30px;
   padding: 5px 8px;
+}
+
+.filterOption {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -361,7 +367,7 @@
   cursor: pointer;
 }
 
-.filterOption:hover,
+.filterOption:enabled:hover,
 .filterOption[aria-pressed="true"] {
   background: var(--control-selected-background);
 }
@@ -372,6 +378,10 @@
 
 .filterOption[data-empty="true"]:not([aria-pressed="true"], :hover, :focus-visible) {
   opacity: 0.55;
+}
+
+.filterOption:disabled {
+  cursor: default;
 }
 
 .filterReset:focus-visible,
@@ -398,7 +408,17 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
+}
+
+.filterOptionIcon img {
   object-fit: cover;
+}
+
+.filterOptionIcon :global(.agent-avatar-fallback) {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  line-height: 1;
 }
 
 .filterOptionName {
@@ -413,6 +433,57 @@
 .filterPath > span {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.filterSkeletonHeading,
+.filterSkeletonRow > span {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--line);
+}
+
+.filterSkeletonHeading {
+  width: 48px;
+  height: 10px;
+  margin: 6px 8px 4px;
+}
+
+.filterSkeletonIcon {
+  flex: 0 0 18px;
+  height: 18px;
+}
+
+.filterSkeletonLabel {
+  width: 44%;
+  height: 10px;
+}
+
+.filterSkeletonRow:last-child .filterSkeletonLabel {
+  width: 32%;
+}
+
+.filterSkeletonCount {
+  width: 12px;
+  height: 10px;
+  margin-inline-start: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .filterSkeletonHeading,
+  .filterSkeletonRow > span {
+    background-image: linear-gradient(100deg, transparent 35%, var(--panel-soft) 50%, transparent 65%);
+    background-size: 220% 100%;
+    animation: filterSkeletonShimmer 1.6s linear infinite;
+  }
+}
+
+@keyframes filterSkeletonShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -85% 0;
+  }
 }
 
 .collapsed {

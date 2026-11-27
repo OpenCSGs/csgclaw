@@ -26,11 +26,12 @@ it("assigns one owner with cloud precedence and matches local account aliases", 
 it("takes the recorded directory and limits the available directories by owner", () => {
   const task = { ...direct, id: "task", configuration: { workspace_dir: "/task" } };
   const space = { ...group, configuration: { workspace_dir: "/space" } };
+  const otherSpace = { ...group, configuration: { workspace_dir: "/other-space" } };
   expect(conversationDirectory(direct, "user-admin", directories)).toBe("/default");
   expect(conversationDirectory({ ...direct, configuration: {} }, "user-admin", directories)).toBe("");
   expect(conversationDirectory(group, "user-admin", directories)).toBe("");
   const options = conversationFilterOptions(
-    [direct, task, space, cloud],
+    [direct, task, space, otherSpace, cloud],
     { owner: "direct:user-worker", directory: "/space" },
     "user-admin",
     new Map(),
@@ -48,4 +49,19 @@ it("takes the recorded directory and limits the available directories by owner",
   ]);
   expect(options.ownerTotal).toBe(1);
   expect(options.directoryTotal).toBe(2);
+});
+
+it("preserves selected values for recovery when a search returns no matching groups", () => {
+  const options = conversationFilterOptions(
+    [],
+    { owner: "cloud:cloud-worker", directory: "/task" },
+    "user-admin",
+    new Map(),
+    directories,
+    (key) => key,
+  );
+  expect(options.owners).toMatchObject([{ value: "cloud:cloud-worker", label: "cloud-worker", count: 0 }]);
+  expect(options.directories).toEqual([{ path: "/task", count: 0 }]);
+  expect(options.ownerTotal).toBe(0);
+  expect(options.directoryTotal).toBe(0);
 });
