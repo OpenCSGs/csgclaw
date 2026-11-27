@@ -1,3 +1,6 @@
+import { confirmWithFocusRecovery } from "@/shared/platform/confirm";
+import { useDescriptionAccess } from "@/hooks/useDescriptionAccess";
+import { IntroductionCard, IntroductionMarkdown } from "@/components/business/IntroductionCard";
 import { TemplatePublishProgress } from "@/components/business/TemplatePublishProgress";
 import { EntityField, EntityAvatar, EntityPane } from "@/components/business/EntityDetail";
 import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
@@ -33,6 +36,7 @@ import {
   RefreshCw,
   Save,
   Server,
+  Sparkles,
   Square,
   Trash2,
   Unlink2,
@@ -217,7 +221,9 @@ export type AgentDetailPaneProps = {
   ) => boolean | Promise<boolean>;
   onRecreate: AgentActionHandler;
   onSave?: () => VoidOrPromise;
-  onMetadataSave?: (patch: AgentMetadataSavePatch) => VoidOrPromise;
+  onDescriptionDirtyChange?: (agentID: string, dirty: boolean) => void;
+  onGenerateDescription?: () => Promise<string | undefined>;
+  onMetadataSave?: (patch: AgentMetadataSavePatch) => boolean | void | Promise<boolean | void>;
   onMemoryChange?: () => VoidOrPromise;
   onStart: AgentActionHandler;
   onStartFeishuConnect?: AgentActionHandler;
@@ -353,6 +359,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onStart,
     onStop,
     onMetadataSave,
+    onGenerateDescription,
+    onDescriptionDirtyChange,
     onMemoryChange,
     onStartFeishuConnect,
     onDisconnectFeishu,
@@ -376,7 +384,23 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const knowledgeServers =
     providedKnowledgeServers ?? mcpServers.filter((server) => mcpManagedKnowledgeBaseSource(server.config));
   const [recreateTarget, setRecreateTarget] = useState<AgentLike | null>(null);
-  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const supportsIntroductionGeneration = Boolean(onGenerateDescription && !isNotificationBotAgent(item));
+  const descriptionAccess = useDescriptionAccess(supportsIntroductionGeneration);
+  const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [descriptionErrorAgentID, setDescriptionErrorAgentID] = useState("");
+  const descriptionAgentID = String(item.id ?? "");
+  const [descriptionEdit, setDescriptionEdit] = useState<{ agentID: string; text: string } | null>(null);
+  const isEditingDescription = descriptionEdit !== null && descriptionEdit.agentID === descriptionAgentID;
+  const descriptionDirty = isEditingDescription && descriptionEdit.text !== (draft?.description ?? "");
+  useEffect(() => {
+    if (!descriptionDirty || !descriptionAgentID || !onDescriptionDirtyChange) return;
+    onDescriptionDirtyChange(descriptionAgentID, true);
+    return () => onDescriptionDirtyChange(descriptionAgentID, false);
+  }, [descriptionAgentID, descriptionDirty, onDescriptionDirtyChange]);
+  useEffect(() => {
+    setDescriptionEdit(null);
+    setDescriptionErrorAgentID("");
+  }, [descriptionAgentID]);
   const [isEditingName, setIsEditingName] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>(DEFAULT_AGENT_PROFILE_TAB_ID);
   const [appSettingsID, setAppSettingsID] = useState<string | undefined>();
@@ -522,10 +546,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     setIsEditingName(false);
   }, [item.name, savedDraft?.name, updateDraft]);
   const cancelDescriptionEdit = useCallback(() => {
-    skipMetadataAutosaveRef.current = { ...skipMetadataAutosaveRef.current, description: true };
-    updateDraft({ description: savedDraft?.description ?? item.description ?? "" });
-    setIsEditingDescription(false);
-  }, [item.description, savedDraft?.description, updateDraft]);
+    if (saving || (descriptionDirty && !confirmWithFocusRecovery(t("agentUnsavedChangesWarning")))) return;
+    setDescriptionEdit(null);
+  }, [descriptionDirty, saving, t]);
   useImperativeHandle(
     ref,
     () => ({
@@ -549,24 +572,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             committedFields.push("name");
           }
         }
-        if (isEditingDescription) {
-          setIsEditingDescription(false);
-          if (saveMetadataField("description", descriptionInputRef.current?.value ?? draft?.description ?? "")) {
-            committedFields.push("description");
-          }
-        }
         return committedFields;
       },
     }),
-    [
-      cancelDescriptionEdit,
-      cancelNameEdit,
-      draft?.description,
-      draft?.name,
-      isEditingDescription,
-      isEditingName,
-      saveMetadataField,
-    ],
+    [cancelDescriptionEdit, cancelNameEdit, draft?.name, isEditingDescription, isEditingName, saveMetadataField],
   );
   const runtimeOptionSchemas = runtimeOptionSchemasForAgent(draft?.runtime_kind || runtimeKind, item);
   const fallbackProviderID = String(draft?.model_provider_id || "").trim();
@@ -681,7 +690,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
 
   useEffect(() => {
     if (!draft) {
-      setIsEditingDescription(false);
+      setDescriptionEdit(null);
       setIsEditingName(false);
     }
   }, [draft]);
@@ -913,48 +922,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             </>
           }
           description={
-            draft ? (
-              isEditingDescription ? (
-                <Field className={"entity-description-field"}>
-                  <TextArea
-                    aria-label={t("agentDescription")}
-                    ref={descriptionInputRef}
-                    className="compact-textarea"
-                    value={draft.description}
-                    onBlur={(event) => {
-                      setIsEditingDescription(false);
-                      saveMetadataField("description", event.currentTarget.value);
-                    }}
-                    onInput={(event) => updateDraft({ description: event.currentTarget.value })}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        event.nativeEvent.stopImmediatePropagation();
-                        cancelDescriptionEdit();
-                        event.currentTarget.blur();
-                      }
-                    }}
-                    placeholder={t("agentDescription")}
-                  />
-                </Field>
-              ) : (
-                <button
-                  type="button"
-                  className={`entity-description-display ${draft.description ? "" : "is-empty"}`.trim()}
-                  aria-label={t("editDescription")}
-                  title={draft.description || t("agentDescription")}
-                  onClick={() => setIsEditingDescription(true)}
-                >
-                  <span className="entity-description-display-copy">{draft.description || t("agentDescription")}</span>
-                  <span className="entity-description-display-icon" aria-hidden="true">
-                    <Edit3 size={16} strokeWidth={1.8} />
-                  </span>
-                </button>
-              )
-            ) : item.description ? (
-              <div className="entity-description-text">{item.description}</div>
-            ) : null
+            !draft && item.description ? <div className="entity-description-text">{item.description}</div> : null
           }
           actions={
             <>
@@ -1030,7 +998,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 <span className="agent-save-status warn" role="status">
                   {t("agentProfileSetupRequired")}
                 </span>
-              ) : draft ? (
+              ) : draft && !isEditingDescription ? (
                 <span className="agent-save-status" role="status">
                   <Check aria-hidden="true" size={16} strokeWidth={2.5} />
                   {t("agentSaved")}
@@ -1142,6 +1110,126 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           >
             {visibleActiveProfileTab === "profile" ? (
               <div id="agent-profile-profile" className={agentDetailPaneStyles["agent-profile-tab-panel"]}>
+                <IntroductionCard
+                  title={t("agentIntroduction")}
+                  hint={
+                    supportsIntroductionGeneration &&
+                    (descriptionAccess.status === "allowed" || descriptionAccess.status === "denied")
+                      ? t(
+                          descriptionAccess.status === "allowed"
+                            ? "agentIntroductionHint"
+                            : "descriptionAccessUnavailable",
+                        )
+                      : undefined
+                  }
+                  actions={
+                    <>
+                      {draftBelongsToItem &&
+                      onGenerateDescription &&
+                      supportsIntroductionGeneration &&
+                      descriptionAccess.status === "allowed" ? (
+                        <Button
+                          variant="secondaryGray"
+                          size="sm"
+                          disabled={saving || generatingDescription || isEditingDescription}
+                          onClick={async () => {
+                            setGeneratingDescription(true);
+                            setDescriptionErrorAgentID("");
+                            try {
+                              const description = await onGenerateDescription();
+                              if (description !== undefined) {
+                                setDescriptionEdit({ agentID: String(item.id ?? ""), text: description });
+                              }
+                            } catch {
+                              setDescriptionErrorAgentID(descriptionAgentID);
+                            } finally {
+                              setGeneratingDescription(false);
+                            }
+                          }}
+                        >
+                          <Sparkles size={14} aria-hidden="true" />
+                          {t(generatingDescription ? "agentDescriptionGenerating" : "agentDescriptionGenerate")}
+                        </Button>
+                      ) : null}
+                      {isEditingDescription ? (
+                        <>
+                          <Button variant="tertiaryGray" size="sm" disabled={saving} onClick={cancelDescriptionEdit}>
+                            {t("cancel")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={saving || !onMetadataSave}
+                            onClick={async () => {
+                              if ((await onMetadataSave?.({ description: descriptionEdit.text })) !== false) {
+                                setDescriptionEdit(null);
+                              }
+                            }}
+                          >
+                            {t("save")}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="tertiaryGray"
+                          size="sm"
+                          aria-label={t("editDescription")}
+                          disabled={saving || generatingDescription}
+                          onClick={() =>
+                            setDescriptionEdit({ agentID: String(item.id ?? ""), text: draft.description ?? "" })
+                          }
+                        >
+                          <Edit3 size={14} aria-hidden="true" />
+                          {t("edit")}
+                        </Button>
+                      )}
+                    </>
+                  }
+                >
+                  {descriptionAccess.status === "error" ? (
+                    <InlineError role="alert">
+                      {t("descriptionAccessCheckFailed")}{" "}
+                      <Button variant="tertiaryGray" size="sm" onClick={descriptionAccess.retry}>
+                        {t("retry")}
+                      </Button>
+                    </InlineError>
+                  ) : null}
+                  {descriptionErrorAgentID && descriptionErrorAgentID === descriptionAgentID ? (
+                    <InlineError role="alert">{t("agentDescriptionGenerationFailed")}</InlineError>
+                  ) : null}
+                  {isEditingDescription ? (
+                    <>
+                      <Field className={"entity-description-field"}>
+                        <TextArea
+                          aria-label={t("agentDescription")}
+                          ref={descriptionInputRef}
+                          className="compact-textarea"
+                          value={descriptionEdit.text}
+                          disabled={saving}
+                          onChange={(event) =>
+                            setDescriptionEdit({ agentID: String(item.id ?? ""), text: event.currentTarget.value })
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              event.nativeEvent.stopImmediatePropagation();
+                              cancelDescriptionEdit();
+                            }
+                          }}
+                          placeholder={t("agentDescription")}
+                        />
+                      </Field>
+                      {descriptionEdit.text.trim() ? (
+                        <details className={agentDetailPaneStyles.introductionPreview}>
+                          <summary>{t("agentIntroductionPreview")}</summary>
+                          <IntroductionMarkdown text={descriptionEdit.text} />
+                        </details>
+                      ) : null}
+                    </>
+                  ) : (
+                    <IntroductionMarkdown text={draft.description} empty={t("agentIntroductionEmpty")} />
+                  )}
+                </IntroductionCard>
                 <AgentRuntimePanel
                   draft={draft}
                   directoryPickerAvailable={directoryPickerAvailable}

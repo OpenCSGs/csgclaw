@@ -598,6 +598,10 @@ func (s *RemoteStore) ListWorkspace(
 		return apitypes.WorkspaceListing{}, err
 	}
 
+	return s.listWorkspaceAtBranch(ctx, id, branch, cleanPath)
+}
+
+func (s *RemoteStore) listWorkspaceAtBranch(ctx context.Context, id, branch, cleanPath string) (apitypes.WorkspaceListing, error) {
 	treePath := cleanPath
 	entries := make([]apitypes.WorkspaceEntry, 0)
 	cursor := ""

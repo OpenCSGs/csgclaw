@@ -1,0 +1,59 @@
+.introduction {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--line));
+  border-radius: var(--radius-2xl);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 8%, var(--surface)), var(--surface));
+  min-width: 0;
+}
+
+.introductionHeader,
+.introductionActions,
+.introductionHeader h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.introductionHeader,
+.introductionActions {
+  flex-wrap: wrap;
+}
+
+.introductionHeader {
+  justify-content: space-between;
+}
+
+.introductionHeader h2 {
+  margin: 0;
+  font-size: var(--text-md-size);
+  font-weight: var(--font-weight-semibold);
+}
+
+.introductionIcon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+.introductionHint,
+.introductionCopy {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.introductionHint {
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+}
+
+.introductionCopy {
+  color: var(--text);
+  font-size: var(--text-md-size);
+  line-height: 1.6;
+}

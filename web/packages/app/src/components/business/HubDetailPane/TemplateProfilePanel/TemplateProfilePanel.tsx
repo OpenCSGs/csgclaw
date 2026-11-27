@@ -1,10 +1,15 @@
+import { useDescriptionAccess } from "@/hooks/useDescriptionAccess";
 import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
-import type { ReactNode } from "react";
-import { Field, TextInput } from "@/components/ui";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Sparkles } from "lucide-react";
+import { apiErrorCode } from "@/api/client";
+import { interpretHubTemplate } from "@/api/hub";
+import { IntroductionCard, IntroductionMarkdown } from "@/components/business/IntroductionCard";
+import { Button, Field, InlineError, TextInput } from "@/components/ui";
 import { formatRuntimeKindLabel } from "@/models/agents";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import { formatHubDateTime, type HubTemplate } from "@/models/hubWorkspace";
-import { templateSourceLabelKey } from "@/models/templateGroups";
+import { isOfficialTemplate, templateSourceLabelKey } from "@/models/templateGroups";
 import { classNames } from "@/shared/lib/classNames";
 import styles from "../HubDetailPane.module.css";
 import templateResourceStyles from "../TemplateResource.module.css";
@@ -31,6 +36,12 @@ export function TemplateProfilePanel({
   const templateImageEnv = selectedTemplate.image_env ?? [];
   return (
     <div className={classNames("profile-editor-shell", styles["hub-template-profile-shell"])}>
+      <TemplateIntroduction
+        key={`${selectedTemplate.id}:${selectedTemplate.revision ?? ""}`}
+        template={selectedTemplate}
+        locale={locale}
+        t={t}
+      />
       {intro}
       <section className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
         {showHeading ? (
@@ -111,5 +122,75 @@ export function TemplateProfilePanel({
         </div>
       </section>
     </div>
+  );
+}
+
+function TemplateIntroduction({ template, locale, t }: { template: HubTemplate; locale: LocaleCode; t: TranslateFn }) {
+  const official = isOfficialTemplate(template);
+  const descriptionAccess = useDescriptionAccess(official);
+  const [interpretation, setInterpretation] = useState("");
+  const [pending, setPending] = useState(false);
+  const [errorCode, setErrorCode] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
+  useEffect(() => () => requestRef.current?.abort(), []);
+
+  async function interpret() {
+    const templateID = template.id;
+    if (!templateID || requestRef.current) return;
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setPending(true);
+    setErrorCode("");
+    try {
+      const result = await interpretHubTemplate(templateID, locale, controller.signal);
+      if (!controller.signal.aborted) setInterpretation(result.description);
+    } catch (error) {
+      if (!controller.signal.aborted) setErrorCode(apiErrorCode(error) || "template_interpretation_failed");
+    } finally {
+      requestRef.current = null;
+      if (!controller.signal.aborted) setPending(false);
+    }
+  }
+
+  return (
+    <IntroductionCard
+      title={t("templateIntroduction")}
+      hint={official && descriptionAccess.status === "denied" ? t("descriptionAccessUnavailable") : undefined}
+      actions={
+        official && descriptionAccess.status === "allowed" ? (
+          <Button variant="secondaryGray" size="sm" disabled={pending || !template.id} onClick={interpret}>
+            <Sparkles size={14} aria-hidden="true" />
+            {t(pending ? "templateInterpreting" : "templateInterpret")}
+          </Button>
+        ) : undefined
+      }
+    >
+      <IntroductionMarkdown text={template.description} empty={t("agentIntroductionEmpty")} />
+      {descriptionAccess.status === "error" ? (
+        <InlineError role="alert">
+          {t("descriptionAccessCheckFailed")}{" "}
+          <Button variant="tertiaryGray" size="sm" onClick={descriptionAccess.retry}>
+            {t("retry")}
+          </Button>
+        </InlineError>
+      ) : null}
+      {errorCode ? (
+        <InlineError role="alert">
+          {t(
+            errorCode === "template_interpretation_model_unavailable"
+              ? "templateInterpretationModelUnavailable"
+              : errorCode === "template_interpretation_timeout"
+                ? "templateInterpretationTimeout"
+                : "templateInterpretationFailed",
+          )}
+        </InlineError>
+      ) : null}
+      {interpretation ? (
+        <div className={templateResourceStyles["hub-template-interpretation"]} role="status">
+          <h3>{t("templateInterpretationTitle")}</h3>
+          <IntroductionMarkdown text={interpretation} />
+        </div>
+      ) : null}
+    </IntroductionCard>
   );
 }

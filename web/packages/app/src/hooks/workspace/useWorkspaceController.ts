@@ -314,7 +314,7 @@ export function useWorkspaceController(): WorkspaceController {
       }
       if (
         !options.skipUnsavedCheck &&
-        agent.agentViewProps.hasUnsavedChanges &&
+        (agent.agentViewProps.hasUnsavedChanges || agent.agentViewProps.hasUnsavedDescription) &&
         !confirmWithFocusRecovery(t("agentUnsavedChangesWarning"))
       ) {
         return false;
@@ -331,7 +331,12 @@ export function useWorkspaceController(): WorkspaceController {
       }
       return true;
     },
-    [agent.agentViewProps.hasUnsavedChanges, conversationProfileDetailAgentID, t],
+    [
+      agent.agentViewProps.hasUnsavedChanges,
+      agent.agentViewProps.hasUnsavedDescription,
+      conversationProfileDetailAgentID,
+      t,
+    ],
   );
   const managerDirectConversation = useMemo(
     () => resolveManagerDirectConversation(rooms, displayData?.current_user_id ?? "", agent.managerAgent),

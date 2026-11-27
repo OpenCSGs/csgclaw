@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	agentruntime "csgclaw/internal/runtime"
@@ -138,6 +139,10 @@ func readTemplateMCPServers(srcFS fs.FS, filePath string) (map[string]any, error
 	if err != nil {
 		return nil, err
 	}
+	return decodeTemplateMCPServers(data, filePath)
+}
+
+func decodeTemplateMCPServers(data []byte, filePath string) (map[string]any, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("decode template %s: %w", filePath, err)
@@ -150,6 +155,22 @@ func readTemplateMCPServers(srcFS fs.FS, filePath string) (map[string]any, error
 		return servers, nil
 	}
 	return raw, nil
+}
+
+// EnabledTemplateMCPServerNames returns capability labels without exposing server configuration.
+func EnabledTemplateMCPServerNames(data []byte) []string {
+	servers, err := decodeTemplateMCPServers(data, localMCPFileName)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for name, value := range servers {
+		if server, ok := value.(map[string]any); ok && server["enabled"] != false && strings.TrimSpace(name) != "" {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
 }
 
 func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind string, mcpServers map[string]any, includeMemory bool) error {

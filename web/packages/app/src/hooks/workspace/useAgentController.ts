@@ -20,6 +20,7 @@ import {
   deleteBotRequest,
   deleteFeishuParticipantRequest,
   fetchAgent,
+  generateAgentDescriptionRequest,
   fetchAgentProfile,
   fetchAgentProfileDefaults,
   fetchAgentMCPServers,
@@ -562,12 +563,17 @@ export function useAgentController({
         .map((entry) => entry.busyKey),
     [agentActionBusyByAgent],
   );
+  const [dirtyDescriptionAgentID, setDirtyDescriptionAgentID] = useState("");
+  const onDescriptionDirtyChange = useCallback((agentID: string, dirty: boolean) => {
+    setDirtyDescriptionAgentID((current) => (dirty ? agentID : current === agentID ? "" : current));
+  }, []);
   const agentPageHasUnsavedChanges = Boolean(
     agentPageDraft && agentPageSavedDraft && JSON.stringify(agentPageDraft) !== JSON.stringify(agentPageSavedDraft),
   );
   const agentPageNavigationBlocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      agentPageHasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname,
+      (agentPageHasUnsavedChanges || Boolean(dirtyDescriptionAgentID)) &&
+      currentLocation.pathname !== nextLocation.pathname,
   );
   const managerCodexRuntimeUnavailable = bootstrapConfig?.manager_runtime?.installed === false;
   const managerAgentRuntimeUnavailable = isAgentRuntimeUnavailable(managerProfile);
@@ -1139,6 +1145,7 @@ export function useAgentController({
     agentPageNavigationConfirmedRef.current = true;
     if (confirmWithFocusRecovery(t("agentUnsavedChangesWarning"))) {
       setAgentPageDraft(agentPageSavedDraft);
+      setDirtyDescriptionAgentID("");
       setAgentPageSaveError("");
       agentPageNavigationBlocker.proceed();
     } else {
@@ -1147,7 +1154,7 @@ export function useAgentController({
   }, [agentPageNavigationBlocker, agentPageSavedDraft, t]);
 
   useEffect(() => {
-    if (!agentPageHasUnsavedChanges) {
+    if (!agentPageHasUnsavedChanges && !dirtyDescriptionAgentID) {
       return undefined;
     }
     function handleBeforeUnload(event: BeforeUnloadEvent) {
@@ -1156,7 +1163,7 @@ export function useAgentController({
     }
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [agentPageHasUnsavedChanges]);
+  }, [agentPageHasUnsavedChanges, dirtyDescriptionAgentID]);
 
   useEffect(() => {
     setAgentSkillAddError("");
@@ -1684,13 +1691,13 @@ export function useAgentController({
     );
   }
 
-  async function saveAgentPageMetadata(patch: Pick<Partial<AgentDraft>, "description" | "name">): Promise<void> {
+  async function saveAgentPageMetadata(patch: Pick<Partial<AgentDraft>, "description" | "name">): Promise<boolean> {
     const agentID = String(selectedAgentForPage?.id ?? "").trim();
     if (!agentID || !agentPageDraft || agentPageBusy) {
-      return;
+      return false;
     }
-    if (modelProviderConfigUsesOpenCSG(agentPageDraft) && !requireOpenCSGAuthentication()) {
-      return;
+    if (patch.name !== undefined && modelProviderConfigUsesOpenCSG(agentPageDraft) && !requireOpenCSGAuthentication()) {
+      return false;
     }
     const payload: AgentUpdatePayload = {};
     const isManagerDraft =
@@ -1701,7 +1708,7 @@ export function useAgentController({
       const name = String(patch.name ?? "");
       if (!name.trim()) {
         setAgentPageSaveError(t("profileSaveIncompleteError"));
-        return;
+        return false;
       }
       if (name !== String(agentPageSavedDraft?.name ?? "")) {
         payload.name = name;
@@ -1714,7 +1721,7 @@ export function useAgentController({
       }
     }
     if (!Object.keys(payload).length) {
-      return;
+      return true;
     }
     setAgentPageBusy(true);
     setAgentPageSaveError("");
@@ -1741,13 +1748,28 @@ export function useAgentController({
           ...(payload.description !== undefined ? { description: saved.description || "" } : {}),
         };
       });
+      return true;
     } catch (err) {
-      if (!(modelProviderConfigUsesOpenCSG(agentPageDraft) && handleOpenCSGAuthenticationError(err))) {
+      if (
+        !(
+          payload.name !== undefined &&
+          modelProviderConfigUsesOpenCSG(agentPageDraft) &&
+          handleOpenCSGAuthenticationError(err)
+        )
+      ) {
         setAgentPageSaveError(errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
       }
+      return false;
     } finally {
       setAgentPageBusy(false);
     }
+  }
+
+  async function generateAgentPageDescription(): Promise<string | undefined> {
+    const agentID = selectedAgentForPage?.id;
+    if (!agentID) return;
+    const result = await generateAgentDescriptionRequest(agentID, locale);
+    if (selectedAgentForPageRef.current?.id === agentID) return result.description;
   }
 
   const agentPageModelChanged =
@@ -2989,6 +3011,8 @@ export function useAgentController({
       draft: agentPageDraft,
       savedDraft: agentPageSavedDraft,
       hasUnsavedChanges: agentPageHasUnsavedChanges,
+      hasUnsavedDescription: Boolean(dirtyDescriptionAgentID && dirtyDescriptionAgentID === selectedAgentForPage?.id),
+      onDescriptionDirtyChange,
       models: agentPageModelOptions.map((option) => option.modelID),
       modelOptions: agentPageModelOptions,
       modelProviders: agentPageModelProviders,
@@ -3068,6 +3092,7 @@ export function useAgentController({
       onDraftChange: setAgentPageDraft,
       onSave: saveAgentPage,
       onMetadataSave: saveAgentPageMetadata,
+      onGenerateDescription: generateAgentPageDescription,
       onMemoryChange: async () => {
         const agentID = String(selectedAgentForPage?.id ?? "").trim();
         if (agentID) {
