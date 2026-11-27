@@ -19,6 +19,7 @@ import { memo, useId, useMemo, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject, ReactNode } from "react";
 import { ArrowUp, Eraser, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
+import { ComposerDraftSaveNotice } from "@/components/business/ComposerDraftSaveNotice";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { DismissibleInlineError, Button, Tooltip } from "@/components/ui";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
@@ -82,6 +83,8 @@ export type ConversationComposerProps = ComposerResourceProps & {
   onProviderLogin: (provider: string) => VoidOrPromise;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onRetrySend?: () => VoidOrPromise;
+  onRetrySaveDraft?: () => void;
+  onDismissDraftSaveError?: () => void;
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;
@@ -113,6 +116,8 @@ export const ConversationComposer = memo(function ConversationComposer({
   composerDisabled,
   composerDisabledReason = "",
   composerError,
+  onRetrySaveDraft,
+  onDismissDraftSaveError,
   draftSegments,
   draftText,
   attachmentDrafts = [],
@@ -253,6 +258,17 @@ export const ConversationComposer = memo(function ConversationComposer({
           onStop={onStopWorkingTurn}
         />
       ) : null}
+      <ComposerDraftSaveNotice
+        onRetry={onRetrySaveDraft}
+        onDismiss={
+          onDismissDraftSaveError &&
+          (() => {
+            onDismissDraftSaveError();
+            editorRef.current?.focus({ preventScroll: true });
+          })
+        }
+        t={t}
+      />
       <div
         ref={composerBoxRef}
         className={`composer-box ${conversationComposerStyles["composer-box"]}`}

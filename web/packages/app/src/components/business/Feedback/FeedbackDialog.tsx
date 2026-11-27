@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { CircleAlert, FileArchive, ImagePlus, Info, Paperclip, X } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { FileArchive, ImagePlus, Info, Paperclip, X } from "lucide-react";
+import { ErrorNotice } from "@/components/business/ErrorNotice";
 import {
   TextArea,
   Button,
@@ -12,7 +13,6 @@ import {
   DialogRoot,
   DialogTitle,
   DialogTrigger,
-  IconButton,
   InlineError,
   LinkButton,
   Tooltip,
@@ -188,7 +188,7 @@ export function FeedbackDialog(props: Props) {
             </p>
           ) : null}
           {showForm && props.error && !awaiting ? (
-            <FeedbackErrorNotice
+            <ErrorNotice
               dismissLabel={t("feedbackDismissSubmissionError")}
               onDismiss={
                 props.onClearError &&
@@ -199,13 +199,13 @@ export function FeedbackDialog(props: Props) {
               }
             >
               {props.error}
-            </FeedbackErrorNotice>
+            </ErrorNotice>
           ) : null}
           {showForm && props.storageUnavailable ? (
             <InlineError role="status">{t("feedbackDraftStorageUnavailable")}</InlineError>
           ) : null}
           {showForm && props.rejections?.length ? (
-            <FeedbackErrorNotice
+            <ErrorNotice
               dismissLabel={t("feedbackDismissAttachmentWarnings")}
               onDismiss={
                 props.onClearRejections &&
@@ -227,7 +227,7 @@ export function FeedbackDialog(props: Props) {
                   </li>
                 ))}
               </ul>
-            </FeedbackErrorNotice>
+            </ErrorNotice>
           ) : null}
           {receipt && (issueNumber || issueURL) ? (
             <div className={styles.inlineActions}>
@@ -451,35 +451,6 @@ export function FeedbackDialog(props: Props) {
         </DialogFooter>
       </DialogContent>
     </DialogRoot>
-  );
-}
-
-function FeedbackErrorNotice({
-  children,
-  dismissLabel,
-  onDismiss,
-}: {
-  children: ReactNode;
-  dismissLabel: string;
-  onDismiss?: () => void;
-}) {
-  return (
-    <div className={styles.errorNotice}>
-      <CircleAlert className={styles.noticeIcon} size={16} aria-hidden="true" />
-      <div className={styles.noticeContent} role="alert">
-        {children}
-      </div>
-      {onDismiss ? (
-        <IconButton
-          variant="tertiaryGray"
-          size="sm"
-          label={dismissLabel}
-          icon={<X />}
-          iconSize={16}
-          onClick={onDismiss}
-        />
-      ) : null}
-    </div>
   );
 }
 

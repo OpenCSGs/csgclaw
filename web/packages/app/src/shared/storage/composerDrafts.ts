@@ -5,10 +5,19 @@ import type { ComposerSegment } from "@/models/composer";
 import { COMPOSER_DRAFT_STORAGE_PREFIX } from "./keys";
 
 type DraftSnapshot = { content: Record<string, unknown>; attachments: ComposerAttachmentDraft[] };
+type CachedDraft = {
+  snapshot: DraftSnapshot;
+  storedValue: string | null | undefined;
+};
+type PendingWrite = {
+  timer?: number;
+  value: object | null;
+  state: "pending" | "failed" | "acknowledged" | "discarding";
+};
 const emptyDraft: DraftSnapshot = { content: {}, attachments: [] };
-const drafts = new Map<string, DraftSnapshot>();
+const drafts = new Map<string, CachedDraft>();
 const listeners = new Map<string, Set<() => void>>();
-const pending = new Map<string, { timer: number; draft: object }>();
+const pending = new Map<string, PendingWrite>();
 
 export function composerDraftKey(userID: string, roomID?: string): string {
   return userID
@@ -41,13 +50,11 @@ export function isStoredComposerSegment(value: unknown): value is ComposerSegmen
   }
 }
 
-function readComposerDraft(key: string): Record<string, unknown> {
-  if (!key) return {};
+function readStoredValue(key: string): string | null | undefined {
   try {
-    const draft: unknown = pending.get(key)?.draft ?? JSON.parse(window.localStorage.getItem(key) ?? "null");
-    return record(draft) ? draft : {};
+    return window.localStorage.getItem(key);
   } catch {
-    return {};
+    return undefined;
   }
 }
 
@@ -73,14 +80,29 @@ export function readDraftAttachments(value: unknown): ComposerAttachmentDraft[] 
     .map(attachmentMetadata);
 }
 
-export function getComposerDraft(key: string): DraftSnapshot {
-  if (!key) return emptyDraft;
+function parseStoredDraft(storedValue: string | null | undefined): DraftSnapshot {
+  if (!storedValue) return emptyDraft;
+  try {
+    const draft: unknown = JSON.parse(storedValue);
+    if (!record(draft)) return emptyDraft;
+    const { attachments, ...content } = draft;
+    return { content, attachments: readDraftAttachments(attachments) };
+  } catch {
+    return emptyDraft;
+  }
+}
+
+function getCachedDraft(key: string): CachedDraft {
   const cached = drafts.get(key);
   if (cached) return cached;
-  const { attachments, ...content } = readComposerDraft(key);
-  const draft = { content, attachments: readDraftAttachments(attachments) };
+  const storedValue = readStoredValue(key);
+  const draft = { snapshot: parseStoredDraft(storedValue), storedValue };
   drafts.set(key, draft);
   return draft;
+}
+
+export function getComposerDraft(key: string): DraftSnapshot {
+  return key ? getCachedDraft(key).snapshot : emptyDraft;
 }
 
 export function subscribeToComposerDraft(key: string, listener: () => void) {
@@ -91,26 +113,80 @@ export function subscribeToComposerDraft(key: string, listener: () => void) {
     subscribers.delete(listener);
     if (!subscribers.size) {
       listeners.delete(key);
-      if (!drafts.get(key)?.attachments.some((attachment) => attachment.file)) drafts.delete(key);
+      evictUnusedDraft(key);
     }
   };
 }
 
-function flush(key: string) {
-  const item = pending.get(key);
-  if (!item) return;
-  window.clearTimeout(item.timer);
-  pending.delete(key);
-  if (!pending.size) window.removeEventListener("pagehide", flushAll);
-  try {
-    window.localStorage.setItem(key, JSON.stringify(item.draft));
-  } catch {
-    // Storage can be disabled or full. The current editor remains usable.
+function evictUnusedDraft(key: string) {
+  if (
+    !listeners.has(key) &&
+    !pending.has(key) &&
+    !drafts.get(key)?.snapshot.attachments.some((attachment) => attachment.file)
+  ) {
+    drafts.delete(key);
   }
 }
 
+export function composerDraftSaveFailed(key: string): boolean {
+  return pending.get(key)?.state === "failed";
+}
+
+export function acknowledgeComposerDraftSaveFailure(key: string) {
+  const item = pending.get(key);
+  if (item?.state !== "failed") return;
+  window.clearTimeout(item.timer);
+  item.timer = undefined;
+  item.value = null;
+  item.state = "acknowledged";
+  listeners.get(key)?.forEach((listener) => listener());
+}
+
+export function discardAcknowledgedComposerDraft(key: string) {
+  if (pending.get(key)?.state === "acknowledged") flushComposerDraft(key);
+}
+
+export function flushComposerDraft(key: string) {
+  const item = pending.get(key);
+  if (!item) return;
+  window.clearTimeout(item.timer);
+  item.timer = undefined;
+  const wasFailed = item.state === "failed";
+  const discard = item.state === "acknowledged";
+  const draft = getCachedDraft(key);
+  if (discard) {
+    draft.snapshot = emptyDraft;
+    item.state = "discarding";
+  }
+  try {
+    let storedValue = item.value === null ? null : JSON.stringify(item.value);
+    const currentValue = discard ? window.localStorage.getItem(key) : draft.storedValue;
+    if (discard && currentValue !== draft.storedValue) {
+      // Dismissing the failed draft only discards this tab's edits.
+      storedValue = currentValue ?? null;
+      draft.snapshot = parseStoredDraft(storedValue);
+    } else if (storedValue === null) {
+      window.localStorage.removeItem(key);
+    } else {
+      window.localStorage.setItem(key, storedValue);
+    }
+    draft.storedValue = storedValue;
+    pending.delete(key);
+    if (!pending.size) window.removeEventListener("pagehide", flushAll);
+    evictUnusedDraft(key);
+  } catch {
+    // Keep a discarded draft empty even if the browser refuses to remove the old value.
+    if (item.state !== "discarding") item.state = "failed";
+  }
+  if (discard || wasFailed !== composerDraftSaveFailed(key)) listeners.get(key)?.forEach((listener) => listener());
+}
+
 function flushAll() {
-  for (const key of pending.keys()) flush(key);
+  for (const [key, item] of pending) {
+    // A timer represents a fresh edit, even while an earlier failure is still shown.
+    if ((item.state === "failed" && item.timer === undefined) || item.state === "discarding") continue;
+    flushComposerDraft(key);
+  }
 }
 
 export function saveComposerDraft(
@@ -119,21 +195,17 @@ export function saveComposerDraft(
   attachments: ComposerAttachmentDraft[],
 ) {
   if (!key) return;
-  drafts.set(key, content || attachments.length ? { content: content ?? {}, attachments } : emptyDraft);
-  window.clearTimeout(pending.get(key)?.timer);
-  if (!content && !attachments.length) {
-    pending.delete(key);
-    if (!pending.size) window.removeEventListener("pagehide", flushAll);
-    try {
-      window.localStorage.removeItem(key);
-    } catch {
-      // Storage can be disabled.
-    }
+  getCachedDraft(key).snapshot = content || attachments.length ? { content: content ?? {}, attachments } : emptyDraft;
+  const previous = pending.get(key);
+  window.clearTimeout(previous?.timer);
+  const value = content || attachments.length ? { ...content, attachments: attachments.map(attachmentMetadata) } : null;
+  const item: PendingWrite = { value, state: previous?.state === "failed" ? "failed" : "pending" };
+  pending.set(key, item);
+  window.addEventListener("pagehide", flushAll);
+  if (value === null) {
+    flushComposerDraft(key);
   } else {
-    const draft = { ...content, attachments: attachments.map(attachmentMetadata) };
-    window.addEventListener("pagehide", flushAll);
-    pending.set(key, { draft, timer: window.setTimeout(() => flush(key), 250) });
+    item.timer = window.setTimeout(() => flushComposerDraft(key), 250);
   }
   listeners.get(key)?.forEach((listener) => listener());
-  if (!listeners.has(key) && !attachments.some((attachment) => attachment.file)) drafts.delete(key);
 }
