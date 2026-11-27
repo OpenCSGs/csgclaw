@@ -1,7 +1,9 @@
 import { createAttachmentDrafts } from "@/models/attachments";
 import {
+  acknowledgeComposerDraftSaveFailure,
   composerDraftKey,
   composerDraftSaveFailed,
+  discardAcknowledgedComposerDraft,
   flushComposerDraft,
   getComposerDraft,
   saveComposerDraft,
@@ -93,4 +95,41 @@ it("keeps an explicit clear when storage removal fails instead of restoring stal
   window.dispatchEvent(new Event("pagehide"));
   expect(composerDraftSaveFailed(key)).toBe(false);
   expect(localStorage.getItem(key)).toBeNull();
+});
+
+it("keeps acknowledged text in the current editor and discards it on leaving", () => {
+  const key = composerDraftKey("test-user", "dismiss");
+  localStorage.setItem(key, JSON.stringify({ text: "previously saved" }));
+  const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new DOMException("Storage is full", "QuotaExceededError");
+  });
+  const leave = subscribeToComposerDraft(key, vi.fn());
+  saveComposerDraft(key, { text: "unsaved edit" }, []);
+  flushComposerDraft(key);
+  acknowledgeComposerDraftSaveFailure(key);
+  expect(composerDraftSaveFailed(key)).toBe(false);
+  expect(getComposerDraft(key).content).toEqual({ text: "unsaved edit" });
+
+  discardAcknowledgedComposerDraft(key);
+  leave();
+  expect(getComposerDraft(key).content).toEqual({});
+  expect(localStorage.getItem(key)).toBeNull();
+  expect(storage).toHaveBeenCalledOnce();
+});
+
+it("saves new edits made after acknowledging a failure", () => {
+  const key = composerDraftKey("test-user", "edit-after-dismiss");
+  const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => {
+    throw new DOMException("Storage is full", "QuotaExceededError");
+  });
+  saveComposerDraft(key, { text: "unsaved edit" }, []);
+  flushComposerDraft(key);
+  acknowledgeComposerDraftSaveFailure(key);
+  saveComposerDraft(key, { text: "later edit" }, []);
+  discardAcknowledgedComposerDraft(key);
+  flushComposerDraft(key);
+
+  expect(storage).toHaveBeenCalledTimes(2);
+  expect(composerDraftSaveFailed(key)).toBe(false);
+  expect(getComposerDraft(key).content).toEqual({ text: "later edit" });
 });

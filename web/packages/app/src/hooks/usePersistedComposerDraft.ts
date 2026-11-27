@@ -1,6 +1,8 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import {
+  acknowledgeComposerDraftSaveFailure,
   composerDraftSaveFailed,
+  discardAcknowledgedComposerDraft,
   flushComposerDraft,
   getComposerDraft,
   saveComposerDraft,
@@ -14,6 +16,7 @@ export function usePersistedComposerDraft<Content>(
   key: string,
   parseContent: (stored: Record<string, unknown>) => Content,
   serializeContent: (content: Content) => Record<string, unknown> | null,
+  active = true,
 ) {
   const subscribe = useCallback((listener: () => void) => subscribeToComposerDraft(key, listener), [key]);
   const getSnapshot = useCallback(() => getComposerDraft(key), [key]);
@@ -21,6 +24,10 @@ export function usePersistedComposerDraft<Content>(
   const getSaveFailed = useCallback(() => composerDraftSaveFailed(key), [key]);
   const saveFailed = useSyncExternalStore(subscribe, getSaveFailed);
   const retrySave = useCallback(() => flushComposerDraft(key), [key]);
+  const dismissSaveError = useCallback(() => acknowledgeComposerDraftSaveFailure(key), [key]);
+  useEffect(() => {
+    if (active) return () => discardAcknowledgedComposerDraft(key);
+  }, [active, key]);
   const draft = useMemo(
     () => ({ content: parseContent(snapshot.content), attachments: snapshot.attachments }),
     [snapshot, parseContent],
@@ -35,5 +42,11 @@ export function usePersistedComposerDraft<Content>(
     saveComposerDraft(key, serializeContent(next.content), next.attachments);
   }
 
-  return { draft, update, snapshot, retrySave: saveFailed ? retrySave : undefined };
+  return {
+    draft,
+    update,
+    snapshot,
+    retrySave: saveFailed ? retrySave : undefined,
+    dismissSaveError: saveFailed ? dismissSaveError : undefined,
+  };
 }

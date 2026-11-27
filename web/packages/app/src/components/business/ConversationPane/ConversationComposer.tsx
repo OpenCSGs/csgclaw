@@ -84,6 +84,7 @@ export type ConversationComposerProps = ComposerResourceProps & {
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onRetrySend?: () => VoidOrPromise;
   onRetrySaveDraft?: () => void;
+  onDismissDraftSaveError?: () => void;
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;
@@ -116,6 +117,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   composerDisabledReason = "",
   composerError,
   onRetrySaveDraft,
+  onDismissDraftSaveError,
   draftSegments,
   draftText,
   attachmentDrafts = [],
@@ -256,6 +258,17 @@ export const ConversationComposer = memo(function ConversationComposer({
           onStop={onStopWorkingTurn}
         />
       ) : null}
+      <ComposerDraftSaveNotice
+        onRetry={onRetrySaveDraft}
+        onDismiss={
+          onDismissDraftSaveError &&
+          (() => {
+            onDismissDraftSaveError();
+            editorRef.current?.focus({ preventScroll: true });
+          })
+        }
+        t={t}
+      />
       <div
         ref={composerBoxRef}
         className={`composer-box ${conversationComposerStyles["composer-box"]}`}
@@ -463,7 +476,6 @@ export const ConversationComposer = memo(function ConversationComposer({
           </Button>
         </div>
       ) : null}
-      <ComposerDraftSaveNotice onRetry={onRetrySaveDraft} t={t} />
       {composerError || sendError ? (
         <DismissibleInlineError
           className={"composer-error"}

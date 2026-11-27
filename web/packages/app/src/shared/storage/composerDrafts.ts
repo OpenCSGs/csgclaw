@@ -5,7 +5,11 @@ import type { ComposerSegment } from "@/models/composer";
 import { COMPOSER_DRAFT_STORAGE_PREFIX } from "./keys";
 
 type DraftSnapshot = { content: Record<string, unknown>; attachments: ComposerAttachmentDraft[] };
-type PendingWrite = { timer?: number; value: object | null; failed: boolean };
+type PendingWrite = {
+  timer?: number;
+  value: object | null;
+  state: "pending" | "failed" | "acknowledged" | "discarding";
+};
 const emptyDraft: DraftSnapshot = { content: {}, attachments: [] };
 const drafts = new Map<string, DraftSnapshot>();
 const listeners = new Map<string, Set<() => void>>();
@@ -104,7 +108,21 @@ function evictUnusedDraft(key: string) {
 }
 
 export function composerDraftSaveFailed(key: string): boolean {
-  return pending.get(key)?.failed ?? false;
+  return pending.get(key)?.state === "failed";
+}
+
+export function acknowledgeComposerDraftSaveFailure(key: string) {
+  const item = pending.get(key);
+  if (item?.state !== "failed") return;
+  window.clearTimeout(item.timer);
+  item.timer = undefined;
+  item.value = null;
+  item.state = "acknowledged";
+  listeners.get(key)?.forEach((listener) => listener());
+}
+
+export function discardAcknowledgedComposerDraft(key: string) {
+  if (pending.get(key)?.state === "acknowledged") flushComposerDraft(key);
 }
 
 export function flushComposerDraft(key: string) {
@@ -112,7 +130,12 @@ export function flushComposerDraft(key: string) {
   if (!item) return;
   window.clearTimeout(item.timer);
   item.timer = undefined;
-  const wasFailed = item.failed;
+  const wasFailed = item.state === "failed";
+  const discard = item.state === "acknowledged";
+  if (discard) {
+    drafts.set(key, emptyDraft);
+    item.state = "discarding";
+  }
   try {
     if (item.value === null) window.localStorage.removeItem(key);
     else window.localStorage.setItem(key, JSON.stringify(item.value));
@@ -120,10 +143,10 @@ export function flushComposerDraft(key: string) {
     if (!pending.size) window.removeEventListener("pagehide", flushAll);
     evictUnusedDraft(key);
   } catch {
-    // Keep the latest draft (or explicit clear) in memory until storage accepts it.
-    item.failed = true;
+    // Keep a discarded draft empty even if the browser refuses to remove the old value.
+    if (item.state !== "discarding") item.state = "failed";
   }
-  if (wasFailed !== composerDraftSaveFailed(key)) listeners.get(key)?.forEach((listener) => listener());
+  if (discard || wasFailed !== composerDraftSaveFailed(key)) listeners.get(key)?.forEach((listener) => listener());
 }
 
 function flushAll() {
@@ -140,7 +163,7 @@ export function saveComposerDraft(
   const previous = pending.get(key);
   window.clearTimeout(previous?.timer);
   const value = content || attachments.length ? { ...content, attachments: attachments.map(attachmentMetadata) } : null;
-  const item: PendingWrite = { value, failed: previous?.failed ?? false };
+  const item: PendingWrite = { value, state: previous?.state === "failed" ? "failed" : "pending" };
   pending.set(key, item);
   window.addEventListener("pagehide", flushAll);
   if (value === null) {

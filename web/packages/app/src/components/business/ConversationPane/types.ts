@@ -150,6 +150,7 @@ export type ConversationPaneProps = {
   onProviderLogin: (provider: string) => VoidOrPromise;
   onRetrySend?: () => VoidOrPromise;
   onRetrySaveDraft?: () => void;
+  onDismissDraftSaveError?: () => void;
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;

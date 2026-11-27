@@ -269,6 +269,7 @@ function StartTaskForm({
     draft: startDraft,
     update: updateStartDraft,
     retrySave: retrySaveStartDraft,
+    dismissSaveError: dismissStartDraftSaveError,
   } = usePersistedComposerDraft(draftKey, readStartDraft, serializeStartDraft);
   useEffect(() => {
     if (!selectedAgent || !pendingDraftKey || createdDraftKey.current) return;
@@ -752,6 +753,17 @@ function StartTaskForm({
               </div>
             ) : null}
             <div className={styles.composerGroup}>
+              <ComposerDraftSaveNotice
+                onRetry={retrySaveStartDraft}
+                onDismiss={
+                  dismissStartDraftSaveError &&
+                  (() => {
+                    dismissStartDraftSaveError();
+                    editorRef.current?.focus({ preventScroll: true });
+                  })
+                }
+                t={t}
+              />
               <div
                 ref={composerBoxRef}
                 className={styles.composer}
@@ -1157,7 +1169,6 @@ function StartTaskForm({
                   </Button>
                 </div>
               ) : null}
-              <ComposerDraftSaveNotice onRetry={retrySaveStartDraft} t={t} />
               {attachmentWarning ? (
                 <DismissibleInlineError messageKey={attachmentWarning} closeLabel={t("close")}>
                   <span role="alert">{attachmentWarning}</span>

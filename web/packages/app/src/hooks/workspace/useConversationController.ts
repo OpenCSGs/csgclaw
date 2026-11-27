@@ -479,7 +479,13 @@ export function useConversationController({
     update: updateRoomDraft,
     snapshot: roomDraftSnapshot,
     retrySave: retrySaveRoomDraft,
-  } = usePersistedComposerDraft(roomDraftKey, readConversationDraft, serializeConversationDraft);
+    dismissSaveError: dismissRoomDraftSaveError,
+  } = usePersistedComposerDraft(
+    roomDraftKey,
+    readConversationDraft,
+    serializeConversationDraft,
+    messageListActive && activePane.type === WorkspacePaneTypes.conversation && Boolean(activePane.id),
+  );
   const [threadDraftsByKey, setThreadDraftsByKey] = useState<DraftsByThreadKey>({});
   const [threadAttachmentDraftsByKey, setThreadAttachmentDraftsByKey] = useState<AttachmentDraftsByKey>({});
   const [composerSendStatesByConversationId, setComposerSendStatesByConversationId] = useState<ComposerSendStatesByKey>(
@@ -2134,6 +2140,7 @@ export function useConversationController({
       onStopSend: stopSending,
       composerError: (draftSegments.length ? cloudDisabledReason : "") || composerError,
       onRetrySaveDraft: retrySaveRoomDraft,
+      onDismissDraftSaveError: dismissRoomDraftSaveError,
       messageActionBusy,
       messageActionFeedback,
       onMessageAction,

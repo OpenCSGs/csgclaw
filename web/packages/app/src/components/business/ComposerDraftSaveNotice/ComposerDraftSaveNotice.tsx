@@ -1,16 +1,30 @@
 import { Button } from "@/components/ui";
+import { ErrorNotice } from "@/components/business/ErrorNotice";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./ComposerDraftSaveNotice.module.css";
 
-export function ComposerDraftSaveNotice({ onRetry, t }: { onRetry?: () => void; t: TranslateFn }) {
+export function ComposerDraftSaveNotice({
+  onDismiss,
+  onRetry,
+  t,
+}: {
+  onDismiss?: () => void;
+  onRetry?: () => void;
+  t: TranslateFn;
+}) {
+  if (!onRetry || !onDismiss) return null;
   return (
-    <div className={onRetry ? styles.notice : undefined}>
-      <span aria-live="polite">{onRetry ? t("composerDraftSaveFailed") : ""}</span>
-      {onRetry ? (
+    <ErrorNotice
+      className={styles.notice}
+      dismissLabel={t("close")}
+      onDismiss={onDismiss}
+      action={
         <Button size="sm" variant="secondaryGray" onClick={onRetry}>
           {t("composerDraftRetrySave")}
         </Button>
-      ) : null}
-    </div>
+      }
+    >
+      <span>{t("composerDraftSaveFailed")}</span>
+    </ErrorNotice>
   );
 }
