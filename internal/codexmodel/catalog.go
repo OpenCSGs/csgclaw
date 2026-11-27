@@ -50,7 +50,7 @@ func Metadata(profile Profile) map[string]any {
 	for _, effort := range levels {
 		supported = append(supported, map[string]any{"effort": effort, "description": effort})
 	}
-	return map[string]any{
+	entry := map[string]any{
 		"slug":                         modelID,
 		"display_name":                 modelID,
 		"description":                  "CSGClaw OpenAI-compatible provider model",
@@ -83,6 +83,15 @@ func Metadata(profile Profile) map[string]any {
 		"experimental_supported_tools":     []any{},
 		"input_modalities":                 []string{"text", "image"},
 	}
+	// Xiaomi's published Codex catalog requires code mode for freeform tools.
+	switch strings.ToLower(modelID) {
+	case "mimo-v2.6-flash", "mimo-v2.6-pro", "mimo-v2.6-pro-ultraspeed":
+		entry["tool_mode"] = "code_mode_only"
+		entry["apply_patch_tool_type"] = "freeform"
+		entry["supports_reasoning_summaries"] = true
+		entry["default_reasoning_summary"] = "none"
+	}
+	return entry
 }
 
 func modelMessages(baseInstructions string) map[string]any {

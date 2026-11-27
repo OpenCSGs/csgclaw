@@ -54,6 +54,102 @@ describe("participantWorkReducer", () => {
     expect(activeParticipantWorkForRoom(state, "room-1")["pt-worker"]).toBeUndefined();
   });
 
+  it.each([18, 10000, 10001, 0, -1, Infinity, NaN])("normalizes the sampled rate %s", (rate) => {
+    const state = participantWorkReducer(createParticipantWorkState(), {
+      now,
+      type: "workEvent",
+      work: work({
+        status: {
+          phase: "working",
+          stage: "generating_reply",
+          sequence: 1,
+          output_tokens_per_second: rate,
+          output_rate_sampled_at: now,
+        },
+      }),
+    });
+    const status = activeParticipantWorkForRoom(state, "room-1")["pt-worker"]?.["lease-1"]?.status;
+    expect(status?.output_tokens_per_second).toBe(rate > 0 && rate <= 10000 ? rate : undefined);
+  });
+
+  it.each([-5000, 5000])("uses server sample age with %s ms of browser clock skew", (skew) => {
+    const status: ParticipantWorkUpdate["status"] = {
+      phase: "working",
+      stage: "generating_reply",
+      sequence: 1,
+      output_tokens_per_second: 18,
+      output_rate_sampled_at: now,
+    };
+    const receipt = 100;
+    const fresh = participantWorkReducer(createParticipantWorkState(), {
+      now: now + skew,
+      receivedAt: receipt,
+      type: "workEvent",
+      serverNow: now + 200,
+      work: work({ server_time_ms: now + 200, status }),
+    });
+    const stale = participantWorkReducer(createParticipantWorkState(), {
+      now: now + skew,
+      receivedAt: receipt,
+      type: "workEvent",
+      serverNow: now + 2500,
+      work: work({ server_time_ms: now + 2500, status }),
+    });
+    expect(workLeaseForRequest(fresh, "room-1", "pt-worker", "message-1")?.outputRateExpiresAt).toBe(2400);
+    const staleLease = workLeaseForRequest(stale, "room-1", "pt-worker", "message-1");
+    expect(staleLease).not.toBeNull();
+    expect(staleLease?.outputRateExpiresAt).toBeUndefined();
+  });
+
+  it.each([0, 5000])("accounts for transport delay with %s ms of clock skew", (skew) => {
+    const workUpdate = work({
+      server_time_ms: now,
+      expires_at: new Date(now + 5000).toISOString(),
+      status: {
+        phase: "working",
+        stage: "generating_reply",
+        sequence: 1,
+        output_tokens_per_second: 18,
+        output_rate_sampled_at: now,
+      },
+    });
+    const receive = (delay: number) =>
+      participantWorkReducer(createParticipantWorkState(), {
+        type: "workEvent",
+        now: now + skew + delay,
+        receivedAt: delay,
+        serverNow: skew ? now + delay : undefined,
+        work: workUpdate,
+      });
+
+    const active = workLeaseForRequest(receive(3000), "room-1", "pt-worker", "message-1");
+    expect(active?.expiresAt).toBe(now + skew + 5000);
+    expect(active?.outputRateExpiresAt).toBeUndefined();
+    expect(workLeaseForRequest(receive(5800), "room-1", "pt-worker", "message-1")).toBeNull();
+  });
+
+  it("keeps the rate in a thinking lease status", () => {
+    const state = participantWorkReducer(createParticipantWorkState(), {
+      now,
+      type: "workEvent",
+      work: work({
+        status: {
+          phase: "thinking",
+          stage: "thinking",
+          sequence: 1,
+          thinking: { format: "plain_text", text: "Checking", truncated: false },
+          output_tokens_per_second: 18,
+          output_rate_sampled_at: now,
+        },
+      }),
+    });
+    expect(activeParticipantWorkForRoom(state, "room-1")["pt-worker"]?.["lease-1"]?.status).toMatchObject({
+      phase: "thinking",
+      output_tokens_per_second: 18,
+      output_rate_sampled_at: now,
+    });
+  });
+
   it("keeps concurrent leases independent and expires them with one clock action", () => {
     let state = participantWorkReducer(createParticipantWorkState(), { now, type: "workEvent", work: work() });
     state = participantWorkReducer(state, {

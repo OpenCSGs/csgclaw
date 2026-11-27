@@ -13,6 +13,21 @@ import (
 
 var ErrInstallationChanged = errors.New("skill_installation_changed")
 
+// WithSelection holds the same lock as installers while consuming a selected
+// installed copy. Do not call another installstate transaction in consume.
+func WithSelection(root, name, expected string, consume func() error) error {
+	return ReadSnapshot(root, func(records map[string]Record) error {
+		actual, err := snapshotToken(root, name, records[name])
+		if err != nil {
+			return err
+		}
+		if actual != expected {
+			return ErrInstallationChanged
+		}
+		return consume()
+	})
+}
+
 // Snapshot identifies the exact local files and installation record reviewed by a user.
 func Snapshot(root, name string) (Record, string, error) {
 	var record Record

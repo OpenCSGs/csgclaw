@@ -11,7 +11,12 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  KeyboardEvent,
+  ReactNode,
+  RefObject,
+} from "react";
 import {
   PopoverContent,
   PopoverRoot,
@@ -25,7 +30,7 @@ import {
   useFieldControlProps,
 } from "../FormControls/fieldContext.js";
 import { classNames, legacyClassName } from "../../lib/classNames.js";
-import { nextFocusTarget } from "./focus.js";
+import { nextFocusTarget, tabTargets } from "./focus.js";
 
 export type ComboboxOption = {
   value: string;
@@ -41,6 +46,7 @@ export type ComboboxOption = {
 export type ComboboxProps = {
   options: readonly ComboboxOption[];
   footer?: ReactNode;
+  tabIntoFooter?: boolean;
   value?: string;
   defaultValue?: string;
   onValueChange?: (value: string) => void;
@@ -58,6 +64,7 @@ export type ComboboxProps = {
   loadingLabel?: ReactNode;
   size?: "sm" | "md";
   triggerClassName?: string;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
   triggerTooltip?: ReactNode;
   triggerProps?: Omit<
     ButtonHTMLAttributes<HTMLButtonElement>,
@@ -79,6 +86,7 @@ function searchText(option: ComboboxOption): string {
 export function Combobox({
   options,
   footer,
+  tabIntoFooter = false,
   value,
   defaultValue = "",
   onValueChange,
@@ -96,6 +104,7 @@ export function Combobox({
   loadingLabel,
   size = "md",
   triggerClassName,
+  triggerRef: providedTriggerRef,
   triggerProps = {},
   triggerTooltip,
   contentClassName,
@@ -106,14 +115,16 @@ export function Combobox({
   const [query, setQuery] = useState("");
   const [lockedSide, setLockedSide] = useState<"top" | "bottom" | null>(null);
   const [highlightedValue, setHighlightedValue] = useState<string | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const internalTriggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = providedTriggerRef ?? internalTriggerRef;
   const [inDialog, setInDialog] = useState(false);
   const attachTrigger = useCallback((node: HTMLButtonElement | null) => {
     triggerRef.current = node;
     if (node) setInDialog(Boolean(node.closest('[role="dialog"]')));
-  }, []);
+  }, [triggerRef]);
   const inputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
   const composing = useRef(false);
   const restoreFocus = useRef(true);
   const tabTarget = useRef<HTMLElement | null>(null);
@@ -168,6 +179,15 @@ export function Combobox({
       tabTarget.current = null;
     }
     onOpenChange?.(next);
+  }
+
+  function leaveWithTab(event: KeyboardEvent<HTMLElement>) {
+    restoreFocus.current = false;
+    tabTarget.current = triggerRef.current
+      ? nextFocusTarget(triggerRef.current, contentRef.current, event.shiftKey)
+      : null;
+    if (tabTarget.current) event.preventDefault();
+    changeOpen(false);
   }
 
   function commit(option: ComboboxOption) {
@@ -361,6 +381,24 @@ export function Combobox({
               onCompositionEnd={() => {
                 composing.current = false;
               }}
+              onKeyDownCapture={(event) => {
+                if (
+                  event.key !== "Tab" ||
+                  event.shiftKey ||
+                  composing.current ||
+                  event.nativeEvent.isComposing ||
+                  event.keyCode === 229 ||
+                  !footerRef.current
+                ) {
+                  return;
+                }
+                const first = tabTargets(footerRef.current)[0];
+                if (!first) return;
+                // Handle this before the popover's focus scope checks the last control.
+                event.stopPropagation();
+                event.preventDefault();
+                first.focus();
+              }}
               onKeyDown={(event) => {
                 if (
                   composing.current ||
@@ -380,16 +418,7 @@ export function Combobox({
                   );
                   if (option) commit(option);
                 } else if (event.key === "Tab") {
-                  restoreFocus.current = false;
-                  tabTarget.current = triggerRef.current
-                    ? nextFocusTarget(
-                        triggerRef.current,
-                        contentRef.current,
-                        event.shiftKey,
-                      )
-                    : null;
-                  if (tabTarget.current) event.preventDefault();
-                  changeOpen(false);
+                  leaveWithTab(event);
                 }
               }}
             />
@@ -483,7 +512,27 @@ export function Combobox({
             </div>
           )}
         </div>
-        {footer}
+        {footer && tabIntoFooter ? (
+          <div
+            className={styles["csg-combobox-footer"]}
+            ref={footerRef}
+            onKeyDownCapture={(event) => {
+              // Route boundary keys before the popover's focus scope can wrap focus.
+              if (event.defaultPrevented || event.key !== "Tab") return;
+              const controls = tabTargets(event.currentTarget);
+              if (event.shiftKey && event.target === controls[0]) {
+                event.stopPropagation();
+                event.preventDefault();
+                inputRef.current?.focus();
+              } else if (!event.shiftKey && event.target === controls.at(-1)) {
+                event.stopPropagation();
+                leaveWithTab(event);
+              }
+            }}
+          >
+            {footer}
+          </div>
+        ) : footer}
       </PopoverContent>
     </PopoverRoot>
   );

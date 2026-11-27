@@ -90,6 +90,36 @@ it("groups services by brand and connects with a display name and Key", async ()
   );
 });
 
+it("connects an Ark image endpoint without treating it as a chat model", async () => {
+  const ark = {
+    ...presets[1],
+    id: "volcengine",
+    brand: "volcengine",
+    brand_name: "Volcengine Ark",
+    name: "Volcengine Ark API",
+    api_protocol: "responses",
+  } satisfies ModelServicePreset;
+  vi.mocked(fetchModelProviderPresets).mockResolvedValue({ presets: [ark] });
+  const onCreate = vi.fn();
+  render(
+    <CreateModelProviderModal busy={false} initialPreset="volcengine" onClose={vi.fn()} onCreate={onCreate} t={t} />,
+  );
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText(t("profileAPIKey")), "test-key");
+  await user.click(screen.getByRole("button", { name: /Advanced settings/ }));
+  const endpoint = screen.getByRole("textbox", { name: t("modelConnectArkImageEndpoints") });
+  await user.type(endpoint, "doubao-seedream");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(screen.getByRole("alert")).toHaveTextContent(t("modelConnectArkImageEndpointInvalid"));
+  expect(onCreate).not.toHaveBeenCalled();
+  await user.clear(endpoint);
+  await user.type(endpoint, "ep-seedream");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(onCreate).toHaveBeenCalledWith(
+    expect.objectContaining({ preset: "volcengine", models: [], image_models: ["ep-seedream"], connect: true }),
+  );
+});
+
 it("clears credentials and transport overrides when changing service", async () => {
   const { user, onCreate } = await setup();
   await user.type(screen.getByLabelText(t("profileAPIKey")), "api-key");
@@ -331,4 +361,49 @@ it("closes a pristine prefilled form without asking to discard changes", async (
   } finally {
     confirm.mockRestore();
   }
+});
+
+it("changes an official endpoint with the protocol and disables unsupported regional options", async () => {
+  const testAPI = presets[1];
+  vi.mocked(fetchModelProviderPresets).mockResolvedValue({
+    presets: [
+      {
+        ...testAPI,
+        regions: [
+          {
+            ...testAPI.regions[0],
+            default_protocol: "responses",
+            protocol_urls: {
+              chat_completions: testAPI.regions[0].base_url,
+              responses: "https://cn.example.test/response/v1",
+            },
+          },
+          {
+            ...testAPI.regions[1],
+            protocol_urls: { chat_completions: testAPI.regions[1].base_url },
+          },
+        ],
+      },
+    ],
+  });
+  const { user, onCreate } = await setup();
+  const protocol = screen.getByRole("combobox", { name: "API protocol" });
+  expect(protocol).toHaveTextContent("OpenAI Responses");
+  expect(screen.getByRole("textbox", { name: t("profileBaseURL") })).toHaveValue("https://cn.example.test/response/v1");
+  await user.click(protocol);
+  await user.click(screen.getByRole("option", { name: "OpenAI Chat Completions" }));
+  expect(screen.getByRole("textbox", { name: t("profileBaseURL") })).toHaveValue(testAPI.regions[0].base_url);
+  await user.click(protocol);
+  await user.click(screen.getByRole("option", { name: "OpenAI Responses" }));
+  expect(screen.getByRole("textbox", { name: t("profileBaseURL") })).toHaveValue("https://cn.example.test/response/v1");
+  await user.type(screen.getByLabelText(t("profileAPIKey")), "test-key");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(onCreate).toHaveBeenCalledWith(
+    expect.objectContaining({ api_protocol: "responses", base_url: "https://cn.example.test/response/v1" }),
+  );
+
+  await user.click(screen.getByRole("combobox", { name: "Region" }));
+  await user.click(screen.getByRole("option", { name: "Global" }));
+  await user.click(protocol);
+  expect(screen.getByRole("option", { name: "OpenAI Responses" })).toHaveAttribute("aria-disabled", "true");
 });

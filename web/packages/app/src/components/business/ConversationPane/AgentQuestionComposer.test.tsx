@@ -105,16 +105,21 @@ describe("AgentQuestionComposer", () => {
     expect(screen.queryByText("None of the above")).not.toBeInTheDocument();
   });
 
-  it("renders a Recommended badge while keeping the full source label selectable", () => {
+  it("shows the question heading, answer label, and custom reply placeholder", async () => {
+    const user = userEvent.setup();
     const selected = activity();
     selected.content.question!.questions[0].options = [
       { label: "Best choice (Recommended)", description: "Use this first." },
     ];
-    render(<AgentQuestionComposer mode={mode({ pending: [selected], selected })} t={t} />);
+    const answerMode = mode({ pending: [selected], selected });
+    render(<AgentQuestionComposer mode={answerMode} t={t} />);
 
-    expect(screen.getByText("Best choice")).toBeInTheDocument();
-    expect(screen.getByText("questionRecommended")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Best choice.*Use this first/ })).toBeInTheDocument();
+    expect(screen.getByText("questionCardTitle")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("questionTypeAnswer")).toBeInTheDocument();
+    expect(screen.queryByText("Use this first.")).not.toBeInTheDocument();
+    expect(screen.queryByText("questionRecommended")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Best choice" }));
+    expect(answerMode.chooseOption).toHaveBeenCalledWith(1);
   });
 
   it("shows Skip for empty freeform text and Next after text is entered", async () => {
@@ -199,21 +204,6 @@ describe("AgentQuestionComposer", () => {
     selected.content.question!.auto_resolve_at = "not-a-date";
     rerender(<AgentQuestionComposer mode={mode({ pending: [selected], selected })} t={t} />);
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
-  });
-
-  it("requires explicit selection when several agents are waiting", async () => {
-    const user = userEvent.setup();
-    const first = activity();
-    const second = {
-      ...activity(),
-      sender: "Agent Two",
-      content: { ...activity().content, question: { ...activity().content.question!, id: "request-2" } },
-    };
-    const answerMode = mode({ pending: [first, second], selected: null });
-    render(<AgentQuestionComposer mode={answerMode} t={t} />);
-
-    await user.click(screen.getByRole("button", { name: /Agent Two/ }));
-    expect(answerMode.select).toHaveBeenCalledWith("request-2");
   });
 
   it("closes the entire request directly", async () => {

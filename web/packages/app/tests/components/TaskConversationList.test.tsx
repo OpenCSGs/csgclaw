@@ -1,19 +1,22 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { emptyConversationFilters } from "@/models/conversationAgentFilter";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
-import { fetchTaskConversations } from "@/api/taskConversations";
+import { deleteRoomRequest } from "@/api/im";
+import { fetchTaskConversationFilters, fetchTaskConversations } from "@/api/taskConversations";
 import { fetchRelayCatalog, type RelayCatalogTarget } from "@/api/relay";
 import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { useArchiveConfirmation } from "@/hooks/workspace/useArchiveConfirmation";
-import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
+import { useTaskEntry, type TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { cloudAgentCatalogKey } from "@/hooks/workspace/useCloudAgentCatalog";
 import type { CloudAgent } from "@/models/cloudAgents";
 import { createTranslator } from "@/shared/i18n";
 
-vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
+vi.mock("@/api/im", () => ({ deleteRoomRequest: vi.fn() }));
+vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn(), fetchTaskConversationFilters: vi.fn() }));
 vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
 const room = { id: "r1", title: "Review", members: ["user-admin", "manager"], is_direct: true, messages: [] };
 
@@ -345,44 +348,146 @@ describe("TaskConversationList archive management", () => {
 
   it("filters by the session directory instead of another task using the same Agent", async () => {
     const user = userEvent.setup();
-    vi.mocked(fetchTaskConversations).mockResolvedValue({
-      rooms: [
-        { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
-        { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
-      ],
-      total: 2,
-      has_more: false,
+    vi.mocked(fetchTaskConversations).mockClear();
+    vi.mocked(fetchTaskConversationFilters)
+      .mockReset()
+      .mockResolvedValue([
+        { is_direct: true, peer: "manager", workspace_dir: "/projects/first", count: 1000 },
+        { is_direct: true, peer: "manager", workspace_dir: "/projects/second", count: 1 },
+        { is_direct: false, workspace_dir: "/projects/shared", count: 1 },
+      ]);
+    const rooms = [
+      { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
+      { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
+      {
+        ...room,
+        id: "space",
+        is_direct: false,
+        title: "Shared project",
+        configuration: { workspace_dir: "/projects/shared" },
+      },
+    ];
+    vi.mocked(fetchTaskConversations).mockImplementation(async (_q, _archived, _offset, filters) => {
+      const matches = rooms.filter(
+        (item) =>
+          (!filters?.directory || filters.directory === item.configuration.workspace_dir) &&
+          (!filters?.owner || filters.owner === (item.is_direct ? "direct:user-manager" : "collaboration")),
+      );
+      return { rooms: matches, total: matches.length, has_more: false };
     });
-    render(
-      <TaskConversationList
-        compact
-        directories={[{ path: "/projects/first", agentIDs: ["manager"] }]}
-        entry={{
-          liveRooms: new Map(),
-          create: vi.fn().mockResolvedValue(room),
-          onMessage: vi.fn(),
-          patch: vi.fn().mockResolvedValue(undefined),
-          remove: vi.fn().mockResolvedValue(undefined),
-          open: vi.fn(),
-          isWorking: () => false,
-          busyID: "",
-        }}
-        currentUserID="user-admin"
-        usersById={new Map()}
-        t={(key) => key}
-        onSelect={vi.fn()}
-      />,
-      { wrapper: createQueryWrapper().wrapper },
-    );
+    vi.mocked(fetchTaskConversations).mockResolvedValueOnce({ rooms: [room], total: 1002, has_more: true });
+    function FilteredList({ collapsed }: { collapsed: boolean }) {
+      const [filters, setFilters] = useState(emptyConversationFilters);
+      return (
+        <TaskConversationList
+          compact
+          collapsed={collapsed}
+          filters={filters}
+          onFiltersChange={setFilters}
+          entry={{ isWorking: () => false, busyID: "" } as unknown as TaskEntryController}
+          currentUserID="user-admin"
+          usersById={new Map()}
+          t={(key) => key}
+          onSelect={vi.fn()}
+        />
+      );
+    }
+    const { rerender } = render(<FilteredList collapsed={false} />, { wrapper: createQueryWrapper().wrapper });
+    await screen.findByText("Review");
+    await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));
+    const owners = within(await screen.findByRole("group", { name: "iaSessionOwnerFilter" }));
+    expect(fetchTaskConversationFilters).toHaveBeenCalledExactlyOnceWith(false);
+    expect(fetchTaskConversations).toHaveBeenCalledExactlyOnceWith("", false, 0);
+    const directories = within(screen.getByRole("group", { name: "iaSessionDirectoryFilter" }));
+    await user.click(directories.getByRole("button", { name: /first 1000/ }));
+    expect(owners.getByRole("button", { name: /iaSessionOwnerAll 1000/ })).toHaveAttribute("aria-pressed", "true");
+    expect(owners.getByRole("button", { name: "manager 1000" })).toBeVisible();
+    expect(owners.queryByRole("button", { name: /iaRoomsTab/ })).not.toBeInTheDocument();
+    expect(await screen.findByText("First project")).toBeInTheDocument();
+    expect(screen.queryByText("Second project")).not.toBeInTheDocument();
+
+    await user.click(owners.getByRole("button", { name: "manager 1000" }));
+    expect(directories.getByRole("button", { name: /shared 0/ })).toBeVisible();
+    await user.click(directories.getByRole("button", { name: /shared 0/ }));
+    expect(owners.getByRole("button", { name: "manager 0" })).toHaveAttribute("aria-pressed", "true");
+    expect(owners.getByRole("button", { name: "iaRoomsTab 1" })).toBeVisible();
+    expect(screen.getByText("iaSessionNoFilterMatches")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "iaSessionClearFilters" }));
+    await user.click(directories.getByRole("button", { name: /second 1/ }));
+    expect(await screen.findByText("Second project")).toBeVisible();
+    expect(fetchTaskConversations).toHaveBeenLastCalledWith("", false, 0, {
+      owner: "",
+      directory: "/projects/second",
+      legacyPeers: [],
+    });
+    expect(vi.mocked(fetchTaskConversations).mock.calls.every(([, , offset]) => offset === 0)).toBe(true);
+    await user.keyboard("{Escape}");
+    rerender(<FilteredList collapsed />);
+    expect(screen.getByRole("button", { name: "Second project" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "First project" })).not.toBeInTheDocument();
+    rerender(<FilteredList collapsed={false} />);
+    expect(screen.getByText("Second project")).toBeVisible();
+  });
+  it("preserves filtered order and selection through sidebar collapse and expansion", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchTaskConversationFilters).mockResolvedValue([
+      { is_direct: true, peer: "manager", workspace_dir: "/projects/first", count: 1 },
+      { is_direct: true, peer: "manager", workspace_dir: "/projects/second", count: 1 },
+    ]);
+    const rooms = [
+      { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
+      { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
+    ];
+    vi.mocked(fetchTaskConversations).mockImplementation(async (_q, _archived, _offset, filters) => {
+      const matches = rooms.filter(
+        (item) => !filters?.directory || filters.directory === item.configuration.workspace_dir,
+      );
+      return { rooms: matches, total: matches.length, has_more: false };
+    });
+    function Harness() {
+      const [collapsed, setCollapsed] = useState(false);
+      const [filters, setFilters] = useState(emptyConversationFilters);
+      return (
+        <>
+          <button onClick={() => setCollapsed((value) => !value)}>Toggle sidebar</button>
+          <TaskConversationList
+            compact
+            collapsed={collapsed}
+            filters={filters}
+            onFiltersChange={setFilters}
+            onExpand={() => setCollapsed(false)}
+            entry={{ isWorking: () => false, busyID: "" } as unknown as TaskEntryController}
+            activeID="first"
+            currentUserID="user-admin"
+            usersById={new Map()}
+            t={(key) => key}
+            onSelect={vi.fn()}
+          />
+        </>
+      );
+    }
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
     await screen.findByText("Second project");
-    await user.click(screen.getByRole("combobox", { name: "iaSessionDirectoryFilter" }));
-    await user.click(screen.getByRole("option", { name: /first/ }));
+    await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(screen.queryByRole("button", { name: "taskEntrySearchHistory" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "taskEntrySearchHistory" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "iaSessionDirectoryFilter" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));
+    await user.click(await screen.findByRole("button", { name: /first 1/ }));
+    await user.keyboard("{Escape}");
     expect(screen.getByText("First project")).toBeInTheDocument();
     expect(screen.queryByText("Second project")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("combobox", { name: "iaSessionDirectoryFilter" }));
-    await user.click(screen.getByRole("option", { name: /second/ }));
-    expect(screen.getByText("Second project")).toBeInTheDocument();
-    expect(screen.queryByText("First project")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(screen.getByRole("button", { name: "First project" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("button", { name: "Second project" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "taskEntrySearchHistory" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "iaSessionDirectoryFilter" }));
+    expect(screen.getByText("First project")).toBeVisible();
+    expect(screen.queryByText("Second project")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "iaSessionFilters" }));
+    expect(screen.getByRole("button", { name: /first 1/ })).toHaveAttribute("aria-pressed", "true");
   });
   it("offers pin and archive shortcuts without navigating the conversation", async () => {
     const user = userEvent.setup();
@@ -450,14 +555,81 @@ describe("TaskConversationList archive management", () => {
     expect(screen.getByTestId("preference")).toHaveTextContent("false");
   });
 
-  it("disables running conversation deletion and archive", async () => {
+  it.each([false, true])("disables deletion while a conversation is running (archived=%s)", async (archived) => {
     const user = userEvent.setup();
-    const { remove } = setup(true, true);
+    const { remove } = setup(true, archived);
     await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
     const item = screen.getByRole("menuitem", { name: "taskEntryDelete" });
     expect(item).toHaveAttribute("data-disabled");
     fireEvent.click(item);
     expect(remove).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+it("confirms deletion, restores the row on failure, and removes it from cached history on success", async () => {
+  const user = userEvent.setup();
+  const page = { rooms: [room], total: 1, has_more: false };
+  const fetch = vi.mocked(fetchTaskConversations).mockResolvedValue(page);
+  let rejectDeletion!: (error: Error) => void;
+  const remove = vi
+    .mocked(deleteRoomRequest)
+    .mockReset()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectDeletion = reject;
+        }),
+    )
+    .mockResolvedValueOnce(undefined);
+  const onDelete = vi.fn();
+  function History() {
+    const entry = useTaskEntry({
+      currentUserID: "user-admin",
+      rooms: [],
+      onUpdate: vi.fn(),
+      onMessage: vi.fn(),
+      onDelete,
+      onOpen: vi.fn(),
+      isWorking: () => false,
+    });
+    return (
+      <TaskConversationList
+        entry={entry}
+        currentUserID="user-admin"
+        usersById={new Map()}
+        t={(key) => key}
+        onSelect={vi.fn()}
+      />
+    );
+  }
+  const { client, wrapper } = createQueryWrapper();
+  client.setQueryData(["task-conversations", false, "review"], { pages: [page], pageParams: [0] });
+  render(<History />, { wrapper });
+  async function openDeleteDialog() {
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryDelete" }));
+  }
+  await openDeleteDialog();
+  await user.click(screen.getByRole("button", { name: "cancel" }));
+  expect(remove).not.toHaveBeenCalled();
+
+  await openDeleteDialog();
+  await user.click(screen.getByRole("button", { name: "confirm" }));
+  expect(remove).toHaveBeenCalledWith("r1");
+  expect(screen.queryByRole("button", { name: "Review", hidden: true })).not.toBeInTheDocument();
+  await act(async () => rejectDeletion(new Error("Delete failed")));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Delete failed");
+  expect(screen.getByRole("button", { name: "Review", hidden: true })).toBeInTheDocument();
+  expect(onDelete).not.toHaveBeenCalled();
+
+  // Hold reconciliation open to verify the row is removed without waiting for it.
+  fetch.mockImplementation(() => new Promise(() => {}));
+  await user.click(screen.getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(screen.queryByRole("button", { name: "Review" })).not.toBeInTheDocument();
+  expect(onDelete).toHaveBeenCalledWith("r1");
+  expect(client.getQueryData(["task-conversations", false, "review"])).toMatchObject({
+    pages: [{ rooms: [], total: 0 }],
   });
 });

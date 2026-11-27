@@ -1,6 +1,7 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -62,6 +64,116 @@ func TestFeedbackUsesAuthenticatedSiteAndServerVersion(t *testing.T) {
 	}
 }
 
+func TestFeedbackValidatesAndUploadsArchives(t *testing.T) {
+	var uploads, issues atomic.Int32
+	var rejectUpload atomic.Bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/internal_api/upload_with_ext":
+			file, header, err := r.FormFile("file")
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			defer r.MultipartForm.RemoveAll()
+			defer file.Close()
+			if header.Filename != "feedback-0.zip" {
+				t.Errorf("unexpected detected archive name: %s", header.Filename)
+			}
+			uploads.Add(1)
+			if rejectUpload.Load() {
+				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			io.WriteString(w, `{"url":"https://files.example/diagnostic.zip"}`)
+		case "/api/v1/csgbot/user-feedback":
+			var payload struct {
+				Description    string   `json:"problem_description"`
+				ScreenshotURLs []string `json:"screenshot_urls"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if len(payload.ScreenshotURLs) != 0 || !strings.Contains(payload.Description, "https://files.example/diagnostic.zip") {
+				t.Errorf("unexpected feedback payload: %+v", payload)
+			}
+			issues.Add(1)
+			io.WriteString(w, `{"success":true,"issue_id":42,"issue_url":"https://issues.example/42"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+	previousStore := auth.Default().Store
+	t.Cleanup(func() { auth.Default().Store = previousStore })
+	auth.Default().Store = auth.NewStore(filepath.Join(t.TempDir(), "auth.json"))
+	if err := auth.Default().Store.Save(auth.Record{Tokens: auth.Tokens{AccessToken: "test-token"}, Account: auth.Account{BaseURL: upstream.URL}}); err != nil {
+		t.Fatal(err)
+	}
+	var archive bytes.Buffer
+	if err := zip.NewWriter(&archive).Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name         string
+		content      []byte
+		wantCode     int
+		rejectUpload bool
+	}{
+		{"spoofed extension", []byte("fake zip"), http.StatusBadRequest, false},
+		{"valid archive without description", archive.Bytes(), http.StatusOK, false},
+		{"valid archive rejected by portal size limit", archive.Bytes(), http.StatusRequestEntityTooLarge, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rejectUpload.Store(tc.rejectUpload)
+			var body bytes.Buffer
+			writer := multipart.NewWriter(&body)
+			part, err := writer.CreateFormFile("archives", "diagnostics.zip")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := part.Write(tc.content); err != nil {
+				t.Fatal(err)
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/feedback", &body)
+			request.Header.Set("Content-Type", writer.FormDataContentType())
+			request.Header.Set("Authorization", "Bearer server-token")
+			recorder := httptest.NewRecorder()
+			(&Handler{serverAccessToken: "server-token"}).Routes().ServeHTTP(recorder, request)
+			if recorder.Code != tc.wantCode {
+				t.Fatalf("got status %d, want %d: %s", recorder.Code, tc.wantCode, recorder.Body)
+			}
+			if tc.wantCode == http.StatusOK && !strings.Contains(recorder.Body.String(), "https://issues.example/42") {
+				t.Errorf("missing issue URL in %s", recorder.Body)
+			}
+			if tc.rejectUpload {
+				var response struct {
+					Error struct {
+						Code  string
+						Stage string
+					}
+				}
+				if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+					t.Fatal(err)
+				}
+				if response.Error.Code != "feedback_upload_too_large" || response.Error.Stage != "archive_upload" {
+					t.Fatalf("unexpected upload error: %+v", response.Error)
+				}
+			}
+		})
+	}
+	if uploads.Load() != 2 || issues.Load() != 1 {
+		t.Errorf("uploads=%d issues=%d", uploads.Load(), issues.Load())
+	}
+}
+
 func TestFeedbackRequiresLogin(t *testing.T) {
 	previousStore := auth.Default().Store
 	t.Cleanup(func() { auth.Default().Store = previousStore })
@@ -83,6 +195,93 @@ func TestFeedbackRequiresLogin(t *testing.T) {
 			(&Handler{serverAccessToken: "server-token"}).Routes().ServeHTTP(response, request)
 			assertFeedbackAccessError(t, response, "feedback_login_required")
 		})
+	}
+}
+
+func TestFeedbackReferencePreventsDuplicateIssueRequests(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	var calls atomic.Int32
+	var upstreamStatus atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if code := upstreamStatus.Load(); code != 0 {
+			w.WriteHeader(int(code))
+			return
+		}
+		io.WriteString(w, `{"success":true,"issue_id":42,"issue_url":"https://issues.example/42"}`)
+	}))
+	defer upstream.Close()
+	previousStore := auth.Default().Store
+	t.Cleanup(func() { auth.Default().Store = previousStore })
+	auth.Default().Store = auth.NewStore(filepath.Join(home, "auth.json"))
+	signIn := func(user string) {
+		t.Helper()
+		if err := auth.Default().Store.Save(auth.Record{
+			Tokens:  auth.Tokens{AccessToken: "test-token"},
+			Account: auth.Account{BaseURL: upstream.URL, UserUUID: user},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	signIn("first-account")
+	request := func(id string, check bool) *httptest.ResponseRecorder {
+		t.Helper()
+		var req *http.Request
+		if check {
+			req = httptest.NewRequest(http.MethodPost, "/api/v1/feedback/status", strings.NewReader(`{"request_id":"`+id+`"}`))
+		} else {
+			var body bytes.Buffer
+			writer := multipart.NewWriter(&body)
+			writer.WriteField("problem_description", "Example feedback")
+			writer.WriteField("request_id", id)
+			writer.Close()
+			req = httptest.NewRequest(http.MethodPost, "/api/v1/feedback", &body)
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+		}
+		req.Header.Set("Authorization", "Bearer server-token")
+		recorder := httptest.NewRecorder()
+		(&Handler{serverAccessToken: "server-token"}).Routes().ServeHTTP(recorder, req)
+		return recorder
+	}
+	expect := func(id string, check bool, status int, content string) {
+		t.Helper()
+		response := request(id, check)
+		if response.Code != status || !strings.Contains(response.Body.String(), content) {
+			t.Fatalf("id=%s check=%v status=%d body=%s", id, check, response.Code, response.Body)
+		}
+	}
+
+	const confirmed = "0123456789abcdef0123456789abcdef"
+	expect(confirmed, true, http.StatusOK, `"state":"not_found"`)
+	expect(confirmed, false, http.StatusOK, `"issue_id":42`)
+	expect(confirmed, true, http.StatusOK, `"state":"submitted"`)
+	expect(confirmed, false, http.StatusOK, `"issue_id":42`)
+	signIn("another-account")
+	expect(confirmed, true, http.StatusOK, `"state":"not_found"`)
+	signIn("first-account")
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("confirmed submit sent %d upstream requests", n)
+	}
+
+	const uncertain = "fedcba9876543210fedcba9876543210"
+	upstreamStatus.Store(http.StatusBadGateway)
+	expect(uncertain, false, http.StatusBadGateway, "feedback_unavailable")
+	expect(uncertain, true, http.StatusOK, `"state":"unknown"`)
+	expect(uncertain, false, http.StatusConflict, "feedback_unavailable")
+	if n := calls.Load(); n != 2 {
+		t.Fatalf("unknown attempt did not stay reserved: %d upstream requests", n)
+	}
+
+	const rejected = "01230123012301230123012301230123"
+	upstreamStatus.Store(http.StatusBadRequest)
+	expect(rejected, false, http.StatusBadRequest, "feedback_invalid")
+	expect(rejected, true, http.StatusOK, `"state":"not_found"`)
+	upstreamStatus.Store(0)
+	expect(rejected, false, http.StatusOK, `"issue_id":42`)
+	if n := calls.Load(); n != 4 {
+		t.Fatalf("definitely rejected submission was not retried: %d upstream requests", n)
 	}
 }
 

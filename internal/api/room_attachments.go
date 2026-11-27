@@ -96,7 +96,7 @@ func (h *Handler) handleRoomAttachmentDownload(w http.ResponseWriter, r *http.Re
 	w.Header().Set("X-CSGClaw-File-Size", strconv.FormatInt(file.Attachment.SizeBytes, 10))
 	// Every download retains the live-reference check; scoped Agent reads also
 	// require current room membership.
-	serveAttachment(w, r, file, false)
+	serveAttachment(w, r, file)
 }
 
 func (h *Handler) handleRoomAttachmentDelete(w http.ResponseWriter, r *http.Request) {

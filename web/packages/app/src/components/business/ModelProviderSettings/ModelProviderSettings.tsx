@@ -1,5 +1,12 @@
 import modelProviderSettingsStyles from "./ModelProviderSettings.module.css";
 import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
+import {
+  modelProviderProtocolOptions,
+  modelProviderProtocolURL,
+  resolveModelProviderProtocol,
+  usesModelProviderPresetURL,
+  type ModelAPIProtocol,
+} from "@/models/modelProviderPresets";
 import { DefaultModelSettings } from "./DefaultModelSettings";
 import directoryStyles from "./ProviderDirectory.module.css";
 import { ModelMetadataFields } from "./ModelMetadataFields";
@@ -17,7 +24,7 @@ import {
   Video,
 } from "lucide-react";
 import { errorMessage } from "@/api/client";
-import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
+import { deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
 import { StatusDot, InlineError, Field, TextInput, Select } from "@/components/ui";
 import {
@@ -74,7 +81,9 @@ function providerToDraft(provider: ModelProvider | null | undefined): ProviderDr
   };
 }
 
-function providerToCheckState(provider: ModelProvider | null | undefined): ProviderCheckState {
+function providerToCheckState(
+  provider: Pick<ModelProvider, "last_checked_at" | "message" | "status"> | null | undefined,
+): ProviderCheckState {
   return {
     lastCheckedAt: provider?.last_checked_at,
     message: provider?.message,
@@ -84,7 +93,7 @@ function providerToCheckState(provider: ModelProvider | null | undefined): Provi
 
 export function ModelProviderSettings({ embedded = false }: { embedded?: boolean }) {
   const controller = useWorkspaceControllerContext();
-  const { activePane, modelProviders, refreshWorkspaceModelProviders, t } = controller;
+  const { activePane, modelProviders, refreshWorkspaceModelProviders, checkWorkspaceModelProvider, t } = controller;
   const [localProviderID, setLocalProviderID] = useState("");
   const providerID = embedded
     ? localProviderID || modelProviders?.providers[0]?.id || ""
@@ -114,15 +123,36 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const [deleteError, setDeleteError] = useState("");
   const [providerSearch, setProviderSearch] = useState("");
   const directory = useModelProviderPresets();
+  const providerPreset = directory.data?.presets.find((preset) => preset.id === provider?.preset);
+  const providerRegion =
+    providerPreset?.regions.find((region) => region.id === provider?.region) ??
+    providerPreset?.regions.find((region) => usesModelProviderPresetURL(region, providerBaseURL)) ??
+    providerPreset?.regions[0];
+  const protocolOptions = modelProviderProtocolOptions(providerRegion, draft.baseURL);
+  const draftProtocol = resolveModelProviderProtocol(draft.apiProtocol, providerRegion, draft.baseURL);
+  const persistedProtocol = resolveModelProviderProtocol(provider?.api_protocol, providerRegion, providerBaseURL);
   const [detailOpen, setDetailOpen] = useState(false);
   const isBuiltinCLI = provider?.id === "codex" || provider?.id === "claude_code";
   const isOpenCSG = provider?.id === MODEL_PROVIDER_IDS.OpenCSG;
   const canEditEndpoint = Boolean(provider && !isBuiltinCLI && !isOpenCSG);
+  const canEditProtocol = canEditEndpoint && !provider?.builtin;
+  const protocolIssue = !canEditProtocol
+    ? undefined
+    : !draftProtocol
+      ? t("modelConnectProtocolRequired")
+      : protocolOptions.some((option) => option.value === draftProtocol && option.disabled)
+        ? t("modelConnectErrorProtocol")
+        : undefined;
   const opencsgAuthenticatedForCheck = controller.ready && isAuthenticated(controller.sidebarProps?.authStatus);
   const opencsgModelsLoaded = isOpenCSG && providerStatus === "connected" && Boolean(provider?.models.length);
 
   const runCheckForDraft = useCallback(
-    async (baseURL: string, apiKey: string, options: { showError?: boolean } = {}) => {
+    async (
+      baseURL: string,
+      apiKey: string,
+      apiProtocol: ModelAPIProtocol | undefined,
+      options: { showError?: boolean } = {},
+    ) => {
       if (!providerID) {
         return;
       }
@@ -132,26 +162,37 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         setSaveStatus("");
       }
       try {
-        const result = await checkModelProvider(providerID, {
+        const previewConnection =
+          baseURL.trim() !== providerBaseURL || Boolean(apiKey) || apiProtocol !== persistedProtocol;
+        const { check, savedProvider } = await checkWorkspaceModelProvider(providerID, {
           connect: options.showError || undefined,
-          api_protocol: draft.apiProtocol || undefined,
+          api_protocol: apiProtocol,
           base_url: baseURL,
           api_key: apiKey,
         });
-        setCheckState({
-          lastCheckedAt: result.last_checked_at,
-          message: result.message || result.status,
-          status: result.status,
-        });
-        if (result.base_url || result.models?.length) {
-          setDraft((current) => ({
-            ...current,
-            baseURL: result.base_url && current.baseURL.trim() === baseURL.trim() ? result.base_url : current.baseURL,
-            modelsText: result.models?.length ? result.models.join("\n") : current.modelsText,
-          }));
+        if (!check.provider && !previewConnection) {
+          await refreshWorkspaceModelProviders();
         }
-        await refreshWorkspaceModelProviders();
-        return result;
+        if (draftSourceKeyRef.current !== draftSourceKey || (check.provider && !savedProvider)) return;
+        const checked = savedProvider ?? check;
+        setCheckState(providerToCheckState(checked));
+        if (checked.base_url || checked.status === "connected") {
+          setDraft((current) => {
+            if (
+              current.baseURL.trim() !== baseURL.trim() ||
+              current.apiKey.trim() !== apiKey.trim() ||
+              resolveModelProviderProtocol(current.apiProtocol, providerRegion, current.baseURL) !== apiProtocol
+            ) {
+              return current;
+            }
+            return {
+              ...current,
+              baseURL: checked.base_url || current.baseURL,
+              modelsText: checked.status === "connected" ? (checked.models ?? []).join("\n") : current.modelsText,
+            };
+          });
+        }
+        return checked;
       } catch (err) {
         if (options.showError) {
           setError(errorMessage(err, t("modelProviderCheckFailed")));
@@ -162,7 +203,16 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         }
       }
     },
-    [providerID, refreshWorkspaceModelProviders, t, draft.apiProtocol],
+    [
+      draftSourceKey,
+      persistedProtocol,
+      providerBaseURL,
+      providerID,
+      providerRegion,
+      checkWorkspaceModelProvider,
+      refreshWorkspaceModelProviders,
+      t,
+    ],
   );
 
   useEffect(() => {
@@ -198,7 +248,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
 
   const providerCheckActive = !embedded || detailOpen;
   useEffect(() => {
-    if (!providerID || !providerCheckActive) {
+    if (!providerID || !providerCheckActive || (canEditProtocol && !persistedProtocol)) {
       return;
     }
     if (isOpenCSG && (!opencsgAuthenticatedForCheck || opencsgModelsLoaded)) {
@@ -208,7 +258,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
     if (!isOpenCSG && !isBuiltinCLI && !providerApiKeySet && providerModelCount === 0) {
       return;
     }
-    void runCheckForDraft(providerBaseURL, "", { showError: true });
+    void runCheckForDraft(providerBaseURL, "", persistedProtocol, { showError: true });
   }, [
     providerCheckActive,
     isOpenCSG,
@@ -219,11 +269,13 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
     providerApiKeySet,
     providerModelCount,
     providerID,
+    canEditProtocol,
+    persistedProtocol,
     runCheckForDraft,
   ]);
 
   useEffect(() => {
-    if (!providerID || !canEditEndpoint) {
+    if (!providerID || !canEditEndpoint || protocolIssue) {
       return undefined;
     }
     const baseURL = draft.baseURL.trim();
@@ -231,17 +283,20 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
     if (!baseURL || (!apiKey && !provider?.api_key_set)) {
       return undefined;
     }
-    if (baseURL === providerBaseURL && !apiKey) {
+    if (baseURL === providerBaseURL && !apiKey && draftProtocol === persistedProtocol) {
       return undefined;
     }
     const timeout = window.setTimeout(() => {
-      void runCheckForDraft(baseURL, apiKey);
+      void runCheckForDraft(baseURL, apiKey, draftProtocol);
     }, 600);
     return () => window.clearTimeout(timeout);
   }, [
     canEditEndpoint,
     draft.apiKey,
     draft.baseURL,
+    draftProtocol,
+    persistedProtocol,
+    protocolIssue,
     provider?.api_key_set,
     providerBaseURL,
     providerID,
@@ -282,7 +337,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const imageModels = new Set(provider.imageModels || []);
   const videoModels = new Set(provider.videoModels || []);
   const modelList = mergeModelProviderModelIDs(
-    parseModelProviderModelsText(draft.modelsText),
+    isOpenCSG || isBuiltinCLI ? provider.models : parseModelProviderModelsText(draft.modelsText),
     provider.imageModels,
     provider.videoModels,
   );
@@ -307,34 +362,36 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         : modelProviderStatusLabel(effectiveStatus, provider, t);
 
   async function runCheck() {
+    if (protocolIssue) return;
     setCheckFeedback("");
-    const result = await runCheckForDraft(draft.baseURL, draft.apiKey, { showError: true });
+    const result = await runCheckForDraft(draft.baseURL, draft.apiKey, draftProtocol, { showError: true });
     if (result?.status === "connected") setCheckFeedback(t("modelContextChecked"));
   }
 
   async function refreshModelMetadata() {
-    const result = await runCheckForDraft(draft.baseURL, draft.apiKey);
+    if (protocolIssue) throw new Error(protocolIssue);
+    const result = await runCheckForDraft(draft.baseURL, draft.apiKey, draftProtocol);
     if (result?.status !== "connected") {
       throw new Error(modelProviderMessageLabel(result, t) || t("modelContextCheckFailed"));
     }
   }
 
   async function saveProvider() {
-    if (!provider || (!provider.builtin && !draft.displayName.trim())) {
+    if (!provider || protocolIssue || (!provider.builtin && !draft.displayName.trim())) {
       return;
     }
     setBusy("save");
     setError("");
     setSaveStatus("");
     try {
-      const submitted = draft;
+      const submitted = { ...draft, apiProtocol: draftProtocol ?? "" };
       await updateModelProvider(
         provider.id,
         isOpenCSG
           ? { model_overrides: draft.modelOverrides }
           : {
               display_name: provider.builtin ? undefined : draft.displayName.trim(),
-              api_protocol: draft.apiProtocol || undefined,
+              api_protocol: draftProtocol,
               base_url: draft.baseURL,
               api_key: draft.apiKey,
               models: parseModelProviderModelsText(draft.modelsText),
@@ -343,7 +400,11 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
       );
       await refreshWorkspaceModelProviders();
       setSavedDraft({ ...submitted, apiKey: "" });
-      setDraft((current) => ({ ...current, apiKey: current.apiKey === submitted.apiKey ? "" : current.apiKey }));
+      setDraft((current) => ({
+        ...current,
+        apiProtocol: current.apiProtocol === draft.apiProtocol ? submitted.apiProtocol : current.apiProtocol,
+        apiKey: current.apiKey === submitted.apiKey ? "" : current.apiKey,
+      }));
       setSaveStatus(t("profileSavedToast"));
     } catch (err) {
       setError(errorMessage(err, t("modelContextSaveFailed")));
@@ -422,7 +483,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                 ? t("csghubNotSignedIn")
                 : modelProviderStatusLabel(itemStatus, item, t);
               const active = (!embedded || detailOpen) && item.id === provider.id;
-              const itemModelCount = item.models.length;
+              const itemModelCount = mergeModelProviderModelIDs(item.models, item.imageModels, item.videoModels).length;
               const itemMetaParts = [
                 itemModelCount ? t("modelProviderModelCount", { count: itemModelCount }) : t("modelProviderNoModels"),
               ].filter(Boolean);
@@ -640,17 +701,21 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                             placeholder="https://api.openai.com/v1"
                           />
                         </Field>
-                        {!provider.builtin ? (
-                          <Field label={t("modelConnectProtocol")}>
+                        {canEditProtocol ? (
+                          <Field label={t("modelConnectProtocol")} hint={protocolIssue} required>
                             <Select
-                              value={draft.apiProtocol}
-                              onValueChange={(apiProtocol) => setDraft((current) => ({ ...current, apiProtocol }))}
-                              options={[
-                                { value: "", label: "Auto" },
-                                { value: "responses", label: "OpenAI Responses" },
-                                { value: "chat_completions", label: "OpenAI Chat Completions" },
-                                { value: "anthropic_messages", label: "Anthropic Messages" },
-                              ]}
+                              value={draftProtocol ?? ""}
+                              onValueChange={(apiProtocol) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  apiProtocol,
+                                  baseURL: usesModelProviderPresetURL(providerRegion, current.baseURL)
+                                    ? (modelProviderProtocolURL(providerRegion, apiProtocol) ?? current.baseURL)
+                                    : current.baseURL,
+                                }))
+                              }
+                              options={protocolOptions}
+                              placeholder={t("modelConnectSelectProtocol")}
                               triggerProps={{ "aria-label": t("modelConnectProtocol") }}
                             />
                           </Field>
@@ -802,7 +867,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             <Button
               variant="secondaryGray"
               onClick={runCheck}
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || Boolean(protocolIssue)}
               loading={busy === "check"}
               loadingLabel={t("profileLoadingModels")}
             >
@@ -812,7 +877,12 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             <Button
               variant="primary"
               onClick={saveProvider}
-              disabled={Boolean(busy) || showOpenCSGSignIn || (!provider.builtin && !draft.displayName.trim())}
+              disabled={
+                Boolean(busy) ||
+                Boolean(protocolIssue) ||
+                showOpenCSGSignIn ||
+                (!provider.builtin && !draft.displayName.trim())
+              }
               loading={busy === "save"}
               loadingLabel={t("modelContextSaving")}
             >

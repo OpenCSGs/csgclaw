@@ -15,7 +15,7 @@ import styles from "../SettingsPage.module.css";
 import versionSectionStyles from "./VersionSection.module.css";
 import accountSectionStyles from "./AccountSection.module.css";
 
-export function VersionSection() {
+export function VersionSection({ highlighted = false }: { highlighted?: boolean }) {
   const controller = useWorkspaceControllerContext();
   const sidebar = controller.sidebarProps;
   const [switchVersionOpen, setSwitchVersionOpen] = useState(false);
@@ -65,6 +65,7 @@ export function VersionSection() {
   return (
     <>
       <SettingsRow
+        className={highlighted ? versionSectionStyles.highlighted : undefined}
         title={
           <span className={versionSectionStyles.versionTitle}>
             <span>{t("versionInfo")}</span>

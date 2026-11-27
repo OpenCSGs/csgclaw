@@ -1,11 +1,33 @@
 import { composerFileReferences, serializeComposerSegments, type ComposerSegment } from "@/models/composer";
 
-import type { ComposerFileReference } from "@/models/fileReferences";
+import { isComposerFileReference, type ComposerFileReference } from "@/models/fileReferences";
 
 export type TaskPromptMention = { start: number; end: number } & (
   | { userId: string; userName: string }
   | { reference: ComposerFileReference }
 );
+
+export function isStoredTaskPromptMention(value: unknown): value is TaskPromptMention {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("start" in value) ||
+    !("end" in value) ||
+    typeof value.start !== "number" ||
+    typeof value.end !== "number" ||
+    !Number.isInteger(value.start) ||
+    !Number.isInteger(value.end) ||
+    value.start < 0 ||
+    value.end <= value.start
+  )
+    return false;
+  return "reference" in value
+    ? isComposerFileReference(value.reference)
+    : "userId" in value &&
+        typeof value.userId === "string" &&
+        "userName" in value &&
+        typeof value.userName === "string";
+}
 
 export function updateTaskPromptMentions(before: string, after: string, mentions: readonly TaskPromptMention[]) {
   let start = 0;

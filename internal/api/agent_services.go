@@ -25,6 +25,7 @@ type AgentRecords interface {
 	AuthorizesConnectorCapability(string, string) bool
 }
 type AgentWorkspace interface {
+	SkillStatus(context.Context, string, string) (agent.WorkerSkillStatus, error)
 	AgentLayout(string) (agentruntime.Layout, error)
 	SkillsRoot(string) (string, error)
 	WorkspaceRoot(string) (string, error)

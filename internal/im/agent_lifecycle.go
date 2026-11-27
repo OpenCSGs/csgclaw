@@ -13,6 +13,66 @@ import (
 
 var ErrAgentIdentityDeleted = errors.New("agent identity was deleted; use a new ID")
 
+// HoldAgentUserName keeps the current name available for rollback while the
+// participant and its worker are being renamed in their respective stores.
+func (s *Service) HoldAgentUserName(id, name string) (func(), error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id = canonicalIMUserID(id)
+	user, ok := s.users[id]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	if user.AgentState == "deleted" {
+		return nil, ErrAgentIdentityDeleted
+	}
+	key := strings.ToLower(strings.TrimSpace(name))
+	if user.Name != name {
+		return nil, fmt.Errorf("IM user %q name changed", id)
+	}
+	return s.holdNameLocked(id, key)
+}
+
+// ReserveAgentUserName protects a worker name while updating a standalone
+// worker or one with only aliases. An empty ID reserves an unowned name.
+func (s *Service) ReserveAgentUserName(id, name string) (func(), error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id = canonicalIMUserID(id)
+	if user, ok := s.users[s.resolveUserIDLocked(name)]; ok && user.ID != id {
+		return nil, fmt.Errorf("name %q %w", name, identity.ErrNameExists)
+	}
+	key := strings.ToLower(strings.TrimSpace(name))
+	if owner, ok := s.byName[key]; ok && owner != id {
+		return nil, fmt.Errorf("name %q %w", name, identity.ErrNameExists)
+	}
+	return s.holdNameLocked(id, key)
+}
+
+func (s *Service) holdNameLocked(id, key string) (func(), error) {
+	if _, held := s.heldNames[key]; held {
+		return nil, fmt.Errorf("name %q %w", key, identity.ErrNameExists)
+	}
+	if s.heldNames == nil {
+		s.heldNames = make(map[string]string)
+	}
+	s.heldNames[key] = id
+	return func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.heldNames, key)
+	}, nil
+}
+
+func (s *Service) nameOwnerLocked(name string) (string, bool) {
+	key := strings.ToLower(strings.TrimSpace(name))
+	if owner, ok := s.heldNames[key]; ok {
+		return owner, true
+	}
+	owner, ok := s.byName[key]
+	return owner, ok
+}
+
 // ValidateAgentUser checks identity availability before provisioning a runtime.
 // Deleted identities remain addressable by ID for history, but do not own names.
 func (s *Service) ValidateAgentUser(req EnsureAgentUserRequest) error {
@@ -36,7 +96,7 @@ func (s *Service) ValidateAgentReplacement(agentID string, userIDs []string, nam
 			return ErrAgentIdentityDeleted
 		}
 	}
-	if owner, ok := s.byName[strings.ToLower(strings.TrimSpace(name))]; ok && !slices.Contains(userIDs, owner) {
+	if owner, ok := s.nameOwnerLocked(name); ok && !slices.Contains(userIDs, owner) {
 		return fmt.Errorf("name %q already exists", name)
 	}
 	return nil
@@ -54,7 +114,7 @@ func (s *Service) validateAgentUserLocked(id, name string) error {
 		}
 	}
 	if name != "" {
-		if existingID, ok := s.byName[strings.ToLower(name)]; ok && existingID != id {
+		if existingID, ok := s.nameOwnerLocked(name); ok && existingID != id {
 			return fmt.Errorf("name %q %w", name, identity.ErrNameExists)
 		}
 	}

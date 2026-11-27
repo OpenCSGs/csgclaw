@@ -6,16 +6,23 @@ vi.mock("@/api/agents", () => ({
 
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
+import {
+  checkModelProvider,
+  deleteModelProvider,
+  fetchModelProviderPresets,
+  updateModelProvider,
+} from "@/api/modelProviders";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
 import { ModelProviderPage } from "@/pages/ModelProviderPage/ModelProviderPage";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { TranslateFn } from "@/models/conversations";
+import type { ModelServicePreset } from "@/models/modelProviderPresets";
 
 vi.mock("@/api/modelProviders", () => ({
   checkModelProvider: vi.fn(),
   deleteModelProvider: vi.fn(),
+  fetchModelProviderPresets: vi.fn(),
   updateModelProvider: vi.fn(),
 }));
 
@@ -38,6 +45,9 @@ const labels: Record<string, string> = {
   cancel: "Cancel",
   close: "Close",
   modelContextRestoreDefaults: "Restore defaults",
+  modelConnectProtocol: "API protocol",
+  modelConnectSelectProtocol: "Choose an API protocol",
+  modelConnectProtocolRequired: "Choose an API protocol before checking or saving.",
   modelProviderCustomSettings: "OpenAI-compatible provider settings",
   modelProviderOpenCSGSettings: "OpenCSG built-in models are served by AI Gateway.",
   modelProviderOpenCSGSignInRequired:
@@ -58,6 +68,34 @@ const labels: Record<string, string> = {
 const t: TranslateFn = (key, params = {}) =>
   Object.entries(params).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), labels[key] ?? key);
 
+const bailianOpenAIURL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+const bailianAnthropicURL = "https://dashscope.aliyuncs.com/apps/anthropic/v1";
+const bailian: ModelServicePreset = {
+  id: "aliyun",
+  brand: "aliyun",
+  brand_name: "Bailian",
+  name: "Bailian API",
+  avatar: "",
+  aliases: [],
+  api_protocol: "responses",
+  docs_url: "",
+  models: [],
+  regions: [
+    {
+      id: "cn",
+      name: "China",
+      base_url: bailianOpenAIURL,
+      key_url: "",
+      default_protocol: "responses",
+      protocol_urls: {
+        responses: bailianOpenAIURL,
+        chat_completions: bailianOpenAIURL,
+        anthropic_messages: bailianAnthropicURL,
+      },
+    },
+  ],
+};
+
 function createCatalog(providerOverrides: Record<string, unknown> = {}) {
   return normalizeModelProviderCatalog({
     providers: [
@@ -67,6 +105,7 @@ function createCatalog(providerOverrides: Record<string, unknown> = {}) {
         preset: "openai",
         display_name: "OpenAI API",
         base_url: "https://api.openai.com/v1",
+        api_protocol: providerOverrides.builtin ? undefined : "responses",
         api_key_set: true,
         api_key_preview: "sk-...",
         models: ["gpt-4.1"],
@@ -83,6 +122,10 @@ function renderModelProviderPage(
   controllerOverrides: Record<string, unknown> = {},
 ) {
   const refreshWorkspaceModelProviders = vi.fn().mockResolvedValue(null);
+  const checkWorkspaceModelProvider = vi.fn(async (...args: Parameters<typeof checkModelProvider>) => {
+    const check = await checkModelProvider(...args);
+    return { check, savedProvider: check.provider };
+  });
   const renderPage = (nextCatalog = catalog) => (
     <WorkspaceControllerProvider
       controller={
@@ -91,6 +134,7 @@ function renderModelProviderPage(
           modelProviders: nextCatalog,
           ready: true,
           refreshWorkspaceModelProviders,
+          checkWorkspaceModelProvider,
           sidebarProps: {
             authBusy: false,
             authPending: false,
@@ -181,6 +225,7 @@ describe("ModelProviderPage", () => {
     expect(refreshWorkspaceModelProviders).toHaveBeenCalled();
   });
   beforeEach(() => {
+    vi.mocked(fetchModelProviderPresets).mockResolvedValue({ presets: [] });
     vi.mocked(checkModelProvider).mockResolvedValue({
       id: "openai",
       last_checked_at: "2026-06-23T12:00:00Z",
@@ -230,6 +275,77 @@ describe("ModelProviderPage", () => {
         expect.objectContaining({
           api_key: "",
           base_url: "https://api.openai.com/v1",
+        }),
+      ),
+    );
+  });
+
+  it("resolves an old preset by its address and checks with an explicit protocol after switching", async () => {
+    vi.mocked(fetchModelProviderPresets).mockResolvedValue({ presets: [bailian] });
+    renderModelProviderPage(
+      createCatalog({ preset: "aliyun", base_url: bailianAnthropicURL, api_protocol: undefined }),
+    );
+    const user = userEvent.setup();
+    const protocol = screen.getByRole("combobox", { name: "API protocol" });
+
+    await waitFor(() => expect(protocol).toHaveTextContent("Anthropic Messages"));
+    await waitFor(() =>
+      expect(checkModelProvider).toHaveBeenCalledWith(
+        "openai",
+        expect.objectContaining({
+          api_protocol: "anthropic_messages",
+          base_url: bailianAnthropicURL,
+        }),
+      ),
+    );
+
+    await user.click(protocol);
+    expect(screen.queryByRole("option", { name: "Auto" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "OpenAI Responses" }));
+    expect(screen.getByLabelText("Base URL")).toHaveValue(bailianOpenAIURL);
+
+    const check = screen.getByRole("button", { name: "Check" });
+    await waitFor(() => expect(check).toBeEnabled());
+    await user.click(check);
+    await waitFor(() =>
+      expect(checkModelProvider).toHaveBeenCalledWith(
+        "openai",
+        expect.objectContaining({
+          connect: true,
+          api_protocol: "responses",
+          base_url: bailianOpenAIURL,
+        }),
+      ),
+    );
+    expect(checkModelProvider).not.toHaveBeenCalledWith(
+      "openai",
+      expect.objectContaining({
+        api_protocol: "responses",
+        base_url: bailianAnthropicURL,
+      }),
+    );
+  });
+
+  it("requires an explicit choice before checking or saving an old custom endpoint", async () => {
+    const baseURL = "https://gateway.example.test/v1";
+    renderModelProviderPage(createCatalog({ preset: "custom", base_url: baseURL, api_protocol: undefined }));
+    const user = userEvent.setup();
+    const protocol = screen.getByRole("combobox", { name: "API protocol" });
+
+    expect(protocol).toHaveTextContent("Choose an API protocol");
+    expect(screen.getByRole("button", { name: "Check" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(checkModelProvider).not.toHaveBeenCalled();
+
+    await user.click(protocol);
+    await user.click(screen.getByRole("option", { name: "OpenAI Chat Completions" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updateModelProvider).toHaveBeenCalledWith(
+        "openai",
+        expect.objectContaining({
+          api_protocol: "chat_completions",
+          base_url: baseURL,
         }),
       ),
     );
@@ -315,6 +431,7 @@ describe("ModelProviderPage", () => {
 
     await waitFor(() =>
       expect(updateModelProvider).toHaveBeenCalledWith("openai", {
+        api_protocol: "responses",
         api_key: "sk-test",
         base_url: "http://127.0.0.1:4000/v1",
         display_name: "Team OpenAI",
@@ -554,13 +671,10 @@ describe("ModelProviderPage", () => {
   });
 
   it("loads OpenCSG models automatically after authentication", async () => {
-    vi.mocked(checkModelProvider).mockResolvedValueOnce({
-      id: "opencsg",
-      last_checked_at: "2026-07-16T09:00:00Z",
-      models: ["stage-model"],
-      status: "connected",
-    });
-    renderModelProviderPage(
+    const catalog = createCatalog({ id: "opencsg", display_name: "OpenCSG", models: ["stage-model"] });
+    const provider = catalog.providers[0];
+    vi.mocked(checkModelProvider).mockResolvedValueOnce({ ...provider, provider });
+    const { container, rerenderWithCatalog } = renderModelProviderPage(
       normalizeModelProviderCatalog({
         providers: [
           {
@@ -595,7 +709,9 @@ describe("ModelProviderPage", () => {
         }),
       ),
     );
+    rerenderWithCatalog(catalog);
     expect(await screen.findByText("stage-model")).toBeInTheDocument();
+    expect(within(container).getByText("1 models")).toBeInTheDocument();
   });
 
   it("clears rendered OpenCSG models when the provider catalog is cleared", async () => {

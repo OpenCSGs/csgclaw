@@ -119,17 +119,16 @@
   align-items: center;
   gap: 8px;
   color: inherit;
-  cursor: pointer;
   font: inherit;
   text-align: left;
   text-decoration: none;
 }
 
-.attachment-draft-preview-link:disabled {
-  cursor: default;
+button.attachment-draft-preview-link:not(:disabled) {
+  cursor: pointer;
 }
 
-.attachment-draft-preview-link:hover .attachment-name,
+button.attachment-draft-preview-link:hover .attachment-name,
 .attachment-draft-preview-link:focus-visible .attachment-name {
   color: var(--primary);
 }

@@ -5,6 +5,7 @@ export type ApiError = {
   billingURL?: string;
   publishedTemplateId?: string;
   filePath?: string;
+  fileName?: string;
   maxFileBytes?: number;
 };
 
@@ -184,6 +185,7 @@ export function apiErrorFromText(status: number, raw: string): ApiError {
         message?: unknown;
         published_template_id?: unknown;
         file_path?: unknown;
+        file_name?: unknown;
         max_file_bytes?: unknown;
       };
     };
@@ -205,6 +207,9 @@ export function apiErrorFromText(status: number, raw: string): ApiError {
       }
       if (typeof payload.error?.file_path === "string") {
         error.filePath = payload.error.file_path;
+      }
+      if (typeof payload.error?.file_name === "string") {
+        error.fileName = payload.error.file_name;
       }
       if (typeof payload.error?.max_file_bytes === "number") {
         error.maxFileBytes = payload.error.max_file_bytes;

@@ -15,19 +15,17 @@ import {
   useWorkspaceBootstrapQuery,
   useWorkspaceHubTemplatesQuery,
   useWorkspaceManagerProfileQuery,
-  useWorkspaceModelProvidersQuery,
   useWorkspaceUpgradeStatusQuery,
   workspaceQueryKeys,
 } from "./workspaceQueries";
 import { fetchHubTemplates } from "@/api/hub";
-import { fetchModelProviders } from "@/api/modelProviders";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { IMData } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
-import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { UpgradeStatus } from "@/models/upgradeStatus";
 import type { WorkspaceQueryData } from "./types";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
+import { useWorkspaceModelProviderCatalog } from "./useWorkspaceModelProviderCatalog";
 
 export function useWorkspaceData() {
   const queryClient = useQueryClient();
@@ -35,7 +33,8 @@ export function useWorkspaceData() {
   const bootstrapConfigQuery = useWorkspaceBootstrapConfigQuery();
   const managerProfileQuery = useWorkspaceManagerProfileQuery();
   const agentsQuery = useWorkspaceAgentsQuery();
-  const modelProvidersQuery = useWorkspaceModelProvidersQuery();
+  const { modelProvidersQuery, refreshWorkspaceModelProviders, checkWorkspaceModelProvider } =
+    useWorkspaceModelProviderCatalog();
   const storedHubResourceType = useWorkspaceUiStore((state) => state.selectedHubResourceType);
   const hubTemplatesQuery = useWorkspaceHubTemplatesQuery({
     enabled: storedHubResourceType === "template",
@@ -75,15 +74,7 @@ export function useWorkspaceData() {
       queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) =>
         typeof value === "function" ? value(current ?? []) : value,
       );
-    },
-    [queryClient],
-  );
-
-  const setModelProvidersData = useCallback(
-    (value: WorkspaceQueryData<ModelProviderCatalog | null>) => {
-      queryClient.setQueryData<ModelProviderCatalog | null>(workspaceQueryKeys.modelProviders(), (current) =>
-        typeof value === "function" ? value(current ?? null) : value,
-      );
+      void queryClient.invalidateQueries({ queryKey: [...workspaceQueryKeys.hubTemplates(), "official-and-owned"] });
     },
     [queryClient],
   );
@@ -180,16 +171,6 @@ export function useWorkspaceData() {
     [setAgentsData],
   );
 
-  const refreshWorkspaceModelProviders = useCallback(async () => {
-    try {
-      const catalog = await fetchModelProviders();
-      setModelProvidersData(catalog);
-      return catalog;
-    } catch (_) {
-      return null;
-    }
-  }, [setModelProvidersData]);
-
   const refreshWorkspaceHubTemplates = useCallback(async () => {
     const payload = await fetchHubTemplates();
     const templates = Array.isArray(payload) ? payload : [];
@@ -222,7 +203,6 @@ export function useWorkspaceData() {
     setBootstrapData,
     setManagerProfileData,
     setAgentsData,
-    setModelProvidersData,
     setHubTemplatesData,
     setAppVersionData,
     setUpgradeStatusData,
@@ -233,6 +213,7 @@ export function useWorkspaceData() {
     refreshWorkspaceManagerProfile,
     refreshWorkspaceAgents,
     refreshWorkspaceModelProviders,
+    checkWorkspaceModelProvider,
     refreshWorkspaceHubTemplates,
   };
 }

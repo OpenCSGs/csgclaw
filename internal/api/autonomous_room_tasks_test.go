@@ -6,11 +6,13 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/roomtask"
 	"csgclaw/internal/taskcore"
 	"csgclaw/internal/worklease"
 )
@@ -215,5 +217,84 @@ func TestAutonomousTaskToolsRecordIndependentPartsAndStayInScope(t *testing.T) {
 	h.Routes().ServeHTTP(out, httptest.NewRequest(http.MethodGet, "/api/v1/rooms/"+room.ID+"/tasks", nil))
 	if out.Code != http.StatusOK {
 		t.Fatalf("room view: %d %s", out.Code, out.Body.String())
+	}
+}
+
+func TestAutonomousVideoFeedbackDoesNotAdmitUnreadNotification(t *testing.T) {
+	h := newAppTaskTestHandler(t)
+	room, source := createAutonomousTaskFixture(t, h)
+	request := roomtask.TurnContextRequest{RoomID: room.ID, ParticipantID: "pt-dev", SourceID: source.ID, VideoFeedback: true}
+	feedback, err := h.roomExecutionContext(request)
+	if err != nil || feedback.Skip || feedback.Role != roomtask.TurnRoleAutonomous || feedback.Notification != nil {
+		t.Fatalf("video feedback context: %+v, %v", feedback, err)
+	}
+	request.VideoFeedback = false
+	ordinary, err := h.roomExecutionContext(request)
+	if err != nil || ordinary.Skip || ordinary.Notification == nil {
+		t.Fatalf("ordinary notification context after feedback: %+v, %v", ordinary, err)
+	}
+}
+
+func TestAutonomousVideoFeedbackHonorsRoomPause(t *testing.T) {
+	h := newAppTaskTestHandler(t)
+	room, source := createAutonomousTaskFixture(t, h)
+	if err := h.im.PauseAutonomousRoom(room.ID, source.ID); err != nil {
+		t.Fatal(err)
+	}
+	request := roomtask.TurnContextRequest{RoomID: room.ID, ParticipantID: "pt-dev", SourceID: source.ID, VideoFeedback: true}
+	feedback, err := h.roomExecutionContext(request)
+	if err != nil || !feedback.Skip || feedback.Notification != nil {
+		t.Fatalf("video feedback after room pause: %+v, %v", feedback, err)
+	}
+	current, _ := h.im.Room(room.ID)
+	if current.AutonomousState == nil || !current.AutonomousState.Paused {
+		t.Fatal("video feedback changed the room pause state")
+	}
+
+	next, err := h.im.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "admin", Content: "New request"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.SourceID = next.ID
+	request.VideoFeedback = false
+	ordinary, err := h.roomExecutionContext(request)
+	if err != nil || ordinary.Skip || ordinary.Notification == nil {
+		t.Fatalf("new user message after room pause: %+v, %v", ordinary, err)
+	}
+	request.VideoFeedback = true
+	feedback, err = h.roomExecutionContext(request)
+	if err != nil || feedback.Skip || feedback.Role != roomtask.TurnRoleAutonomous || feedback.Notification != nil {
+		t.Fatalf("video feedback after room resume: %+v, %v", feedback, err)
+	}
+}
+
+func TestAutonomousVideoFeedbackWaitsForStopToSavePause(t *testing.T) {
+	h := newAppTaskTestHandler(t)
+	h.serverNoAuth = true
+	room, source := createAutonomousTaskFixture(t, h)
+	request := roomtask.TurnContextRequest{RoomID: room.ID, ParticipantID: "pt-dev", SourceID: source.ID, VideoFeedback: true}
+	h.participantWork = &roomStopControl{confirm: func() {
+		current, _ := h.im.Room(room.ID)
+		if current.AutonomousState != nil && current.AutonomousState.Paused {
+			t.Error("room paused before turn cancellation completed")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		queued := request
+		queued.Context = ctx
+		feedback, err := h.roomExecutionContext(queued)
+		if err != nil || !feedback.Skip || ctx.Err() == nil {
+			t.Errorf("feedback while Stop is in progress: %+v, %v (context: %v)", feedback, err, ctx.Err())
+		}
+	}}
+	stopped := performParticipantWorkRequest(t, h, http.MethodPost, "/api/v1/channels/csgclaw/participants/dev/work:stop", map[string]any{
+		"room_id": room.ID, "lease_id": worklease.NewID(), "request_id": source.ID,
+	})
+	if stopped.Code != http.StatusAccepted {
+		t.Fatalf("stop: %d %s", stopped.Code, stopped.Body.String())
+	}
+	feedback, err := h.roomExecutionContext(request)
+	if err != nil || !feedback.Skip {
+		t.Fatalf("feedback after Stop: %+v, %v", feedback, err)
 	}
 }

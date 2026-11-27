@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentengine/lifecycle"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/identity"
 	"csgclaw/internal/im"
 	"csgclaw/internal/modelprovider"
 	hub "csgclaw/internal/template"
@@ -15,14 +17,17 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 )
 
 type Service struct {
-	store  *Store
-	agents agentengine.AgentInterface
-	im     *im.Service
+	mutations sync.Map // participant key -> completion channel
+	lifecycle *lifecycle.Coordinator
+	store     *Store
+	agents    agentengine.AgentInterface
+	im        *im.Service
 }
 
 type Option func(*Service)
@@ -31,7 +36,7 @@ func NewService(store *Store, opts ...Option) *Service {
 	if store == nil {
 		store = NewMemoryStore(nil)
 	}
-	s := &Service{store: store}
+	s := &Service{store: store, lifecycle: &lifecycle.Coordinator{}}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(s)
@@ -44,6 +49,9 @@ func WithAgentEngine(engine agentengine.Interface) Option {
 	return func(s *Service) {
 		if engine != nil {
 			s.agents = engine.Agents()
+			if owner, ok := s.agents.(interface{ LifecycleCoordinator() *lifecycle.Coordinator }); ok {
+				s.lifecycle = owner.LifecycleCoordinator()
+			}
 		}
 	}
 }
@@ -70,16 +78,213 @@ func (s *Service) Get(channel, id string) (apitypes.Participant, bool) {
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Participant, error) {
+	item, _, err := s.CreateWithStatus(ctx, req)
+	return item, err
+}
+
+// CreateWithStatus reports whether the request inserted a new participant.
+func (s *Service) CreateWithStatus(ctx context.Context, req CreateRequest) (apitypes.Participant, bool, error) {
 	if s == nil || s.store == nil {
-		return apitypes.Participant{}, fmt.Errorf("participant store is required")
+		return apitypes.Participant{}, false, fmt.Errorf("participant store is required")
 	}
 	normalized, err := s.normalizeCreateRequest(req)
 	if err != nil {
-		return apitypes.Participant{}, err
+		return apitypes.Participant{}, false, err
 	}
-	if _, ok := s.store.Get(normalized.Channel, normalized.ID); ok {
-		return apitypes.Participant{}, fmt.Errorf("participant %s:%s already exists", normalized.Channel, normalized.ID)
+	normalized.reconcile = req.ReconcilesBinding()
+	ctx, release, err := s.lockCreate(ctx, &normalized)
+	if err != nil {
+		return apitypes.Participant{}, false, err
 	}
+	defer release()
+	if existing, ok := s.store.Get(normalized.Channel, normalized.ID); ok {
+		if !normalized.reconcile || existing.Type != TypeAgent ||
+			(req.ChannelUser.Ref != "" && normalized.ChannelUser.Ref != canonicalUserID(existing.ChannelUserRef)) ||
+			(req.ChannelUser.Kind != "" && normalized.ChannelUser.Kind != existing.ChannelUserKind) {
+			return apitypes.Participant{}, false, fmt.Errorf("participant %s:%s already exists", normalized.Channel, normalized.ID)
+		}
+		item, err := s.reconcileBinding(ctx, existing, normalized)
+		return item, false, err
+	}
+	item, err := s.create(ctx, normalized)
+	return item, err == nil, err
+}
+
+func (s *Service) reconcileBinding(ctx context.Context, existing apitypes.Participant, req normalizedCreateRequest) (apitypes.Participant, error) {
+	item := existing
+	item.AgentName = req.workerName
+	if req.reconcileBoundName {
+		item.Name = req.Name
+	}
+	if item.AgentID == "" {
+		item.AgentID = agent.CanonicalID(req.AgentBinding.AgentID)
+	}
+	if item.Name != existing.Name || item.AgentID != existing.AgentID {
+		item.UpdatedAt = time.Now().UTC()
+	}
+	change := bindingNameChange{before: existing, after: item, syncUser: true}
+	apply := func() (bool, error) {
+		id, err := s.ensureAgentBinding(ctx, req, true)
+		return id != "", err
+	}
+	// An exact replay can share the worker lease with other participants.
+	// Only a worker rename or restoration needs the other recovery records.
+	var err error
+	if req.readOnly {
+		err = s.applyBindingNames([]bindingNameChange{change}, apply)
+	} else {
+		err = s.withWorkerNames(ctx, item.AgentID, "", req.workerName, &change, apply)
+	}
+	if err != nil {
+		return existing, err
+	}
+	return item, nil
+}
+
+// Agent lifecycle mutations precede participant writes, including Feishu calls
+// that already hold the same lease. Recheck the binding after both locks: a
+// concurrent first create may have selected a different worker for this ID.
+func (s *Service) lockCreate(ctx context.Context, req *normalizedCreateRequest) (context.Context, func(), error) {
+	if req.Type != TypeAgent || req.AgentBinding.Mode == BindingModeNone {
+		release, err := s.lockParticipant(ctx, req.Channel, req.ID)
+		return ctx, release, err
+	}
+	requested := req.AgentBinding.AgentID
+	if requested == "" {
+		requested = defaultAgentID(req.ID)
+	}
+	// An explicit binding already identifies the worker. Pin it before reading
+	// names so a concurrent participant PATCH is serialized with reconciliation.
+	target := bindingTarget{id: requested, readOnly: true}
+	var err error
+	if req.reconcile {
+		if bound, ok := s.store.Get(req.Channel, req.ID); ok && bound.AgentID != "" {
+			target.id = bound.AgentID
+		}
+	} else {
+		target, err = s.bindingTarget(ctx, req, requested)
+		if err != nil {
+			return ctx, nil, err
+		}
+	}
+	for {
+		lease := ctx
+		var releaseAgent func()
+		if target.readOnly {
+			releaseAgent, err = s.lifecycle.Read(ctx, agent.CanonicalID(target.id))
+		} else {
+			lease, releaseAgent, err = s.lifecycle.Mutation(ctx, agent.CanonicalID(target.id))
+		}
+		if err != nil {
+			return ctx, nil, err
+		}
+		releaseParticipant, err := s.lockParticipant(lease, req.Channel, req.ID)
+		if err != nil {
+			releaseAgent()
+			return ctx, nil, err
+		}
+		release := func() {
+			releaseParticipant()
+			releaseAgent()
+		}
+		current, err := s.bindingTarget(lease, req, requested)
+		if err != nil {
+			release()
+			return ctx, nil, err
+		}
+		if current.id != target.id || (target.readOnly && !current.readOnly) {
+			release()
+			target = current
+			continue
+		}
+		if req.AgentBinding.Mode == BindingModeCreate {
+			req.AgentBinding.AgentID = target.id
+			req.bindingTarget = current
+		}
+		return lease, release, nil
+	}
+}
+
+type bindingTarget struct {
+	id                 string
+	readOnly           bool
+	reconcileBoundName bool
+	workerName         string
+}
+
+func (s *Service) bindingTarget(ctx context.Context, req *normalizedCreateRequest, requested string) (bindingTarget, error) {
+	target := bindingTarget{id: requested, readOnly: req.AgentBinding.Mode == BindingModeReuse}
+	var bound apitypes.Participant
+	if req.reconcile {
+		bound, _ = s.store.Get(req.Channel, req.ID)
+		if bound.AgentID != "" {
+			target.id = bound.AgentID
+			target.reconcileBoundName = true
+		}
+		target.workerName = req.Name
+		// The stored worker name distinguishes an alias from a worker whose
+		// own name has changed since this participant was bound.
+		if bound.AgentName != "" && bound.AgentName != bound.Name && bound.Name == req.Name {
+			target.workerName = bound.AgentName
+			target.reconcileBoundName = false
+		}
+	}
+	// Historical selectors also match worker names. Pin the selected worker
+	// until the participant is saved, including when deletion races the lookup.
+	if s.agents != nil {
+		selected, err := s.agents.Get(ctx, target.id, agentengine.AgentGetOptions{})
+		if err == nil {
+			if !req.reconcile {
+				return bindingTarget{id: selected.ID, readOnly: true}, nil
+			}
+			if selected.ID == agent.CanonicalID(target.id) {
+				nameMatches := selected.Spec.Name == req.Name
+				if bound.AgentName == "" && target.reconcileBoundName && !nameMatches && bound.Name == req.Name {
+					// An exact replay of an older binding has no recorded worker name.
+					// Keep the current one when the stored identities already satisfy it.
+					target.reconcileBoundName = agent.CanonicalID(requested) != selected.ID && !s.isSharedWorkerAlias(bound, selected.Spec.Name)
+				}
+				if !target.reconcileBoundName {
+					target.workerName = selected.Spec.Name
+				}
+				target.readOnly = nameMatches || !target.reconcileBoundName
+			}
+			return target, nil
+		}
+		if agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+			return bindingTarget{}, err
+		}
+	}
+	return target, nil
+}
+
+func (s *Service) isSharedWorkerAlias(bound apitypes.Participant, workerName string) bool {
+	return slices.ContainsFunc(s.store.List(ListOptions{Channel: bound.Channel, AgentID: bound.AgentID}), func(p apitypes.Participant) bool {
+		return p.ID != bound.ID && strings.EqualFold(p.Name, workerName)
+	})
+}
+
+// Serialize changes to the participant and its associated IM user.
+func (s *Service) lockParticipant(ctx context.Context, channel, id string) (func(), error) {
+	key := storeKey(channel, canonicalParticipantID(slugify(id)))
+	done := make(chan struct{})
+	for {
+		active, occupied := s.mutations.LoadOrStore(key, done)
+		if !occupied {
+			return func() {
+				s.mutations.Delete(key)
+				close(done)
+			}, nil
+		}
+		select {
+		case <-active.(chan struct{}):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+func (s *Service) create(ctx context.Context, normalized normalizedCreateRequest) (apitypes.Participant, error) {
 	if normalized.Channel == ChannelCSGClaw && s.im != nil {
 		if err := s.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: normalized.ChannelUser.Ref, Name: normalized.Name}); err != nil {
 			return apitypes.Participant{}, err
@@ -96,7 +301,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Parti
 	}
 
 	if normalized.Type == TypeAgent {
-		agentID, err := s.ensureAgentBinding(ctx, normalized)
+		agentID, err := s.ensureAgentBinding(ctx, normalized, false)
 		if err != nil {
 			return apitypes.Participant{}, err
 		}
@@ -118,6 +323,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Parti
 		ChannelAppRef:    normalized.ChannelAppRef,
 		ChannelAppConfig: cloneMap(normalized.ChannelAppConfig),
 		AgentID:          normalized.AgentID,
+		AgentName:        normalized.workerName,
 		LifecycleStatus:  LifecycleStatusActive,
 		Mentionable:      true,
 		Metadata:         cloneMetadata(normalized.Metadata),
@@ -364,7 +570,7 @@ func isLegacyManagerParticipant(item apitypes.Participant) bool {
 	return strings.EqualFold(strings.TrimSpace(item.Name), agent.ManagerName)
 }
 
-func (s *Service) Update(_ context.Context, channel, id string, req UpdateRequest) (apitypes.Participant, bool, error) {
+func (s *Service) Update(ctx context.Context, channel, id string, req UpdateRequest) (apitypes.Participant, bool, error) {
 	if s == nil || s.store == nil {
 		return apitypes.Participant{}, false, fmt.Errorf("participant store is required")
 	}
@@ -373,6 +579,11 @@ func (s *Service) Update(_ context.Context, channel, id string, req UpdateReques
 	if channel == "" || id == "" {
 		return apitypes.Participant{}, false, fmt.Errorf("channel and id are required")
 	}
+	release, err := s.lockParticipant(ctx, channel, id)
+	if err != nil {
+		return apitypes.Participant{}, false, err
+	}
+	defer release()
 	item, _, ok := s.getByID(channel, id)
 	if !ok {
 		return apitypes.Participant{}, false, nil
@@ -479,13 +690,39 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 		return apitypes.Participant{}, false, fmt.Errorf("channel and id are required")
 	}
 
+	deleteAgentMode := strings.TrimSpace(opts.DeleteAgent)
+	// Optional worker deletion uses the same acquisition order as create.
+	// Hold the worker lease through the reference check and deletion.
+	var pinnedAgentID string
+	if deleteAgentMode == DeleteAgentIfUnreferenced {
+		target, _, found := s.getByID(channel, id)
+		if !found {
+			return apitypes.Participant{}, false, nil
+		}
+		pinnedAgentID = target.AgentID
+	}
+	if pinnedAgentID != "" {
+		lease, release, err := s.lifecycle.Mutation(ctx, agent.CanonicalID(pinnedAgentID))
+		if err != nil {
+			return apitypes.Participant{}, false, err
+		}
+		defer release()
+		ctx = lease
+	}
+	release, err := s.lockParticipant(ctx, channel, id)
+	if err != nil {
+		return apitypes.Participant{}, false, err
+	}
+	defer release()
 	existing, deleteID, ok := s.getByID(channel, id)
 	if !ok {
 		return apitypes.Participant{}, false, nil
 	}
-	deleteAgentMode := strings.TrimSpace(opts.DeleteAgent)
 	if deleteAgentMode != "" && deleteAgentMode != DeleteAgentIfUnreferenced {
 		return apitypes.Participant{}, false, fmt.Errorf("delete_agent must be %q", DeleteAgentIfUnreferenced)
+	}
+	if deleteAgentMode == DeleteAgentIfUnreferenced && existing.AgentID != pinnedAgentID {
+		return apitypes.Participant{}, false, fmt.Errorf("participant binding changed during deletion")
 	}
 	if deleteAgentMode == DeleteAgentIfUnreferenced && strings.TrimSpace(existing.AgentID) != "" {
 		if s.agents == nil {
@@ -535,6 +772,11 @@ func (s *Service) DeleteAgent(ctx context.Context, agentID string) ([]apitypes.P
 		return nil, fmt.Errorf("agent service is required")
 	}
 
+	ctx, release, err := s.lifecycle.Mutation(ctx, agent.CanonicalID(agentID))
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	refs := s.store.List(ListOptions{AgentID: agentID})
 	if err := s.agents.Delete(ctx, agentID); err != nil {
 		return nil, err
@@ -574,10 +816,19 @@ func (s *Service) RepairDanglingCSGClawAgentParticipants() ([]apitypes.Participa
 		}
 		agentID := strings.TrimSpace(item.AgentID)
 		if agentID != "" {
-			if _, err := s.agents.Get(context.Background(), agentID, agentengine.AgentGetOptions{}); err == nil {
-				continue
-			} else if agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+			_, found, err := s.boundAgentByID(context.Background(), agentID)
+			if err != nil {
 				return deleted, fmt.Errorf("inspect agent %q while repairing participants: %w", agentID, err)
+			}
+			if found {
+				continue
+			}
+			// A persisted binding with a live local identity can be restored by
+			// participant create even when its worker record is missing.
+			if item.ChannelUserKind == ChannelUserKindLocalUserID {
+				if user, ok := s.im.LocalUserByID(item.ChannelUserRef); ok && user.AgentState != "deleted" {
+					continue
+				}
 			}
 		}
 		removed, ok, err := s.store.Delete(item.Channel, item.ID)
@@ -659,6 +910,8 @@ func (s *Service) deleteUnreferencedCSGClawParticipantUser(deleted apitypes.Part
 }
 
 type normalizedCreateRequest struct {
+	bindingTarget
+	reconcile        bool
 	ID               string
 	Channel          string
 	Type             string
@@ -896,7 +1149,19 @@ func trimLocalIdentityPrefixes(id string) string {
 	return strings.TrimSpace(id)
 }
 
-func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRequest) (string, error) {
+// Engine Get also accepts display names. Bindings refer to canonical IDs only.
+func (s *Service) boundAgentByID(ctx context.Context, id string) (agentengine.Agent, bool, error) {
+	selected, err := s.agents.Get(ctx, id, agentengine.AgentGetOptions{})
+	if err != nil {
+		if agentengine.ErrorCodeOf(err) == agentengine.ErrorAgentNotFound {
+			return agentengine.Agent{}, false, nil
+		}
+		return agentengine.Agent{}, false, err
+	}
+	return selected, selected.ID == agent.CanonicalID(id), nil
+}
+
+func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRequest, restoring bool) (string, error) {
 	switch req.AgentBinding.Mode {
 	case BindingModeNone:
 		return "", nil
@@ -916,15 +1181,31 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if agentID == "" {
 			agentID = defaultAgentID(req.ID)
 		}
-		if existing, err := s.agents.Get(ctx, agentID, agentengine.AgentGetOptions{}); err == nil {
-			return existing.ID, nil
+		if req.reconcile {
+			owner, err := s.agents.Get(ctx, req.Name, agentengine.AgentGetOptions{})
+			if err == nil && owner.ID != agent.CanonicalID(agentID) {
+				return "", fmt.Errorf("agent name %q %w", req.Name, identity.ErrNameExists)
+			}
+			if err != nil && agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
+				return "", err
+			}
+		}
+		if existing, found, err := s.boundAgentByID(ctx, agentID); err != nil {
+			return "", err
+		} else if found {
+			return s.reconcileAgentName(ctx, req, existing)
+		}
+		if restoring && (req.AgentBinding.Agent == nil || strings.TrimSpace(req.AgentBinding.Agent.FromTemplate) == "") {
+			return "", fmt.Errorf("restoring missing agent %q requires a template", agentID)
 		}
 		spec := agent.CreateAgentSpec{}
 		if req.AgentBinding.Agent != nil {
 			spec = *req.AgentBinding.Agent
 		}
 		spec.ID = agentID
-		if strings.TrimSpace(spec.Name) == "" {
+		if req.reconcile {
+			spec.Name = req.workerName
+		} else if strings.TrimSpace(spec.Name) == "" {
 			spec.Name = req.Name
 		}
 		if strings.TrimSpace(spec.Role) == "" {
@@ -935,10 +1216,30 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if err != nil {
 			return "", err
 		}
-		return created.ID, nil
+		return s.reconcileAgentName(ctx, req, created)
 	default:
 		return "", fmt.Errorf("agent_binding.mode must be one of %q, %q, or %q", BindingModeCreate, BindingModeReuse, BindingModeNone)
 	}
+}
+
+func (s *Service) reconcileAgentName(ctx context.Context, req normalizedCreateRequest, worker agentengine.Agent) (string, error) {
+	if !req.reconcile {
+		return worker.ID, nil
+	}
+	role := agentengine.AgentRoleWorker
+	if req.AgentBinding.Agent != nil && strings.EqualFold(req.AgentBinding.Agent.Role, agent.RoleManager) {
+		role = agentengine.AgentRoleManager
+	}
+	if worker.Spec.Role != role {
+		return "", fmt.Errorf("agent %q already exists with role %q", worker.ID, worker.Spec.Role)
+	}
+	if req.reconcileBoundName && worker.Spec.Name != req.Name {
+		updated, err := updateWorkerName(ctx, s.agents, worker, agentengine.AgentUpdateRequest{
+			Spec: agentengine.AgentSpec{Name: req.Name}, FieldMask: []string{"name"}, ResourceVersion: worker.ResourceVersion,
+		})
+		return updated.ID, err
+	}
+	return worker.ID, nil
 }
 
 func participantEngineCreateRequest(spec agent.CreateAgentSpec) agentengine.AgentCreateRequest {

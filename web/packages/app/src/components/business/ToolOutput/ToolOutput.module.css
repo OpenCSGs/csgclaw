@@ -23,3 +23,17 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.output[data-expandable] {
+  max-block-size: 200px;
+  padding: 0;
+  background: transparent;
+}
+
+.output[data-expanded] {
+  max-block-size: none;
+}
+
+.toggle {
+  margin-top: 6px;
+}

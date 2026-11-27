@@ -138,6 +138,20 @@ func (m *Manager) cloudReader(ctx context.Context, id, connectionID string) (*Cl
 
 func validatedCloudEndpoint(raw, gateway, expectedSandbox string) (string, error) {
 	endpoint, err := url.Parse(raw)
+	// The production gateway is exposed both directly and through the portal.
+	// Trust only these exact HTTPS bases as aliases; retain the original URL
+	// for requests and validate its sandbox path against the matching base.
+	gateway = strings.TrimRight(gateway, "/")
+	const directGateway = "https://ai.space.opencsg.com/v1"
+	const portalGateway = "https://opencsg.com/aigateway/v1"
+	if gateway == directGateway || gateway == portalGateway {
+		for _, base := range []string{directGateway, portalGateway} {
+			if strings.HasPrefix(raw, base+"/sandboxes/") {
+				gateway = base
+				break
+			}
+		}
+	}
 	trusted, trustedErr := url.Parse(strings.TrimSuffix(strings.TrimRight(gateway, "/"), "/v1"))
 	if err != nil || trustedErr != nil || endpoint == nil || trusted == nil || endpoint.Host == "" || endpoint.Host != trusted.Host || endpoint.Scheme != trusted.Scheme || (endpoint.Scheme != "https" && endpoint.Scheme != "http") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
 		return "", ErrCloudEndpointUnavailable

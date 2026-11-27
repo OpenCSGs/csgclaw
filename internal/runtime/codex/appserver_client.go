@@ -28,8 +28,9 @@ type appServerClient struct {
 }
 
 type appServerPendingRequest struct {
-	method string
-	ch     chan appServerRPCResult
+	initialize *initializeTiming
+	method     string
+	ch         chan appServerRPCResult
 }
 
 type appServerRPCResult struct {
@@ -48,7 +49,11 @@ func newAppServerClient(stdin io.Writer, logger *slog.Logger) *appServerClient {
 }
 
 func (c *appServerClient) request(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	return c.call(ctx, method, params, nil)
+	return c.call(ctx, method, params, nil, false, nil)
+}
+
+func (c *appServerClient) startupRequest(ctx context.Context, method string, params map[string]any) (json.RawMessage, error) {
+	return c.call(ctx, method, params, nil, true, nil)
 }
 
 // probe skips a busy or non-pollable stdin instead of delaying normal RPCs.
@@ -56,10 +61,10 @@ func (c *appServerClient) probe(ctx context.Context, method string, params any) 
 	if ctx == nil {
 		return nil, fmt.Errorf("codex app-server probe requires a context")
 	}
-	return c.call(ctx, method, params, ctx)
+	return c.call(ctx, method, params, ctx, false, nil)
 }
 
-func (c *appServerClient) call(ctx context.Context, method string, params any, probeCtx context.Context) (json.RawMessage, error) {
+func (c *appServerClient) call(ctx context.Context, method string, params any, probeCtx context.Context, logTiming bool, initialize *initializeTiming) (_ json.RawMessage, err error) {
 	if c == nil || c.stdin == nil {
 		return nil, fmt.Errorf("codex app-server client is not configured")
 	}
@@ -80,11 +85,23 @@ func (c *appServerClient) call(ctx context.Context, method string, params any, p
 	c.nextID++
 	id := c.nextID
 	pending := &appServerPendingRequest{
-		method: method,
-		ch:     make(chan appServerRPCResult, 1),
+		initialize: initialize,
+		method:     method,
+		ch:         make(chan appServerRPCResult, 1),
 	}
 	c.pending[id] = pending
 	c.mu.Unlock()
+
+	if logTiming {
+		start := time.Now()
+		fields, _ := params.(map[string]any)
+		threadID, _ := fields["threadId"].(string)
+		c.logInfo("Codex session RPC started", "method", method, "request_id", id, "thread_id", threadID)
+		defer func() {
+			c.logInfo("Codex session RPC finished", "method", method, "request_id", id, "thread_id", threadID,
+				"success", err == nil, "duration_ms", time.Since(start).Milliseconds())
+		}()
+	}
 
 	msg := map[string]any{
 		"jsonrpc": appServerJSONRPCVersion,
@@ -96,6 +113,9 @@ func (c *appServerClient) call(ctx context.Context, method string, params any, p
 	}
 	diagnostics.From(ctx).Capture("runtime.rpc_request", msg)
 	if err := c.writeJSONLine(probeCtx, msg, func() {
+		if initialize != nil {
+			initialize.sent = time.Now()
+		}
 		if method == "turn/start" {
 			diagnostics.From(ctx).RuntimeStart()
 		}
@@ -120,21 +140,19 @@ func (c *appServerClient) call(ctx context.Context, method string, params any, p
 // notify sends a JSON-RPC notification (no id, no response expected) to the
 // codex app-server. Used for the "initialized" notification that completes
 // the app-server handshake.
-func (c *appServerClient) notify(method string) {
+func (c *appServerClient) notify(method string) error {
 	if c == nil || c.stdin == nil {
-		return
+		return fmt.Errorf("codex app-server client is not configured")
 	}
 	method = strings.TrimSpace(method)
 	if method == "" {
-		return
+		return fmt.Errorf("empty notification method")
 	}
 	msg := map[string]any{
 		"jsonrpc": appServerJSONRPCVersion,
 		"method":  method,
 	}
-	if err := c.writeJSONLine(nil, msg); err != nil {
-		c.logDebug("write codex app-server notification failed", "method", method, "error", err)
-	}
+	return c.writeJSONLine(nil, msg)
 }
 func (c *appServerClient) handleLine(line string) {
 	line = strings.TrimSpace(line)
@@ -203,6 +221,9 @@ func (c *appServerClient) handleResponse(msg appServerWireMessage) {
 		return
 	}
 	pending := c.removePending(id)
+	if pending != nil && pending.initialize != nil {
+		pending.initialize.reply = time.Now()
+	}
 	result := appServerRPCResult{result: msg.Result}
 	if len(msg.Error) > 0 {
 		method := ""

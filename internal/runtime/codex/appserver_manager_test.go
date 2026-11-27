@@ -59,23 +59,33 @@ func TestAppServerManagerStartFailureIncludesRedactedStderrTail(t *testing.T) {
 	}
 }
 
-func TestAppServerManagerStartFallsBackToThreadStartWhenResumeFails(t *testing.T) {
-	withAppServerHelperCommand(t, "resume-fallback")
-	dir := t.TempDir()
-	spec := testAppServerSessionSpec(dir)
-	if err := os.WriteFile(filepath.Join(spec.RuntimeDir, sessionFileName), []byte(`{"session_id":"old-thread"}`), 0o600); err != nil {
-		t.Fatalf("write session metadata: %v", err)
+func TestRestartPreservesThreadOnPermissionError(t *testing.T) {
+	withAppServerHelperCommand(t, "resume-inaccessible")
+	spec := testAppServerSessionSpec(t.TempDir())
+	path := filepath.Join(spec.RuntimeDir, sessionFileName)
+	legacy := []byte(`{"session_id":"old-thread"}`)
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatal(err)
 	}
-
 	manager := newAppServerManager(testAppServerManagerDeps())
-	session, err := manager.Start(context.Background(), spec)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
+	h := SessionHandle{RuntimeID: spec.RuntimeID}
+	if _, err := manager.Start(t.Context(), spec); err != nil {
+		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
-
-	if got, want := session.SessionID, "new-thread"; got != want {
-		t.Fatalf("SessionID = %q, want %q", got, want)
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), h) })
+	if _, err := manager.Prompt(t.Context(), h, PromptRequest{Prompt: []PromptContentBlock{TextBlock("hello")}}); err == nil || !strings.Contains(err.Error(), "old-thread") {
+		t.Fatalf("Prompt() error = %v, want failed restore of old-thread", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != string(legacy) {
+		t.Fatalf("saved session = %s, %v", data, err)
+	}
+	log, err := os.ReadFile(spec.StderrPath)
+	if err != nil || strings.Contains(string(log), "method=thread/start") {
+		t.Fatalf("unexpected replacement request: %s, %v", log, err)
+	}
+	if id, err := manager.EnsureSession(t.Context(), h, "unrelated-room"); err != nil || id == "" {
+		t.Fatalf("new room after failed default restore = %q, %v", id, err)
 	}
 }
 
@@ -85,8 +95,8 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	spec := testAppServerSessionSpec(dir)
 	var persisted []map[string]string
 	deps := testAppServerManagerDeps()
-	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string, _ map[string]bool) error {
-		persisted = append(persisted, cloneConversationSessions(conversations))
+	deps.SaveSessionMetadata = func(_ string, meta sessionMetadata) error {
+		persisted = append(persisted, cloneConversationSessions(meta.ConversationSessions))
 		return nil
 	}
 	manager := newAppServerManager(deps)
@@ -100,8 +110,8 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureSession(main) error = %v", err)
 	}
-	if mainThread != session.SessionID {
-		t.Fatalf("main thread = %q, want %q", mainThread, session.SessionID)
+	if mainThread == "" || session.SessionID != "" {
+		t.Fatalf("idle default = %q, first resolved default = %q", session.SessionID, mainThread)
 	}
 
 	thread, err := manager.EnsureSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
@@ -129,16 +139,16 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	if threadAfterReset == thread {
 		t.Fatalf("conversation thread after reset = %q, want a new thread", threadAfterReset)
 	}
-	if len(persisted) != 3 {
-		t.Fatalf("persisted conversation snapshots = %#v, want create/reset/recreate", persisted)
+	if len(persisted) != 4 || len(persisted[0]) != 0 {
+		t.Fatalf("persisted conversation snapshots = %#v, want default/create/reset/recreate", persisted)
 	}
-	if got := persisted[0]["room-1"]; got != thread {
+	if got := persisted[1]["room-1"]; got != thread {
 		t.Fatalf("first persisted room thread = %q, want %q", got, thread)
 	}
-	if len(persisted[1]) != 0 {
-		t.Fatalf("reset persisted conversations = %#v, want empty", persisted[1])
+	if len(persisted[2]) != 0 {
+		t.Fatalf("reset persisted conversations = %#v, want empty", persisted[2])
 	}
-	if got := persisted[2]["room-1"]; got != threadAfterReset {
+	if got := persisted[3]["room-1"]; got != threadAfterReset {
 		t.Fatalf("recreated persisted room thread = %q, want %q", got, threadAfterReset)
 	}
 }
@@ -148,8 +158,8 @@ func TestAppServerManagerEnsureEngineSessionReplacesLoadedLegacyThread(t *testin
 	spec := testAppServerSessionSpec(t.TempDir())
 	var persistedFilePublishing map[string]bool
 	deps := testAppServerManagerDeps()
-	deps.OnConversationSessionsChange = func(_ *Session, _ map[string]string, filePublishing map[string]bool) error {
-		persistedFilePublishing = cloneFilePublishingConversations(filePublishing)
+	deps.SaveSessionMetadata = func(_ string, meta sessionMetadata) error {
+		persistedFilePublishing = cloneFilePublishingConversations(meta.FilePublishingConversations)
 		return nil
 	}
 	manager := newAppServerManager(deps)
@@ -196,7 +206,7 @@ func TestAppServerManagerRestoresConversationThreadMapping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureSession() error = %v", err)
 	}
-	if got, want := thread, "resumed-thread"; got != want {
+	if got, want := thread, "persisted-room-thread"; got != want {
 		t.Fatalf("EnsureSession() = %q, want restored %q", got, want)
 	}
 	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
@@ -220,9 +230,9 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	var persistedFilePublishing map[string]bool
 	sink := newFilePublicationTestSink(t, spec.WorkspaceDir, "generated-file.txt")
 	deps := testAppServerManagerDepsWithSink(sink)
-	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string, filePublishing map[string]bool) error {
-		persisted = cloneConversationSessions(conversations)
-		persistedFilePublishing = cloneFilePublishingConversations(filePublishing)
+	deps.SaveSessionMetadata = func(_ string, meta sessionMetadata) error {
+		persisted = cloneConversationSessions(meta.ConversationSessions)
+		persistedFilePublishing = cloneFilePublishingConversations(meta.FilePublishingConversations)
 		return nil
 	}
 	manager := newAppServerManager(deps)
@@ -234,7 +244,7 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	if err != nil {
 		t.Fatalf("cold EnsureEngineSession error=%v", err)
 	}
-	if threadID != "resumed-thread" || persisted["conversation-1"] != threadID {
+	if threadID != "cold-thread" || persisted["conversation-1"] != threadID {
 		t.Fatalf("resumed Engine thread=%q persisted=%v", threadID, persisted)
 	}
 	if !persistedFilePublishing["conversation-1"] {
@@ -276,10 +286,18 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	}
 }
 
-func TestAppServerManagerReplacesColdConversationWithoutFilePublishingProvenance(t *testing.T) {
-	withAppServerHelperCommand(t, "conversation-thread")
+func TestAppServerManagerReplacesEmptyColdConversationWithoutFilePublishingProvenance(t *testing.T) {
+	withAppServerHelperCommand(t, "room-configuration")
 	spec := testAppServerSessionSpec(t.TempDir())
-	spec.ConversationSessions = map[string]string{"conversation-1": "legacy-thread"}
+	path := filepath.Join(spec.RuntimeDir, sessionFileName)
+	if err := os.WriteFile(path, []byte(`{"session_id":"unused-default","conversation_sessions":{"conversation-1":"legacy-thread","active":"keep"},"empty_threads":{"legacy-thread":true,"unused-default":true}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := readSavedThreads(os.ReadFile, spec.RuntimeDir)
+	if err != nil || saved.SessionID != "unused-default" || saved.ConversationSessions["active"] != "keep" || saved.ConversationSessions["conversation-1"] != "legacy-thread" {
+		t.Fatalf("migrated bindings = %+v, %v", saved, err)
+	}
+	spec.ConversationSessions = saved.ConversationSessions
 	manager := newAppServerManager(testAppServerManagerDeps())
 	if _, err := manager.Start(context.Background(), spec); err != nil {
 		t.Fatal(err)
@@ -302,7 +320,7 @@ func TestAppServerManagerSerializesConversationPersistence(t *testing.T) {
 	entered := make(chan struct{}, 2)
 	release := make(chan struct{})
 	deps := testAppServerManagerDeps()
-	deps.OnConversationSessionsChange = func(_ *Session, _ map[string]string, _ map[string]bool) error {
+	deps.SaveSessionMetadata = func(_ string, meta sessionMetadata) error {
 		entered <- struct{}{}
 		<-release
 		return nil
@@ -354,8 +372,8 @@ func TestAppServerManagerEnsureSessionHandlesThreadNotificationBeforeResponse(t 
 	if err != nil {
 		t.Fatalf("EnsureSession(conversation) error = %v", err)
 	}
-	if thread != "conversation-thread-2" {
-		t.Fatalf("conversation thread = %q, want conversation-thread-2", thread)
+	if thread != "conversation-thread-1" {
+		t.Fatalf("conversation thread = %q, want conversation-thread-1", thread)
 	}
 }
 
@@ -473,7 +491,7 @@ func TestAppServerManagerPromptCompletesTurn(t *testing.T) {
 	if len(events) != 2 ||
 		events[0].Kind != SessionEventTextDelta ||
 		events[1].Kind != SessionEventPromptCompleted ||
-		events[1].SessionID != session.SessionID {
+		events[1].SessionID != "main-thread" {
 		t.Fatalf("events = %#v, want text delta then prompt completed event", events)
 	}
 }
@@ -670,7 +688,7 @@ func TestAppServerManagerVideoConfirmationContinuesAppServerTurn(t *testing.T) {
 	generated := 0
 	ctx := contract.WithVideoGenerationHandler(context.Background(), func(_ context.Context, id, prompt string, options modelprovider.VideoGenerationOptions, references ...int) error {
 		generated++
-		if id != "call-video" || prompt != "kitten in a bath" || options.Seconds != 6 || len(references) != 0 {
+		if id != "call-video" || prompt != "kitten in a bath" || options.Seconds != 6 || !options.ParametersConfirmed || len(references) != 0 {
 			t.Fatalf("video request = id:%q prompt:%q options:%+v refs:%v", id, prompt, options, references)
 		}
 		return nil
@@ -1149,7 +1167,7 @@ func TestConversationStructuredQuestionPolicy(t *testing.T) {
 					break
 				}
 				live := manager.liveSession(spec.RuntimeID)
-				waiter := live.appServerTurnWaiter(session.SessionID)
+				waiter := live.appServerTurnWaiter("main-thread")
 				if waiter == nil {
 					t.Fatal("question finished the turn before the model completed")
 				}
@@ -1200,7 +1218,7 @@ func TestAppServerManagerPromptCancellationReturnsConfirmedStop(t *testing.T) {
 		if live == nil {
 			return false
 		}
-		waiter := live.appServerTurnWaiter(session.SessionID)
+		waiter := live.appServerTurnWaiter("main-thread")
 		return waiter != nil && waiter.currentTurnID() == "turn-cancel"
 	})
 	cancel()
@@ -1316,7 +1334,7 @@ func TestAppServerManagerSilentTurnWaitsForCallerCancellation(t *testing.T) {
 				promptDone <- err
 			}()
 			waitForRuntime(t, func() bool {
-				waiter := manager.liveSession(spec.RuntimeID).appServerTurnWaiter(session.SessionID)
+				waiter := manager.liveSession(spec.RuntimeID).appServerTurnWaiter("main-thread")
 				return waiter != nil && waiter.currentTurnID() != ""
 			})
 			select {
@@ -1333,7 +1351,7 @@ func TestAppServerManagerSilentTurnWaitsForCallerCancellation(t *testing.T) {
 			case <-time.After(3 * time.Second):
 				t.Fatal("silent turn did not cancel")
 			}
-			if manager.liveSession(spec.RuntimeID).appServerTurnWaiter(session.SessionID) != nil {
+			if manager.liveSession(spec.RuntimeID).appServerTurnWaiter("main-thread") != nil {
 				t.Fatal("canceled turn retained waiter")
 			}
 		})
@@ -3421,7 +3439,8 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	}
 	mode := args[len(args)-1]
 	switch mode {
-	case "room-configuration":
+	case "room-configuration", "resume-during-turn", "missing-rollout":
+		var pendingResume any
 		threads := 0
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			params, _ := msg["params"].(map[string]any)
@@ -3432,8 +3451,25 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			case "thread/read":
 				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": params["threadId"]}}), true
 			case "thread/resume":
+				if params["threadId"] == "missing-native-id" {
+					return rpcError(msg["id"], -32000, "thread not found"), true
+				}
+				if mode == "missing-rollout" || params["threadId"] == "legacy-thread" || params["threadId"] == "unused" || params["threadId"] == "idle-room" {
+					return rpcError(msg["id"], -32600, "no rollout found for thread id "+fmt.Sprint(params["threadId"])), true
+				}
+				if mode == "resume-during-turn" && params["threadId"] == "cold-thread" {
+					pendingResume = msg["id"]
+					fmt.Fprintln(os.Stderr, "waiting for active turn before resuming cold thread")
+					return nil, false
+				}
 				return rpcResult(msg["id"], map[string]any{"threadId": params["threadId"]}), true
 			case "turn/start":
+				if pendingResume != nil {
+					if err := json.NewEncoder(os.Stdout).Encode(rpcResult(pendingResume, map[string]any{"threadId": "cold-thread"})); err != nil {
+						t.Fatal(err)
+					}
+					pendingResume = nil
+				}
 				threadID := params["threadId"]
 				turnID := fmt.Sprintf("turn-%d", index)
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID}})
@@ -3464,10 +3500,13 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			}
 			return nil, false
 		})
-	case "resume-fallback":
+	case "resume-fallback", "resume-inaccessible":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {
 			case "thread/read", "thread/resume":
+				if mode == "resume-inaccessible" {
+					return rpcError(msg["id"], -32000, "permission denied reading session"), true
+				}
 				return rpcError(msg["id"], -32000, "thread not found"), true
 			case "thread/start":
 				return rpcResult(msg["id"], map[string]any{"threadId": "new-thread"}), true
@@ -3475,13 +3514,18 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return nil, false
 			}
 		})
-	case "resume-success":
+	case "resume-success", "resume-mismatched-id":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			params, _ := msg["params"].(map[string]any)
+			id := params["threadId"]
+			if mode == "resume-mismatched-id" {
+				id = "resumed-thread"
+			}
 			switch msg["method"] {
 			case "thread/read":
-				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": "resumed-thread", "model": "saved-model", "reasoningEffort": "high"}}), true
+				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": id, "model": "saved-model", "reasoningEffort": "high"}}), true
 			case "thread/resume":
-				return rpcResult(msg["id"], map[string]any{"threadId": "resumed-thread"}), true
+				return rpcResult(msg["id"], map[string]any{"threadId": id}), true
 			case "thread/start":
 				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 			case "turn/start":
@@ -3512,9 +3556,6 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			if msg["method"] != "thread/start" {
 				return nil, false
-			}
-			if index == 1 {
-				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 			}
 			threadID := fmt.Sprintf("conversation-thread-%d", index)
 			writeRPCNotification(t, "thread/started", map[string]any{"threadId": threadID})
@@ -3550,9 +3591,9 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			switch msg["method"] {
 			case "thread/start":
 				threadStarts++
-				threadID := "main-thread"
+				threadID := "room-thread"
 				if threadStarts > 1 {
-					threadID = "room-thread"
+					threadID = "main-thread"
 				}
 				return rpcResult(msg["id"], map[string]any{"threadId": threadID}), true
 			case "thread/fork":
@@ -3620,7 +3661,6 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 		})
 	case "prompt-publish-file":
 		awaitingTool := false
-		threadStarts := 0
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			if awaitingTool {
 				assertServerRequestResponse(t, msg, 9010, func(result map[string]any) {
@@ -3641,13 +3681,6 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			case "thread/start":
 				params, _ := msg["params"].(map[string]any)
 				tools, _ := params["dynamicTools"].([]any)
-				if threadStarts == 0 {
-					threadStarts++
-					if len(tools) != 0 {
-						t.Fatalf("primary thread dynamicTools = %#v, want none", params["dynamicTools"])
-					}
-					return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
-				}
 				if len(tools) != 4 {
 					t.Fatalf("thread/start dynamicTools = %#v", params["dynamicTools"])
 				}
@@ -4428,6 +4461,35 @@ func TestAppServerCompletedMessageCorrectsStreamedDraft(t *testing.T) {
 	}
 }
 
+func TestGenerateImageToolReportsMissingModelBeforeConfirmation(t *testing.T) {
+	ctx := contract.WithImageGenerationPreflight(context.Background(), func(bool) error {
+		return errors.New("image_model_not_configured")
+	})
+	ctx = contract.WithImageGenerationHandler(ctx, func(context.Context, string, string, []int, modelprovider.ImageGenerationOptions) error {
+		t.Fatal("image handler called after failed preflight")
+		return nil
+	})
+	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
+	sink := &recordingSink{}
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = NewUserInputBroker(sink)
+	manager := newAppServerManager(deps)
+	request := appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
+		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"},
+	})}
+	response, err := manager.handleAppServerServerRequest("runtime-1", live, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := response.(map[string]any)
+	if result["success"] != false || result["contentItems"].([]map[string]any)[0]["text"] != "image_model_not_configured" {
+		t.Fatalf("unexpected tool response: %#v", result)
+	}
+	if events := sink.snapshot(); len(events) != 0 {
+		t.Fatalf("unexpected confirmation or status events: %+v", events)
+	}
+}
+
 func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 	calls := 0
 	ctx := contract.WithImageGenerationHandler(context.Background(), func(context.Context, string, string, []int, modelprovider.ImageGenerationOptions) error {
@@ -4494,9 +4556,18 @@ func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 
 func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testing.T) {
 	called := 0
-	ctx := contract.WithVideoGenerationHandler(context.Background(), func(context.Context, string, string, modelprovider.VideoGenerationOptions, ...int) error {
+	turnCtx, cancelTurn := context.WithCancel(context.Background())
+	defer cancelTurn()
+	ctx := contract.WithVideoGenerationHandler(turnCtx, func(context.Context, string, string, modelprovider.VideoGenerationOptions, ...int) error {
 		called++
 		return nil
+	})
+	ctx = contract.WithVideoGenerationPreflight(ctx, func(options modelprovider.VideoGenerationOptions) (modelprovider.VideoGenerationOptions, error) {
+		if options.Size == "1080P" {
+			return options, &modelprovider.VideoGenerationError{Code: "invalid_video_size", Message: "unsupported size 1080P"}
+		}
+		options.Size, options.Seconds = "480P", 4
+		return options, nil
 	})
 	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
 	sink := &recordingSink{}
@@ -4505,8 +4576,19 @@ func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testi
 	deps.UserInput = broker
 	manager := newAppServerManager(deps)
 	request := appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
-		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-video", "tool": "csgclaw_generate_video", "arguments": map[string]any{"prompt": "slow moving clouds", "reference_images": []int{3}, "size": "1280x720", "seconds": 6},
+		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-video", "tool": "csgclaw_generate_video", "arguments": map[string]any{"prompt": "slow moving clouds", "reference_images": []int{3}, "size": "1080P"},
 	})}
+	rejected, err := manager.handleAppServerServerRequest("runtime-1", live, request)
+	if err != nil || rejected.(map[string]any)["success"] != false || len(sink.snapshot()) != 0 || called != 0 {
+		t.Fatalf("unsupported size reached confirmation or generation: response=%#v err=%v", rejected, err)
+	}
+	feedback := rejected.(map[string]any)["contentItems"].([]map[string]any)[0]["text"].(string)
+	if !strings.Contains(feedback, "request_user_input") || !strings.Contains(feedback, "unsupported size 1080P") {
+		t.Fatalf("tool feedback = %q, want parameter error and interactive recovery guidance", feedback)
+	}
+	request.Params = mustJSONRaw(t, map[string]any{
+		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-video-defaults", "tool": "csgclaw_generate_video", "arguments": map[string]any{"prompt": "slow moving clouds", "reference_images": []int{3}},
+	})
 	result := make(chan map[string]any, 1)
 	go func() {
 		response, err := manager.handleAppServerServerRequest("runtime-1", live, request)
@@ -4518,12 +4600,10 @@ func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testi
 	}()
 	requestID := waitForUserInputRequest(t, sink)
 	question, ok := broker.Get(requestID)
-	if !ok || len(question.Questions) != 1 || !strings.Contains(question.Questions[0].Question, "Duration: 6 seconds") || !strings.Contains(question.Questions[0].Question, "Reference images: 1") {
+	if !ok || len(question.Questions) != 1 || !strings.Contains(question.Questions[0].Question, "Size: 480P") || !strings.Contains(question.Questions[0].Question, "Duration: 4 seconds") || !strings.Contains(question.Questions[0].Question, "Reference images: 1") {
 		t.Fatalf("confirmation question = %#v", question)
 	}
-	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{mediaGenerationConfirmationQuestionID: {Answers: []string{mediaGenerationConfirmationTextFor("en", "video").cancel}}}}}); err != nil {
-		t.Fatalf("cancel generation: %v", err)
-	}
+	cancelTurn()
 	select {
 	case response := <-result:
 		if response["success"] != false {
@@ -4531,6 +4611,9 @@ func TestGenerateVideoToolDoesNotCallProviderWhenConfirmationIsCanceled(t *testi
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("video generation did not stop after cancellation")
+	}
+	if snapshot, ok := broker.Get(requestID); !ok || snapshot.Status != activity.UserInputStatusCanceled {
+		t.Fatalf("confirmation after turn cancellation = %#v", snapshot)
 	}
 	if called != 0 {
 		t.Fatalf("video provider invoked after cancellation: %d", called)

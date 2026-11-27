@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -287,6 +289,24 @@ type memoryAgents struct {
 	client *MemoryClient
 }
 
+func (a *memoryAgents) ensureSkillEnabled(ctx context.Context, id, name string) error {
+	return a.client.lifecycle.TryUpdateFiles(ctx, id, func() error {
+		a.client.mu.Lock()
+		defer a.client.mu.Unlock()
+		item, ok := a.client.agents[id]
+		if !ok || !slices.Contains(item.Spec.Skills, name) {
+			return os.ErrNotExist
+		}
+		if _, ok := item.Spec.SkillStates[name]; ok {
+			delete(item.Spec.SkillStates, name)
+			item.UpdatedAt = time.Now().UTC()
+			item.ResourceVersion = item.UpdatedAt.Format(time.RFC3339Nano)
+			a.client.agents[id] = item
+		}
+		return nil
+	})
+}
+
 func (c *MemoryClient) withExtensionReadinessLocked(item agentengine.Agent) agentengine.Agent {
 	for _, extension := range c.extensions[item.ID] {
 		if extension.Spec.FailurePolicy == agentengine.RuntimeExtensionBlockRuntime && (extension.Status.State != agentengine.RuntimeExtensionConfigured || !extension.Status.RuntimeLoaded || extension.Status.Generation != extension.Status.ObservedGeneration) {
@@ -448,6 +468,35 @@ func mergeMemoryUpdate(current agentengine.AgentSpec, request agentengine.AgentU
 }
 
 func (a *memoryAgents) Update(ctx context.Context, agentID string, request agentengine.AgentUpdateRequest) (agentengine.Agent, error) {
+	if in := request.CatalogInstall; in != nil {
+		err := a.client.lifecycle.TryUpdateFiles(ctx, agentID, func() error {
+			a.client.mu.Lock()
+			defer a.client.mu.Unlock()
+			item, ok := a.client.agents[agentID]
+			if !ok {
+				return os.ErrNotExist
+			}
+			if slices.Contains(item.Spec.Skills, in.Name) {
+				if !in.Replace {
+					return os.ErrExist
+				}
+			} else {
+				item.Spec.Skills = append(item.Spec.Skills, in.Name)
+			}
+			a.client.agents[agentID] = item
+			return nil
+		})
+		if err != nil {
+			return agentengine.Agent{}, err
+		}
+		return a.Get(ctx, agentID, agentengine.AgentGetOptions{})
+	}
+	if request.EnsureEnabledSkill != "" {
+		if err := a.ensureSkillEnabled(ctx, agentID, request.EnsureEnabledSkill); err != nil {
+			return agentengine.Agent{}, err
+		}
+		return a.Get(ctx, agentID, agentengine.AgentGetOptions{})
+	}
 	invalidate := false
 	defer func() {
 		if invalidate {

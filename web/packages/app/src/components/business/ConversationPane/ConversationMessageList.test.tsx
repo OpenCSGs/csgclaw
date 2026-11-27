@@ -1,7 +1,10 @@
 import { createRef } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 import * as memoryAPI from "@/api/agents";
+import * as activitiesAPI from "@/api/agentActivities";
 import { ConversationMessageList, type ConversationMessageListProps } from "./ConversationMessageList";
 
 function messageListProps(): ConversationMessageListProps {
@@ -28,6 +31,48 @@ function messageListProps(): ConversationMessageListProps {
 }
 
 describe("ConversationMessageList render isolation", () => {
+  it("keeps the video card after the confirmation when the agent reply moves", () => {
+    const props = messageListProps();
+    props.usersById.set("local", { id: "local", name: "Local user" });
+    props.currentUserID = "local";
+    const turn = { id: "turn", sender_id: "manager", content: "Preparing", created_at: "2026-10-12T08:00:00Z" };
+    const confirmation = {
+      id: "answer",
+      sender_id: "local",
+      content: "Confirm generation",
+      created_at: "2026-10-12T08:00:01Z",
+    };
+    const video = {
+      id: "video",
+      sender_id: "manager",
+      content: "Animate a kitten",
+      created_at: "2026-10-12T08:00:02Z",
+      metadata: { video_generation: { state: "generating" }, codex: { turn_message_id: "turn" } },
+    };
+    const messages = [turn, confirmation, video];
+    const { container, rerender } = render(
+      <ConversationMessageList
+        {...props}
+        conversation={{ ...props.conversation, messages }}
+        visibleMessages={messages}
+      />,
+    );
+    const messageIDs = () =>
+      Array.from(container.querySelectorAll("[data-message-id]"), (node) => node.getAttribute("data-message-id"));
+    expect(messageIDs()).toEqual(["turn", "answer", "video"]);
+    const cardMessage = container.querySelector('[data-message-id="video"]');
+    const finalMessages = [confirmation, video, { ...turn, content: "Submitted", created_at: "2026-10-12T08:00:03Z" }];
+    rerender(
+      <ConversationMessageList
+        {...props}
+        conversation={{ ...props.conversation, messages: finalMessages }}
+        visibleMessages={finalMessages}
+      />,
+    );
+    expect(messageIDs()).toEqual(["answer", "video", "turn"]);
+    expect(container.querySelector('[data-message-id="video"]')).toBe(cardMessage);
+  });
+
   it.each([
     [
       "agent_archived",
@@ -94,7 +139,6 @@ describe("ConversationMessageList render isolation", () => {
           onPreviewUser={latestPreview}
           onOpenThread={latestThread}
           onMessageAction={() => undefined}
-          onQuestionSelect={() => undefined}
           onCitationSelect={() => undefined}
           onPreviewAttachment={() => undefined}
         />,
@@ -107,6 +151,88 @@ describe("ConversationMessageList render isolation", () => {
     expect(firstPreview).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByRole("button", { name: "replyInThread" })[0]);
     expect(latestThread).toHaveBeenCalledWith(props.visibleMessages[0]);
+  });
+
+  it("keeps failed answers retryable and hides the confirmation as soon as submission succeeds", async () => {
+    const user = userEvent.setup();
+    const respond = vi
+      .spyOn(activitiesAPI, "respondToUserInput")
+      .mockRejectedValueOnce(new Error("Try again"))
+      .mockResolvedValueOnce({ id: "layout-request", status: "answered", questions: [] });
+    const props = messageListProps();
+    const question = {
+      id: "choice-message",
+      sender_id: "manager",
+      content: "## Questions\n\nPick a layout",
+      metadata: {
+        codex: { turn_id: "layout-turn" },
+        csgclaw: {
+          agent_activity: {
+            type: CSGCLAW_AGENT_ACTIVITY_TYPE,
+            content: {
+              msgtype: AgentActivityMsgTypes.question,
+              question: {
+                id: "layout-request",
+                status: "pending",
+                questions: [
+                  { id: "layout", header: "Layout", question: "Pick a layout", options: [{ label: "Minimal" }] },
+                ],
+              },
+            },
+          },
+        },
+      },
+    };
+    props.usersById.set("user", { id: "user", name: "User" });
+    const userPrompt = { id: "prompt", sender_id: "user", content: "Format the article" };
+    const answer = {
+      id: "answer",
+      sender_id: "user",
+      content: "Minimal selected",
+      metadata: {
+        csgclaw: { request_user_input: { kind: "answer", request_id: "layout-request" } },
+      },
+    };
+    const final = {
+      id: "final",
+      sender_id: "manager",
+      content: "Article formatted",
+      created_at: "2026-11-25T02:00:03Z",
+      metadata: { codex: { delivery_kind: "final" } },
+    };
+    const settled = structuredClone(question);
+    Object.assign(settled.metadata.csgclaw.agent_activity.content.question, {
+      status: "answered",
+      resolved_at: "2026-11-25T02:00:02Z",
+    });
+    const view = (messages: ConversationMessageListProps["visibleMessages"]) => (
+      <ConversationMessageList
+        {...props}
+        conversation={{ ...props.conversation, messages }}
+        visibleMessages={messages}
+      />
+    );
+    const { rerender } = render(view([userPrompt, question]));
+    const option = await screen.findByRole("radio", { name: /Minimal/ });
+    expect(option.closest("[data-message-id=choice-message]")).not.toBeNull();
+    await user.click(option);
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(option).toHaveAttribute("aria-checked", "true");
+    await user.click(option);
+    await waitFor(() => expect(option.closest("[data-message-id=choice-message]")).not.toBeInTheDocument());
+    expect(respond).toHaveBeenCalledTimes(2);
+
+    const ordinaryMessage = { id: "ordinary", sender_id: "user", content: "## 回答\n\n我选极简风" };
+    rerender(view([userPrompt, settled, answer, ordinaryMessage]));
+    expect(screen.getByText("我选极简风")).toBeInTheDocument();
+    expect(screen.queryByText("Minimal selected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pick a layout")).not.toBeInTheDocument();
+    rerender(view([userPrompt, settled, answer, ordinaryMessage, final]));
+    expect(screen.getByText("Format the article")).toBeInTheDocument();
+    expect(screen.getByText("Article formatted")).toBeInTheDocument();
+    expect(screen.queryByText("Minimal selected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pick a layout")).not.toBeInTheDocument();
+    respond.mockRestore();
   });
 
   it("renders new history, translation and theme changes without losing existing messages", () => {

@@ -1,6 +1,7 @@
 import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { OutputTokenRate } from "@/components/business/ConversationPane/OutputTokenRate";
 import { WorkingTurnStatus } from "@/components/business/ConversationPane/WorkingTurnStatus";
 import type { ConversationWorkingParticipant, VoidOrPromise } from "@/components/business/ConversationPane";
 import { resolveMessageAgent } from "@/components/business/ConversationPane/MessageTimeline";
@@ -51,6 +52,11 @@ export function PendingTurnReplies({
         <div className={`message-card ${messageLayoutStyles["message-card"]}`}>
           <div className={`message-meta ${messageLayoutStyles["message-meta"]}`}>
             <span className={`message-author ${messageLayoutStyles["message-author"]}`}>{participant.name}</span>
+            <OutputTokenRate
+              rate={participant.outputTokensPerSecond}
+              expiresAt={participant.outputRateExpiresAt}
+              t={t}
+            />
           </div>
           <div className={styles.status} role="status" aria-live="polite">
             <WorkingTurnStatus

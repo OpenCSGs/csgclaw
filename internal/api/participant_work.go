@@ -21,6 +21,34 @@ const (
 	participantTurnStopTimeout     = 10 * time.Second
 )
 
+type pendingAutonomousStop struct {
+	count int
+	done  chan struct{}
+}
+
+func (h *Handler) beginAutonomousStop(roomID string) func() {
+	h.autonomousStopsMu.Lock()
+	if h.autonomousStops == nil {
+		h.autonomousStops = make(map[string]*pendingAutonomousStop)
+	}
+	stop := h.autonomousStops[roomID]
+	if stop == nil {
+		stop = &pendingAutonomousStop{done: make(chan struct{})}
+		h.autonomousStops[roomID] = stop
+	}
+	stop.count++
+	h.autonomousStopsMu.Unlock()
+	return func() {
+		h.autonomousStopsMu.Lock()
+		defer h.autonomousStopsMu.Unlock()
+		stop.count--
+		if stop.count == 0 {
+			delete(h.autonomousStops, roomID)
+			close(stop.done)
+		}
+	}
+}
+
 func (h *Handler) putParticipantWorkLease(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(chi.URLParam(r, "channel")) != "csgclaw" {
 		http.NotFound(w, r)
@@ -170,6 +198,10 @@ func (h *Handler) stopParticipantWork(w http.ResponseWriter, r *http.Request) {
 	var autonomous bool
 	if h.im != nil {
 		pauseSource, autonomous = h.im.AutonomousPauseWatermark(request.RoomID)
+	}
+	if autonomous {
+		finishStop := h.beginAutonomousStop(request.RoomID)
+		defer finishStop()
 	}
 	stopCtx, cancel := context.WithTimeout(r.Context(), participantTurnStopTimeout)
 	defer cancel()

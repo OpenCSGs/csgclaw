@@ -425,7 +425,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 					if !firstCompletion {
 						return
 					}
-					m.publishReasoningSummary(runtimeID, threadID, turnID, itemID, text)
+					m.publishReasoningSummary(runtimeID, threadID, turnID, itemID, text, true)
 				}
 			}
 			m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, MessageID: itemID, Kind: kind})
@@ -537,7 +537,7 @@ func (m *appServerManager) handleReasoningDelta(runtimeID string, live *liveSess
 	waiter := live.appServerTurnWaiter(threadID)
 	if active, summary := waiter.reasoningStream(turnID); active && summary {
 		if delta := waiter.recordReasoningSummaryDelta(itemID, method, index, text); delta != "" {
-			m.publishReasoningSummary(runtimeID, threadID, turnID, itemID, delta)
+			m.publishReasoningSummary(runtimeID, threadID, turnID, itemID, delta, false)
 		}
 	}
 }
@@ -633,14 +633,18 @@ func (w *appServerTurnWaiter) completeReasoningSummary(itemID string, snapshot, 
 	return tail.String(), true
 }
 
-func (m *appServerManager) publishReasoningSummary(runtimeID, threadID, turnID, itemID, text string) {
+func (m *appServerManager) publishReasoningSummary(runtimeID, threadID, turnID, itemID, text string, snapshot bool) {
 	if text == "" {
 		return
 	}
-	m.publishAppServerEvent(SessionEvent{
+	event := SessionEvent{
 		RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, MessageID: itemID,
 		Kind: activitypkg.RuntimeEventReasoningSummary, Text: text,
-	})
+	}
+	if snapshot {
+		event.Payload = map[string]any{"text_snapshot": true}
+	}
+	m.publishAppServerEvent(event)
 }
 
 func cloneAppServerParams(params map[string]any) map[string]any {
@@ -1140,7 +1144,12 @@ func (s *liveSession) appServerPublishesFilesForThread(threadID string) bool {
 }
 
 func (m *appServerManager) appServerPrimaryThreadID(live *liveSession) string {
-	if live == nil || live.session == nil {
+	if live == nil {
+		return ""
+	}
+	live.mu.Lock()
+	defer live.mu.Unlock()
+	if live.session == nil {
 		return ""
 	}
 	return strings.TrimSpace(live.session.SessionID)

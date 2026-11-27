@@ -61,7 +61,7 @@ export function BrowserTab({
   }, [native.available, url]);
   const externalURL = html === undefined ? normalizeBrowserURL(address) || normalizeBrowserURL(url) : "";
   return (
-    <section className="chat-browser-tab" aria-label={t("chatBrowser")}>
+    <section data-chat-browser-tab className={chatSidePanelStyles["chat-browser-tab"]} aria-label={t("chatBrowser")}>
       <form
         className={chatSidePanelStyles["chat-browser-toolbar"]}
         onSubmit={(event) => {
@@ -186,7 +186,7 @@ export function BrowserTab({
         </div>
       ) : null}
       {native.available && url ? (
-        <div className="chat-browser-native" ref={native.hostRef}>
+        <div data-native-browser className={chatSidePanelStyles["chat-browser-native"]} ref={native.hostRef}>
           {native.failed ? (
             <div className={chatSidePanelStyles["chat-side-status"]} role="alert">
               <span>{t("chatBrowserLoadFailed")}</span>

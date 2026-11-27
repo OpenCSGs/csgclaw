@@ -96,7 +96,7 @@ export function AgentModelFields({
           providers={selectedProvider ? [{ ...selectedProvider, models: [...models] }] : []}
           providerID={providerID}
           modelID={modelID}
-          disabled={busy || !selectedProvider || selectedProvider.disabled || !models.length}
+          disabled={busy}
           onChoose={(id, model) => {
             if (id === MODEL_PROVIDER_IDS.OpenCSG && !onRequireOpenCSGAuth()) return;
             onPatch({ provider: providerNameForProviderID(id), model_provider_id: id, model_id: model });

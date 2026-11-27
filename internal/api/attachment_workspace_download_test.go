@@ -136,13 +136,21 @@ func TestWorkspaceAttachmentDownloadReflectsEditsAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	roomFile := msg.Attachments[0]
-	headers, _ = request("GET", roomFile.DownloadURL, nil, 200)
-	if headers.Get("Cache-Control") != "private, max-age=31536000, immutable" {
-		t.Fatalf("room ID cache = %s", headers.Get("Cache-Control"))
+	for _, method := range []string{"GET", "HEAD"} {
+		headers, _ := request(method, roomFile.DownloadURL, nil, 200)
+		if headers.Get("Cache-Control") != "no-store" {
+			t.Fatalf("%s room attachment Cache-Control = %q, want no-store", method, headers.Get("Cache-Control"))
+		}
 	}
 	headers, _ = request("GET", "/api/v1/rooms/"+room+"/attachments/"+roomFile.ID, map[string]string{"Authorization": "Bearer " + h.serverAccessToken}, 200)
 	if headers.Get("Cache-Control") != "no-store" || headers.Get("X-CSGClaw-File-SHA256") != roomFile.SHA256 {
 		t.Fatalf("room download: %v", headers)
+	}
+	if err := h.im.DeleteRoom(room); err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{"GET", "HEAD"} {
+		request(method, roomFile.DownloadURL, nil, 404)
 	}
 }
 

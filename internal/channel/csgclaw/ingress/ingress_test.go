@@ -112,3 +112,39 @@ func TestTaskTopicSignalsItsRunningRequestAndKeepsQueuedFallback(t *testing.T) {
 		t.Fatalf("queued task topic should run after its request, got %d", got)
 	}
 }
+
+func TestVideoContinuationOnlyRunsWhileItsSourceIsCurrent(t *testing.T) {
+	w := testBufferedWorker()
+	w.active = make(map[agentengine.ConversationKey]map[string]activeEvent)
+	if _, accepted, err := w.acceptAndEnqueue(channel.Event{RoomID: "r", MessageID: "original", Text: "first"}); err != nil || !accepted {
+		t.Fatalf("original: accepted=%t err=%v", accepted, err)
+	}
+	continuation, accepted, err := w.acceptAndEnqueue(channel.Event{RoomID: "r", MessageID: "feedback", Text: "failure", ContinuationOf: "original"})
+	if err != nil || !accepted {
+		t.Fatalf("fresh continuation: accepted=%t err=%v", accepted, err)
+	}
+	second, accepted, err := w.acceptAndEnqueue(channel.Event{RoomID: "r", MessageID: "feedback-2", Text: "another failure", ContinuationOf: "original"})
+	if err != nil || !accepted || !w.isCurrentGeneration(second) || !w.IsCurrent(second.conversationKey, "original") {
+		t.Fatalf("sibling continuation: accepted=%t err=%v", accepted, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if !w.setActive(continuation, activeEvent{cancel: cancel}) {
+		t.Fatal("fresh continuation could not start")
+	}
+	if _, accepted, err := w.acceptAndEnqueue(channel.Event{RoomID: "r", MessageID: "newer", Text: "second"}); err != nil || !accepted {
+		t.Fatalf("newer message: accepted=%t err=%v", accepted, err)
+	}
+	if ctx.Err() != context.Canceled {
+		t.Fatal("newer request did not cancel the active continuation")
+	}
+	if w.setActive(second, activeEvent{}) {
+		t.Fatal("queued continuation started after a newer user request")
+	}
+	if _, accepted, err := w.acceptAndEnqueue(channel.Event{RoomID: "r", MessageID: "late-feedback", Text: "failure", ContinuationOf: "original"}); err != nil || accepted {
+		t.Fatalf("stale continuation: accepted=%t err=%v", accepted, err)
+	}
+	if !w.IsCurrent(continuation.conversationKey, "newer") {
+		t.Fatal("stale continuation changed the latest source")
+	}
+}

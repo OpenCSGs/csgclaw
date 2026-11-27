@@ -23,7 +23,13 @@ type openAIModelsResponse struct {
 		MaxOutputTokens json.RawMessage `json:"max_output_tokens"`
 		Task            any             `json:"task"`
 		Tasks           any             `json:"tasks"`
-		Availability    *struct {
+		Domain          string          `json:"domain"`
+		APISupported    json.RawMessage `json:"api_supported"`
+		Modalities      struct {
+			Input  []string `json:"input_modalities"`
+			Output []string `json:"output_modalities"`
+		} `json:"modalities"`
+		Availability *struct {
 			IsAvailable *bool `json:"is_available"`
 		} `json:"availability"`
 		Metadata struct {
@@ -74,7 +80,7 @@ func (e *ResponsesAPIStatusError) Error() string {
 }
 
 func (e *ResponsesAPIStatusError) Is(target error) bool {
-	return target == ErrResponsesAPIUnsupported && strings.TrimSpace(e.Operation) != "chat completions" && (e.StatusCode == http.StatusNotFound || e.StatusCode == http.StatusMethodNotAllowed)
+	return target == ErrResponsesAPIUnsupported && strings.TrimSpace(e.Operation) != "chat completions" && ResponsesEndpointUnsupported(e.StatusCode, []byte(e.Body))
 }
 
 func (e *ResponsesAPIStatusError) Code() string {
@@ -189,10 +195,20 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 		imageTasks := append(taskValues(item.Task), taskValues(item.Tasks)...)
 		imageTasks = append(imageTasks, taskValues(item.Metadata.Tasks)...)
 		capabilities, isImage := imageGenerationCapabilities(imageTasks)
+		if strings.EqualFold(item.Domain, "ImageGeneration") || hasModality(item.Modalities.Output, "image") {
+			isImage = true
+			capabilities.TextToImage = capabilities.TextToImage || hasModality(item.Modalities.Input, "text")
+			capabilities.ImageToImage = capabilities.ImageToImage || hasModality(item.Modalities.Input, "image")
+		}
+		legacyGPTImage := !isImage && !taskPresent(declaredTasks) && IsGPTImageModel(id)
+		if !legacyGPTImage && capabilities == (modelcap.ImageGeneration{}) && (isImage || !taskPresent(declaredTasks)) {
+			capabilities = KnownImageGenerationModes(id)
+			isImage = isImage || capabilities != (modelcap.ImageGeneration{})
+		}
 		if capabilities != (modelcap.ImageGeneration{}) {
 			imageMetadata[id] = capabilities
 		}
-		if isImage || (!taskPresent(declaredTasks) && IsGPTImageModel(id)) {
+		if isImage || legacyGPTImage {
 			imageModels = append(imageModels, id)
 		}
 		if taskSupportsVideoGeneration(declaredTasks) {
@@ -201,14 +217,19 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 				videoMetadata[id] = capabilities
 			}
 		}
-		if taskSupportsVisionInput(declaredTasks) {
+		if taskSupportsVisionInput(declaredTasks) || hasModality(item.Modalities.Input, "image") && hasModality(item.Modalities.Output, "text") {
 			visionModels = append(visionModels, id)
 		}
 		chatTasks := declaredTasks
 		if isImage {
 			chatTasks = imageTasks
 		}
-		if !taskPresent(chatTasks) || taskSupportsTextGeneration(chatTasks) {
+		switch strings.ToLower(item.Domain) {
+		case "embedding", "audio", "videogeneration", "3dgeneration":
+			continue
+		}
+		if taskSupportsTextGeneration(chatTasks) || hasModality(item.Modalities.Output, "text") ||
+			(!isImage && !taskPresent(chatTasks) && len(item.Modalities.Output) == 0) {
 			models = append(models, id)
 		}
 	}
@@ -216,6 +237,15 @@ func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL stri
 		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
 	}
 	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, ImageMetadata: imageMetadata, VideoModels: videoModels, VisionModels: visionModels, ModelMetadata: metadata, VideoMetadata: videoMetadata}, nil
+}
+
+func hasModality(modalities []string, want string) bool {
+	for _, value := range modalities {
+		if strings.EqualFold(value, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func taskPresent(task any) bool {
@@ -298,6 +328,10 @@ func requestOpenAIModels(ctx context.Context, client *http.Client, modelsURL, ap
 
 func CheckResponsesAPI(ctx context.Context, baseURL, apiKey, modelID string, headers map[string]string) error {
 	return CheckResponsesAPIWithClient(ctx, &http.Client{Timeout: 10 * time.Second}, baseURL, apiKey, modelID, headers)
+}
+
+func CheckChatCompletionsAPI(ctx context.Context, baseURL, apiKey, modelID string, headers map[string]string) error {
+	return CheckChatCompletionsAPIWithClient(ctx, &http.Client{Timeout: 10 * time.Second}, baseURL, apiKey, modelID, headers)
 }
 
 func CheckResponsesOrChatCompletionsAPI(ctx context.Context, baseURL, apiKey, modelID string, headers map[string]string) error {

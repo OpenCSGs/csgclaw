@@ -3,6 +3,7 @@ package im
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -69,12 +70,42 @@ func (s *Service) RoomAttachmentFile(roomID, attachmentID string) (AttachmentFil
 	if !ok {
 		return AttachmentFile{}, ErrRoomNotFound
 	}
-	for _, item := range roomAttachmentReferences(room) {
-		if item.ID == strings.TrimSpace(attachmentID) {
-			return s.AttachmentFile(item.ID)
+	attachmentID = strings.TrimSpace(attachmentID)
+	if attachmentID == "" || !roomReferencesAttachment(room, attachmentID) {
+		return AttachmentFile{}, ErrRoomAttachmentNotFound
+	}
+	if strings.TrimSpace(s.statePath) == "" {
+		return AttachmentFile{}, fmt.Errorf("attachment storage is not configured")
+	}
+	return s.attachmentFileLocked(attachmentID, true)
+}
+
+func (s *Service) hasRoomAttachmentReferenceLocked(originID, attachmentID string) bool {
+	if room := s.rooms[originID]; room != nil && roomReferencesAttachment(room, attachmentID) {
+		return true
+	}
+	for id, room := range s.rooms {
+		if id != originID && roomReferencesAttachment(room, attachmentID) {
+			return true
 		}
 	}
-	return AttachmentFile{}, ErrRoomAttachmentNotFound
+	return false
+}
+
+func roomReferencesAttachment(room *Room, attachmentID string) bool {
+	contains := func(messages []Message) bool {
+		for _, message := range messages {
+			for _, attachment := range message.Attachments {
+				if attachment.ID == attachmentID {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return contains(room.Messages) || slices.ContainsFunc(room.Threads, func(thread ThreadState) bool {
+		return contains(thread.Context)
+	})
 }
 
 func roomAttachmentReferences(room *Room) []apitypes.RoomAttachment {

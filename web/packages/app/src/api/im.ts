@@ -256,3 +256,12 @@ export async function sendMessageRequest(
   if (message.id) trackDiagnosticSubmission(payload.room_id, message.id, started);
   return message;
 }
+
+export async function fetchParticipantWorkServerClock(signal: AbortSignal) {
+  const startedAt = performance.now();
+  const response = await fetch(resolveRequestPath("healthz"), { cache: "no-store", signal });
+  const receivedAt = performance.now();
+  const serverTime = Number(response.headers.get("X-CSGClaw-Server-Time-Ms"));
+  if (!response.ok || !Number.isSafeInteger(serverTime) || serverTime <= 0) return undefined;
+  return { serverTime, measuredAt: (startedAt + receivedAt) / 2 };
+}

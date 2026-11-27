@@ -169,9 +169,11 @@
 }
 
 .menuValue {
-  margin-left: 16px;
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .hintDot {
@@ -207,4 +209,36 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.footer {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.upgradeLink {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  color: var(--accent-text);
+  font-size: 12px;
+  text-align: start;
+}
+
+.upgradeLink:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.upgradeLink:hover {
+  background: var(--primary-soft);
+}
+
+.upgradeLink svg {
+  flex: none;
 }

@@ -1,5 +1,16 @@
-import { useState } from "react";
-import { Check, ChevronUp, LogOut, Monitor, Moon, Sun, User, Settings as SettingsIcon } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  Check,
+  ChevronRight,
+  ChevronUp,
+  LogOut,
+  MessageCircleMore,
+  Monitor,
+  Moon,
+  Sun,
+  User,
+  Settings as SettingsIcon,
+} from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import {
   DropdownMenuContent,
@@ -8,6 +19,9 @@ import {
   DropdownMenuRoot,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "csgclaw-ui";
 import { avatarFallbackText } from "@/shared/avatar";
 import { classNames } from "@/shared/lib/classNames";
@@ -36,6 +50,7 @@ export type WorkspaceUserMenuProps = {
   onOpenCSGLogout: () => void;
   onOpenProfile: () => void;
   onOpenSettings: () => void;
+  onOpenFeedback: (trigger: HTMLButtonElement | null) => void;
   onThemeChange: (theme: ThemeMode) => void;
 };
 
@@ -57,17 +72,21 @@ export function WorkspaceUserMenu({
   onOpenCSGLogout,
   onOpenProfile,
   onOpenSettings,
+  onOpenFeedback,
   onThemeChange,
 }: WorkspaceUserMenuProps) {
+  const accountTrigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const name = currentUser?.name || currentUser?.id || t("localIdentityFallback");
   const role = currentUser?.role || "";
   const iconOnly = presentation === "icon";
+  const appearanceValue = t(THEME_OPTIONS.find((option) => option.key === theme)?.labelKey ?? "themeSystem");
 
   return (
     <DropdownMenuRoot open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button
+          ref={accountTrigger}
           type="button"
           className={classNames(styles.trigger, iconOnly && styles.triggerIconOnly, open && styles.triggerOpen)}
           aria-label={t("iaUserMenuLabel")}
@@ -164,45 +183,63 @@ export function WorkspaceUserMenu({
           {t("settings")}
         </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
-
-        <DropdownMenuLabel>{t("themeSwitcher")}</DropdownMenuLabel>
-        {THEME_OPTIONS.map((option) => (
-          <DropdownMenuItem
-            key={option.key}
-            onSelect={(event) => {
-              event.preventDefault();
-              onThemeChange(option.key);
-            }}
-          >
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
             <span className={styles.menuIcon} aria-hidden="true">
-              <option.icon />
+              <Monitor />
             </span>
-            <span className={styles.menuSubmenuLabel}>{t(option.labelKey)}</span>
-            {theme === option.key ? <Check size={14} aria-hidden="true" /> : null}
-          </DropdownMenuItem>
-        ))}
+            <span className={styles.menuSubmenuLabel}>{t("sidebarAppearanceLanguage")}</span>
+            <span className={styles.menuValue}>{appearanceValue}</span>
+            <ChevronRight size={14} aria-hidden="true" />
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent collisionPadding={12}>
+            <DropdownMenuLabel>{t("themeSwitcher")}</DropdownMenuLabel>
+            {THEME_OPTIONS.map((option) => (
+              <DropdownMenuItem
+                key={option.key}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onThemeChange(option.key);
+                }}
+              >
+                <span className={styles.menuIcon} aria-hidden="true">
+                  <option.icon />
+                </span>
+                <span className={styles.menuSubmenuLabel}>{t(option.labelKey)}</span>
+                {theme === option.key ? <Check size={14} aria-hidden="true" /> : null}
+              </DropdownMenuItem>
+            ))}
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuLabel>{t("languageSwitcher")}</DropdownMenuLabel>
+            {(
+              [
+                { key: "zh" as LocaleCode, labelKey: "languageOptionZh" as const },
+                { key: "en" as LocaleCode, labelKey: "languageOptionEn" as const },
+              ] satisfies Array<{ key: LocaleCode; labelKey: "languageOptionZh" | "languageOptionEn" }>
+            ).map((option) => (
+              <DropdownMenuItem
+                key={option.key}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onLocaleChange(option.key);
+                }}
+              >
+                <span className={styles.menuSubmenuLabel}>{t(option.labelKey)}</span>
+                {locale === option.key ? <Check size={14} aria-hidden="true" /> : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
 
         <DropdownMenuSeparator />
-
-        <DropdownMenuLabel>{t("languageSwitcher")}</DropdownMenuLabel>
-        {(
-          [
-            { key: "zh" as LocaleCode, labelKey: "languageOptionZh" as const },
-            { key: "en" as LocaleCode, labelKey: "languageOptionEn" as const },
-          ] satisfies Array<{ key: LocaleCode; labelKey: "languageOptionZh" | "languageOptionEn" }>
-        ).map((option) => (
-          <DropdownMenuItem
-            key={option.key}
-            onSelect={(event) => {
-              event.preventDefault();
-              onLocaleChange(option.key);
-            }}
-          >
-            <span className={styles.menuSubmenuLabel}>{t(option.labelKey)}</span>
-            {locale === option.key ? <Check size={14} aria-hidden="true" /> : null}
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuItem onSelect={() => onOpenFeedback(accountTrigger.current)}>
+          <span className={styles.menuIcon} aria-hidden="true">
+            <MessageCircleMore size={16} />
+          </span>
+          {t("feedbackMenuAction")}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenuRoot>
   );

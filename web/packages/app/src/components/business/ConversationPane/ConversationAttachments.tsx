@@ -10,7 +10,7 @@ import {
   formatAttachmentSize,
   isImageAttachment,
   splitAttachmentFilename,
-  type AttachmentDraft,
+  type ComposerAttachmentDraft,
   type AttachmentPreviewItem,
   type MessageAttachment,
 } from "@/models/attachments";
@@ -26,7 +26,7 @@ export function AttachmentDraftStrip({
   onPreviewAttachment,
   onRemove,
 }: {
-  drafts: readonly AttachmentDraft[];
+  drafts: readonly ComposerAttachmentDraft[];
   progress?: number;
   status?: AttachmentDraftStatus;
   t: TranslateFn;
@@ -93,7 +93,7 @@ export function AttachmentDraftStrip({
     updateScrollState();
   }
 
-  const previewItems = drafts.map(draftPreviewItem);
+  const previewItems = drafts.filter((draft) => draft.file).map(draftPreviewItem);
   const shellClassName = [
     "attachment-draft-strip-shell",
     scrollState.canScrollLeft ? "can-scroll-left" : "",
@@ -111,14 +111,20 @@ export function AttachmentDraftStrip({
         onScroll={updateScrollState}
         onWheel={handleWheel}
       >
-        {drafts.map((draft, index) => (
+        {drafts.map((draft) => (
           <AttachmentDraftItem
             key={draft.id}
             draft={draft}
             progress={progress}
             status={status}
             t={t}
-            onPreview={(anchor) => onPreviewAttachment?.({ anchor, index, items: previewItems })}
+            onPreview={(anchor) =>
+              onPreviewAttachment?.({
+                anchor,
+                index: previewItems.findIndex((item) => item.id === draft.id),
+                items: previewItems,
+              })
+            }
             onRemove={onRemove}
           />
         ))}
@@ -169,14 +175,14 @@ function AttachmentDraftItem({
   onPreview,
   onRemove,
 }: {
-  draft: AttachmentDraft;
+  draft: ComposerAttachmentDraft;
   progress: number;
   status: AttachmentDraftStatus;
   t: TranslateFn;
   onPreview: (anchor: HTMLElement) => void;
   onRemove: (id: string) => void;
 }) {
-  const previewURL = useObjectURL(draft.file);
+  const previewURL = useObjectURL(draft.file ?? null);
   const removeLabel = t("removeAttachmentNamed", { name: draft.name });
   const previewLabel = t("previewAttachmentNamed", { name: draft.name });
   const filename = splitAttachmentFilename(draft.name);
@@ -186,27 +192,37 @@ function AttachmentDraftItem({
       : status === "failed"
         ? t("attachmentUploadFailed")
         : formatAttachmentSize(draft.sizeBytes);
+  const fileContent = (
+    <>
+      {isImageAttachment(draft) && previewURL ? (
+        <img className={conversationAttachmentsStyles["attachment-draft-preview"]} src={previewURL} alt="" />
+      ) : (
+        <span className={conversationAttachmentsStyles["attachment-file-icon"]} aria-hidden="true">
+          <FileTypeIcon name={draft.name} mediaType={draft.mediaType} />
+        </span>
+      )}
+      <AttachmentMeta name={draft.name} size={draft.file ? size : t("attachmentReselect")} filename={filename} />
+    </>
+  );
+  const previewClass = conversationAttachmentsStyles["attachment-draft-preview-link"];
   return (
     <div
       className={`attachment-draft ${isImageAttachment(draft) ? "is-image" : ""} is-${status}`.trim()}
       role="listitem"
     >
-      <button
-        type="button"
-        aria-label={previewLabel}
-        className={conversationAttachmentsStyles["attachment-draft-preview-link"]}
-        title={previewLabel}
-        onClick={(event) => onPreview(event.currentTarget)}
-      >
-        {isImageAttachment(draft) && previewURL ? (
-          <img className={conversationAttachmentsStyles["attachment-draft-preview"]} src={previewURL} alt="" />
-        ) : (
-          <span className={conversationAttachmentsStyles["attachment-file-icon"]} aria-hidden="true">
-            <FileTypeIcon name={draft.name} mediaType={draft.mediaType} />
-          </span>
-        )}
-        <AttachmentMeta name={draft.name} size={size} filename={filename} />
-      </button>
+      {draft.file ? (
+        <button
+          type="button"
+          aria-label={previewLabel}
+          className={previewClass}
+          title={previewLabel}
+          onClick={(event) => onPreview(event.currentTarget)}
+        >
+          {fileContent}
+        </button>
+      ) : (
+        <div className={previewClass}>{fileContent}</div>
+      )}
       <Tooltip content={removeLabel}>
         <Button
           aria-label={removeLabel}
@@ -346,7 +362,7 @@ function AttachmentMeta({
   );
 }
 
-function draftPreviewItem(draft: AttachmentDraft): AttachmentPreviewItem {
+function draftPreviewItem(draft: ComposerAttachmentDraft): AttachmentPreviewItem {
   return { file: draft.file, id: draft.id, mediaType: draft.mediaType, name: draft.name, sizeBytes: draft.sizeBytes };
 }
 

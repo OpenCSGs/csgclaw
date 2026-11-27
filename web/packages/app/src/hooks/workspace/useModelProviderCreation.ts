@@ -4,10 +4,15 @@ import { createModelProvider, type ModelProviderPayload } from "@/api/modelProvi
 import type { ModelProvider, ModelProviderCatalog } from "@/models/modelProviders";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 
-export type ModelProviderCreationOptions = { preset?: string; onConnected?: (provider: ModelProvider) => void };
+export type ModelProviderCreationOptions = {
+  preset?: string;
+  focusFallback?: HTMLElement | null;
+  onConnected?: (provider: ModelProvider) => void;
+};
 
 export type ModelProviderCreationProps = {
   initialPreset?: string;
+  focusFallback?: HTMLElement | null;
   busy: boolean;
   locale: LocaleCode;
   error: string;
@@ -61,6 +66,10 @@ export function useModelProviderCreation({
           timeout: "modelConnectErrorNetwork",
           network_error: "modelConnectErrorNetwork",
           model_not_found: "modelConnectErrorModel",
+          unsupported_protocol: "modelConnectErrorProtocol",
+          invalid_inference_request: "modelConnectErrorInferenceRequest",
+          ark_model_unavailable: "modelConnectErrorArkUnavailable",
+          ark_endpoint_required: "modelConnectErrorArkEndpoint",
           models_required: "modelConnectManualModels",
         } as const
       )[code as "invalid_api_key"];
@@ -74,6 +83,7 @@ export function useModelProviderCreation({
     ? {
         busy,
         initialPreset: options.current.preset,
+        focusFallback: options.current.focusFallback,
         locale,
         error,
         modelProviders: catalog,

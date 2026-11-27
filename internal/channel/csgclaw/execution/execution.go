@@ -281,7 +281,16 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	}
 	var current roomtask.PrivateTurnContext
 	if a.roomContext != nil {
-		current, err = a.roomContext(roomtask.TurnContextRequest{ConversationID: string(turn.ConversationKey), RoomID: event.RoomID, ParticipantID: binding.ParticipantID, SourceID: event.MessageID, TaskID: event.TaskID})
+		request := roomtask.TurnContextRequest{
+			ConversationID: string(turn.ConversationKey), RoomID: event.RoomID,
+			ParticipantID: binding.ParticipantID, SourceID: event.MessageID, TaskID: event.TaskID,
+		}
+		if event.VideoRetry != nil && event.ContinuationOf != "" {
+			request.SourceID = event.ContinuationOf
+			request.VideoFeedback = true
+			request.Context = ctx
+		}
+		current, err = a.roomContext(request)
 		if err != nil {
 			if a.room != nil {
 				if room, ok := a.room(turn.RoomID); ok && room.IsAutonomous() {
@@ -353,15 +362,17 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 			MessageID: turn.SourceMessageID, Text: event.MemoryText, ReplyTo: event.ThreadRootID, Locale: event.Locale}
 	}
 	result := conversation.Run(ctx, agentengine.TurnRequest{
-		MemorySource:      memorySource,
-		RoomConfiguration: session,
-		Locale:            turn.Locale,
-		ID:                turn.TurnID,
-		ConversationKey:   turn.ConversationKey,
-		Input:             input,
-		Admission:         builtInIMAdmissionPolicy,
-		Continuation:      agentengine.ContinuationCreateOrResume,
-		Interaction:       agentengine.InteractionResolve,
+		MemorySource:           memorySource,
+		RoomConfiguration:      session,
+		VideoRetry:             event.VideoRetry,
+		Locale:                 turn.Locale,
+		ID:                     turn.TurnID,
+		ConversationKey:        turn.ConversationKey,
+		Input:                  input,
+		Admission:              builtInIMAdmissionPolicy,
+		Continuation:           agentengine.ContinuationCreateOrResume,
+		Interaction:            agentengine.InteractionResolve,
+		StreamReasoningSummary: true,
 	}, contract.MediaGenerationSink{EventSink: rendererSink{renderer: a.renderer, turn: turn, observeWork: observeWork, projector: a.projector}})
 	if result.Status != agentengine.TurnSucceeded && a.projector != nil {
 		// A failed/canceled Runtime call may not have retained its input. Prefer

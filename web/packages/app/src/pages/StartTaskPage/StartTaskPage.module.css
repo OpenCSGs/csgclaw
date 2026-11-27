@@ -228,8 +228,8 @@
 .actions {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
   gap: 4px;
   padding: 4px 10px 8px;
 }
@@ -436,4 +436,16 @@ button.modeTrigger[data-csg-control]:disabled {
   .examples {
     flex-wrap: wrap;
   }
+}
+
+.actions > * {
+  flex-shrink: 0;
+}
+[data-compact="all"] .actions {
+  gap: 2px;
+}
+
+[data-compact] .modeLabel,
+[data-compact] .modeTrigger :global(.csg-select-chevron) {
+  display: none;
 }

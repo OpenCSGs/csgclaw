@@ -133,11 +133,13 @@ type TurnModel struct {
 
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
-	ImageToolGuidance string         `json:"-"`
-	Model             *TurnModel     `json:"-"`
-	MemorySource      *MemorySource  `json:"-"`
-	RuntimeMemory     *RuntimeMemory `json:"-"`
-	Locale            string         `json:"-"`
+	ImageToolGuidance string                `json:"-"`
+	VideoToolGuidance string                `json:"-"`
+	VideoRetry        *VideoGenerationRetry `json:"-"`
+	Model             *TurnModel            `json:"-"`
+	MemorySource      *MemorySource         `json:"-"`
+	RuntimeMemory     *RuntimeMemory        `json:"-"`
+	Locale            string                `json:"-"`
 	// RespondingTo identifies the detached answer reserved for this turn.
 	RespondingTo string `json:"-"`
 	// PreservePendingInteractions prevents this turn from superseding a pending form.

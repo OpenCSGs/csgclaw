@@ -31,18 +31,21 @@ func CloneVideoGeneration(in *VideoGenerationConfig) *VideoGenerationConfig {
 }
 
 type VideoGenerationOptions struct {
-	Reference *ReferenceImage               `json:"-"`
-	Size      string                        `json:"size,omitempty"`
-	Seconds   int                           `json:"seconds,omitempty"`
-	RequestID string                        `json:"-"`
-	ResumeID  string                        `json:"-"`
-	Progress  func(VideoGenerationProgress) `json:"-"`
+	ParametersConfirmed bool                          `json:"parameters_confirmed,omitempty"`
+	RetryOf             string                        `json:"-"`
+	Reference           *ReferenceImage               `json:"-"`
+	Size                string                        `json:"size,omitempty"`
+	Seconds             int                           `json:"seconds,omitempty"`
+	RequestID           string                        `json:"-"`
+	ResumeID            string                        `json:"-"`
+	Progress            func(VideoGenerationProgress) `json:"-"`
 }
 
 type VideoGenerationProgress struct {
-	ID        string
-	Status    string
-	UpdatedAt time.Time
+	StatusChecked bool
+	ID            string
+	Status        string
+	UpdatedAt     time.Time
 }
 
 // ResolveVideoGenerationOptions applies provider-advertised defaults and
@@ -50,6 +53,9 @@ type VideoGenerationProgress struct {
 func ResolveVideoGenerationOptions(options VideoGenerationOptions, capabilities modelcap.VideoGeneration) (VideoGenerationOptions, error) {
 	capabilities = capabilities.Normalized()
 	options.Size = strings.TrimSpace(options.Size)
+	if options.Seconds < 0 {
+		return options, &VideoGenerationError{Code: "invalid_video_seconds", Message: "Video duration must be positive when specified."}
+	}
 	if len(capabilities.Sizes) > 0 {
 		if options.Size == "" {
 			options.Size = capabilities.Sizes[0]
@@ -103,13 +109,26 @@ var videoRequestTimeout = 30 * time.Second
 var videoRetryLimit = 5
 var videoRetryBaseDelay = time.Second
 
+type videoJobStatus struct {
+	ID     string
+	Status string
+	Error  *struct{ Code, Message string }
+}
+
+func (s videoJobStatus) failure() error {
+	if s.Status == "failed" && s.Error != nil {
+		return &VideoGenerationError{Code: s.Error.Code, Message: s.Error.Message}
+	}
+	return nil
+}
+
 // GenerateVideo implements AIGateway's normalized OpenAI-compatible async API.
 func GenerateVideo(ctx context.Context, client *http.Client, baseURL, key string, headers map[string]string, model, prompt string, options VideoGenerationOptions) (GeneratedVideo, error) {
 	var result GeneratedVideo
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	var created struct{ ID, Status string }
+	var created videoJobStatus
 	created.ID = strings.TrimSpace(options.ResumeID)
-	reportVideoProgress(options.Progress, created.ID, "submitting")
+	reportVideoProgress(options.Progress, created.ID, "submitting", false)
 	if created.ID == "" {
 		if err := submitVideo(ctx, client, baseURL+"/videos", key, headers, model, prompt, options, &created); err != nil {
 			return result, err
@@ -117,10 +136,14 @@ func GenerateVideo(ctx context.Context, client *http.Client, baseURL, key string
 	} else {
 		created.Status = ""
 	}
+	if err := created.failure(); err != nil {
+		reportVideoProgress(options.Progress, created.ID, created.Status, false)
+		return result, err
+	}
 	if strings.TrimSpace(created.ID) == "" {
 		return result, &VideoGenerationError{Code: "upstream_response_invalid", Message: "The video service did not return a video ID."}
 	}
-	reportVideoProgress(options.Progress, created.ID, created.Status)
+	reportVideoProgress(options.Progress, created.ID, created.Status, false)
 
 	status := created.Status
 	for status != "completed" {
@@ -138,10 +161,7 @@ func GenerateVideo(ctx context.Context, client *http.Client, baseURL, key string
 			return result, ctx.Err()
 		case <-timer.C:
 		}
-		var state struct {
-			Status string                          `json:"status"`
-			Error  *struct{ Code, Message string } `json:"error"`
-		}
+		var state videoJobStatus
 		var pollErr error
 		for attempt := 0; attempt < videoRetryLimit; attempt++ {
 			pollErr = videoJSON(ctx, client, http.MethodGet, baseURL+"/videos/"+created.ID, key, headers, nil, "", "", &state)
@@ -156,12 +176,13 @@ func GenerateVideo(ctx context.Context, client *http.Client, baseURL, key string
 			return result, pollErr
 		}
 		status = state.Status
-		reportVideoProgress(options.Progress, created.ID, status)
-		if status == "failed" && state.Error != nil {
-			return result, &VideoGenerationError{Code: state.Error.Code, Message: state.Error.Message}
+		statusChecked := status == "in_progress" || status == "completed"
+		reportVideoProgress(options.Progress, created.ID, status, statusChecked)
+		if err := state.failure(); err != nil {
+			return result, err
 		}
 	}
-	reportVideoProgress(options.Progress, created.ID, "downloading")
+	reportVideoProgress(options.Progress, created.ID, "downloading", true)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/videos/"+created.ID+"/content", nil)
 	if err != nil {
@@ -243,11 +264,14 @@ func spoolVideoContent(source io.ReadCloser) (io.ReadCloser, int64, error) {
 	return content, size, nil
 }
 
-func reportVideoProgress(callback func(VideoGenerationProgress), id, status string) {
+func reportVideoProgress(callback func(VideoGenerationProgress), id, status string, statusChecked bool) {
 	if callback == nil {
 		return
 	}
-	callback(VideoGenerationProgress{ID: strings.TrimSpace(id), Status: strings.TrimSpace(status), UpdatedAt: time.Now().UTC()})
+	callback(VideoGenerationProgress{
+		ID: strings.TrimSpace(id), Status: strings.TrimSpace(status),
+		StatusChecked: statusChecked, UpdatedAt: time.Now().UTC(),
+	})
 }
 
 func submitVideo(ctx context.Context, client *http.Client, endpoint, key string, headers map[string]string, model, prompt string, options VideoGenerationOptions, out any) error {

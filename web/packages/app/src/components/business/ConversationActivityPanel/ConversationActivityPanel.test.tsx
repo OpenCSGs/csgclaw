@@ -140,8 +140,13 @@ describe("collaboration activity turns", () => {
     const records = screen.getByRole("list", { name: "This turn · Execution order" });
     scrollTowardEnd(records, 300);
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(within(records).getByText(/dev-turn-command-0$/)).toBeVisible();
-    expect(within(records).getByText(/dev-turn-command-49$/)).toBeVisible();
+    expect(within(records).queryByText("dev-turn-command-0")).not.toBeInTheDocument();
+    expect(within(records).queryByText("dev-turn-output-0")).not.toBeInTheDocument();
+    const [first] = within(records).getAllByRole("button", { name: "Run commands · Completed" });
+    expect(first).toHaveAttribute("aria-expanded", "false");
+    await user.click(first);
+    expect(within(records).getByText("dev-turn-command-0")).toBeVisible();
+    expect(within(records).queryByText("dev-turn-command-49")).not.toBeInTheDocument();
     expect(screen.queryByText(/test-turn-command-0$/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Load earlier activity" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Next page" })).not.toBeInTheDocument();
@@ -159,6 +164,7 @@ describe("collaboration activity turns", () => {
     expect(screen.queryByText(/dev-turn-command-0$/)).not.toBeInTheDocument();
   });
   it("uses the message from the thread dock to open its turn outside the latest activity window", async () => {
+    const user = userEvent.setup();
     const props = turnPanelProps(1);
     const [source, oldTurn, recentTurn] = props.conversation.messages;
     const turn = { ...oldTurn, id: "dev-turn-final", relates_to: { rel_type: "m.thread", event_id: source.id } };
@@ -177,7 +183,9 @@ describe("collaboration activity turns", () => {
         actorSelection={{ agentID: "dev", turnID: "dev-turn", requestID: source.id, messageID: turn.id }}
       />,
     );
-    expect(await screen.findByText(/dev-turn-command-0$/)).toBeVisible();
+    const records = await screen.findByRole("list", { name: "This turn · Execution order" });
+    await user.click(within(records).getByRole("button", { name: "Run commands · Completed" }));
+    expect(within(records).getByText("dev-turn-command-0")).toBeVisible();
     expect(screen.queryByText(/test-turn-command-0$/)).not.toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith("room", expect.objectContaining({ refreshIDs: [turn.id] }));
   });
@@ -312,10 +320,10 @@ it("keeps a 4,146-tool turn navigable with at most 100 mounted activity rows", a
   expect(within(records).getByText("dev-turn-output-99")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Next page" }));
   expect(screen.getByText("Page 2 of 42")).toBeVisible();
-  expect(within(records).getByRole("button", { name: /dev-turn-command-100$/ })).toHaveAttribute(
-    "aria-expanded",
-    "false",
-  );
+  const [firstOnPageTwo] = within(records).getAllByRole("button", { name: "Run commands · Completed" });
+  expect(firstOnPageTwo).toHaveAttribute("aria-expanded", "false");
+  await user.click(firstOnPageTwo);
+  expect(within(records).getByText("dev-turn-command-100")).toBeVisible();
   expect(within(records).getAllByRole("listitem")).toHaveLength(100);
   scrollTowardEnd(records, 300);
   await user.click(screen.getByRole("button", { name: "Previous page" }));

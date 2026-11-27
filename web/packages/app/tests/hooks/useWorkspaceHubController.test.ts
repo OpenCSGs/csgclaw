@@ -198,6 +198,8 @@ describe("useWorkspaceHubController template deletion", () => {
       const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       queryClient.setQueryData(workspaceQueryKeys.hubTemplates(), [template, remaining]);
+      const overviewQueryKey = [...workspaceQueryKeys.hubTemplates(), "official-and-owned"];
+      queryClient.setQueryData(overviewQueryKey, [template, remaining]);
       queryClient.setQueryData(workspaceQueryKeys.hubTemplate(template.id), template);
       vi.mocked(useWorkspaceHubSelection).mockReturnValue({
         detailPaneProps: { error: "" },
@@ -258,6 +260,7 @@ describe("useWorkspaceHubController template deletion", () => {
         `删除模板 法务经理?\n\n只删除本地模板，AgenticHub 上的模板不会删除。如需彻底删除，请前往 AgenticHub 下架。`,
       );
       expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplates())).toEqual([remaining]);
+      expect(queryClient.getQueryData(overviewQueryKey)).toEqual([remaining]);
       expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplate(template.id))).toBeUndefined();
       expect(result.current.editor.dirty).toBe(false);
       expect(unloadIsProtected()).toBe(otherDirty);

@@ -1,0 +1,286 @@
+.dialog {
+  width: min(600px, calc(100vw - 32px));
+}
+.headerCopy {
+  display: grid;
+  gap: var(--space-1);
+}
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.footer,
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.inlineActions p {
+  margin: 0;
+  flex-basis: 100%;
+}
+.submissionActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.submissionActions > button {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+.errorNotice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in oklab, var(--danger) 35%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--danger) 8%, var(--surface));
+}
+.noticeIcon {
+  margin-block-start: 2px;
+  color: color-mix(in oklab, var(--danger) 65%, var(--text));
+}
+.noticeContent {
+  font-size: var(--text-sm-size);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.noticeTitle {
+  margin: 0;
+  font-weight: 600;
+}
+.submissionStatus {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: var(--text-sm-size);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.submissionStatus[data-warning="true"] {
+  border-color: var(--notice-warning-border);
+  background: var(--notice-warning-background);
+}
+.submissionStatus > svg {
+  flex: 0 0 auto;
+  margin-block-start: 2px;
+  color: var(--muted);
+}
+.submissionStatus[data-warning="true"] > svg {
+  color: var(--warning-text);
+}
+.submissionStatus:empty {
+  position: absolute;
+  padding: 0;
+  border: 0;
+}
+.rejections {
+  margin-block: var(--space-1) 0;
+  padding-inline-start: 1.25em;
+}
+.label {
+  display: grid;
+  gap: 8px;
+}
+.fileInput {
+  display: none;
+}
+.attachmentUsage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+.attachmentUsage {
+  column-gap: var(--space-4);
+}
+.attachmentFormats > summary {
+  width: fit-content;
+  color: var(--text);
+  cursor: pointer;
+}
+.attachmentFormats > summary:hover {
+  text-decoration: underline;
+}
+.attachmentFormats[open] > div {
+  margin-block-start: var(--space-1);
+}
+.chooseFilesButton {
+  flex-shrink: 0;
+  display: inline-flex;
+  border-radius: var(--radius-md);
+}
+.chooseFilesButton:focus-visible,
+.attachmentFormats > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.chooseFilesButton > button:disabled {
+  pointer-events: none;
+}
+.attachments {
+  display: grid;
+  gap: 10px;
+}
+.attachmentsHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+}
+.attachmentsTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--text-xs-medium);
+}
+.attachmentsTitle svg {
+  color: var(--muted);
+}
+.attachmentsCount {
+  color: var(--muted);
+  font: var(--text-xs-normal);
+  font-variant-numeric: tabular-nums;
+}
+.dropzone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+.dropzoneIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted);
+}
+.dropzoneCopy {
+  flex: 1;
+  min-width: 0;
+}
+.dropzoneTitle {
+  margin: 0;
+  font: var(--text-xs-medium);
+}
+.dropzoneHint,
+.limitHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.imageHint {
+  margin: 0;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+.label textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+.images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.image {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  width: 120px;
+}
+.removeImage {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 999px;
+}
+.image .previewTrigger {
+  width: 100%;
+  height: 90px;
+  padding: 0;
+  border: 0;
+  cursor: zoom-in;
+}
+.previewTrigger img {
+  width: 120px;
+  height: 90px;
+  object-fit: contain;
+}
+.previewDialog {
+  width: min(960px, calc(100vw - 32px));
+  height: min(760px, calc(100dvh - 40px));
+}
+.previewTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.previewBody {
+  flex: 1;
+}
+.previewBody > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.archiveHint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.archiveHint > svg {
+  flex: 0 0 auto;
+  margin-block-start: 2px;
+}
+.archives {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.archive {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

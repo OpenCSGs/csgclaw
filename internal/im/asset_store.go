@@ -348,6 +348,13 @@ func (s *Service) AttachmentFile(id string) (AttachmentFile, error) {
 	if s == nil || strings.TrimSpace(s.statePath) == "" {
 		return AttachmentFile{}, fmt.Errorf("attachment storage is not configured")
 	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.attachmentFileLocked(id, false)
+}
+
+// A room-scoped lookup has already checked the reference under the same lock.
+func (s *Service) attachmentFileLocked(id string, roomReferenceChecked bool) (AttachmentFile, error) {
 	for _, store := range []attachmentStore{sessionAttachmentStore(s.statePath), roomAttachmentStore(s.statePath)} {
 		object, err := store.readObject(id)
 		if errors.Is(err, errAttachmentNotFound) {
@@ -358,6 +365,9 @@ func (s *Service) AttachmentFile(id string) (AttachmentFile, error) {
 		}
 		if object.RoomID == "" {
 			return sessionFile(object)
+		}
+		if !roomReferenceChecked && !s.hasRoomAttachmentReferenceLocked(object.RoomID, object.ID) {
+			return AttachmentFile{}, errAttachmentNotFound
 		}
 		return store.blobFile(object)
 	}
@@ -822,6 +832,10 @@ func cleanupAssetFilesForState(statePath string, rooms []Room) error {
 	if err := migrateLegacySessionAttachments(statePath); err != nil {
 		return err
 	}
+	return collectUnreferencedAssets(statePath, rooms)
+}
+
+func collectUnreferencedAssets(statePath string, rooms []Room) error {
 	live, liveSHA := liveAttachmentRefs(rooms)
 	if err := cleanupLocalAttachmentFiles(statePath, live); err != nil {
 		return err

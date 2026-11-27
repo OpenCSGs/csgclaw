@@ -172,7 +172,7 @@ export function useWorkspaceHubController({
         queryClient.setQueryData(workspaceQueryKeys.hubTemplate(published.id), published);
       }
       if (published?.id) {
-        queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) =>
+        queryClient.setQueriesData<HubTemplate[]>({ queryKey: workspaceQueryKeys.hubTemplates() }, (current) =>
           current?.some((item) => item.id === published.id) ? current : [...(current ?? []), published],
         );
       }
@@ -255,7 +255,7 @@ export function useWorkspaceHubController({
         ]);
         await deleteHubTemplateRequest(template.id);
         templateDrafts?.deleteDraft(template.id);
-        queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
+        queryClient.setQueriesData<HubTemplate[]>({ queryKey: workspaceQueryKeys.hubTemplates() }, (templates) =>
           templates?.filter((item) => item.id !== template.id),
         );
         queryClient.removeQueries({ queryKey: workspaceQueryKeys.hubTemplate(template.id) });

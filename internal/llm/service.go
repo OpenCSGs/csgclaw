@@ -420,6 +420,15 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 type responsesRequestSender func([]byte) (*http.Response, error)
 
 func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent.AgentProfile, payload map[string]any, baseURL, apiKey string, resp *http.Response, allowReasoningRetry bool, sendResponses responsesRequestSender) (*UpstreamResponse, error) {
+	if resp.StatusCode == http.StatusOK && modelprovider.IsZhipuResponsesURL(baseURL) &&
+		strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+		body, err := peekModelError(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, &HTTPError{Status: http.StatusBadGateway, Message: "Could not read the model service response."}
+		}
+		resp.StatusCode = modelprovider.ZhipuResponsesGatewayStatus(baseURL, resp.StatusCode, body)
+	}
 	if responsesAPITransientFallbackStatus(profile, resp.StatusCode) && !responsesPayloadHasToolSemantics(payload) {
 		_ = resp.Body.Close()
 		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, true)
@@ -896,8 +905,7 @@ func OpenCSGBillingURL(profile agent.AgentProfile) string {
 }
 
 func responsesAPIUnsupported(status int, body []byte) bool {
-	return (status == http.StatusNotFound || status == http.StatusMethodNotAllowed) &&
-		!strings.EqualFold(modelprovider.UpstreamErrorCode(body), "model_not_found")
+	return modelprovider.ResponsesEndpointUnsupported(status, body)
 }
 
 func responsesAPITransientFallbackStatus(profile agent.AgentProfile, status int) bool {
@@ -1597,6 +1605,22 @@ func applyProviderPayloadConstraints(payload map[string]any, profile agent.Agent
 
 func applyResponsesProviderPayloadConstraints(payload map[string]any, profile agent.AgentProfile) {
 	applyProviderPayloadConstraints(payload, profile)
+	if endpoint, err := url.Parse(strings.TrimSpace(profile.BaseURL)); err == nil &&
+		strings.HasSuffix(strings.ToLower(endpoint.Hostname()), ".xiaomimimo.com") {
+		// The official MiMo Codex profile uses freeform tool mode with hosted web search disabled.
+		if tools, ok := payload["tools"].([]any); ok {
+			supported := make([]any, 0, len(tools))
+			for _, tool := range tools {
+				entry, _ := tool.(map[string]any)
+				switch stringValue(entry["type"]) {
+				case "web_search", "web_search_preview":
+					continue
+				}
+				supported = append(supported, tool)
+			}
+			payload["tools"] = supported
+		}
+	}
 	caps := modelcap.ForProviderModel(profile.Provider, profile.ModelID)
 	if caps.ResponsesReasoningInputKnown && !caps.SupportsResponsesReasoningInput {
 		logResponsesReasoningInputRemoved(profile, stripResponsesInputReasoning(payload), "known_unsupported")

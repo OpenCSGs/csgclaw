@@ -1,55 +1,13 @@
 import agentQuestionComposerStyles from "./AgentQuestionComposer.module.css";
-import { useEffect, useState, type ReactNode } from "react";
-import { CircleHelp, Clock3, LockKeyhole, Pencil, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Clock3, LockKeyhole, Pencil, X } from "lucide-react";
 import { InlineError, TextInput, Button, IconButton, QuestionCard } from "@/components/ui";
 import { questionOptions } from "@/models/agentActivity";
-import { resolveUserByLocalIdentity, type TranslateFn, type UsersById } from "@/models/conversations";
+import type { TranslateFn } from "@/models/conversations";
 import type { QuestionAnswerMode } from "./useQuestionAnswerMode";
 
-const recommendedSuffix = " (Recommended)";
-
-export function AgentQuestionComposer({
-  mode,
-  t,
-  usersById,
-  statusSlot,
-}: {
-  mode: QuestionAnswerMode;
-  t: TranslateFn;
-  usersById?: UsersById;
-  statusSlot?: ReactNode;
-}) {
-  if (mode.pending.length === 0) {
-    return null;
-  }
-  if (!mode.selected) {
-    return (
-      <section
-        className={`${agentQuestionComposerStyles["question-composer"]} question-chooser`}
-        aria-label={t("questionChooseRequest")}
-      >
-        {statusSlot}
-        <div className={agentQuestionComposerStyles["question-composer-heading"]}>
-          <CircleHelp aria-hidden="true" size={18} />
-          <strong>{t("questionSeveralWaiting", { count: mode.pending.length })}</strong>
-        </div>
-        <div className={agentQuestionComposerStyles["question-request-options"]}>
-          {mode.pending.map((activity) => {
-            const request = activity.content.question!;
-            const first = request.questions[0];
-            const askingAgent =
-              (usersById ? resolveUserByLocalIdentity(activity.sender, usersById)?.name : "") || activity.sender;
-            return (
-              <Button key={request.id} variant="secondaryColor" onClick={() => mode.select(request.id)}>
-                {askingAgent || t("questionAgent")}: {first?.header || t("questionRequest")}
-              </Button>
-            );
-          })}
-        </div>
-        <p className={agentQuestionComposerStyles["question-composer-hint"]}>{t("questionSelectHint")}</p>
-      </section>
-    );
-  }
+export function AgentQuestionComposer({ mode, t }: { mode: QuestionAnswerMode; t: TranslateFn }) {
+  if (!mode.selected) return null;
 
   const request = mode.selected.content.question!;
   const question = request.questions[mode.questionIndex];
@@ -73,22 +31,14 @@ export function AgentQuestionComposer({
 
   return (
     <div className={agentQuestionComposerStyles["question-composer-card"]}>
-      {statusSlot}
       <QuestionCard
         fullWidth
-        title={question.header || t("questionRequest")}
+        title={t("questionCardTitle")}
         accessibleLabel={t("questionAnswerMode")}
         questions={request.questions.map((item) => ({
           id: item.id,
           prompt: item.question,
-          options: questionOptions(item).map(({ label, description }) => {
-            const recommended = label.endsWith(recommendedSuffix);
-            return {
-              label: recommended ? label.slice(0, -recommendedSuffix.length) : label,
-              description,
-              badge: recommended ? t("questionRecommended") : undefined,
-            };
-          }),
+          options: questionOptions(item).map(({ label }) => ({ label: label.replace(/ \(Recommended\)$/, "") })),
         }))}
         labels={{
           answer: t("questionAnswer"),
@@ -109,7 +59,10 @@ export function AgentQuestionComposer({
         onAnswer={(_, index) => {
           if (index !== undefined) mode.chooseOption(index + 1);
         }}
-        footerMeta={<QuestionExpirationCountdown autoResolveAt={request.auto_resolve_at} t={t} />}
+        controlsPlacement="header"
+        footerMeta={
+          request.auto_resolve_at ? <QuestionExpirationCountdown autoResolveAt={request.auto_resolve_at} t={t} /> : null
+        }
         footerActions={
           <IconButton
             disabled={mode.busy}
@@ -133,7 +86,6 @@ export function AgentQuestionComposer({
             <TextInput
               size="sm"
               key={question.id}
-              autoFocus
               type={question.is_secret ? "password" : "text"}
               autoComplete="off"
               value={mode.text}

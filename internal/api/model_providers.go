@@ -8,12 +8,15 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"slices"
 	"strings"
+	"time"
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelpreset"
+	"csgclaw/internal/modelprovider"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -31,7 +34,13 @@ type modelProviderRequest struct {
 	APIKey          string                       `json:"api_key,omitempty"`
 	Headers         map[string]string            `json:"headers,omitempty"`
 	Models          []string                     `json:"models,omitempty"`
+	ImageModels     []string                     `json:"image_models,omitempty"`
 	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
+}
+
+type modelProviderCheckResponse struct {
+	agent.ModelProviderCheckResult
+	Provider *agent.ModelProviderSummary `json:"provider,omitempty"`
 }
 
 func (h *Handler) handleModelProviders(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +88,8 @@ func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request_error", "message": err.Error()}})
 		return
 	}
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	cfg, path, err := h.loadBootstrapConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -143,14 +154,12 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	if err := resolveModelProviderRequest(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 	if err := validateModelOverrides(req.ModelOverrides); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request_error", "message": err.Error()}})
 		return
 	}
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	cfg, path, err := h.loadBootstrapConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -163,6 +172,10 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 	existing, exists := cfg.Models.Providers[id]
 	if !exists && !agent.IsBuiltinModelProviderID(id) {
 		http.Error(w, fmt.Sprintf("model provider %q not found", id), http.StatusNotFound)
+		return
+	}
+	if err := resolveSavedModelProviderRequest(&req, existing); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if agent.IsBuiltinModelProviderID(id) {
@@ -219,6 +232,8 @@ func (h *Handler) deleteModelProvider(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "builtin model providers cannot be deleted", http.StatusBadRequest)
 		return
 	}
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	cfg, path, err := h.loadBootstrapConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -255,11 +270,9 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := resolveModelProviderRequest(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	cfg, path, err := h.loadBootstrapConfig()
+	h.configMu.Lock()
+	cfg, _, err := h.loadBootstrapConfig()
+	h.configMu.Unlock()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -269,24 +282,63 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 	checkConfig := existing
 	// Built-in OpenCSG checks use the gateway from the signed-in account.
 	if id != agent.ModelProviderIDOpenCSG {
+		if err := resolveSavedModelProviderRequest(&req, existing); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		checkConfig = providerConfigFromRequest(existing, req, true).Resolved()
 	}
-	result := appCheckModelProvider(r.Context(), providerCheckInput(id, checkConfig, req.Connect))
-	if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed && !modelProviderTransportChanged(existing, checkConfig) {
-		cfg.Models = updated
-		if err := h.saveModelProvidersConfig(r.Context(), path, cfg); err != nil {
+	response := modelProviderCheckResponse{
+		ModelProviderCheckResult: appCheckModelProvider(r.Context(), providerCheckInput(id, checkConfig, req.Connect)),
+	}
+	if sameModelProviderCheckConnection(existing, checkConfig) {
+		response.Provider, err = h.persistModelProviderCheck(r.Context(), id, existing, response.ModelProviderCheckResult)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, response)
+}
+
+func sameModelProviderCheckConnection(a, b config.ProviderConfig) bool {
+	return !modelProviderTransportChanged(a, b) && a.Preset == b.Preset && slices.Equal(a.ImageModels, b.ImageModels)
+}
+
+func (h *Handler) persistModelProviderCheck(ctx context.Context, id string, checked config.ProviderConfig, result agent.ModelProviderCheckResult) (*agent.ModelProviderSummary, error) {
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
+	// Discovery runs outside the lock. Re-read the catalog so a slow check
+	// cannot overwrite updates made while it was querying the upstream service.
+	cfg, path, err := h.loadBootstrapConfig()
+	if err != nil {
+		return nil, err
+	}
+	current, exists := cfg.Models.Providers[id]
+	if (!exists && !agent.IsBuiltinModelProviderID(id)) || !sameModelProviderCheckConnection(current, checked) {
+		return nil, nil
+	}
+	lastCheck, _ := time.Parse(time.RFC3339Nano, current.LastCheckedAt)
+	thisCheck, _ := time.Parse(time.RFC3339Nano, result.LastCheckedAt)
+	if current.LastCheckedAt == checked.LastCheckedAt || !lastCheck.After(thisCheck) {
+		if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed {
+			cfg.Models = updated
+			if err := h.saveModelProvidersConfig(ctx, path, cfg); err != nil {
+				return nil, err
+			}
+		}
+	}
+	provider := findProviderSummary(agent.ModelProviderCatalogFromLLM(cfg.Models), id)
+	return &provider, nil
 }
 
 func (h *Handler) refreshOpenCSGModelProvider(ctx context.Context) error {
 	if h == nil || strings.TrimSpace(h.configPath) == "" {
 		return nil
 	}
-	cfg, path, err := h.loadBootstrapConfig()
+	h.configMu.Lock()
+	cfg, _, err := h.loadBootstrapConfig()
+	h.configMu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -299,6 +351,12 @@ func (h *Handler) refreshOpenCSGModelProvider(ctx context.Context) error {
 		Headers: existing.Headers,
 		Models:  existing.Models,
 	})
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
+	cfg, path, err := h.loadBootstrapConfig()
+	if err != nil {
+		return err
+	}
 	models, cleared := agent.ClearModelProviderCachedState(cfg.Models, agent.ModelProviderIDOpenCSG)
 	models, applied := agent.ApplyModelProviderCheckResult(models, agent.ModelProviderIDOpenCSG, result)
 	if !cleared && !applied {
@@ -339,6 +397,9 @@ func providerConfigFromRequest(existing config.ProviderConfig, req modelProvider
 	}
 	if req.Models != nil {
 		out.Models = append([]string(nil), req.Models...)
+	}
+	if req.ImageModels != nil {
+		out.ImageModels = append([]string(nil), req.ImageModels...)
 	}
 	if strings.TrimSpace(req.ReasoningEffort) != "" {
 		out.ReasoningEffort = strings.TrimSpace(req.ReasoningEffort)
@@ -473,6 +534,9 @@ func resolveModelProviderRequest(req *modelProviderRequest) error {
 	if !modelpreset.ValidProtocol(req.APIProtocol) {
 		return fmt.Errorf("invalid api_protocol")
 	}
+	if err := validateArkImageEndpoints(req.Preset, req.ImageModels); err != nil {
+		return err
+	}
 	if req.Preset == "" {
 		return nil
 	}
@@ -484,17 +548,64 @@ func resolveModelProviderRequest(req *modelProviderRequest) error {
 	if !ok {
 		return fmt.Errorf("region %q is unavailable for %s", req.Region, p.Name)
 	}
-	// A preset supplied without transport fields uses the official service defaults.
 	req.Region = region.ID
-	if req.BaseURL == "" {
-		req.BaseURL = region.BaseURL
-	}
+	usesPresetURL := strings.TrimSpace(req.BaseURL) == "" || region.MatchesBaseURL(req.BaseURL)
 	if req.APIProtocol == "" {
 		req.APIProtocol = p.Protocol
+		if usesPresetURL {
+			req.APIProtocol = region.DefaultProtocol
+		}
+	}
+	if usesPresetURL {
+		if p.ID == "custom" {
+			return nil
+		}
+		baseURL, ok := region.ProtocolURLs[req.APIProtocol]
+		if !ok {
+			return fmt.Errorf("protocol %q is unavailable for %s in %s", req.APIProtocol, p.Name, region.Name)
+		}
+		req.BaseURL = baseURL
+	}
+	return nil
+}
+
+func resolveSavedModelProviderRequest(req *modelProviderRequest, existing config.ProviderConfig) error {
+	if req.Preset != "" {
+		return resolveModelProviderRequest(req)
+	}
+	if req.APIProtocol == "" {
+		return validateArkImageEndpoints(existing.Preset, req.ImageModels)
+	}
+	if existing.Preset != "" {
+		req.Preset = existing.Preset
+		if req.Region == "" {
+			req.Region = existing.Region
+		}
+		if req.BaseURL == "" {
+			req.BaseURL = existing.BaseURL
+		}
+	}
+	return resolveModelProviderRequest(req)
+}
+
+func validateArkImageEndpoints(preset string, models []string) error {
+	if len(models) == 0 {
+		return nil
+	}
+	if preset != "volcengine" {
+		return fmt.Errorf("manual image endpoints require the Volcano Ark API preset")
+	}
+	for _, id := range models {
+		if !modelprovider.IsArkEndpointID(strings.TrimSpace(id)) {
+			return fmt.Errorf("image endpoint IDs must start with ep-")
+		}
 	}
 	return nil
 }
 
 func providerCheckInput(id string, p config.ProviderConfig, verify bool) agent.ModelProviderCheckInput {
-	return agent.ModelProviderCheckInput{ID: id, BaseURL: p.BaseURL, APIKey: p.APIKey, Headers: p.Headers, Models: p.Models, Preset: p.Preset, Region: p.Region, APIProtocol: p.APIProtocol, Verify: verify}
+	return agent.ModelProviderCheckInput{
+		ID: id, BaseURL: p.BaseURL, APIKey: p.APIKey, Headers: p.Headers, Models: p.Models, ImageModels: p.ImageModels,
+		Preset: p.Preset, Region: p.Region, APIProtocol: p.APIProtocol, Verify: verify,
+	}
 }

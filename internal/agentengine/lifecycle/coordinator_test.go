@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -118,4 +119,43 @@ func TestMutationPreparationValidatesBeforeDrainAndRunsForNestedUpdates(t *testi
 	if !prepared {
 		t.Fatal("nested resource update skipped preparation")
 	}
+}
+
+func TestReadWaitsForMutationAndSharesExecutions(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c := &Coordinator{}
+		ctx, release, err := c.Mutation(t.Context(), "worker")
+		if err != nil {
+			t.Fatal(err)
+		}
+		nested, err := c.Read(ctx, "worker")
+		if err != nil {
+			t.Fatal(err)
+		}
+		nested()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			read, err := c.Read(t.Context(), "worker")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer read()
+			execution, err := c.Execution(t.Context(), "worker")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			execution()
+		}()
+		synctest.Wait()
+		select {
+		case <-done:
+			t.Fatal("lookup finished before mutation released")
+		default:
+		}
+		release()
+		<-done
+	})
 }

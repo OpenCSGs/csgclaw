@@ -1,10 +1,10 @@
 .controls {
   min-width: 0;
-  flex: 1;
+  flex: 1 0 auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
 }
 .defaults {
@@ -20,4 +20,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.controls > * {
+  flex-shrink: 0;
+}
+[data-compact="all"] .label {
+  display: none;
+}
+[data-compact="all"] .controls {
+  flex: 1 1 auto;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+[data-compact="all"] .controls :global(.btn) {
+  --btn-min-width: 0;
+  --btn-padding-x: 4px;
 }

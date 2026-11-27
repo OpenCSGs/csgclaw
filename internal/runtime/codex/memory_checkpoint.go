@@ -102,14 +102,15 @@ func (m *appServerManager) runMemoryMaintenance(live *liveSession, checkpointThr
 		go m.cleanupMemoryCheckpoint(live, checkpointThreadID)
 		return
 	}
-	maintenanceThreadID := ""
-	if live.session != nil {
-		maintenanceThreadID = strings.TrimSpace(live.session.SessionID)
-	}
-	if maintenanceThreadID == "" {
-		live.memoryCheckpointMu.Unlock()
+	live.memoryCheckpointMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), appServerMemoryMaintenanceTimeout)
+	defer cancel()
+	maintenanceThreadID, err := m.ensureDefaultThread(ctx, live)
+	if err != nil {
+		live.appClient.logDebug("prepare Codex memory maintenance thread failed", "error", err)
 		return
 	}
+	live.memoryCheckpointMu.Lock()
 	live.memoryLastMaintenance = now
 	live.memoryMaintenanceID = maintenanceThreadID
 	live.memoryCheckpointMu.Unlock()
@@ -119,12 +120,10 @@ func (m *appServerManager) runMemoryMaintenance(live *liveSession, checkpointThr
 		live.memoryCheckpointMu.Unlock()
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), appServerMemoryMaintenanceTimeout)
-	_, err := m.Prompt(ctx, SessionHandle{RuntimeID: live.spec.RuntimeID}, PromptRequest{
+	_, err = m.Prompt(ctx, SessionHandle{RuntimeID: live.spec.RuntimeID}, PromptRequest{
 		SessionID: maintenanceThreadID,
 		Prompt:    []PromptContentBlock{TextBlock(memoryMaintenancePrompt)},
 	})
-	cancel()
 	if err != nil {
 		live.memoryCheckpointMu.Lock()
 		live.memoryLastMaintenance = time.Time{}

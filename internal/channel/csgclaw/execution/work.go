@@ -11,9 +11,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
+	"csgclaw/internal/modelusage"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/worklease"
 )
@@ -49,6 +51,8 @@ type activeWorkTurn struct {
 	capabilities   []string
 	statusSequence uint64
 	statusStage    string
+	outputRate     outputRateMeter
+	lastUsageTotal int64
 	thinking       string
 	truncated      bool
 	lastThinking   time.Time
@@ -182,13 +186,35 @@ func (t *activeWorkTurn) observeEvent(ctx context.Context, event agentengine.Tur
 		return
 	}
 
+	if event.Kind == agentengine.TurnEventActivityUpdate && event.Activity != nil &&
+		event.Activity.Kind == string(activity.RuntimeEventReasoningSummary) {
+		event.Kind = agentengine.TurnEventThoughtDelta
+		event.Thought, _ = event.Activity.Payload.(string)
+	}
+
 	now := time.Now()
 	request := apitypes.ParticipantWorkStatusPatchRequest{}
 	switch event.Kind {
 	case agentengine.TurnEventActivityUpdate:
-		if event.Activity == nil || event.Activity.Kind != modelcap.ContextUsageKind {
+		if event.Activity == nil {
 			t.mu.Unlock()
 			return
+		}
+		if event.Activity.Kind != modelcap.ContextUsageKind {
+			reset := event.Activity.Kind == string(activity.RuntimeEventReasoningStarted) &&
+				t.statusStage == apitypes.ParticipantWorkStageGeneratingReply
+			if event.Activity.Kind == modelusage.Kind {
+				if usage := modelusage.Decode(event.Activity.Payload); usage != nil && usage.Known && usage.Total > t.lastUsageTotal {
+					t.lastUsageTotal = usage.Total
+					reset = true
+				}
+			}
+			if !reset || t.outputRate.last.IsZero() {
+				t.mu.Unlock()
+				return
+			}
+			t.outputRate.reset()
+			break
 		}
 		raw, err := json.Marshal(event.Activity.Payload)
 		var usage modelcap.ContextUsage
@@ -196,57 +222,77 @@ func (t *activeWorkTurn) observeEvent(ctx context.Context, event agentengine.Tur
 			t.mu.Unlock()
 			return
 		}
-		request.ContextUsage = &usage
-		request.Stage = t.statusStage
-		request.Phase = apitypes.ParticipantWorkPhaseWorking
-		if t.statusStage == apitypes.ParticipantWorkStageThinking || t.statusStage == apitypes.ParticipantWorkStagePreparingReply {
-			request.Phase = apitypes.ParticipantWorkPhaseThinking
-			if t.statusStage == apitypes.ParticipantWorkStageThinking {
-				request.Thinking = &apitypes.ParticipantThinkingStatus{Format: apitypes.ParticipantThinkingFormatPlainText, Text: t.thinking, Truncated: t.truncated}
-			}
+		t.outputRate.setModel(usage.ModelID)
+		if usage.Compacting {
+			t.outputRate.reset()
 		}
+		request.ContextUsage = &usage
 	case agentengine.TurnEventThoughtDelta:
-		if event.Thought == "" {
+		if event.Thought == "" || event.TextSnapshot || event.Recovered {
 			t.mu.Unlock()
 			return
 		}
+		changed := t.statusStage != apitypes.ParticipantWorkStageThinking
+		if changed {
+			t.outputRate.reset()
+			t.thinking, t.truncated = "", false
+		}
 		t.thinking, t.truncated = appendThinkingTail(t.thinking, event.Thought, t.truncated)
-		if strings.TrimSpace(t.thinking) == "" ||
-			(t.statusStage == apitypes.ParticipantWorkStageThinking &&
-				!t.lastThinking.IsZero() && now.Sub(t.lastThinking) < defaultThinkingUpdateEvery) {
+		sampled := t.outputRate.observe(now, event.Thought)
+		if strings.TrimSpace(t.thinking) == "" || (!changed && !sampled && now.Sub(t.lastThinking) < defaultThinkingUpdateEvery) {
 			t.mu.Unlock()
 			return
 		}
 		t.statusStage = apitypes.ParticipantWorkStageThinking
 		t.lastThinking = now
-		request.Phase = apitypes.ParticipantWorkPhaseThinking
-		request.Stage = t.statusStage
-		request.Thinking = &apitypes.ParticipantThinkingStatus{
-			Format:    apitypes.ParticipantThinkingFormatPlainText,
-			Text:      t.thinking,
-			Truncated: t.truncated,
-		}
-	case agentengine.TurnEventToolCallStart, agentengine.TurnEventToolCallUpdate:
+	case agentengine.TurnEventToolCallStart:
 		if t.statusStage == apitypes.ParticipantWorkStageRunningTool {
 			t.mu.Unlock()
 			return
 		}
+		t.outputRate.reset()
 		t.statusStage = apitypes.ParticipantWorkStageRunningTool
-		request.Phase = apitypes.ParticipantWorkPhaseWorking
-		request.Stage = t.statusStage
 	case agentengine.TurnEventTextDelta:
-		if event.Text == "" || t.statusStage == apitypes.ParticipantWorkStageGeneratingReply {
+		if event.Text == "" || event.Recovered {
+			t.mu.Unlock()
+			return
+		}
+		changed := t.statusStage != apitypes.ParticipantWorkStageGeneratingReply
+		if changed {
+			t.outputRate.reset()
+		}
+		sampled := !event.TextSnapshot && t.outputRate.observe(now, event.Text)
+		if !changed && !sampled {
 			t.mu.Unlock()
 			return
 		}
 		t.statusStage = apitypes.ParticipantWorkStageGeneratingReply
-		request.Phase = apitypes.ParticipantWorkPhaseWorking
-		request.Stage = t.statusStage
+	case agentengine.TurnEventInteractionRequest:
+		if t.outputRate.last.IsZero() || event.Interaction == nil || event.Interaction.Detached {
+			t.mu.Unlock()
+			return
+		}
+		t.outputRate.reset()
 	default:
 		t.mu.Unlock()
 		return
 	}
 
+	request.Stage = t.statusStage
+	request.Phase = apitypes.ParticipantWorkPhaseWorking
+	switch request.Stage {
+	case apitypes.ParticipantWorkStagePreparingReply:
+		request.Phase = apitypes.ParticipantWorkPhaseThinking
+	case apitypes.ParticipantWorkStageThinking:
+		request.Phase = apitypes.ParticipantWorkPhaseThinking
+		request.Thinking = &apitypes.ParticipantThinkingStatus{
+			Format: apitypes.ParticipantThinkingFormatPlainText, Text: t.thinking, Truncated: t.truncated,
+		}
+	}
+	if request.Stage == apitypes.ParticipantWorkStageGeneratingReply || request.Stage == apitypes.ParticipantWorkStageThinking {
+		request.OutputTokensPerSecond = t.outputRate.rate
+		request.OutputRateSampledAt = t.outputRate.at
+	}
 	t.statusSequence++
 	request.Sequence = t.statusSequence
 	request.Capabilities = append([]string(nil), t.capabilities...)

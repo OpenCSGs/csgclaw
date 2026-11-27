@@ -1,6 +1,8 @@
 package participant
 
 import (
+	"strings"
+
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	hub "csgclaw/internal/template"
@@ -51,6 +53,12 @@ type CreateRequest struct {
 	ChannelUser      ChannelUserSpec  `json:"channel_user,omitempty"`
 	AgentBinding     AgentBindingSpec `json:"agent_binding,omitempty"`
 	Metadata         map[string]any   `json:"metadata,omitempty"`
+}
+
+// ReconcilesBinding reports whether create may complete an existing worker binding.
+func (req CreateRequest) ReconcilesBinding() bool {
+	return strings.TrimSpace(req.ID) != "" && normalizeChannel(req.Channel) == ChannelCSGClaw &&
+		normalizeType(req.Type) == TypeAgent && normalizeBindingMode(req.AgentBinding.Mode) == BindingModeCreate
 }
 
 type UpdateRequest struct {

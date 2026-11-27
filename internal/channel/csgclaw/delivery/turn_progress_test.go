@@ -178,7 +178,7 @@ func TestProgressStreamsThroughIMAndCommitsOneFinal(t *testing.T) {
 	ctx := context.Background()
 	for _, event := range []agentengine.TurnEvent{
 		{Sequence: 1, Kind: agentengine.TurnEventTextDelta, ItemID: "intro", Phase: "commentary", Text: "Checking files."},
-		{Sequence: 2, Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "read", Kind: "exec_command", Status: "started", Payload: map[string]any{"command": "cat README.md", "commandActions": []any{map[string]any{"type": "read"}}}}},
+		{Sequence: 2, Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "read", Kind: "exec_command", Status: "started", Payload: map[string]any{"command": "cat README.md", "commandActions": []any{map[string]any{"type": "read", "path": "README.md"}}}}},
 		{Sequence: 3, Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "read", Kind: "exec_command", Status: "completed", Payload: map[string]any{"output": "contents", "exitCode": float64(0)}}},
 		{Sequence: 4, Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: "The answer"},
 	} {
@@ -187,7 +187,7 @@ func TestProgressStreamsThroughIMAndCommitsOneFinal(t *testing.T) {
 		}
 	}
 	msg, p := progressMessage(t, service)
-	if msg.Content != "The answer" || !im.IsAgentActivityMessage(msg) || p.Status != "running" || len(p.Items) != 2 || p.Items[1].Tool.Actions[0] != "read" {
+	if msg.Content != "The answer" || !im.IsAgentActivityMessage(msg) || p.Status != "running" || len(p.Items) != 2 || p.Items[1].Tool.Actions[0] != "read" || p.Items[1].Tool.Command != "cat README.md" {
 		t.Fatalf("stream=%+v progress=%+v", msg, p)
 	}
 	// Queue a trailing chunk, then finish before the timer. Completion must win.
@@ -307,6 +307,41 @@ func TestProgressCoalescesReasoningAndFlushesTail(t *testing.T) {
 	}
 	if err := renderer.Complete(ctx, turn, agentengine.TurnResult{Status: agentengine.TurnCanceled}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestProgressStreamsCodexReasoningInOrder(t *testing.T) {
+	renderer, service, turn := progressFixture(t)
+	ctx := context.Background()
+	reasoning := func(id, text string) agentengine.TurnEvent {
+		return agentengine.TurnEvent{
+			Kind: agentengine.TurnEventActivityUpdate, ItemID: id,
+			Activity: &agentengine.ActivityUpdate{Kind: string(activity.RuntimeEventReasoningSummary), Payload: text},
+		}
+	}
+	completion := reasoning("r1", " thought")
+	completion.TextSnapshot = true
+	events := []agentengine.TurnEvent{
+		reasoning("r1", "first"),
+		completion,
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "c1", Phase: "commentary", Text: "Checking"},
+		reasoning("r2", "next thought"),
+		reasoning("r3", ""),
+	}
+	for _, event := range events {
+		if err := renderer.Emit(ctx, turn, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := renderer.Complete(ctx, turn, agentengine.TurnResult{Status: agentengine.TurnCanceled}); err != nil {
+		t.Fatal(err)
+	}
+	_, progress := progressMessage(t, service)
+	items := progress.Items
+	if len(items) != 3 || items[0].Kind != "reasoning" || items[0].Text != "first thought" ||
+		items[1].Kind != "commentary" || items[1].Text != "Checking" ||
+		items[2].Kind != "reasoning" || items[2].Text != "next thought" {
+		t.Fatalf("unexpected progress items: %+v", items)
 	}
 }
 

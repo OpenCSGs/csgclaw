@@ -72,7 +72,7 @@ func TestSuccessfulImageRetryParticipatesInCompletedTurnEviction(t *testing.T) {
 	}}
 	t.Cleanup(func() { engine.files.DeleteAgent("agent-image") })
 	conversation := engine.Conversations("agent-image")
-	request := TurnRequest{ID: "image-retry", ConversationKey: "room-image", Input: []InputPart{{Kind: InputPartText, Text: "blue sky"}}, ImageGeneration: &contract.ImageGenerationTask{ID: "image-call", Prompt: "blue sky"}}
+	request := TurnRequest{ID: "image-retry", ConversationKey: "room-image", Input: []InputPart{{Kind: InputPartText, Text: "blue sky"}}, ImageGeneration: &contract.ImageGenerationTask{ID: "image-call", Prompt: "blue sky", Model: testImageModel()}}
 	var fileID string
 	sink := contract.ImageGenerationSink{EventSink: EventSinkFunc(func(_ context.Context, event TurnEvent) error {
 		if task, ok := event.Output.Payload.(contract.ImageGenerationTask); ok && task.State == "completed" {
@@ -121,7 +121,7 @@ func TestImageHandlerStopsAfterBadRequestForTurn(t *testing.T) {
 	conversation := &conversations{engine: engine, agentID: "agent-1"}
 	turn := &activeTurn{request: TurnRequest{ID: "turn-1", ConversationKey: "room-1"}}
 	sink := contract.ImageGenerationSink{EventSink: EventSinkFunc(func(context.Context, TurnEvent) error { return nil })}
-	handle, preflight := conversation.imageHandler(turn, sink, nil, nil)
+	handle, preflight := conversation.imageHandler(turn, sink, testImageModel(), nil)
 	first := handle(context.Background(), "call-1", "blue sky", nil, modelprovider.ImageGenerationOptions{})
 	second := handle(context.Background(), "call-2", "blue sky", nil, modelprovider.ImageGenerationOptions{Size: "1024x1024"})
 	var providerErr *modelprovider.ImageGenerationError
@@ -137,7 +137,7 @@ func TestImageHandlerDoesNotGenerateReplacementAfterEditFails(t *testing.T) {
 		return modelprovider.GeneratedImage{}, errors.New("unexpected provider call")
 	}}
 	conversation := &conversations{engine: engine, agentID: "agent-1"}
-	handle, preflight := conversation.imageHandler(&activeTurn{}, nil, nil, nil)
+	handle, preflight := conversation.imageHandler(&activeTurn{}, nil, testImageModel(), nil)
 	if err := handle(context.Background(), "edit", "add a sheep", []int{1}, modelprovider.ImageGenerationOptions{}); err == nil {
 		t.Fatal("expected the missing reference to fail")
 	}
@@ -154,7 +154,7 @@ func TestImageHandlerPreflightRejectsEditWithTextOnlyModel(t *testing.T) {
 		return modelcap.ImageGeneration{TextToImage: true}
 	}}
 	conversation := &conversations{engine: engine}
-	_, preflight := conversation.imageHandler(&activeTurn{}, nil, nil, nil)
+	_, preflight := conversation.imageHandler(&activeTurn{}, nil, testImageModel(), nil)
 	if err := preflight(false); err != nil {
 		t.Fatalf("text-to-image should be allowed: %v", err)
 	}
@@ -165,5 +165,36 @@ func TestImageHandlerPreflightRejectsEditWithTextOnlyModel(t *testing.T) {
 	}
 	if preflight(false) != err {
 		t.Fatal("text-to-image must not replace the rejected edit in the same turn")
+	}
+}
+
+func testImageModel() *modelprovider.ImageGenerationConfig {
+	return &modelprovider.ImageGenerationConfig{ProviderID: "codex", ModelID: "gpt-image-2"}
+}
+
+func TestImageGenerationMissingModelReturnsToolErrorWithoutOutput(t *testing.T) {
+	ctx := context.Background()
+	engine := &Engine{generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
+		t.Fatal("provider called without a model")
+		return modelprovider.GeneratedImage{}, nil
+	}}
+	conversation := &conversations{engine: engine}
+	turn := &activeTurn{}
+	sink := contract.ImageGenerationSink{EventSink: EventSinkFunc(func(context.Context, TurnEvent) error {
+		t.Fatal("missing model should not create an image status message")
+		return nil
+	})}
+	for _, model := range []*modelprovider.ImageGenerationConfig{nil, {ProviderID: "codex"}, {ModelID: "gpt-image-2"}} {
+		handle, preflight := conversation.imageHandler(turn, sink, model, nil)
+		if err := preflight(false); !errors.Is(err, errImageModelNotConfigured) {
+			t.Fatalf("preflight: %v", err)
+		}
+		if err := handle(ctx, "call-1", "blue sky", []int{1}, modelprovider.ImageGenerationOptions{}); !errors.Is(err, errImageModelNotConfigured) {
+			t.Fatalf("tool: %v", err)
+		}
+		task := contract.ImageGenerationTask{ID: "call-1", Prompt: "blue sky", Model: model}
+		if err := conversation.generateImage(ctx, turn, sink, task); !errors.Is(err, errImageModelNotConfigured) {
+			t.Fatalf("retry: %v", err)
+		}
 	}
 }

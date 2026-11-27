@@ -32,10 +32,10 @@ func TestAppServerUnboundSessionKeepsContextAndIsolatesPriorMemory(t *testing.T)
 				if live.conversationSessions[key] != "" {
 					t.Fatal("prior memory binding remains resumable")
 				}
-				if thread == "cold-thread" || thread == "resumed-thread" {
+				if thread == "cold-thread" {
 					t.Fatal("memory-free turn resumed prior memory")
 				}
-			} else if thread != "resumed-thread" {
+			} else if thread != "cold-thread" {
 				t.Fatalf("unbound conversation was replaced: %s", thread)
 			}
 		})

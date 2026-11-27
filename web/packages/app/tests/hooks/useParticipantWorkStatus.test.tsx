@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 describe("useParticipantWorkStatus", () => {
-  it("projects active lease state and expires it through one deadline timer", () => {
+  it("projects active lease state and expires it through one deadline timer", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(startedAt);
     const { result } = renderHook(() =>
@@ -42,6 +42,7 @@ describe("useParticipantWorkStatus", () => {
       }),
     );
 
+    await act(async () => {});
     expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
     expect(result.current.hasObservedWorkLease("user-worker")).toBe(false);
 
@@ -68,7 +69,7 @@ describe("useParticipantWorkStatus", () => {
     ]);
     expect(result.current.hasObservedWorkLease("pt-worker")).toBe(true);
     expect(result.current.hasObservedWorkLease("user-worker")).toBe(true);
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
 
     act(() =>
       result.current.handleRealtimeEvent(
@@ -107,7 +108,7 @@ describe("useParticipantWorkStatus", () => {
 
     act(() => vi.advanceTimersByTime(15_000));
     expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
 
     act(() =>
       result.current.handleRealtimeEvent({
@@ -117,6 +118,125 @@ describe("useParticipantWorkStatus", () => {
     );
     expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
     expect(result.current.hasObservedWorkLease("pt-worker")).toBe(false);
+  });
+
+  it("uses the independent HTTP clock for work events delayed in transit", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance", "setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    vi.setSystemTime(startedAt - 5000);
+    const fetchMock = vi.fn(
+      async () => new Response("ok", { headers: { "X-CSGClaw-Server-Time-Ms": String(startedAt) } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useParticipantWorkStatus({ agents: [], users: [] }));
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledWith("healthz", expect.objectContaining({ cache: "no-store" }));
+
+    const status = {
+      phase: "working",
+      stage: "generating_reply",
+      sequence: 1,
+      output_tokens_per_second: 18,
+      output_rate_sampled_at: startedAt,
+    } as const;
+    act(() => {
+      vi.advanceTimersByTime(5800);
+      result.current.handleRealtimeEvent(
+        workEvent({
+          server_time_ms: startedAt,
+          expires_at: new Date(startedAt + 5000).toISOString(),
+          status,
+        }),
+      );
+    });
+    expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
+
+    act(() =>
+      result.current.handleRealtimeEvent(
+        workEvent({
+          lease_id: "fresh-lease",
+          server_time_ms: startedAt + 5800,
+          status: { ...status, output_rate_sampled_at: startedAt + 5800 },
+        }),
+      ),
+    );
+    expect(result.current.workingParticipantsForRoom("room-1")[0]?.outputRateExpiresAt).toBe(8300);
+  });
+
+  it("replays the latest working event after calibration and honors a newer idle event", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance", "setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    vi.setSystemTime(startedAt + 5000);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            setTimeout(
+              () =>
+                resolve(
+                  new Response("ok", {
+                    headers: { "X-CSGClaw-Server-Time-Ms": String(startedAt + 400) },
+                  }),
+                ),
+              800,
+            );
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useParticipantWorkStatus({ agents: [], users: [] }));
+
+    const fresh = {
+      server_time_ms: startedAt + 120,
+      expires_at: new Date(startedAt + 5120).toISOString(),
+      status: {
+        phase: "working",
+        stage: "generating_reply",
+        sequence: 1,
+        output_tokens_per_second: 18,
+        output_rate_sampled_at: startedAt + 120,
+      },
+    } as const;
+    act(() => {
+      vi.advanceTimersByTime(120);
+      result.current.handleRealtimeEvent(workEvent(fresh));
+      result.current.handleRealtimeEvent(workEvent({ ...fresh, lease_id: "released-lease" }));
+      result.current.handleRealtimeEvent(
+        workEvent({
+          lease_id: "released-lease",
+          reason: "released",
+          revision: 2,
+          state: "idle",
+        }),
+      );
+      result.current.handleRealtimeEvent(workEvent({ ...fresh, lease_id: "released-lease" }));
+    });
+    expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
+
+    await act(async () => vi.advanceTimersByTimeAsync(680));
+    expect(result.current.workingParticipantsForRoom("room-1")).toEqual([
+      expect.objectContaining({ leaseID: "lease-1", outputRateExpiresAt: 2620 }),
+    ]);
+  });
+
+  it("falls back to the browser clock if the initial calibration times out", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(startedAt);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, options: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            options.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useParticipantWorkStatus({ agents: [], users: [] }));
+    act(() => result.current.handleRealtimeEvent(workEvent({ server_time_ms: startedAt })));
+    expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
+
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(result.current.workingParticipantsForRoom("room-1")).toEqual([
+      expect.objectContaining({ leaseID: "lease-1" }),
+    ]);
   });
 
   it("does not display idle work updates", () => {

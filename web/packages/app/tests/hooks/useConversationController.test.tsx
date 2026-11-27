@@ -1,8 +1,11 @@
+import { clearTestComposerDrafts } from "../helpers/composerDrafts";
+import { composerDraftKey } from "@/shared/storage/composerDrafts";
 import { createTranslator } from "@/shared/i18n";
 import { CLOUD_SEND_CONSENT_STORAGE_KEY } from "@/shared/storage/keys";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { vi } from "vitest";
 import { useConversationController } from "@/hooks/workspace/useConversationController";
 import { WorkspacePaneTypes } from "@/models/routing";
@@ -25,6 +28,8 @@ import type { AgentProfileLike } from "@/models/agents";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import type { SendMessageRequestOptions } from "@/api/im";
 import type { OpenCSGAuthGuard } from "@/hooks/workspace/useOpenCSGAuthGuard";
+
+afterEach(clearTestComposerDrafts);
 
 const subscribeIMEventsMock = vi.fn();
 const apiMocks = vi.hoisted(() => ({
@@ -178,6 +183,9 @@ function renderConversationController(
     managerRuntimeWarning?: string;
     messageListActive?: boolean;
     openCSGAuthGuard?: OpenCSGAuthGuard;
+    navigatePane?: Parameters<typeof useConversationController>[0]["navigatePane"];
+    selectComputer?: Parameters<typeof useConversationController>[0]["selectComputer"];
+    selectConversation?: Parameters<typeof useConversationController>[0]["selectConversation"];
     setBootstrapData?: (updater: unknown) => void;
     workingParticipantsForRoom?: (roomID: string | null | undefined) => ConversationWorkingParticipant[];
   } = {},
@@ -221,13 +229,13 @@ function renderConversationController(
         messageActionBusy: "",
         messageActionFeedback: { key: "", message: "" },
         messageListActive,
-        navigatePane: vi.fn(),
+        navigatePane: options.navigatePane ?? vi.fn(),
         onMessageAction: vi.fn(),
         onProviderLogin: vi.fn(),
         openCSGAuthGuard: options.openCSGAuthGuard ?? openCSGAuthGuardStub(),
         rooms: data.rooms,
-        selectComputer: vi.fn(),
-        selectConversation: vi.fn(),
+        selectComputer: options.selectComputer ?? vi.fn(),
+        selectConversation: options.selectConversation ?? vi.fn(),
         setActiveConversationId: vi.fn(),
         setBootstrapData: options.setBootstrapData ?? vi.fn(),
         setShowToolCalls: vi.fn(),
@@ -250,6 +258,24 @@ function renderConversationController(
 }
 
 describe("useConversationController", () => {
+  it.each([false, true])("keeps an explicit route missing from bootstrap (other rooms: %s)", (hasOtherRooms) => {
+    const navigatePane = vi.fn();
+    const selectComputer = vi.fn();
+    const selectConversation = vi.fn();
+    const data = dataWithMessages([]);
+    renderConversationController({
+      activeConversationId: directConversation.id,
+      routedConversationId: "missing",
+      data: hasOtherRooms ? data : { ...data, rooms: [] },
+      navigatePane,
+      selectComputer,
+      selectConversation,
+    });
+    expect(navigatePane).not.toHaveBeenCalled();
+    expect(selectComputer).not.toHaveBeenCalled();
+    expect(selectConversation).not.toHaveBeenCalled();
+  });
+
   it("uses shared avatar metadata without treating it as cloud availability", () => {
     const agent = { ...cloudAgentFixture[0], type: "code" };
     const data = {
@@ -1855,6 +1881,107 @@ describe("useConversationController", () => {
     });
 
     expect(result.current.conversationViewProps.workingParticipants).toEqual([]);
+  });
+
+  it.each(["", "Next message"])("preserves only new edits after Enter sends a draft (%j)", async (nextDraft) => {
+    const key = composerDraftKey("u-admin", directConversation.id);
+    let completeSend!: (message: IMMessage) => void;
+    apiMocks.sendMessageRequest.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          completeSend = resolve;
+        }),
+    );
+    const { result } = renderConversationController();
+    const editor = document.createElement("div");
+    editor.textContent = "Send this message";
+    result.current.conversationViewProps.editorRef.current = editor;
+    act(() => result.current.conversationViewProps.onSyncComposer());
+
+    const preventDefault = vi.fn();
+    act(() =>
+      result.current.conversationViewProps.onComposerKeyDown({
+        key: "Enter",
+        preventDefault,
+      } as unknown as ReactKeyboardEvent<HTMLElement>),
+    );
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+    // The composer also synchronizes its DOM on keyup, while the send is pending.
+    act(() => result.current.conversationViewProps.onSyncComposer());
+    if (nextDraft) {
+      editor.textContent = nextDraft;
+      act(() => result.current.conversationViewProps.onSyncComposer());
+    }
+    await act(async () => completeSend(successfulMessage("Send this message")));
+    window.dispatchEvent(new Event("pagehide"));
+
+    expect(editor.textContent).toBe(nextDraft);
+    expect(result.current.conversationViewProps.draftText).toBe(nextDraft);
+    if (nextDraft) {
+      expect(localStorage.getItem(key)).toContain(nextDraft);
+    } else {
+      expect(localStorage.getItem(key)).toBeNull();
+    }
+  });
+
+  it("restores drafts by room and clears the sent room when navigation completes before sending", async () => {
+    const roomID = directConversation.id;
+    const other = { ...directConversation, id: "room-other" };
+    const data = { ...dataWithMessages([]), rooms: [directConversation, other] };
+    const key = composerDraftKey(data.current_user_id, roomID);
+    const otherKey = composerDraftKey(data.current_user_id, other.id);
+    localStorage.setItem(key, JSON.stringify({ segments: [{ type: "text", text: "First room" }] }));
+    localStorage.setItem(otherKey, JSON.stringify({ segments: [{ type: "text", text: "Other room" }] }));
+    let completeSend!: (message: IMMessage) => void;
+    apiMocks.sendMessageRequest.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          completeSend = resolve;
+        }),
+    );
+    const { result, rerender, unmount } = renderConversationController({ data });
+    expect(result.current.conversationViewProps.draftText).toBe("First room");
+    let send!: Promise<void>;
+    act(() => {
+      send = result.current.conversationViewProps.onSendMessage() as Promise<void>;
+    });
+
+    rerender({ activeConversationId: other.id, data });
+    expect(result.current.conversationViewProps.draftText).toBe("Other room");
+    await act(async () => {
+      completeSend(successfulMessage("First room"));
+      await send;
+    });
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(result.current.conversationViewProps.draftText).toBe("Other room");
+    unmount();
+
+    const remounted = renderConversationController({ data });
+    expect(remounted.result.current.conversationViewProps.draftText).toBe("");
+    remounted.rerender({ activeConversationId: other.id, data });
+    expect(remounted.result.current.conversationViewProps.draftText).toBe("Other room");
+  });
+
+  it("keeps a failed room draft and immediately removes it when explicitly cleared", async () => {
+    const key = composerDraftKey("u-admin", directConversation.id);
+    apiMocks.sendMessageRequest.mockRejectedValueOnce(new Error("Failed"));
+    const { result } = renderConversationController();
+    const editor = document.createElement("div");
+    editor.textContent = "Unsent message";
+    result.current.conversationViewProps.editorRef.current = editor;
+    act(() => result.current.conversationViewProps.onSyncComposer());
+    window.dispatchEvent(new Event("pagehide"));
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+    expect(localStorage.getItem(key)).toContain("Unsent message");
+    expect(result.current.conversationViewProps.draftText).toBe("Unsent message");
+
+    act(() => result.current.conversationViewProps.onClearDraft?.());
+    window.dispatchEvent(new Event("pagehide"));
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(result.current.conversationViewProps.draftText).toBe("");
   });
 
   it("tracks upload progress, stops an in-flight send, and keeps the draft retryable", async () => {

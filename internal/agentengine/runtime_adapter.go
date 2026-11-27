@@ -55,6 +55,7 @@ func New(controller *agent.Controller) *Engine {
 	engine.generateImage = controller.Models().GenerateImage
 	engine.imageGenerationModes = controller.Models().ImageGenerationModes
 	engine.generateVideo = controller.Models().GenerateVideo
+	engine.videoCapabilities = controller.Models().VideoGenerationCapabilities
 	return engine
 }
 

@@ -30,6 +30,14 @@ func (e *UpstreamRequestError) Unwrap() error {
 // UserFacingUpstreamError unwraps a provider request error and returns the safe
 // response fields that API handlers may expose.
 func UserFacingUpstreamError(err error) (status int, code, message string, ok bool) {
+	var connectionErr *ConnectionError
+	if errors.As(err, &connectionErr) {
+		status = connectionErr.Status
+		if status < 400 || status > 599 {
+			status = http.StatusBadGateway
+		}
+		return status, connectionErr.Code, connectionErr.Message, true
+	}
 	var statusErr *ResponsesAPIStatusError
 	if !errors.As(err, &statusErr) {
 		var requestErr *UpstreamRequestError
@@ -47,6 +55,20 @@ func UserFacingUpstreamError(err error) (status int, code, message string, ok bo
 	}
 	code = UpstreamErrorCodeForResponse(status, []byte(statusErr.Body))
 	return status, code, FriendlyUpstreamErrorMessage(status, code), true
+}
+
+// ResponsesEndpointUnsupported distinguishes a missing route from an unavailable model.
+func ResponsesEndpointUnsupported(status int, body []byte) bool {
+	if status != http.StatusNotFound && status != http.StatusMethodNotAllowed && status != http.StatusNotImplemented {
+		return false
+	}
+	switch strings.ToLower(UpstreamErrorCode(body)) {
+	case "model_not_found", "modelnotfound", "model_not_supported", "modelnotopen", "invalidendpointormodel.notfound",
+		"invalidendpointormodel.modelidaccessdisabled", "deploymentnotfound", "cluster_not_found":
+		return false
+	default:
+		return true
+	}
 }
 
 // FallbackUpstreamErrorCode returns a stable OpenAI-style error code when an

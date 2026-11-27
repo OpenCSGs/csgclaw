@@ -72,11 +72,12 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 		}
 		req.AgentHubService = hubSvc
 		var created apitypes.Participant
+		var inserted bool
 		skippedResources := []mcp.SkippedTemplateResource{}
 		create := func(ctx context.Context) error {
 			var err error
 			ctx = agentengine.WithTemplateMCPAvailability(ctx, h.mcp, &skippedResources)
-			created, err = h.participant.Create(ctx, req)
+			created, inserted, err = h.participant.CreateWithStatus(ctx, req)
 			return err
 		}
 		if channelName == participant.ChannelFeishu && req.Type == participant.TypeAgent {
@@ -112,12 +113,6 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			writeAgentOperationErrorWithBillingURL(w, err, participantCreateStatus(err), billingURL)
 			return
 		}
-		if req.AutoPublish {
-			if err := h.queueAgentPublication(created.AgentID); err != nil {
-				writeAgentSessionError(w, 502, "relay_publish_failed", "participant created; automatic publication could not be queued: "+err.Error(), nil)
-				return
-			}
-		}
 		presented := h.presentParticipant(created)
 		if len(skippedResources) > 0 {
 			presented.Metadata = maps.Clone(presented.Metadata)
@@ -126,8 +121,18 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			}
 			presented.Metadata["skipped_resources"] = skippedResources
 		}
-		h.publishParticipantEvent(im.EventTypeParticipantCreated, presented)
-		writeJSON(w, http.StatusCreated, presented)
+		status := http.StatusOK
+		if inserted {
+			h.publishParticipantEvent(im.EventTypeParticipantCreated, presented)
+			status = http.StatusCreated
+		}
+		if req.AutoPublish {
+			if err := h.queueAgentPublication(created.AgentID); err != nil {
+				writeAgentSessionError(w, 502, "relay_publish_failed", "participant created; automatic publication could not be queued: "+err.Error(), nil)
+				return
+			}
+		}
+		writeJSON(w, status, presented)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -147,6 +152,7 @@ func (h *Handler) handleParticipantByIDPath(w http.ResponseWriter, r *http.Reque
 
 	switch r.Method {
 	case http.MethodGet:
+		w.Header().Set("X-CSGClaw-Participant-Create", "reconcile")
 		item, ok := h.participant.Get(channelName, id)
 		if !ok {
 			http.NotFound(w, r)
@@ -437,6 +443,7 @@ func presentParticipants(items []apitypes.Participant) []apitypes.Participant {
 }
 
 func presentParticipant(item apitypes.Participant) apitypes.Participant {
+	item.AgentName = "" // The response uses the current worker name.
 	if len(item.ChannelAppConfig) == 0 {
 		return item
 	}

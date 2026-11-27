@@ -70,6 +70,7 @@ func RenderRuntimeAgentsInstructionsBlock(agentID, instructions string) string {
 func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions string, options RuntimeManagedInstructionsOptions) string {
 	command := companionCLICommand(options.CLIPath)
 	managedInstructions := joinManagedInstructions(untrustedExtraContextInstructions, runtimeFilePublishingInstructions, RoomAttachmentInstructions(command), ResourceSelectionInstructions)
+	managedInstructions = joinManagedInstructions(managedInstructions, skillRoutingInstructions)
 	if identity.CanonicalAgentID(agentID) == identity.ManagerAgentID && !options.AgentMCP {
 		managedInstructions = joinManagedInstructions(managedInstructions, managerRuntimeConnectorInstructions)
 	}
@@ -81,6 +82,12 @@ func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions strin
 	}
 	return renderAgentsInstructionsBlock(instructions, managedInstructions, command)
 }
+
+const skillRoutingInstructions = `### Installing vs creating skills
+
+- For finding, adding, installing, reinstalling or checking an existing skill (安装/添加/新增已有技能、查安装状态), first load the bundled skill-installer and follow its current-worker workflow. A request for a capability such as “给我加个能总结文档的技能” means find an existing skill, not author one.
+- For an install request with a bare name or namespace/name, call skill_search without a source. Enable an exact installed match rather than looking for another download; never infer GitHub from the slash.
+- For writing a new SKILL.md, packaging a new capability, or editing a skill's implementation, first load skill-creator instead. If “新增技能” alone is ambiguous, ask whether to install an existing one or create one. Invoking an already selected skill to do work is not an install request.`
 
 const untrustedExtraContextInstructions = `### Untrusted Extra Context
 
@@ -112,7 +119,9 @@ const ImageGenerationPromptPolicy = `- For image editing or reference-based imag
 - Calling the generation tool presents the exact prompt and generation settings to the user for confirmation. Do not state or imply that generation has started until the tool returns successfully.
 - A provider rejection does not establish that a character or category is prohibited. Report only the returned reason; do not replace the requested subject or rewrite the prompt to work around a rejection without a new user instruction.`
 
-const VideoGenerationPromptPolicy = `- When available, use csgclaw_generate_video whenever the user asks to create a video. For image-to-video, pass the requested numbered attached image in reference_images. If the source image is missing or ambiguous, ask the user to attach or identify it. Preserve a supplied prompt faithfully, including its original language and wording; do not translate, rewrite, expand, or otherwise optimize it unless the user explicitly asks you to do so. Do not invent duration, resolution, subjects, styles, or exclusions. Omit unspecified size and duration so CSGClaw can use the selected model's advertised defaults. Calling the generation tool presents the exact prompt and generation settings to the user for confirmation. Do not state or imply that generation has started until the tool returns successfully. A successful tool call only means the request was submitted: acknowledge submission briefly without describing a transient status such as generating, downloading, completed, or delivered. The task card is the source of truth and updates automatically; do not publish another copy.`
+const VideoGenerationRetryPolicy = "When a video parameter is explicitly rejected, use an interactive card and keep the turn open for the user's response. If there is a clear replacement, your next action must be to call csgclaw_generate_video with that value and the original prompt, reference images, and other settings. Include retry_of when supplied by the failed tool result. The tool opens the confirmation card before sending a new request, so no separate chat approval is needed. If the user must choose between alternatives, call request_user_input with the choices as structured options. A question or Markdown list in the final answer does not open a card. If upstream acceptance is uncertain, do not resubmit."
+
+const VideoGenerationPromptPolicy = `- When available, use csgclaw_generate_video whenever the user asks to create a video. For image-to-video, pass the requested numbered attached image in reference_images. If the source image is missing or ambiguous, ask the user to attach or identify it. Preserve a supplied prompt faithfully, including its original language and wording; do not translate, rewrite, expand, or otherwise optimize it unless the user explicitly asks you to do so. Do not invent duration, resolution, subjects, styles, or exclusions. Omit unspecified size and duration so CSGClaw can use the selected model's advertised defaults. Calling the generation tool presents the exact prompt and generation settings to the user for confirmation. Do not state or imply that generation has started until the tool returns successfully. A successful tool call only means the request was submitted: acknowledge submission briefly without describing a transient status such as generating, downloading, completed, or delivered. The task card is the source of truth and updates automatically; do not publish another copy.` + " " + VideoGenerationRetryPolicy
 
 const runtimeFilePublishingInstructions = `### Image Generation
 

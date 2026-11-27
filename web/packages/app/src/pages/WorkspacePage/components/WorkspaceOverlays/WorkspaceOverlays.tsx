@@ -1,3 +1,4 @@
+import { WorkspaceFeedback } from "@/components/business/Feedback";
 import { OpenCSGConnectionDialog } from "@/components/business/OpenCSGConnectionDialog";
 import { lazy, Suspense } from "react";
 import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
@@ -34,6 +35,7 @@ export function WorkspaceOverlays() {
         {current === "settings" ? <SettingsPage /> : null}
         {current === "profile" ? <HumanPage /> : null}
       </Suspense>
+      <WorkspaceFeedback />
       {controller.hubViewProps?.hub?.skillUpdateNames?.length ? (
         <SkillUpdateDialog
           key={controller.hubViewProps.hub.skillUpdateNames.join("\u0000")}

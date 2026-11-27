@@ -1,7 +1,12 @@
 import type { ModelServicePreset } from "@/models/modelProviderPresets";
 import type { ModelOverride } from "@/models/modelMetadata";
 import { del, get, post, put } from "@/api/client";
-import { normalizeModelProviderCatalog, type ModelProvider, type ModelProviderCatalog } from "@/models/modelProviders";
+import {
+  normalizeModelProvider,
+  normalizeModelProviderCatalog,
+  type ModelProvider,
+  type ModelProviderCatalog,
+} from "@/models/modelProviders";
 
 export type ModelProviderPayload = {
   model_overrides?: Record<string, ModelOverride>;
@@ -15,6 +20,7 @@ export type ModelProviderPayload = {
   api_key?: string;
   headers?: Record<string, unknown>;
   models?: string[];
+  image_models?: string[];
   reasoning_effort?: string;
 };
 
@@ -25,10 +31,11 @@ export type ModelProviderCheckResult = {
   message?: string;
   models: string[];
   last_checked_at?: string;
+  provider?: ModelProvider;
 };
 
-export async function fetchModelProviders(): Promise<ModelProviderCatalog> {
-  return normalizeModelProviderCatalog(await get("api/v1/model-providers"));
+export async function fetchModelProviders(signal?: AbortSignal): Promise<ModelProviderCatalog> {
+  return normalizeModelProviderCatalog(await get("api/v1/model-providers", { signal }));
 }
 
 export function createModelProvider(payload: ModelProviderPayload): Promise<ModelProvider> {
@@ -43,11 +50,15 @@ export function deleteModelProvider(providerID: string): Promise<void> {
   return del(`api/v1/model-providers/${encodeURIComponent(providerID)}`);
 }
 
-export function checkModelProvider(
+export async function checkModelProvider(
   providerID: string,
   payload: ModelProviderPayload = {},
 ): Promise<ModelProviderCheckResult> {
-  return post(`api/v1/model-providers/${encodeURIComponent(providerID)}/check`, payload);
+  const result = await post<Omit<ModelProviderCheckResult, "provider"> & { provider?: unknown }>(
+    `api/v1/model-providers/${encodeURIComponent(providerID)}/check`,
+    payload,
+  );
+  return { ...result, provider: result.provider ? normalizeModelProvider(result.provider) : undefined };
 }
 
 export function fetchModelProviderPresets(signal?: AbortSignal): Promise<{ presets: ModelServicePreset[] }> {

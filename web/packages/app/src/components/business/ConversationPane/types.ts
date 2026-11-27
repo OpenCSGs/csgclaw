@@ -9,7 +9,7 @@ import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import type { RoomMembersPanelProps } from "@/components/business/RoomMembersPanel";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
-import type { AttachmentDraft } from "@/models/attachments";
+import type { AttachmentDraft, ComposerAttachmentDraft } from "@/models/attachments";
 import type { ComposerMentionUser, ComposerSegment } from "@/models/composer";
 import type { ComposerFileReference } from "@/models/fileReferences";
 import type {
@@ -49,6 +49,8 @@ export type ComposerSendStatus = "failed" | "idle" | "sending";
 export type ConversationWorkingAction = (typeof ConversationWorkingActions)[keyof typeof ConversationWorkingActions];
 
 export type ConversationWorkingParticipant = {
+  outputTokensPerSecond?: number;
+  outputRateExpiresAt?: number;
   contextUsage?: ContextUsage;
   contextUsageEpoch?: number;
   showContextUsage?: boolean;
@@ -95,7 +97,7 @@ export type ConversationPaneProps = {
   onPickThreadResources?: (resources: ResourceSnapshot[]) => void;
   draftSegments: ComposerSegment[];
   draftText: string;
-  attachmentDrafts?: AttachmentDraft[];
+  attachmentDrafts?: ComposerAttachmentDraft[];
   removedAttachmentCount?: number;
   removedAttachmentName?: string;
   sendError?: string;
@@ -141,6 +143,7 @@ export type ConversationPaneProps = {
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onRemoveMember?: (memberID: string) => VoidOrPromise;
   onRemoveAttachment?: (id: string) => void;
+  onClearDraft?: () => void;
   onRemoveThreadAttachment?: (id: string) => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;

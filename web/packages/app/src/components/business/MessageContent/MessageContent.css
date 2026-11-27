@@ -126,6 +126,32 @@
   margin-bottom: 0;
 }
 
+.message-content[data-streaming-text] > :last-child:not(:is(ul, ol))::after,
+.message-content[data-streaming-text] > :is(ul, ol):last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  inline-size: 0.38em;
+  block-size: 0.9em;
+  margin-inline-start: 0.2em;
+  border-radius: 1px;
+  background: currentColor;
+  vertical-align: -0.08em;
+  animation: message-stream-caret 1s step-end infinite;
+}
+
+@keyframes message-stream-caret {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-content[data-streaming-text] > :last-child:not(:is(ul, ol))::after,
+  .message-content[data-streaming-text] > :is(ul, ol):last-child > li:last-child::after {
+    animation: none;
+  }
+}
+
 .message-citation-link {
   display: inline;
   margin: 0;

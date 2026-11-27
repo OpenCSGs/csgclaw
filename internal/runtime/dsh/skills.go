@@ -3,14 +3,43 @@ package dsh
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
 	agentruntime "csgclaw/internal/runtime"
 	runtimeworkspace "csgclaw/internal/runtime/workspace"
+	"csgclaw/internal/skill/installstate"
 	skill "csgclaw/internal/skill/state"
 )
+
+func (r *Runtime) SkillDiskSync(layout agentruntime.Layout, name string, enabled bool, _ map[string]any) (string, error) {
+	view := filepath.Join(filepath.Dir(filepath.Dir(layout.SkillsRoot)), "skill-view", "skills", name)
+	fi, err := os.Lstat(view)
+	if errors.Is(err, os.ErrNotExist) {
+		if enabled {
+			return "pending", nil
+		}
+		return "in_sync", nil
+	}
+	if err != nil {
+		return "unknown", err
+	}
+	if !enabled || !fi.IsDir() {
+		return "pending", nil
+	}
+	want, err := skill.DirectoryDigest(filepath.Join(layout.SkillsRoot, name))
+	if err != nil {
+		return "unknown", err
+	}
+	got, err := skill.DirectoryDigest(view)
+	if err != nil {
+		return "unknown", err
+	}
+	if want != got {
+		return "pending", nil
+	}
+	return "in_sync", nil
+}
 
 func (r *Runtime) ReconcileSkills(_ context.Context, h agentruntime.Handle, states map[string]skill.State) error {
 	ref, err := r.deps.ResolveAgent(h)
@@ -25,16 +54,16 @@ func (r *Runtime) ReconcileSkills(_ context.Context, h agentruntime.Handle, stat
 	if err != nil {
 		return err
 	}
-	root := filepath.Dir(layout.SkillsRoot)
-	runtimeRoot := filepath.Dir(root)
-	if err := writeRuntimePatch(filepath.Join(runtimeRoot, patchFileName), ref.Profile); err != nil {
-		return err
-	}
-	return projectSkills(runtimeRoot, layout.SkillsRoot, states)
+	runtimeRoot := filepath.Dir(filepath.Dir(layout.SkillsRoot))
+	// A CLI may be replacing files while the worker is running. Project a
+	// single committed installation snapshot, not a mix of two versions.
+	return installstate.ReadSnapshot(layout.SkillsRoot, func(_ map[string]installstate.Record) error {
+		return projectSkills(runtimeRoot, layout.SkillsRoot, states)
+	})
 }
 
 // projectSkills 在完整文件目录之外生成 DSH 使用的 Skill 目录。
-// 调用者持有生命周期控制权，启动前完成目录替换。
+// 调用者与其他配置写入互斥；更新磁盘不要求中断当前会话。
 func projectSkills(root, source string, states map[string]skill.State) error {
 	entries, err := os.ReadDir(source)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -88,16 +117,6 @@ func projectSkills(root, source string, states map[string]skill.State) error {
 		if previous {
 			return errors.Join(err, os.Rename(backup, target))
 		}
-		return err
-	}
-	patch := fmt.Sprintf("\n- id: skill-filesystem\n  config:\n    dshHome: %q\n    includeDefaultRoots: true\n", target)
-	file, err := os.OpenFile(filepath.Join(root, contextPatchFileName), os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	_, writeErr := file.WriteString(patch)
-	closeErr := file.Close()
-	if err := errors.Join(writeErr, closeErr); err != nil {
 		return err
 	}
 	return os.RemoveAll(backup)

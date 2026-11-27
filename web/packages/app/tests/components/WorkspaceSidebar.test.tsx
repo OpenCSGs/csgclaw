@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { createTranslator } from "@/shared/i18n";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { fetchTaskConversations } from "@/api/taskConversations";
@@ -13,7 +14,12 @@ import { createQueryWrapper } from "../helpers/queryClient";
 vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
 
 function CurrentPath() {
-  return <output data-testid="current-path">{useLocation().pathname}</output>;
+  const { pathname, search } = useLocation();
+  return (
+    <output data-testid="current-path" data-query={search}>
+      {pathname}
+    </output>
+  );
 }
 
 function taskEntry() {
@@ -43,6 +49,7 @@ const labels: Record<string, string> = {
   directMessagesSection: "Direct messages",
   expandSidebar: "Expand sidebar",
   humanSection: "Human",
+  iaUserMenuLabel: "User menu",
   localAgentConsole: "Local agent console",
   messagesTab: "Messages",
   modelProviderAdd: "Add model provider",
@@ -215,6 +222,26 @@ describe("WorkspaceSidebar", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
+  it("shows the selected appearance in the account menu and updates it after a theme change", async () => {
+    const user = userEvent.setup();
+    const zh = createTranslator("zh");
+    const { props, rerender } = renderSidebar({ taskEntry: taskEntry(), t: zh, theme: "dark" });
+    await user.click(screen.getByRole("button", { name: zh("iaUserMenuLabel") }));
+    const submenu = screen.getByRole("menuitem", { name: /外观与语言/ });
+    expect(within(submenu).getByText("深色")).toBeVisible();
+
+    fireEvent.keyDown(submenu, { key: "ArrowRight" });
+    await user.click(await screen.findByRole("menuitem", { name: "浅色" }));
+    expect(props.onThemeChange).toHaveBeenCalledWith("light");
+    rerender(
+      <MemoryRouter initialEntries={["/rooms/collaboration"]}>
+        <WorkspaceSidebar {...props} theme="light" />
+        <CurrentPath />
+      </MemoryRouter>,
+    );
+    expect(within(submenu).getByText("浅色")).toBeVisible();
+  });
+
   it.each([390, 1280])("shows destinations after choosing navigation at %ipx", (width) => {
     vi.stubGlobal("innerWidth", width);
     const { props } = renderSidebar({ taskEntry: taskEntry() });
@@ -268,12 +295,42 @@ describe("WorkspaceSidebar", () => {
     expect(props.onCollapseSidebar).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    ["taskEntryNewWithAgent", "/new"],
+    ["taskEntryEditAgent", "/agents"],
+  ])("routes a cloud conversation's %s action to %s", async (action, path) => {
+    vi.stubGlobal("innerWidth", 390);
+    const user = userEvent.setup();
+    vi.mocked(fetchTaskConversations).mockResolvedValue({
+      rooms: [
+        {
+          id: "cloud-room",
+          title: "Cloud review",
+          members: ["user-1", "cloud-worker"],
+          messages: [],
+          is_direct: true,
+          cloud_agent: { agent_id: "relay/worker", connection_id: "relay", user_id: "cloud-worker" },
+        },
+      ],
+      total: 1,
+      has_more: false,
+    });
+    const { props } = renderSidebar({ taskEntry: taskEntry() });
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Cloud review" }));
+    await user.click(screen.getByRole("menuitem", { name: action }));
+    const destination = screen.getByTestId("current-path");
+    expect(destination).toHaveTextContent(path);
+    expect(destination).toHaveAttribute("data-query", "?cloud=relay%2Fworker");
+    expect(props.onSelectAgent).not.toHaveBeenCalled();
+    expect(props.onCollapseSidebar).toHaveBeenCalledOnce();
+  });
+
   it.each([390, 1280])("keeps the destination visible after opening account settings at %ipx", async (width) => {
     vi.stubGlobal("innerWidth", width);
     const user = userEvent.setup();
     const { props } = renderSidebar({ taskEntry: taskEntry() });
 
-    await user.click(screen.getByRole("button", { name: "iaUserMenuLabel" }));
+    await user.click(screen.getByRole("button", { name: "User menu" }));
     await user.click(screen.getByRole("menuitem", { name: "Settings" }));
 
     expect(props.onOpenSettings).toHaveBeenCalledOnce();
@@ -612,9 +669,10 @@ describe("WorkspaceSidebar", () => {
       workspaceTab: WorkspaceTabs.agents,
     });
 
-    expect(document.querySelector('[data-workspace-section="humans"]')).toBeInTheDocument();
+    const humans = document.querySelector<HTMLElement>('[data-workspace-section="humans"]');
+    expect(humans).toBeInTheDocument();
     expect(document.querySelector('button[aria-controls="workspace-group-items-humans"]')).not.toBeInTheDocument();
-    expect(screen.getByText("User One")).toBeInTheDocument();
+    expect(within(humans!).getByText("User One")).toBeInTheDocument();
   });
 
   it("opens the notification section when there are no notification bots", () => {
@@ -649,13 +707,15 @@ describe("WorkspaceSidebar", () => {
     expect(onSelectTeam).not.toHaveBeenCalled();
   });
 
-  it("opens the settings page from the bottom settings entry without changing workspace tabs", () => {
+  it("opens settings from the sidebar user menu without changing workspace tabs", async () => {
     const onOpenSettings = vi.fn();
     const onWorkspaceTabChange = vi.fn();
 
     renderSidebar({ onOpenSettings, onWorkspaceTabChange });
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "User menu" }));
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
 
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(onWorkspaceTabChange).not.toHaveBeenCalled();

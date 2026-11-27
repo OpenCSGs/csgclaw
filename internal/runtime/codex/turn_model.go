@@ -148,7 +148,7 @@ func (s *liveSession) loadedTurnModel(modelID string) (contract.TurnModel, bool)
 }
 
 func (s *liveSession) persistedThreadModel(ctx context.Context, threadID string) (contract.TurnModel, bool) {
-	raw, err := s.appClient.request(ctx, "thread/read", map[string]any{"threadId": threadID, "includeTurns": false})
+	raw, err := s.appClient.startupRequest(ctx, "thread/read", map[string]any{"threadId": threadID, "includeTurns": false})
 	var result struct {
 		Thread struct {
 			ID              string `json:"id"`

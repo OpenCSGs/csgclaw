@@ -100,21 +100,47 @@ func (s *Store) Get(channel, id string) (apitypes.Participant, bool) {
 }
 
 func (s *Store) Save(item apitypes.Participant) error {
+	return s.saveAll([]apitypes.Participant{item})
+}
+
+// saveAll persists a worker's binding changes in a single participant snapshot.
+func (s *Store) saveAll(items []apitypes.Participant) error {
 	if s == nil {
 		return fmt.Errorf("participant store is required")
 	}
-	item = normalizeStoredParticipant(item)
-	if item.Channel == "" {
-		return fmt.Errorf("channel is required")
+	if len(items) == 0 {
+		return nil
 	}
-	if item.ID == "" {
-		return fmt.Errorf("id is required")
+	for i, item := range items {
+		item = normalizeStoredParticipant(item)
+		if item.Channel == "" {
+			return fmt.Errorf("channel is required")
+		}
+		if item.ID == "" {
+			return fmt.Errorf("id is required")
+		}
+		items[i] = item
 	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.items[storeKey(item.Channel, item.ID)] = item
-	return s.saveLocked()
+	previous := make([]apitypes.Participant, len(items))
+	for i, item := range items {
+		key := storeKey(item.Channel, item.ID)
+		previous[i] = s.items[key]
+		s.items[key] = item
+	}
+	if err := s.saveLocked(); err != nil {
+		for i := len(items) - 1; i >= 0; i-- {
+			key := storeKey(items[i].Channel, items[i].ID)
+			if previous[i].ID == "" {
+				delete(s.items, key)
+			} else {
+				s.items[key] = previous[i]
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *Store) Delete(channel, id string) (apitypes.Participant, bool, error) {

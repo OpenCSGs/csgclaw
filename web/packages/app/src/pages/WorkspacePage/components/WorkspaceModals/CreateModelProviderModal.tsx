@@ -18,6 +18,11 @@ import {
 } from "@/components/ui";
 import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
 import {
+  modelProviderProtocolOptions,
+  modelProviderProtocolURL,
+  usesModelProviderPresetURL,
+} from "@/models/modelProviderPresets";
+import {
   modelProviderDisplayNameExists,
   nextAvailableModelProviderDisplayName,
   parseModelProviderModelsText,
@@ -33,6 +38,7 @@ export type CreateModelProviderModalProps = {
   error?: string;
   locale?: LocaleCode;
   initialPreset?: string;
+  focusFallback?: HTMLElement | null;
   modelProviders?: ModelProviderCatalog | null;
   onClearError?: () => void;
   onClose: () => void;
@@ -45,12 +51,14 @@ export function CreateModelProviderModal({
   error = "",
   locale = "en",
   initialPreset = "",
+  focusFallback,
   modelProviders = null,
   onClose,
   onClearError,
   onCreate,
   t,
 }: CreateModelProviderModalProps) {
+  const [opener] = useState(() => document.activeElement);
   const directory = useModelProviderPresets();
   const presets = directory.data?.presets ?? [];
   const [selected, setSelected] = useState(initialPreset);
@@ -66,17 +74,23 @@ export function CreateModelProviderModal({
   const [protocol, setProtocol] = useState("");
   const [headers, setHeaders] = useState("");
   const [models, setModels] = useState("");
+  const [imageEndpoints, setImageEndpoints] = useState("");
   const [localError, setLocalError] = useState("");
   const preset = presets.find((item) => item.id === selected);
+  const isArkAPI = preset?.id === "volcengine";
   const defaultName = nextAvailableModelProviderDisplayName(modelProviders, preset?.name ?? "");
   const name = nameDraft ?? defaultName;
   const activeBrand = preset?.brand || brand;
   const region = preset?.regions.find((item) => item.id === regionID) ?? preset?.regions[0];
   const brandPresets = presets.filter((item) => item.brand === activeBrand);
   const brands = presets.filter((item, index) => presets.findIndex((other) => other.brand === item.brand) === index);
+  const selectedProtocol = protocol || region?.default_protocol || preset?.api_protocol || "";
+  const selectedURL = baseURL ?? modelProviderProtocolURL(region, selectedProtocol) ?? region?.base_url ?? "";
+  const protocolOptions = modelProviderProtocolOptions(region, selectedURL);
+  const protocolUnavailable = protocolOptions.some((option) => option.value === selectedProtocol && option.disabled);
   const duplicateName = Boolean(name.trim()) && modelProviderDisplayNameExists(modelProviders, name);
   const canConnect = Boolean(
-    preset && name.trim() && apiKey.trim() && (baseURL ?? region?.base_url ?? "").trim() && !duplicateName,
+    preset && name.trim() && apiKey.trim() && selectedURL.trim() && !duplicateName && !protocolUnavailable,
   );
   const cn = locale === "zh";
   const reset = () => {
@@ -88,6 +102,7 @@ export function CreateModelProviderModal({
     setProtocol("");
     setHeaders("");
     setModels("");
+    setImageEndpoints("");
     setLocalError("");
   };
   const selectService = (id: string) => {
@@ -98,7 +113,7 @@ export function CreateModelProviderModal({
   const close = () => {
     if (busy) return;
     if (
-      (apiKey || (nameDraft !== undefined && nameDraft !== defaultName) || headers || models) &&
+      (apiKey || (nameDraft !== undefined && nameDraft !== defaultName) || headers || models || imageEndpoints) &&
       !confirmWithFocusRecovery(t("modelProviderDiscardConfirm"))
     )
       return;
@@ -107,6 +122,11 @@ export function CreateModelProviderModal({
   function connect() {
     if (busy || !preset || !canConnect) return;
     setLocalError("");
+    const imageModels = isArkAPI ? parseModelProviderModelsText(imageEndpoints) : [];
+    if (imageModels.some((id) => !/^ep-\S+$/.test(id))) {
+      setLocalError(t("modelConnectArkImageEndpointInvalid"));
+      return;
+    }
     let customHeaders: Record<string, string> | undefined;
     try {
       if (headers.trim()) {
@@ -127,12 +147,13 @@ export function CreateModelProviderModal({
     void onCreate({
       preset: preset.id,
       region: region?.id,
-      api_protocol: protocol || preset.api_protocol,
+      api_protocol: selectedProtocol,
       api_key: apiKey.trim(),
-      base_url: (baseURL ?? region?.base_url ?? "").trim(),
+      base_url: selectedURL.trim(),
       display_name: name.trim(),
       headers: customHeaders,
       models: parseModelProviderModelsText(models),
+      ...(imageModels.length ? { image_models: imageModels } : {}),
       connect: true,
     });
   }
@@ -146,6 +167,14 @@ export function CreateModelProviderModal({
       <DialogContent
         scrollBody
         className={styles.dialog}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          const target =
+            opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")
+              ? opener
+              : focusFallback;
+          if (target?.isConnected && !target.matches(":disabled")) target.focus();
+        }}
         onEscapeKeyDown={(event) => {
           // Keep a fast Escape in a newly opened Select from dismissing its parent dialog.
           if (openSelect) {
@@ -306,26 +335,27 @@ export function CreateModelProviderModal({
                 <Field
                   className={preset.regions.length > 1 ? styles.fullWidth : undefined}
                   label={t("modelConnectProtocol")}
+                  hint={protocolUnavailable ? t("modelConnectErrorProtocol") : undefined}
                   required
                 >
                   <Select
                     open={openSelect === "protocol"}
                     onOpenChange={(open) => setOpenSelect(open ? "protocol" : "")}
-                    value={protocol || preset.api_protocol}
+                    value={selectedProtocol}
                     disabled={busy}
-                    onValueChange={setProtocol}
-                    options={[
-                      { value: "responses", label: "OpenAI Responses" },
-                      { value: "chat_completions", label: "OpenAI Chat Completions" },
-                      { value: "anthropic_messages", label: "Anthropic Messages" },
-                    ]}
+                    onValueChange={(value) => {
+                      if (usesModelProviderPresetURL(region, selectedURL)) setBaseURL(undefined);
+                      setProtocol(value);
+                      onClearError?.();
+                    }}
+                    options={protocolOptions}
                     triggerProps={{ "aria-label": t("modelConnectProtocol") }}
                   />
                 </Field>
                 <Field className={styles.fullWidth} label={t("profileBaseURL")} required>
                   <TextInput
                     required
-                    value={baseURL ?? region?.base_url ?? ""}
+                    value={selectedURL}
                     disabled={busy}
                     onChange={(event) => setBaseURL(event.target.value)}
                   />
@@ -398,7 +428,10 @@ export function CreateModelProviderModal({
                       placeholder={'{"X-Project": "project-id"}'}
                     />
                   </Field>
-                  <Field label={t("modelProviderModels")} hint={t("modelConnectManualModels")}>
+                  <Field
+                    label={t(isArkAPI ? "modelConnectArkChatModels" : "modelProviderModels")}
+                    hint={t(isArkAPI ? "modelConnectArkChatModelsHint" : "modelConnectManualModels")}
+                  >
                     <TextArea
                       value={models}
                       disabled={busy}
@@ -406,6 +439,20 @@ export function CreateModelProviderModal({
                       placeholder="model-id"
                     />
                   </Field>
+                  {isArkAPI ? (
+                    <Field label={t("modelConnectArkImageEndpoints")} hint={t("modelConnectArkImageEndpointsHint")}>
+                      <TextArea
+                        value={imageEndpoints}
+                        disabled={busy}
+                        onChange={(event) => {
+                          setImageEndpoints(event.target.value);
+                          setLocalError("");
+                          onClearError?.();
+                        }}
+                        placeholder="ep-..."
+                      />
+                    </Field>
+                  ) : null}
                 </div>
               ) : null}
               {selected === "custom" ? (

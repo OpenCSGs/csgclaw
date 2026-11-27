@@ -130,29 +130,19 @@ export type IMMessage = {
   thread?: ThreadSummary | null;
 };
 
-export type VideoGenerationMessageGroup = {
-  childMessageIDs: Set<string>;
-  childrenByParentID: Map<string, IMMessage[]>;
-};
-
-// Video generation remains a separate persisted message so an asynchronous
-// task can survive restarts. When its originating final message is present in
-// the same view, project it as a child card of that message instead.
-export function groupVideoGenerationMessages(messages: readonly IMMessage[]): VideoGenerationMessageGroup {
-  const parentIDs = new Set(messages.map((message) => String(message.id || "").trim()).filter(Boolean));
-  const childMessageIDs = new Set<string>();
-  const childrenByParentID = new Map<string, IMMessage[]>();
-  messages.forEach((message) => {
-    if (!message.metadata?.video_generation) return;
-    const parentID = videoGenerationParentMessageID(message);
-    const messageID = String(message.id || "").trim();
-    if (!parentID || !messageID || parentID === messageID || !parentIDs.has(parentID)) return;
-    childMessageIDs.add(messageID);
-    const children = childrenByParentID.get(parentID) || [];
-    children.push(message);
-    childrenByParentID.set(parentID, children);
-  });
-  return { childMessageIDs, childrenByParentID };
+// A video task keeps its own position in the transcript. Associate it with
+// the agent turn only to report video timing in the turn progress header.
+export function indexVideoMessagesByTurn(messages: readonly IMMessage[]): Map<string, IMMessage[]> {
+  const videosByTurn = new Map<string, IMMessage[]>();
+  for (const message of messages) {
+    if (!message.metadata?.video_generation) continue;
+    const turnMessageID = videoGenerationParentMessageID(message);
+    if (!turnMessageID || turnMessageID === message.id) continue;
+    const videos = videosByTurn.get(turnMessageID) ?? [];
+    videos.push(message);
+    videosByTurn.set(turnMessageID, videos);
+  }
+  return videosByTurn;
 }
 
 function videoGenerationParentMessageID(message: IMMessage): string {
@@ -212,6 +202,7 @@ export type IMData = {
 export type ParticipantWorkStage = "preparing_reply" | "thinking" | "running_tool" | "generating_reply";
 
 export type ParticipantWorkUpdate = {
+  server_time_ms?: number;
   capabilities?: Array<"thinking_status_v1" | "turn_stop_v1" | "work_stage_v1"> | null;
   expires_at: string;
   kind: "agent_turn";
@@ -236,6 +227,8 @@ export type ParticipantWorkUpdate = {
     phase: "working" | "thinking";
     context_usage?: ContextUsage;
     context_usage_epoch?: number;
+    output_tokens_per_second?: number;
+    output_rate_sampled_at?: number;
     sequence: number;
     stage?: ParticipantWorkStage | null;
     thinking?: {

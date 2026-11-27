@@ -627,3 +627,21 @@ func TestMinimalWebSearchErrorRetainsSafeActionableCause(t *testing.T) {
 		t.Fatalf("unsafe or generic error: %s %s", code, message)
 	}
 }
+
+func TestModelDirectoryDetectsKnownImageModelsWithoutTasks(t *testing.T) {
+	var data openAIModelsResponse
+	if err := json.Unmarshal([]byte(`{"data":[
+		{"id":"wan2.7-image-pro"},{"id":"wan2.7-image"},{"id":"z-image-turbo"},
+		{"id":"MiniMax-H3-Image-Highspeed"},{"id":"glm-image"},{"id":"qwen3-vl-plus"}
+	]}`), &data); err != nil {
+		t.Fatal(err)
+	}
+	got, err := openAIModelDirectoryFromResponse(data, "https://example.test/v1", false)
+	if err != nil || !reflect.DeepEqual(got.Models, []string{"qwen3-vl-plus"}) ||
+		!reflect.DeepEqual(got.ImageModels, []string{"wan2.7-image-pro", "wan2.7-image", "z-image-turbo", "MiniMax-H3-Image-Highspeed", "glm-image"}) {
+		t.Fatalf("directory = %+v, error = %v", got, err)
+	}
+	if got.ImageMetadata["z-image-turbo"].ImageToImage || !got.ImageMetadata["wan2.7-image"].ImageToImage {
+		t.Fatalf("image modes = %+v", got.ImageMetadata)
+	}
+}

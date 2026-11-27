@@ -146,6 +146,7 @@ const t: TranslateFn = (key, params = {}) => {
     composerTip: "Enter to send",
     directMessagesSection: "Direct Messages",
     inputPlaceholder: "Message",
+    tokenRateLabel: "Estimated output rate: {rate} tokens per second",
     localIdentityFallback: "Local user",
     conversationWorkingEditing: "Editing",
     conversationWorkingGeneratingReply: "Generating reply",
@@ -340,7 +341,10 @@ function renderThreadPane({
         onApplyMention={onApplyMention}
         onClearRoomMessages={onClearRoomMessages}
         onClearMemberActionError={onClearMemberActionError}
-        onCloseThread={onCloseThread}
+        onCloseThread={() => {
+          if (statefulThreads) setThreadRootID("");
+          onCloseThread();
+        }}
         onComposerCompositionEnd={() => {}}
         onComposerCompositionStart={() => {}}
         onComposerKeyDown={() => {}}
@@ -596,6 +600,47 @@ describe("ConversationPane", () => {
     expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
   });
 
+  it("shows the sampled rate in a pending reply header", () => {
+    renderThreadPane({
+      workingParticipants: [
+        {
+          id: "u-manager",
+          name: "manager",
+          roomID: "room-1",
+          leaseID: "lease-pending",
+          requestID: "request-pending",
+          outputTokensPerSecond: 18,
+          outputRateExpiresAt: performance.now() + 2500,
+        },
+      ],
+    });
+    expect(
+      screen
+        .getByLabelText("Estimated output rate: 18 tokens per second")
+        .closest("[data-work-lease-id] .message-meta"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the sampled thinking rate for a pending thread reply", () => {
+    renderThreadPane({
+      workingParticipants: [
+        {
+          id: "u-manager",
+          name: "manager",
+          roomID: "room-1",
+          leaseID: "lease-thread-pending",
+          requestID: "request-thread-pending",
+          threadRootID: "msg-root",
+          workStage: "thinking",
+          outputTokensPerSecond: 18,
+          outputRateExpiresAt: performance.now() + 2500,
+        },
+      ],
+    });
+    const rate = screen.getByLabelText("Estimated output rate: 18 tokens per second");
+    expect(rate.closest(".composer-working")).toBeInTheDocument();
+  });
+
   it.each(["running", "succeeded", "canceled"])(
     "replaces the pending reply with a matching %s message without duplicating controls",
     (status) => {
@@ -607,6 +652,8 @@ describe("ConversationPane", () => {
         requestID: "request-pending",
         leaseID: "lease-pending",
         canStop: true,
+        outputTokensPerSecond: 18,
+        outputRateExpiresAt: performance.now() + 2500,
       };
       const { container } = renderThreadPane({
         workingParticipants: [participant],
@@ -634,8 +681,15 @@ describe("ConversationPane", () => {
       expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
       expect(container.querySelector(`.message-row .${testWorkingTurnStyles["composer-working-stop"]}`)).toBeNull();
       const stop = screen.queryByRole("button", { name: "conversationWorkingStopAria" });
-      if (status === "running") expect(stop?.closest(".composer-box")).toBeInTheDocument();
-      else expect(stop).not.toBeInTheDocument();
+      if (status === "running") {
+        expect(stop?.closest(".composer-box")).toBeInTheDocument();
+        expect(
+          screen.getByLabelText("Estimated output rate: 18 tokens per second").closest(".message-meta"),
+        ).toBeInTheDocument();
+      } else {
+        expect(stop).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Estimated output rate: 18 tokens per second")).not.toBeInTheDocument();
+      }
     },
   );
 
@@ -844,12 +898,11 @@ describe("ConversationPane", () => {
       ],
     });
 
-    expect(screen.getAllByText("Choose a color").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Choose a color")).toHaveLength(1);
     const answerMode = within(screen.getByRole("region", { name: "questionAnswerMode" }));
     expect(answerMode.getByRole("heading", { name: "Choose a color" })).toBeInTheDocument();
     expect(screen.getByRole("timer")).toBeInTheDocument();
-    const card = within(screen.getByRole("region", { name: "questionRequest" }));
-    expect(card.getByText("Choose a color")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "questionRequest" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
     expect(
       within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", {
@@ -859,7 +912,7 @@ describe("ConversationPane", () => {
     expect(
       within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", { name: "questionNext" }),
     ).toBeEnabled();
-    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Message")).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Blue/ }));
     await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Choose a color" })).not.toBeInTheDocument());
@@ -895,7 +948,7 @@ describe("ConversationPane", () => {
     expect(
       within(screen.getByRole("region", { name: "questionAnswerMode" })).getByRole("button", { name: "questionNext" }),
     ).toBeEnabled();
-    expect(screen.queryByRole("textbox", { name: "Reply in thread" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply in thread" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Blue/ }));
     await user.click(
@@ -907,6 +960,37 @@ describe("ConversationPane", () => {
     expect(selectedOption).toHaveAttribute("aria-checked", "true");
     await user.click(selectedOption);
     expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
+  });
+
+  it("reopens a discussion from a settled question without showing the question transcript", async () => {
+    const user = userEvent.setup();
+    const content = JSON.parse(questionActivityContent());
+    content.content.question.status = "answered";
+    const reply: IMMessage = {
+      id: "layout-reply",
+      content: "Use blue for the sidebar",
+      sender_id: "u-admin",
+      relates_to: { rel_type: "m.thread", event_id: "msg-root" },
+    };
+    const question: IMMessage = {
+      id: "msg-root",
+      sender_id: "u-manager",
+      content: "## Questions\n\nChoose a color",
+      metadata: { csgclaw: { agent_activity: content } },
+      thread: { root_id: "msg-root", reply_count: 1, latest_reply: reply },
+    };
+    renderThreadPane({ statefulThreads: true, messages: [question], replies: [reply] });
+
+    const threadPanel = () => screen.getByRole("complementary", { name: "Thread" });
+    expect(within(threadPanel()).getByText(reply.content)).toBeInTheDocument();
+    expect(screen.queryByText("Choose a color")).not.toBeInTheDocument();
+    expect(within(threadPanel()).queryByText("noVisibleMessages")).not.toBeInTheDocument();
+    await user.click(within(threadPanel()).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("complementary", { name: "Thread" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "1 replies" }));
+    expect(within(threadPanel()).getByText(reply.content)).toBeInTheDocument();
+    expect(screen.queryByText("Choose a color")).not.toBeInTheDocument();
   });
 
   it("hides legacy zero-reply thread summaries from the timeline", () => {
@@ -1696,7 +1780,7 @@ describe("ConversationPane", () => {
     expect(threadPanel.querySelector(".thread-section-title")).toBeNull();
   });
 
-  it("shows tool-call replies when enabled without exposing direct conversation tools", () => {
+  it("folds the details of enabled tool-call replies in direct threads", async () => {
     renderThreadPane({
       isDirect: true,
       showToolCalls: true,
@@ -1704,7 +1788,9 @@ describe("ConversationPane", () => {
     });
 
     const threadPanel = screen.getByRole("complementary", { name: "Thread" });
-    expect(within(threadPanel).getByText("visible shell output")).toBeInTheDocument();
+    expect(within(threadPanel).queryByText("visible shell output")).not.toBeInTheDocument();
+    await userEvent.click(within(threadPanel).getByRole("button", { name: "progressToolDetails" }));
+    expect(within(threadPanel).getByText("visible shell output")).toBeVisible();
     expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
   });
 

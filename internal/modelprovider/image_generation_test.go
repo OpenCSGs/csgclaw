@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -227,5 +228,58 @@ func TestResolveImageGenerationOptionsDefaultsOnlyVerifiedTextRoutes(t *testing.
 		if got := ResolveImageGenerationOptions(tc.provider, tc.model, tc.edit, tc.options); got != tc.want {
 			t.Errorf("%+v: got %+v", tc, got)
 		}
+	}
+}
+
+func TestImageServiceUsesDocumentedProviderRequests(t *testing.T) {
+	var pngData bytes.Buffer
+	if err := png.Encode(&pngData, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
+	}
+	ref := []ReferenceImage{{Name: "reference.png", Data: pngData.Bytes()}}
+	for _, tc := range []struct {
+		name, base, model, path, field string
+		edit                           bool
+	}{
+		{"DashScope text", "https://dashscope.aliyuncs.com/compatible-mode/v1", "z-image-turbo", "/api/v1/services/aigc/multimodal-generation/generation", "input", false},
+		{"DashScope Token Plan edit", "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", "wan2.7-image-pro", "/api/v1/services/aigc/multimodal-generation/generation", "input", true},
+		{"Ark edit", "https://ark.cn-beijing.volces.com/api/v3", "doubao-seedream-5-5-261028", "/images/generations", "image", true},
+		{"GLM text", "https://open.bigmodel.cn/api/paas/v4", "glm-image", "/images/generations", "prompt", false},
+		{"GLM Responses image", "https://open.bigmodel.cn/api/v1", "glm-image", "/api/paas/v4/images/generations", "prompt", false},
+		{"GLM Responses image Z.ai", "https://api.z.ai/api/v1", "glm-image", "/api/paas/v4/images/generations", "prompt", false},
+		{"Ark Messages image", "https://ark.cn-beijing.volces.com/api/plan/v1", "doubao-seedream-5.5", "/api/plan/v3/images/generations", "image", true},
+		{"DashScope Messages image", "https://dashscope.aliyuncs.com/apps/anthropic/v1", "wan2.7-image", "/api/v1/services/aigc/multimodal-generation/generation", "input", true},
+		{"MiniMax text", "https://api.minimax.io/v1", "MiniMax-H3-Image", "/images/generations", "prompt", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var images []ReferenceImage
+			if tc.edit {
+				images = ref
+			}
+			endpoint, contentType, body, err := buildImageRequest(tc.base, imageAPIForURL(tc.base), tc.model, "blue sky", ImageGenerationOptions{Size: "1024x1024"}, images)
+			var request map[string]json.RawMessage
+			if err != nil || !strings.HasSuffix(endpoint, tc.path) || contentType != "application/json" ||
+				json.Unmarshal(body, &request) != nil || request[tc.field] == nil {
+				t.Fatalf("unexpected image request: %s %s %s (%v)", endpoint, contentType, body, err)
+			}
+			sourceURL, _ := url.Parse(tc.base)
+			targetURL, err := url.Parse(endpoint)
+			if err != nil || sourceURL.Host != targetURL.Host {
+				t.Fatalf("image generation changed provider origin: %s", endpoint)
+			}
+			if tc.edit && !bytes.Contains(body, []byte("data:image/png;base64,")) {
+				t.Fatal("reference image missing from JSON")
+			}
+			if tc.field == "input" && (strings.Contains(endpoint, "compatible-mode") || !bytes.Contains(body, []byte("1024*1024"))) {
+				t.Fatalf("incorrect DashScope request: %s %s", endpoint, body)
+			}
+			if tc.name == "GLM text" && (request["n"] != nil || request["response_format"] != nil) {
+				t.Fatalf("unsupported GLM fields: %s", body)
+			}
+		})
+	}
+	images, err := decodeImageResults(imageDashScope, []byte(`{"output":{"choices":[{"message":{"content":[{"text":"generated"},{"image":"https://example.test/image.png"}]}}]}}`))
+	if err != nil || len(images) != 1 || images[0].URL != "https://example.test/image.png" {
+		t.Fatalf("decoded %v, error = %v", images, err)
 	}
 }

@@ -148,7 +148,7 @@ export function ConversationContextUsage({
         <PopoverTrigger asChild>
           <Button {...hoverPanel.triggerProps} variant="tertiaryGray" size="sm" aria-label={label}>
             <CircleGauge size={16} />
-            <span>
+            <span className={styles.label}>
               {ratio < 0
                 ? t("contextCompactContext")
                 : t(conversation.is_direct ? "contextCompactPercent" : "contextCompactGroupShort", { percent })}

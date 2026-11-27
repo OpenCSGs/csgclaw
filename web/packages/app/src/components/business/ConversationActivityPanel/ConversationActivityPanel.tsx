@@ -3,6 +3,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -39,6 +40,7 @@ import {
   Tooltip,
 } from "@/components/ui";
 import type { AgentLike } from "@/models/agents";
+import { formatProgressToolDuration, isExecutionToolKind, progressToolStatus } from "@/models/turnProgress";
 import {
   isDirectConversation,
   resolveUserByLocalIdentity,
@@ -852,14 +854,34 @@ function ActivityRow({
   onCitationSelect?: CitationSelectHandler;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const detailID = useId();
   useEffect(() => {
     if (expandAll !== undefined) setExpanded(expandAll || selected);
   }, [expandAll, selected]);
   const details = conversationActivityEntryDetails(entry, includeToolInput);
   const hasDetail = details.length > 0;
-  const tool = includeToolInput ? entry.activity?.content.tool : undefined;
+  const tool = entry.activity?.content.tool;
   const summary = conversationActivityEntrySummary(entry);
-  const rowSummary = tool?.title && !summary.startsWith(tool.title) ? `${tool.title} · ${summary}` : summary;
+  const isCommand = Boolean(entry.command) || isExecutionToolKind(tool?.kind) || isExecutionToolKind(tool?.title);
+  const actionKey = `progressAction_${isCommand ? "execute" : tool?.kind || "tool"}`;
+  const action = t(actionKey);
+  const name = details.some((detail) => detail.kind === "command") ? "" : tool?.title;
+  const toolTitle =
+    action === actionKey || (!isCommand && tool?.kind === "tool") ? name || t("progressAction_tool") : action;
+  const statusKey = tool ? `progressToolStatus_${progressToolStatus(tool.status, tool.exit_code)}` : "";
+  const status = statusKey ? t(statusKey) : "";
+  const duration = formatProgressToolDuration(tool?.duration_ms, t);
+  const rowSummary =
+    tool || isCommand
+      ? [
+          toolTitle,
+          summary === toolTitle ? "" : summary,
+          status === statusKey ? "" : status,
+          duration ? t("progressToolDuration", { duration }) : "",
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : summary;
 
   return (
     <article
@@ -874,8 +896,9 @@ function ActivityRow({
         {hasDetail ? (
           <button
             type="button"
-            className={styles.rowSummary}
+            className={classNames(styles.rowSummary, (tool || isCommand) && styles.toolSummary)}
             aria-expanded={expanded}
+            aria-controls={expanded ? detailID : undefined}
             onClick={() => setExpanded((current) => !current)}
           >
             <ChevronRight className={expanded ? styles.expanded : undefined} aria-hidden="true" size={14} />
@@ -893,15 +916,9 @@ function ActivityRow({
         ) : null}
       </div>
       {hasDetail && expanded ? (
-        <div className={styles.detail}>
-          {tool ? (
+        <div className={styles.detail} id={detailID}>
+          {includeToolInput && tool && (tool.exit_code != null || tool.cwd) ? (
             <div className={styles.toolFacts}>
-              <span>
-                {tool.title} · {tool.status}
-              </span>
-              {tool.duration_ms != null ? (
-                <span>{t("progressToolDuration", { seconds: (tool.duration_ms / 1000).toFixed(1) })}</span>
-              ) : null}
               {tool.exit_code != null ? <span>{t("progressExitCode", { code: tool.exit_code })}</span> : null}
               {tool.cwd ? <span>{t("progressDirectory", { path: tool.cwd })}</span> : null}
             </div>

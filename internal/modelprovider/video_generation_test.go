@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/modelcap"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -37,6 +38,7 @@ func TestGenerateVideoUsesAIGatewayAsyncAPI(t *testing.T) {
 	previous := videoPollInterval
 	videoPollInterval = time.Millisecond
 	t.Cleanup(func() { videoPollInterval = previous })
+	polls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer secret" {
 			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
@@ -50,7 +52,12 @@ func TestGenerateVideoUsesAIGatewayAsyncAPI(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": "video_1", "status": "queued"})
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/videos/video_1":
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": "video_1", "status": "completed"})
+			polls++
+			status := "queued"
+			if polls == 2 {
+				status = "completed"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "video_1", "status": status})
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/videos/video_1/content":
 			w.Header().Set("Content-Type", "video/mp4")
 			_, _ = w.Write([]byte("video-bytes"))
@@ -70,8 +77,23 @@ func TestGenerateVideoUsesAIGatewayAsyncAPI(t *testing.T) {
 	if data.String() != "video-bytes" || got.SizeBytes != int64(len("video-bytes")) || got.MediaType != "video/mp4" {
 		t.Fatalf("result = %#v", got)
 	}
-	if len(progress) != 4 || progress[0].Status != "submitting" || progress[1].ID != "video_1" || progress[1].Status != "queued" || progress[2].Status != "completed" || progress[3].Status != "downloading" {
+	if len(progress) != 5 || progress[0].Status != "submitting" || progress[1].ID != "video_1" || progress[1].Status != "queued" || progress[1].StatusChecked || progress[2].Status != "queued" || progress[2].StatusChecked || progress[3].Status != "completed" || !progress[3].StatusChecked || progress[4].Status != "downloading" {
 		t.Fatalf("progress = %#v", progress)
+	}
+}
+
+func TestGenerateVideoPreservesFailedCreationDetails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("unexpected method %s", r.Method)
+		}
+		_, _ = w.Write([]byte(`{"status":"failed","error":{"code":"invalid_parameter","message":"duration rejected"}}`))
+	}))
+	defer server.Close()
+	_, err := GenerateVideo(context.Background(), server.Client(), server.URL, "", nil, "video", "animate", VideoGenerationOptions{})
+	var upstream *VideoGenerationError
+	if !errors.As(err, &upstream) || upstream.Code != "invalid_parameter" || upstream.Message != "duration rejected" {
+		t.Fatalf("creation failure = %v", err)
 	}
 }
 
