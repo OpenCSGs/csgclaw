@@ -121,6 +121,8 @@ func TestCheckModelProviderUsesOpenCSGAIGatewayCredentials(t *testing.T) {
 }
 
 func TestModelProviderCatalogPrefersAvailableOpenCSGAuto(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CSGHUB_AIGATEWAY_BASE_URL", "https://gateway.example/team/aigateway")
 	for _, tc := range []struct {
 		name, id, baseURL string
 		models, want      []string
@@ -128,8 +130,13 @@ func TestModelProviderCatalogPrefersAvailableOpenCSGAuto(t *testing.T) {
 		{"signed-in gateway", ModelProviderIDOpenCSG, "https://gateway.example/v1", []string{"gpt-5", "auto", "qwen3"}, []string{"auto", "gpt-5", "qwen3"}},
 		{"production custom provider", "company-prod", "https://ai.space.opencsg.com/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
 		{"production gateway", "company-prod", "https://aigateway.opencsg.com/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
+		{"production portal", "company-prod", "https://opencsg.com/aigateway/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
 		{"staging custom provider", "company-stg", "https://opencsg-stg.com/aigateway/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
 		{"other staging service", "custom", "https://opencsg-stg.com/other/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
+		{"configured gateway", "remote", "https://GATEWAY.example:443/team/aigateway/v1/", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
+		{"other configured path", "custom", "https://gateway.example/other/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
+		{"other production path", "custom", "https://opencsg.com/other/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
+		{"other port", "custom", "https://opencsg.com:8443/aigateway/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
 		{"auto absent", ModelProviderIDOpenCSG, "", []string{"gpt-5", "qwen3"}, []string{"gpt-5", "qwen3"}},
 		{"ordinary provider", "custom", "https://api.example/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
 		{"similar hostname", "custom", "https://opencsg-stg.com.example/aigateway/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},

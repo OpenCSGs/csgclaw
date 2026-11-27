@@ -24,6 +24,7 @@ type agentSessionInput struct {
 	resourcePrompt              string
 	model                       string
 	reasoningEffort             string
+	autoProfile                 string
 	reasoningSummary            bool
 	turnModel                   *agentengine.TurnModel
 	preservePendingInteractions bool
@@ -92,7 +93,9 @@ func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSe
 	}
 	inputs := form.Value["input"]
 	for name := range form.Value {
-		if name != "input" && name != "stream" && name != "user_input" && name != "model" && name != "reasoning_effort" {
+		switch name {
+		case "input", "stream", "user_input", "model", "reasoning_effort", "auto_profile":
+		default:
 			return agentSessionInput{}, false, fmt.Errorf("unknown multipart field %q", name)
 		}
 	}
@@ -101,20 +104,19 @@ func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSe
 	}
 	metadataBytes := len(inputs[0])
 	var request agentSessionResponseRequest
-	for _, field := range []string{"model", "reasoning_effort"} {
-		values := form.Value[field]
+	for _, field := range []struct {
+		name string
+		dest *string
+	}{{"model", &request.Model}, {"reasoning_effort", &request.ReasoningEffort}, {"auto_profile", &request.AutoProfile}} {
+		values := form.Value[field.name]
 		if len(values) == 0 {
 			continue
 		}
 		if len(values) > 1 {
-			return agentSessionInput{}, false, fmt.Errorf("expected at most one %s field", field)
+			return agentSessionInput{}, false, fmt.Errorf("expected at most one %s field", field.name)
 		}
 		metadataBytes += len(values[0])
-		if field == "model" {
-			request.Model = values[0]
-		} else {
-			request.ReasoningEffort = values[0]
-		}
+		*field.dest = values[0]
 	}
 	for _, field := range []string{"stream", "user_input"} {
 		values := form.Value[field]

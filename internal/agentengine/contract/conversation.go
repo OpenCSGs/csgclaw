@@ -128,6 +128,7 @@ type RoomConfiguration struct {
 type TurnModel struct {
 	ModelID         string
 	ReasoningEffort string
+	AutoProfile     string
 	Metadata        modelcap.Resolved
 }
 

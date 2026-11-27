@@ -171,6 +171,9 @@ func (s *liveSession) rememberThreadModel(threadID string, model contract.TurnMo
 	if s.threadModels == nil {
 		s.threadModels = make(map[string]contract.TurnModel)
 	}
+	// Compaction can use this model during a later turn. The profile belongs
+	// to the original turn and must stay with its waiter.
+	model.AutoProfile = ""
 	s.threadModels[threadID] = model
 }
 

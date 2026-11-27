@@ -113,8 +113,9 @@ show_upgrade = true
 ## Model Provider Examples
 
 OpenCSG AIGateway uses `auto` as the initial model choice when the gateway advertises it.
-This applies to the signed-in OpenCSG provider and custom providers pointing to the production or staging AIGateway.
-The staging AI Gateway base URL is `https://opencsg-stg.com/aigateway/v1`.
+This applies to the built-in OpenCSG provider and custom providers whose base URL matches the configured OpenCSG gateway or a known public gateway URL.
+The production and staging Portal gateway URLs are `https://opencsg.com/aigateway/v1` and `https://opencsg-stg.com/aigateway/v1`.
+Other environments can set `CSGHUB_AIGATEWAY_BASE_URL` to identify their gateway.
 An explicitly selected model remains selected; when `auto` is unavailable, CSGClaw uses the first available model.
 
 Reply footers show [per-turn token consumption](token-usage.md); `auto` hides the model name.

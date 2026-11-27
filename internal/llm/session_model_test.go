@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,26 +13,150 @@ import (
 	"testing"
 
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/auth"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 )
 
+func withTestSessionModel(ctx context.Context, model, effort string) context.Context {
+	return WithSessionModel(ctx, contract.TurnModel{ModelID: model, ReasoningEffort: effort})
+}
+
 type sessionProfileFixture struct {
 	base           string
 	requestOptions map[string]any
+	provider       string
 }
 
 func (f sessionProfileFixture) ResolvedAgentProfile(string) (agent.AgentProfile, error) {
-	return agent.AgentProfile{Provider: agent.ProviderAPI, ModelID: "model-a", ReasoningEffort: "low", BaseURL: f.base, APIKey: "test-key", RequestOptions: f.requestOptions}, nil
+	provider := f.provider
+	if provider == "" {
+		provider = agent.ProviderAPI
+	}
+	return agent.AgentProfile{Provider: provider, ModelID: "model-a", ReasoningEffort: "low", BaseURL: f.base, APIKey: "test-key", RequestOptions: f.requestOptions}, nil
 }
 
 func (f sessionProfileFixture) ResolvedSessionProfile(id, model, effort string) (agent.AgentProfile, error) {
 	profile, _ := f.ResolvedAgentProfile(id)
-	if model != "model-b" {
+	if model != "model-b" && model != "auto" {
 		return profile, fmt.Errorf("model unavailable")
 	}
 	profile.ModelID, profile.ReasoningEffort = model, effort
 	return profile, nil
+}
+
+func TestSessionModelAutoProfileIsScopedToGatewayRequestsForItsTurn(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	type observed struct {
+		profile string
+		model   string
+		effort  string
+	}
+	requests := make(chan observed, 4)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Model     string `json:"model"`
+			Effort    string `json:"reasoning_effort"`
+			Reasoning struct {
+				Effort string `json:"effort"`
+			} `json:"reasoning"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		requests <- observed{r.Header.Get("CSG-Router-Auto-Profile"), payload.Model, payload.Effort + payload.Reasoning.Effort}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"test","object":"response","status":"completed","output":[]}`)
+	}))
+	defer upstream.Close()
+	t.Setenv("CSGHUB_AIGATEWAY_BASE_URL", upstream.URL)
+	store, err := auth.DefaultStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(auth.Record{
+		Tokens:  auth.Tokens{AccessToken: "fixture"},
+		Account: auth.Account{BaseURL: upstream.URL, UserID: "fixture", UserUUID: "user-1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveCSGHubProviderCredentials(auth.CSGHubProviderCredentials{
+		AIGatewayBaseURL: upstream.URL + "/v1", AIGatewayBuiltinAPIKey: "gk_fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(config.ModelConfig{}, sessionProfileFixture{provider: agent.ProviderCSGHub})
+	ctx := WithSessionModel(t.Context(), contract.TurnModel{ModelID: "auto", ReasoningEffort: "low", AutoProfile: "custom-quality"})
+	for _, call := range []func(context.Context, string, []byte) (*UpstreamResponse, error){service.Responses, service.ChatCompletionsStream} {
+		resp, err := call(ctx, "agent", []byte(`{"model":"auto","input":"hello","messages":[]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if got := <-requests; got != (observed{"custom-quality", "auto", "low"}) {
+			t.Fatalf("Auto request = %+v", got)
+		}
+	}
+	resp, err := service.Responses(withTestSessionModel(t.Context(), "model-b", "high"), "agent", []byte(`{"input":"next turn"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if got := <-requests; got != (observed{"", "model-b", "high"}) {
+		t.Fatalf("physical model request = %+v", got)
+	}
+}
+
+type sessionModelRoundTripper func(*http.Request) (*http.Response, error)
+
+func (send sessionModelRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	return send(r)
+}
+
+func TestSessionModelAutoProfileUsesCustomOpenCSGGateway(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	const baseURL = "https://gateway.customer.example/team/aigateway/v1"
+	store, err := auth.DefaultStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveCSGHubProviderCredentials(auth.CSGHubProviderCredentials{AIGatewayBaseURL: baseURL}); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(config.ModelConfig{}, sessionProfileFixture{base: baseURL, provider: agent.ProviderAPI})
+	calls := 0
+	service.client.Transport = sessionModelRoundTripper(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.URL.String() != baseURL+"/responses" ||
+			r.Header.Get("Authorization") != "Bearer test-key" ||
+			r.Header.Get("CSG-Router-Auto-Profile") != "quality" {
+			t.Error("custom request did not use the configured gateway, API key, and routing profile")
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": {"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"id":"test","object":"response","status":"completed","output":[]}`)),
+		}, nil
+	})
+
+	ctx := WithSessionModel(t.Context(), contract.TurnModel{ModelID: "auto", AutoProfile: "quality"})
+	body := []byte(`{"model":"auto","input":"hello"}`)
+	resp, err := service.Responses(ctx, "agent", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if calls != 1 {
+		t.Fatalf("made %d upstream requests, want 1", calls)
+	}
+
+	service.agents = sessionProfileFixture{base: "https://opencsg-stg.com.example/aigateway/v1", provider: agent.ProviderAPI}
+	_, err = service.Responses(ctx, "agent", body)
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) || httpErr.Status != http.StatusConflict || calls != 1 {
+		t.Fatalf("third-party selection error = %v, total upstream requests = %d", err, calls)
+	}
 }
 
 func TestSessionModelBridgeUsesOnlyScopedSelection(t *testing.T) {
@@ -51,7 +176,7 @@ func TestSessionModelBridgeUsesOnlyScopedSelection(t *testing.T) {
 		ctx   context.Context
 		model string
 	}{
-		{WithSessionModel(context.Background(), "model-b", "high"), "model-b"},
+		{withTestSessionModel(context.Background(), "model-b", "high"), "model-b"},
 		{context.Background(), "model-a"},
 		{context.Background(), "model-a"},
 	} {
@@ -65,7 +190,7 @@ func TestSessionModelBridgeUsesOnlyScopedSelection(t *testing.T) {
 			t.Fatalf("upstream model=%v want %s", payload["model"], test.model)
 		}
 	}
-	if _, err := service.Responses(WithSessionModel(context.Background(), "missing", "high"), "agent-a", []byte(`{"input":"hello"}`)); err == nil {
+	if _, err := service.Responses(withTestSessionModel(context.Background(), "missing", "high"), "agent-a", []byte(`{"input":"hello"}`)); err == nil {
 		t.Fatal("invalid selection fell back to the Agent model")
 	}
 }
@@ -92,7 +217,7 @@ func TestSessionModelBridgeUsesResolvedReasoningEffort(t *testing.T) {
 				}))
 				defer upstream.Close()
 				service := NewService(config.ModelConfig{}, sessionProfileFixture{base: upstream.URL})
-				ctx := WithSessionModel(t.Context(), "model-b", effort)
+				ctx := withTestSessionModel(t.Context(), "model-b", effort)
 				var want any = effort
 				switch effort {
 				case "auto", "":
@@ -172,7 +297,7 @@ func TestSessionModelResponsesFallbackPreservesReasoningEffort(t *testing.T) {
 				defer upstream.Close()
 				options := map[string]any{"reasoning_effort": "high"}
 				service := NewService(config.ModelConfig{}, sessionProfileFixture{base: upstream.URL, requestOptions: options})
-				ctx := WithSessionModel(t.Context(), "model-b", test.effort)
+				ctx := withTestSessionModel(t.Context(), "model-b", test.effort)
 				wantModel := "model-b"
 				switch test.mode {
 				case "profile":
@@ -257,7 +382,7 @@ func TestSessionModelPreservesTaskProvider(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := WithTaskProfile(context.Background(), taskProfile)
-			ctx = WithSessionModel(ctx, "model-b", "high")
+			ctx = withTestSessionModel(ctx, "model-b", "high")
 			response, err := test.call(ctx, "agent-a", []byte(test.body))
 			if err != nil {
 				t.Fatal(err)
@@ -318,7 +443,7 @@ func TestSessionModelBridgePreservesInheritedProfileEffort(t *testing.T) {
 		return cliproxy.AuthStatus{Authenticated: true}, nil
 	}
 	service := NewService(config.ModelConfig{}, models)
-	ctx := WithSessionModel(context.Background(), selected.ModelID, selected.ReasoningEffort)
+	ctx := withTestSessionModel(context.Background(), selected.ModelID, selected.ReasoningEffort)
 	for _, test := range []struct {
 		name, body string
 		call       func(context.Context, string, []byte) (*UpstreamResponse, error)

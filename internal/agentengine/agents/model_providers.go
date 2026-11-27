@@ -2,7 +2,6 @@ package agents
 
 import (
 	"context"
-	"csgclaw/internal/modelcap"
 	"fmt"
 	"maps"
 	"net/http"
@@ -14,7 +13,9 @@ import (
 	"time"
 	"unicode"
 
+	"csgclaw/internal/auth"
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelpreset"
 	"csgclaw/internal/modelprovider"
 )
@@ -718,32 +719,46 @@ func ModelProviderConfigForProfile(llm config.LLMConfig, profile AgentProfile) (
 	}
 }
 
+func isOpenCSGAIGatewayURL(baseURL string) bool {
+	endpoint := normalizedGatewayEndpoint(baseURL)
+	switch endpoint {
+	case "":
+		return false
+	case auth.DefaultAIGatewayBaseURL, auth.DefaultOpenCSGBaseURL + "/aigateway/v1",
+		auth.StageAIGatewayBaseURL, "https://aigateway.opencsg.com/v1", "https://aigateway.opencsg-stg.com/v1":
+		return true
+	default:
+		return endpoint == normalizedGatewayEndpoint(defaultOpenCSGAIGatewayBaseURL())
+	}
+}
+
+func normalizedGatewayEndpoint(raw string) string {
+	endpoint, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || endpoint.Hostname() == "" || endpoint.User != nil ||
+		endpoint.RawQuery != "" || endpoint.ForceQuery || endpoint.Fragment != "" {
+		return ""
+	}
+	host := strings.ToLower(endpoint.Host)
+	switch endpoint.Scheme {
+	case "https":
+		host = strings.TrimSuffix(host, ":443")
+	case "http":
+		host = strings.TrimSuffix(host, ":80")
+	default:
+		return ""
+	}
+	return endpoint.Scheme + "://" + host + strings.TrimRight(endpoint.EscapedPath(), "/")
+}
+
 // OpenCSG's auto route chooses the concrete model. Keep it first so callers
 // that need an initial selection use the gateway default, regardless of the
 // catalog order or the name of a custom staging/production provider.
 func prioritizeOpenCSGAutoModel(providerID, baseURL string, models []string) []string {
 	out := append([]string(nil), models...)
-	if NormalizeModelProviderID(providerID) != ModelProviderIDOpenCSG {
-		endpoint, err := url.Parse(baseURL)
-		if err != nil {
-			return out
-		}
-		switch strings.ToLower(endpoint.Hostname()) {
-		case "ai.space.opencsg.com", "aigateway.opencsg.com", "aigateway.opencsg-stg.com":
-		case "opencsg-stg.com":
-			if strings.TrimRight(endpoint.EscapedPath(), "/") != "/aigateway/v1" {
-				return out
-			}
-		default:
-			return out
-		}
-	}
-	for i, model := range out {
-		if model == "auto" {
-			copy(out[1:i+1], out[:i])
-			out[0] = model
-			break
-		}
+	if i := slices.Index(out, "auto"); i > 0 &&
+		(NormalizeModelProviderID(providerID) == ModelProviderIDOpenCSG || isOpenCSGAIGatewayURL(baseURL)) {
+		copy(out[1:i+1], out[:i])
+		out[0] = "auto"
 	}
 	return out
 }

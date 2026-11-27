@@ -15,16 +15,18 @@ import (
 
 func TestParseAgentSessionModelOptionsJSON(t *testing.T) {
 	for _, test := range []struct {
-		name, body, model, effort, wantError string
+		name, body, model, effort, profile, wantError string
 	}{
 		{name: "defaults", body: `{"input":"hello"}`},
 		{name: "empty defaults", body: `{"input":"hello","model":" ","reasoning_effort":" "}`},
 		{name: "model", body: `{"input":"hello","model":" model-a "}`, model: "model-a"},
 		{name: "effort", body: `{"input":"hello","reasoning_effort":"high"}`, effort: "high"},
 		{name: "both", body: `{"input":"hello","model":"model-b","reasoning_effort":" low "}`, model: "model-b", effort: "low"},
+		{name: "auto profile", body: `{"input":"hello","model":"auto","reasoning_effort":"high","auto_profile":" quality "}`, model: "auto", effort: "high", profile: "quality"},
 		{name: "case insensitive", body: `{"input":"hello","MODEL":"model-b","Reasoning_Effort":"high"}`, model: "model-b", effort: "high"},
 		{name: "invalid model type", body: `{"input":"hello","model":42}`, wantError: "cannot unmarshal number"},
 		{name: "invalid effort type", body: `{"input":"hello","reasoning_effort":true}`, wantError: "cannot unmarshal bool"},
+		{name: "invalid profile type", body: `{"input":"hello","model":"auto","auto_profile":42}`, wantError: "cannot unmarshal number"},
 		{name: "unknown field", body: `{"input":"hello","model":"model-a","unexpected":true}`, wantError: `unknown field "unexpected"`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -36,8 +38,8 @@ func TestParseAgentSessionModelOptionsJSON(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || input.model != test.model || input.reasoningEffort != test.effort {
-				t.Fatalf("model = %q, effort = %q, error = %v", input.model, input.reasoningEffort, err)
+			if err != nil || input.model != test.model || input.reasoningEffort != test.effort || input.autoProfile != test.profile {
+				t.Fatalf("model = %q, effort = %q, profile = %q, error = %v", input.model, input.reasoningEffort, input.autoProfile, err)
 			}
 		})
 	}
@@ -45,14 +47,16 @@ func TestParseAgentSessionModelOptionsJSON(t *testing.T) {
 
 func TestParseAgentSessionModelOptionsMultipart(t *testing.T) {
 	for _, test := range []struct {
-		name, model, effort, wantError string
-		fields                         map[string][]string
+		name, model, effort, profile, wantError string
+		fields                                  map[string][]string
 	}{
 		{name: "defaults"},
 		{name: "empty defaults", fields: map[string][]string{"model": {" "}, "reasoning_effort": {" "}}},
 		{name: "both", fields: map[string][]string{"model": {" model-a "}, "reasoning_effort": {" high "}}, model: "model-a", effort: "high"},
+		{name: "auto profile", fields: map[string][]string{"model": {"auto"}, "auto_profile": {" quality "}}, model: "auto", profile: "quality"},
 		{name: "model repeated", fields: map[string][]string{"model": {"model-a", "model-b"}}, wantError: "expected at most one model field"},
 		{name: "effort repeated", fields: map[string][]string{"reasoning_effort": {"low", "high"}}, wantError: "expected at most one reasoning_effort field"},
+		{name: "profile repeated", fields: map[string][]string{"model": {"auto"}, "auto_profile": {"quality", "economy"}}, wantError: "expected at most one auto_profile field"},
 		{name: "unknown field", fields: map[string][]string{"model": {"model-a"}, "unexpected": {"true"}}, wantError: `unknown multipart field "unexpected"`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -69,8 +73,8 @@ func TestParseAgentSessionModelOptionsMultipart(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || input.model != test.model || input.reasoningEffort != test.effort {
-				t.Fatalf("model = %q, effort = %q, error = %v", input.model, input.reasoningEffort, err)
+			if err != nil || input.model != test.model || input.reasoningEffort != test.effort || input.autoProfile != test.profile {
+				t.Fatalf("model = %q, effort = %q, profile = %q, error = %v", input.model, input.reasoningEffort, input.autoProfile, err)
 			}
 		})
 	}
