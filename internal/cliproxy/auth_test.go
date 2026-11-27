@@ -311,14 +311,13 @@ func TestAuthStatusImportDoesNotRestartRunningService(t *testing.T) {
 	runCtx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	run := &serviceRun{
-		ctx: runCtx, baseURL: "http://127.0.0.1:1",
-		ready: make(chan struct{}), done: make(chan struct{}),
+		ctx: runCtx, startupDone: make(chan struct{}), done: make(chan struct{}),
 	}
 	run.cancel = func() {
 		cancel()
 		close(run.done)
 	}
-	close(run.ready)
+	run.finishStartup("http://127.0.0.1:1", nil)
 	svc := &Service{run: run}
 
 	status, err := svc.AuthStatus(context.Background(), ProviderCodex)

@@ -61,12 +61,19 @@ type Service struct {
 }
 
 type serviceRun struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	ready   chan struct{}
-	done    chan struct{}
-	baseURL string // Published by closing ready.
-	err     error  // Published by closing done.
+	ctx         context.Context
+	cancel      context.CancelFunc
+	startupDone chan struct{}
+	done        chan struct{}
+	baseURL     string // Published by closing startupDone.
+	startupErr  error  // Published by closing startupDone.
+	err         error  // Published by closing done.
+}
+
+func (run *serviceRun) finishStartup(baseURL string, err error) {
+	run.baseURL = baseURL
+	run.startupErr = err
+	close(run.startupDone)
 }
 
 var defaultService = &Service{
@@ -101,7 +108,7 @@ func (s *Service) ensureStarted(ctx context.Context, serverOptions ...cliproxyap
 		runCtx, cancel := context.WithCancel(context.Background())
 		run = &serviceRun{
 			ctx: runCtx, cancel: cancel,
-			ready: make(chan struct{}), done: make(chan struct{}),
+			startupDone: make(chan struct{}), done: make(chan struct{}),
 		}
 		s.run = run
 		go s.runService(run, serverOptions)
@@ -111,19 +118,17 @@ func (s *Service) ensureStarted(ctx context.Context, serverOptions ...cliproxyap
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
-	case <-run.ready:
+	case <-run.startupDone:
 		if err := ctx.Err(); err != nil {
 			return "", err
+		}
+		if run.startupErr != nil {
+			return "", run.startupErr
 		}
 		if err := run.ctx.Err(); err != nil {
 			return "", err
 		}
 		return run.baseURL, nil
-	case <-run.done:
-		if run.err != nil {
-			return "", run.err
-		}
-		return "", fmt.Errorf("embedded cliproxy stopped before becoming ready")
 	}
 }
 
@@ -135,6 +140,12 @@ func (s *Service) runService(run *serviceRun, serverOptions []cliproxyapi.Server
 	run.cancel()
 	s.mu.Lock()
 	s.run = nil
+	select {
+	case <-run.startupDone:
+	default:
+		// Setup errors can finish the run without ever starting the SDK.
+		run.finishStartup("", err)
+	}
 	close(run.done)
 	s.mu.Unlock()
 }
@@ -171,14 +182,20 @@ func (s *Service) serve(run *serviceRun, serverOptions []cliproxyapi.ServerOptio
 
 	if err = s.waitHealthy(run.ctx, baseURL, stopped); err != nil {
 		run.cancel()
-		<-stopped
+		select {
+		case <-stopped:
+		default:
+			// Release readiness waiters while the SDK winds down. Keep this
+			// run registered until it exits so another daemon cannot overlap it.
+			run.finishStartup("", err)
+			<-stopped
+		}
 		if daemonErr != nil && !errors.Is(daemonErr, context.Canceled) {
 			return fmt.Errorf("embedded cliproxy stopped during startup: %w", daemonErr)
 		}
 		return err
 	}
-	run.baseURL = baseURL
-	close(run.ready)
+	run.finishStartup(baseURL, nil)
 	<-stopped
 	return daemonErr
 }

@@ -152,6 +152,66 @@ func TestEmbeddedStartupFailureCanRetry(t *testing.T) {
 	startModelTestService(t, ctx, svc, nil)
 }
 
+func TestStartupHealthTimeoutReturnsBeforeDaemonCleanup(t *testing.T) {
+	t.Setenv(configDirEnv, t.TempDir())
+	t.Setenv(authDirEnv, t.TempDir())
+	t.Setenv(autoLoginEnv, "false")
+
+	svc := &Service{}
+	entered := make(chan struct{})
+	gate := make(chan struct{})
+	release := sync.OnceFunc(func() { close(gate) })
+	t.Cleanup(func() {
+		release()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = svc.Shutdown(ctx)
+	})
+
+	started := make(chan error, 1)
+	go func() {
+		_, err := svc.ensureStarted(t.Context(), cliproxyapi.WithRouterConfigurator(
+			func(_ *gin.Engine, _ *sdkhandlers.BaseAPIHandler, _ *sdkconfig.Config) {
+				close(entered)
+				<-gate
+			},
+		))
+		started <- err
+	}()
+	select {
+	case <-entered:
+	case <-time.After(4 * time.Second):
+		t.Fatal("embedded service did not enter the startup hook")
+	}
+
+	var startupErr error
+	select {
+	case startupErr = <-started:
+		if !errors.Is(startupErr, context.DeadlineExceeded) {
+			t.Fatalf("startup returned %v, want its health check deadline", startupErr)
+		}
+	case <-time.After(7 * time.Second):
+		t.Fatal("startup health timeout did not reach the waiter while the SDK was blocked")
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if err := svc.EnsureStarted(ctx); err != startupErr {
+		t.Fatalf("retry during cleanup returned %v, want the same startup failure %v", err, startupErr)
+	}
+	shutdownCtx, cancelShutdown := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancelShutdown()
+	if err := svc.Shutdown(shutdownCtx); err != context.DeadlineExceeded {
+		t.Fatalf("shutdown returned %v before the SDK was released", err)
+	}
+
+	release()
+	if err := svc.Shutdown(ctx); ctx.Err() != nil || (err != nil && err != startupErr) {
+		t.Fatalf("shutdown after releasing the SDK returned %v", err)
+	}
+	startModelTestService(t, ctx, svc, nil)
+}
+
 type modelTransportFixture struct {
 	mu              sync.Mutex
 	provider, model string
