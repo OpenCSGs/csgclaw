@@ -1377,7 +1377,7 @@ func (s *Controller) validateReplaceWorkerSpecBeforeDelete(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	if err := s.validateCreateRuntimeConfig(ctx, spec, runtimeKind, runtimeConfigSnapshotForAgent(s.hydrateProfileFromCatalog(resolvedProfile), spec.RuntimeOptions)); err != nil {
+	if err := s.validateTemplateRuntimeConfig(ctx, spec.FromTemplate, runtimeKind, runtimeConfigSnapshotForAgent(s.hydrateProfileFromCatalog(resolvedProfile), spec.RuntimeOptions)); err != nil {
 		return err
 	}
 	return s.validateMCPServers(ctx, runtimeKind, mcpServersSnapshotForAgent(spec.MCPServers))
@@ -2371,7 +2371,7 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 		return Agent{}, err
 	}
 	runtimeResolvedProfile := s.hydrateProfileFromCatalog(resolvedProfile)
-	if err := s.validateCreateRuntimeConfig(ctx, spec, runtimeKind, runtimeConfigSnapshotForAgent(runtimeResolvedProfile, spec.RuntimeOptions)); err != nil {
+	if err := s.validateTemplateRuntimeConfig(ctx, spec.FromTemplate, runtimeKind, runtimeConfigSnapshotForAgent(runtimeResolvedProfile, spec.RuntimeOptions)); err != nil {
 		return Agent{}, err
 	}
 	if err := s.validateMCPServers(ctx, runtimeKind, mcpServersSnapshotForAgent(spec.MCPServers)); err != nil {

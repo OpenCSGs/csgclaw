@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/assets"
 	"csgclaw/internal/channel/feishu"
@@ -8986,7 +8987,7 @@ func TestPlatformTemplateCreationDefersModelCheck(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := svc.validateCreateRuntimeConfig(context.Background(), CreateAgentSpec{FromTemplate: tc.template}, RuntimeKindCodex, agentruntime.RuntimeConfigSnapshot{}); err != nil {
+			if err := svc.validateTemplateRuntimeConfig(context.Background(), tc.template, RuntimeKindCodex, agentruntime.RuntimeConfigSnapshot{}); err != nil {
 				t.Fatal(err)
 			}
 			if calls != 1 {
@@ -8996,9 +8997,10 @@ func TestPlatformTemplateCreationDefersModelCheck(t *testing.T) {
 	}
 }
 
-func TestCreatePlatformTemplateWorkerWithUnavailableModel(t *testing.T) {
+func TestCreateAndRefreshPlatformTemplateWorkerWithUnavailableModel(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	hubSvc := mustNewLocalTemplateHubService(t, "codex-worker", hub.Template{ID: "codex-worker", Name: "codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: RuntimeNameCodex})
+	modelUnavailable := errors.New("model unavailable")
 	calls := 0
 	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "manager-image:test", "",
 		WithHubService(hubSvc), WithSandboxProvider(fakeProvider{name: "csghub"}),
@@ -9006,7 +9008,7 @@ func TestCreatePlatformTemplateWorkerWithUnavailableModel(t *testing.T) {
 			validate: func(_ context.Context, current agentruntime.RuntimeConfigSnapshot) error {
 				calls++
 				if !current.SkipModelAvailabilityCheck {
-					return errors.New("model unavailable")
+					return modelUnavailable
 				}
 				return nil
 			},
@@ -9026,6 +9028,24 @@ func TestCreatePlatformTemplateWorkerWithUnavailableModel(t *testing.T) {
 	}
 	if got.BoxID != "template-worker" || got.Status != "running" || calls != 1 {
 		t.Fatalf("worker = %#v, validation calls = %d", got, calls)
+	}
+
+	updatedHub := mustNewLocalTemplateHubService(t, "codex-worker", hub.Template{
+		Name: "codex-worker", RuntimeKind: RuntimeNameCodex,
+		ModelConfig: &apitypes.TemplateModelConfig{ModelID: "updated-model"},
+	})
+	ctx := WithLocalTemplateService(t.Context(), updatedHub)
+	refreshed, err := svc.Update(ctx, got.ID, contract.AgentUpdateRequest{RefreshTemplate: "local.codex-worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refreshed.Spec.Model.ModelID != "updated-model" || calls != 2 {
+		t.Fatalf("refreshed model = %q, validation calls = %d", refreshed.Spec.Model.ModelID, calls)
+	}
+	profile := got.AgentProfile
+	profile.ModelID = "manual-model"
+	if _, err := svc.UpdateRecord(t.Context(), got.ID, UpdateRequest{AgentProfile: &profile}); !errors.Is(err, modelUnavailable) {
+		t.Fatalf("manual model update error = %v, want %v", err, modelUnavailable)
 	}
 }
 

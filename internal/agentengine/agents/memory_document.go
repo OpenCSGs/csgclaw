@@ -97,10 +97,10 @@ func (s *Controller) UpdateMemoryEnabled(ctx context.Context, id string, enabled
 	if err != nil {
 		return MemoryDocument{}, err
 	}
-	if _, err := s.updateWithManagedRuntimeOptions(ctx, got.ID, UpdateRequest{
+	if _, err := s.applyUpdate(ctx, got.ID, UpdateRequest{
 		RuntimeOptions: &options,
 		FieldMask:      []string{"runtime_options"},
-	}, true); err != nil {
+	}, true, ""); err != nil {
 		return MemoryDocument{}, err
 	}
 	return s.MemoryDocument(ctx, got.ID)

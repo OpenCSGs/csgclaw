@@ -196,10 +196,10 @@ func (s *Controller) UpdateRecord(ctx context.Context, id string, req UpdateRequ
 }
 
 func (s *Controller) update(ctx context.Context, id string, req UpdateRequest) (Agent, error) {
-	return s.updateWithManagedRuntimeOptions(ctx, id, req, false)
+	return s.applyUpdate(ctx, id, req, false, "")
 }
 
-func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id string, req UpdateRequest, allowManagerRuntimeOptions bool) (Agent, error) {
+func (s *Controller) applyUpdate(ctx context.Context, id string, req UpdateRequest, allowManagerRuntimeOptions bool, templateRef string) (Agent, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
@@ -416,7 +416,7 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 		if (runtimeConfigUpdated && runtimeNormalized.ProfileComplete) || mcpServersUpdated {
 			s.mu.Unlock()
 			if runtimeConfigUpdated && runtimeNormalized.ProfileComplete {
-				if err := s.validateRuntimeConfig(ctx, runtimeKind, change.Current); err != nil {
+				if err := s.validateTemplateRuntimeConfig(ctx, templateRef, runtimeKind, change.Current); err != nil {
 					return Agent{}, err
 				}
 			}
@@ -730,8 +730,8 @@ func mcpServersSnapshotForAgent(servers map[string]any) agentruntime.MCPServersS
 
 // Platform template bootstrap must not depend on the model service being online.
 // Runtime options, dependencies and MCP configuration are still validated.
-func (s *Controller) validateCreateRuntimeConfig(ctx context.Context, spec CreateAgentSpec, runtimeKind string, current agentruntime.RuntimeConfigSnapshot) error {
-	current.SkipModelAvailabilityCheck = s.server.DeploymentMode == "csghub" && strings.TrimSpace(spec.FromTemplate) != ""
+func (s *Controller) validateTemplateRuntimeConfig(ctx context.Context, templateRef, runtimeKind string, current agentruntime.RuntimeConfigSnapshot) error {
+	current.SkipModelAvailabilityCheck = s.server.DeploymentMode == "csghub" && strings.TrimSpace(templateRef) != ""
 	return s.validateRuntimeConfig(ctx, runtimeKind, current)
 }
 
