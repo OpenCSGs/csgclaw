@@ -39,6 +39,14 @@ Key 无效、权限不足、余额或套餐额度不足、限流、网络异常�
 Key 由后端持久化，连接目录与错误消息保持脱敏。
 官方 Logo 随应用本地打包，来源记录在 `web/packages/app/public/model-providers/SOURCES.md`。
 
+## 内置服务的余额与额度
+
+模型服务目录按需返回 `balance` 或 `quota`，没有数据时省略该字段。
+
+- OpenCSG 使用当前登录账户的 Hub 地址、用户 UUID 和用户令牌读取 `GET /api/v1/accounting/credit/{uuid}/balance`，将分换算为人民币元。成功结果按账户缓存 5 分钟。
+- CSGHub Lite 通过本机控制台的 `GET /api/cloud/balance` 读取 Lite 自身登录的社区账户。只暴露推理 API 的桌面端口无法提供该字段。
+- Codex 使用 CLIProxy 存储的当前账户凭据读取 ChatGPT 用量接口，模型响应中的额度也可用于更新。Claude Code 使用 CLIProxy 从模型响应中收到的 OAuth 额度。徽标显示仍生效的窗口中剩余比例最低的一项及其重置时间。
+
 ## 新建 Agent 的模型选择
 
 模型服务设置提供新建 Agent 使用的智能体、图片生成和视频生成默认模型。

@@ -46,7 +46,9 @@ The page uses the demo's full-width header, compact schedule list, centered comp
 
 Manager uses its configured model and embedded `scheduled-tasks` skill to parse requests in new or existing conversations. It reads `csgclaw-cli scheduled-task context` for the current server time, real executor IDs and supported recurrences, shows the parsed time/content/executor in the conversation, and lets the user correct them before saving. Ambiguous times, missing executors and unsupported schedules require clarification. A successful CLI response is required before reporting success. Demo-only keyword parsing is not used.
 
-Both `csgclaw` and `csgclaw-cli` expose `scheduled-task context|list|create|update`. These call the existing `/api/v1/scheduled-tasks` CRUD API; `GET /api/v1/scheduled-tasks/context` returns only executor ID/name/role, current server time and supported recurrences. Model configuration and credentials are excluded. Schedule timestamps and recurrence calculations retain their existing behavior.
+Both `csgclaw` and `csgclaw-cli` expose `scheduled-task context|list|create|update`. These call the existing `/api/v1/scheduled-tasks` CRUD API; `GET /api/v1/scheduled-tasks/context` returns only executor ID/name/role, current server time and supported recurrences. Model configuration and credentials are excluded. The context endpoint lists the recurrence modes supported by the natural-language CLI flow.
+
+The manual scheduler also supports interval, biweekly and yearly plans. Its API requests retain `recurrence` and `first_run_at` (or `next_run_at` on update), with optional `schedule_detail`, `starts_at` and `expires_at`. Schedule details hold the interval, selected weekdays or month days, annual date, and local clock/time zone as applicable. The first occurrence determines the alternating Monday-based week for a biweekly plan. Calendar plans skip nonexistent dates, and the scheduler stops automatic runs after expiration.
 
 For updates, omitting `--expires-at` preserves the existing end date. Passing `--expires-at ''` sends `expires_at: null` to clear it; supplying a timestamp replaces it.
 

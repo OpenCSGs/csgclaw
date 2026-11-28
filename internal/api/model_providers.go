@@ -10,10 +10,13 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/auth"
+	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelpreset"
 	"csgclaw/internal/modelprovider"
@@ -71,7 +74,58 @@ func (h *Handler) listModelProviders(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, agent.ModelProviderCatalogFromLLM(cfg.Models))
+	catalog := agent.ModelProviderCatalogFromLLM(cfg.Models)
+	configured := cfg.Models.Normalized().Providers
+	var lookups sync.WaitGroup
+	for i := range catalog.Providers {
+		summary := &catalog.Providers[i]
+		provider := configured[summary.ID]
+		if !summary.Builtin && (summary.Status != agent.ModelProviderStatusConnected || provider.APIKey == "") {
+			continue
+		}
+		lookups.Go(func() {
+			h.addModelProviderUsage(r.Context(), summary, provider)
+		})
+	}
+	lookups.Wait()
+	writeJSON(w, http.StatusOK, catalog)
+}
+
+func (h *Handler) addModelProviderUsage(ctx context.Context, summary *agent.ModelProviderSummary, provider config.ProviderConfig) {
+	var usage *modelprovider.AccountUsage
+	switch summary.ID {
+	case agent.ModelProviderIDOpenCSG:
+		record, found, err := auth.Default().Store.Load()
+		if err != nil || !found {
+			return
+		}
+		status := record.Status()
+		if !status.Authenticated {
+			return
+		}
+		site := status.BaseURL
+		if site == "" {
+			site = openCSGEnvironmentFromStatus(status).CSGHubBaseURL
+		}
+		usage = h.modelProviderUsage.LookupOpenCSG(ctx, site, status.UserUUID, record.Tokens.AccessToken)
+	case agent.ModelProviderIDCSGHubLite:
+		usage = modelprovider.LookupCSGHubLiteBalance(ctx, summary.BaseURL)
+	case agent.ModelProviderIDCodex, agent.ModelProviderIDClaude:
+		usage = cliproxy.Default().AccountQuota(ctx, summary.ID)
+	default:
+		if summary.Status != agent.ModelProviderStatusConnected {
+			return
+		}
+		usage = h.modelProviderUsage.Lookup(ctx, summary.Preset, provider.BaseURL, provider.APIKey)
+	}
+	if usage == nil {
+		return
+	}
+	if usage.Kind == "quota" {
+		summary.Quota = usage
+	} else {
+		summary.Balance = usage
+	}
 }
 
 func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
@@ -296,6 +350,9 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		if response.Provider != nil {
+			h.addModelProviderUsage(r.Context(), response.Provider, existing)
 		}
 	}
 	writeJSON(w, http.StatusOK, response)

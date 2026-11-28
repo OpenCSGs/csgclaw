@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"csgclaw/internal/diagnostics"
 )
@@ -50,6 +51,11 @@ type Client struct {
 
 const maxErrorResponseBytes = 4096
 
+var markdownFilenameEscaper = strings.NewReplacer(
+	`\`, `\\`, "[", `\[`, "]", `\]`, "*", `\*`, "_", `\_`,
+	"<", `\<`, ">", `\>`, "&", `\&`, "`", "\\`", "~", `\~`,
+)
+
 var responseURLWithQuery = regexp.MustCompile(`(?i)(https?:(?:/|\\/){2}[^?#\s"'<>]+)[?#][^\s"'<>]*`)
 
 type HTTPError struct {
@@ -73,7 +79,8 @@ func (e *UploadError) Unwrap() error { return e.Err }
 func (c *Client) Submit(ctx context.Context, submission Submission) (Result, error) {
 	urls := make([]string, 0, len(submission.Images))
 	for index, image := range submission.Images {
-		imageURL, err := c.upload(ctx, submission.SiteURL, UploadEndpoint, index, image.Data, image.Extension)
+		filename := attachmentFilename(image.Filename, index, image.Extension)
+		imageURL, err := c.upload(ctx, submission.SiteURL, UploadEndpoint, filename, image.Data)
 		if err != nil {
 			return Result{}, &UploadError{Kind: "image", Err: err}
 		}
@@ -83,11 +90,12 @@ func (c *Client) Submit(ctx context.Context, submission Submission) (Result, err
 	var description strings.Builder
 	if len(submission.Archives) > 0 {
 		for index, archive := range submission.Archives {
-			archiveURL, err := c.upload(ctx, submission.SiteURL, ArchiveUploadEndpoint, len(submission.Images)+index, archive.Data, archive.Extension)
+			filename := attachmentFilename(archive.Filename, len(submission.Images)+index, archive.Extension)
+			archiveURL, err := c.upload(ctx, submission.SiteURL, ArchiveUploadEndpoint, filename, archive.Data)
 			if err != nil {
 				return Result{}, &UploadError{Kind: "archive", Err: err}
 			}
-			fmt.Fprintf(&description, "- [feedback-%d.%s](<%s>)\n", len(submission.Images)+index, archive.Extension, archiveURL)
+			fmt.Fprintf(&description, "- [%s](<%s>)\n", markdownFilenameEscaper.Replace(filename), archiveURL)
 		}
 		description.WriteString("\n")
 	}
@@ -111,10 +119,17 @@ func (c *Client) Submit(ctx context.Context, submission Submission) (Result, err
 	return result, err
 }
 
-func (c *Client) upload(ctx context.Context, site, endpoint string, index int, data []byte, extension string) (string, error) {
+func attachmentFilename(filename string, index int, extension string) string {
+	if strings.TrimSpace(filename) == "" || strings.IndexFunc(filename, unicode.IsControl) >= 0 {
+		return fmt.Sprintf("feedback-%d.%s", index, extension)
+	}
+	return filename
+}
+
+func (c *Client) upload(ctx context.Context, site, endpoint, filename string, data []byte) (string, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", fmt.Sprintf("feedback-%d.%s", index, extension))
+	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
 		return "", err
 	}

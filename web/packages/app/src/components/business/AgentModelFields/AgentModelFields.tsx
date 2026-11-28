@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Field, Select } from "@/components/ui";
+import { ModelProviderBalanceBadge } from "@/components/business/ModelProviderBalanceBadge";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
 import {
   MODEL_PROVIDER_IDS,
@@ -54,7 +55,12 @@ export function AgentModelFields({
           placeholder={busy ? t("profileLoadingModels") : t("profileProviderSelect")}
           selectedLabel={
             selectedProvider ? (
-              <ModelOptionLabel avatar={selectedProvider.avatar} model={selectedProvider.displayName} />
+              <span className="flex w-full min-w-0 items-center justify-between gap-2">
+                <span className="min-w-0 flex-1">
+                  <ModelOptionLabel avatar={selectedProvider.avatar} model={selectedProvider.displayName} />
+                </span>
+                <ModelProviderBalanceBadge balance={selectedProvider.balance} t={t} compact />
+              </span>
             ) : undefined
           }
           triggerProps={{ "aria-label": t("profileModelProvider"), "aria-required": true }}
@@ -76,15 +82,20 @@ export function AgentModelFields({
             disabled: option.disabled,
             textValue: option.displayName,
             label: (
-              <ModelOptionLabel
-                avatar={option.avatar}
-                model={option.displayName}
-                provider={
-                  option.models.length
-                    ? t("modelProviderModelCount", { count: option.models.length })
-                    : t("modelProviderNoModels")
-                }
-              />
+              <span className="flex w-full min-w-0 items-center justify-between gap-2">
+                <span className="min-w-0 flex-1">
+                  <ModelOptionLabel
+                    avatar={option.avatar}
+                    model={option.displayName}
+                    provider={
+                      option.models.length
+                        ? t("modelProviderModelCount", { count: option.models.length })
+                        : t("modelProviderNoModels")
+                    }
+                  />
+                </span>
+                <ModelProviderBalanceBadge balance={option.balance} t={t} compact />
+              </span>
             ),
           }))}
         />

@@ -1,12 +1,12 @@
 import type { Dispatch, SetStateAction } from "react";
-import { Field, TextInput, TextArea, Combobox, Select } from "@/components/ui";
+import { Field, TextInput, TextArea, Combobox } from "@/components/ui";
 import { classNames } from "@/shared/lib/classNames";
 import { TASK_TITLE_MAX_LENGTH } from "./taskDialogTypes";
 import taskFormStyles from "./TaskForm.module.css";
 import type { SelectOption } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
-import type { ScheduledTaskRecurrence } from "@/models/scheduledTasks";
 import type { ScheduledTaskFormDraft, ScheduledTaskFormFieldErrors } from "./taskDialogTypes";
+import { ScheduleControls } from "./ScheduleControls";
 
 type ScheduledTaskFormFieldsProps = {
   draft: ScheduledTaskFormDraft;
@@ -68,53 +68,17 @@ export function ScheduledTaskFormFields({
           }}
         />
       </Field>
-      <Field className={taskFormStyles.taskCreateField} label={t("scheduledTaskRecurrenceLabel")}>
-        <Select
-          value={draft.recurrence}
-          onValueChange={(recurrence) =>
-            onChange((current) => ({ ...current, recurrence: recurrence as ScheduledTaskRecurrence }))
-          }
-          options={[
-            { value: "once", label: t("scheduledTaskRecurrenceOnce") },
-            { value: "daily", label: t("scheduledTaskRecurrenceDaily") },
-            { value: "weekly", label: t("scheduledTaskRecurrenceWeekly") },
-            { value: "monthly", label: t("scheduledTaskRecurrenceMonthly") },
-          ]}
-          triggerProps={{ "aria-label": t("scheduledTaskRecurrenceLabel") }}
-        />
-      </Field>
-      <Field className={taskFormStyles.taskCreateField} label={t("scheduledTaskDateLabel")} error={errors.date}>
-        <TextInput
-          type="date"
-          value={draft.date}
-          onInput={(event) => {
-            const value = event.currentTarget.value;
-            onChange((current) => ({ ...current, date: value }));
-            onClearError("date");
+      <div className={taskFormStyles.span2}>
+        <ScheduleControls
+          draft={draft}
+          errors={errors}
+          t={t}
+          onChange={(patch) => {
+            onChange((current) => ({ ...current, ...patch }));
+            (["weekdays", "monthDays", "interval", "onceAt", "time", "effectiveRange"] as const).forEach(onClearError);
           }}
         />
-      </Field>
-      <Field className={taskFormStyles.taskCreateField} label={t("scheduledTaskTimeLabel")} error={errors.time}>
-        <TextInput
-          type="time"
-          value={draft.time}
-          onInput={(event) => {
-            const value = event.currentTarget.value;
-            onChange((current) => ({ ...current, time: value }));
-            onClearError("time");
-          }}
-        />
-      </Field>
-      <Field className={taskFormStyles.taskCreateField} label={t("scheduledTaskExpiresLabel")}>
-        <TextInput
-          type="date"
-          value={draft.expiresDate}
-          onInput={(event) => {
-            const value = event.currentTarget.value;
-            onChange((current) => ({ ...current, expiresDate: value }));
-          }}
-        />
-      </Field>
+      </div>
     </div>
   );
 }

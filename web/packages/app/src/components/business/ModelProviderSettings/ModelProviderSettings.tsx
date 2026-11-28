@@ -11,6 +11,7 @@ import { DefaultModelSettings } from "./DefaultModelSettings";
 import directoryStyles from "./ProviderDirectory.module.css";
 import { ModelMetadataFields } from "./ModelMetadataFields";
 import { modelOverridesEqual, type ModelOverride } from "@/models/modelMetadata";
+import { ModelProviderBalanceBadge } from "@/components/business/ModelProviderBalanceBadge";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -527,7 +528,8 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                   />
                   <span className={modelProviderSettingsStyles["model-provider-provider-copy"]}>
                     <span className={modelProviderSettingsStyles["model-provider-provider-title"]}>
-                      {item.display_name || item.id}
+                      <span className={modelProviderSettingsStyles["model-provider-provider-name"]}>{item.display_name || item.id}</span>
+                      <ModelProviderBalanceBadge balance={item.balance} t={t} compact />
                     </span>
                     <span className={modelProviderSettingsStyles["model-provider-provider-description"]}>
                       {itemMetaParts.join(" · ") || item.kind || item.base_url || t("resourcesModelProvidersSection")}

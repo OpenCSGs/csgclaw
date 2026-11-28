@@ -308,9 +308,13 @@ provides a new-task action that preserves the cloud target.
 ## Automatic publication in sandbox images
 
 Set `TEMPLATE_ID` and `CSGCLAW_AGENT_AUTO_PUBLISH=true` at container startup.
-The image bootstrap passes `--auto-publish=true` to `participant create --bind create`;
-both `csgclaw` and `csgclaw-cli` support the flag. The default is false. This applies
-only to the startup template agent; false does not unpublish existing registrations.
+CSGClaw queues publication when the image bootstrap creates the template worker
+or when the server starts with that worker already present. The default is false.
+This setting applies only to the startup template worker. Disabling it leaves
+existing registrations in place. Cancelling or unpublishing a worker prevents
+automatic publication on later starts. The worker can still be published manually.
+When rebuilding the sandbox image, set `CSGCLAW_BASE_IMAGE` to a build that
+includes server-side automatic publication.
 
 `LoadSiteCredentials` prefers an authenticated `CurrentSiteCredentials` login,
 then the existing managed `CSGHUB_API_BASE_URL` / `CSGHUB_USER_TOKEN` environment
@@ -325,9 +329,8 @@ readiness. `POST /api/v1/agents/{id}/relay` with `{"auto_publish":true}` returns
 `publishing` indicates queued work, `published` confirms registration/writeback.
 Pending work resumes on restart, uses idempotent external registration or a persisted
 platform content target, and is cancelled
-by DELETE. The image reconciles publication on new creation, marker recovery, and
-existing-agent recovery before enabling readiness on port 8888. On bounded polling
-timeout it follows the existing bootstrap shutdown path while preserving progress.
+by DELETE. The image enables readiness on port 8888 once the template worker is
+running. Relay publication proceeds asynchronously.
 Mount `/home/picoclaw/.csgclaw` to retain identity and recovery state.
 
 The deployed community contract is documented in

@@ -220,20 +220,32 @@ type PatchAgentTaskRequest struct {
 	Reason  string `json:"reason,omitempty"`
 }
 
+type ScheduledTaskScheduleDetail struct {
+	IntervalMinutes int    `json:"interval_minutes,omitempty"`
+	Weekdays        []int  `json:"weekdays,omitempty"`
+	MonthDays       []int  `json:"month_days,omitempty"`
+	Month           int    `json:"month,omitempty"`
+	Day             int    `json:"day,omitempty"`
+	Clock           string `json:"clock,omitempty"`
+	TimeZone        string `json:"time_zone,omitempty"`
+}
+
 type ScheduledTask struct {
-	AgentState string     `json:"agent_state,omitempty"`
-	ID         string     `json:"id"`
-	Title      string     `json:"title"`
-	AgentID    string     `json:"agent_id"`
-	AgentName  string     `json:"agent_name,omitempty"`
-	Prompt     string     `json:"prompt"`
-	Recurrence string     `json:"recurrence"`
-	Enabled    bool       `json:"enabled"`
-	NextRunAt  time.Time  `json:"next_run_at"`
-	LastRunAt  *time.Time `json:"last_run_at,omitempty"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	AgentState     string                       `json:"agent_state,omitempty"`
+	ID             string                       `json:"id"`
+	Title          string                       `json:"title"`
+	AgentID        string                       `json:"agent_id"`
+	AgentName      string                       `json:"agent_name,omitempty"`
+	Prompt         string                       `json:"prompt"`
+	Recurrence     string                       `json:"recurrence"`
+	ScheduleDetail *ScheduledTaskScheduleDetail `json:"schedule_detail,omitempty"`
+	StartsAt       *time.Time                   `json:"starts_at,omitempty"`
+	Enabled        bool                         `json:"enabled"`
+	NextRunAt      time.Time                    `json:"next_run_at"`
+	LastRunAt      *time.Time                   `json:"last_run_at,omitempty"`
+	ExpiresAt      *time.Time                   `json:"expires_at,omitempty"`
+	CreatedAt      time.Time                    `json:"created_at"`
+	UpdatedAt      time.Time                    `json:"updated_at"`
 }
 
 type ScheduledTaskRun struct {
@@ -246,13 +258,15 @@ type ScheduledTaskRun struct {
 }
 
 type CreateScheduledTaskRequest struct {
-	Title      string     `json:"title"`
-	AgentID    string     `json:"agent_id"`
-	Prompt     string     `json:"prompt"`
-	Recurrence string     `json:"recurrence"`
-	FirstRunAt time.Time  `json:"first_run_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	Enabled    *bool      `json:"enabled,omitempty"`
+	Title          string                       `json:"title"`
+	AgentID        string                       `json:"agent_id"`
+	Prompt         string                       `json:"prompt"`
+	Recurrence     string                       `json:"recurrence"`
+	ScheduleDetail *ScheduledTaskScheduleDetail `json:"schedule_detail,omitempty"`
+	StartsAt       *time.Time                   `json:"starts_at,omitempty"`
+	FirstRunAt     time.Time                    `json:"first_run_at"`
+	ExpiresAt      *time.Time                   `json:"expires_at,omitempty"`
+	Enabled        *bool                        `json:"enabled,omitempty"`
 }
 
 type PatchScheduledTaskRequest struct {

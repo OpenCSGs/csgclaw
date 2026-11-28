@@ -59,6 +59,14 @@ Credentials are persisted by the backend and are omitted from connection-directo
 Provider errors shown during connection do not include raw upstream bodies or echoed secrets.
 Official logos ship locally, with provenance recorded in `web/packages/app/public/model-providers/SOURCES.md`.
 
+## Built-in account balances and quotas
+
+The model provider catalog includes an optional `balance` or `quota` when account data is available.
+
+- OpenCSG reads `GET /api/v1/accounting/credit/{uuid}/balance` with the signed-in account's Hub URL, UUID, and user token. It converts CNY cents to yuan and caches successful reads per account for five minutes.
+- CSGHub Lite reads `GET /api/cloud/balance` from its local console for the community account signed in on Lite. Its inference-only desktop port does not expose this endpoint.
+- Codex reads ChatGPT account usage using the current CLIProxy credential and can also use quota signals from model responses. Claude Code uses OAuth quota signals observed by CLIProxy on model requests. The badge shows the active window with the lowest remaining percentage and its reset time.
+
 ## Agent creation defaults
 
 The model settings page provides conversation, image-generation, and video-generation defaults for new Agents.

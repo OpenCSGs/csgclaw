@@ -130,3 +130,32 @@ it("shows the followed model provider icon for the follow-agent option and selec
     screen.getByRole("option", { name: /Follow the agent/ }).querySelector("img.model-option-avatar"),
   ).toHaveAttribute("src", "model-providers/zhipu.svg");
 });
+
+it("puts each account balance on its group header only, including after filtering", async () => {
+  const user = userEvent.setup();
+  render(
+    <ConnectedModelPicker
+      providers={providers.map((provider, index) => ({
+        ...provider,
+        models: ["shared-model", "search-model"],
+        balance: { kind: "balance", currency: "CNY", remaining: index ? 10 : 0 },
+      }))}
+      providerID="api"
+      modelID="shared-model"
+      onChoose={vi.fn()}
+      t={t}
+    />,
+  );
+
+  await user.click(screen.getByRole("combobox", { name: "Model" }));
+  const team = screen.getByRole("group", { name: /Team API/ });
+  const personal = screen.getByRole("group", { name: /Personal/ });
+  expect(team).toContainElement(screen.getByText("¥0.00"));
+  expect(personal).toContainElement(screen.getByText("¥10.00"));
+  for (const option of screen.getAllByRole("option")) expect(option).not.toHaveTextContent("¥");
+
+  await user.type(screen.getByRole("combobox", { name: "Search models" }), "search-model");
+  expect(screen.getAllByRole("option")).toHaveLength(2);
+  expect(screen.getAllByText("¥0.00")).toHaveLength(1);
+  expect(screen.getAllByText("¥10.00")).toHaveLength(1);
+});

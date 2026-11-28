@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Bot, ChevronDown } from "lucide-react";
 import {
   Button,
+  InlineError,
   Tooltip,
   DialogBody,
   DialogContent,
@@ -61,25 +62,30 @@ type TaskDetailDialogProps = {
   title?: string;
 };
 
-type GeneratedTaskInlineDetailProps = {
+type GeneratedTaskDetailBodyProps = {
   agentNames: ReadonlyMap<string, string>;
   childTasks?: WorkspaceTask[];
-  onOpenConversation: (roomID: string) => void | Promise<void>;
   t: TranslateFn;
   task: WorkspaceTask | null;
   taskEvents?: WorkspaceTeamEvent[];
-  teams?: WorkspaceTeam[];
 };
 
-export function GeneratedTaskInlineDetail({
+type GeneratedTaskDetailDialogProps = GeneratedTaskDetailBodyProps & {
+  onOpenConversation?: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
+  runID?: string;
+  runError?: string;
+  onClose?: () => void;
+  open: boolean;
+};
+
+function GeneratedTaskDetailBody({
   t,
   task,
   agentNames,
   childTasks = [],
-  teams = [],
   taskEvents = [],
-  onOpenConversation,
-}: GeneratedTaskInlineDetailProps) {
+}: GeneratedTaskDetailBodyProps) {
   const locale = document.documentElement.lang;
   const isParentDetail = Boolean(task && !task.parent_id);
   const detailEvents = useMemo(
@@ -98,21 +104,8 @@ export function GeneratedTaskInlineDetail({
     () => (task ? taskMetaTags(task, childTasks.length, t, locale, agentNames) : []),
     [agentNames, childTasks.length, locale, t, task],
   );
-  const detailRoomID = useMemo(
-    () => (task ? taskExecutionRoomID(task, childTasks, teams) : ""),
-    [childTasks, task, teams],
-  );
-
   return (
-    <section className={taskDetailsStyles.generatedTaskDetail} aria-label={t("generatedTaskDetailTitle")}>
-      <header className={taskDetailsStyles.generatedTaskDetailHead}>
-        <h3>{t("generatedTaskDetailTitle")}</h3>
-        {task && (task.room_id || detailRoomID) ? (
-          <Button variant="secondaryGray" size="sm" onClick={() => onOpenConversation(detailRoomID || task.room_id)}>
-            {t("taskOpenConversation")}
-          </Button>
-        ) : null}
-      </header>
+    <section className={taskDetailsStyles.generatedTaskDetail}>
       <div className={taskDetailsStyles.generatedTaskPanel}>
         {task ? (
           <>
@@ -165,6 +158,43 @@ export function GeneratedTaskInlineDetail({
         )}
       </div>
     </section>
+  );
+}
+
+export function GeneratedTaskDetailDialog({
+  open,
+  onClose,
+  onOpenConversation,
+  onCloseAutoFocus,
+  runID,
+  runError,
+  t,
+  task,
+  ...props
+}: GeneratedTaskDetailDialogProps) {
+  return (
+    <DialogRoot open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose?.() : undefined)}>
+      <DialogContent className={taskDetailsStyles.generatedTaskDialog} scrollBody onCloseAutoFocus={onCloseAutoFocus}>
+        <DialogHeader>
+          <div>
+            <DialogTitle>{t("generatedTaskDetailTitle")}</DialogTitle>
+            <DialogDescription>{task?.id || runID}</DialogDescription>
+          </div>
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
+        </DialogHeader>
+        <DialogBody>
+          {runError && <InlineError>{runError}</InlineError>}
+          {(task || !runError) && <GeneratedTaskDetailBody t={t} task={task} {...props} />}
+        </DialogBody>
+        {onOpenConversation && (
+          <DialogFooter>
+            <Button variant="secondaryGray" onClick={onOpenConversation}>
+              {t("taskOpenConversation")}
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </DialogRoot>
   );
 }
 

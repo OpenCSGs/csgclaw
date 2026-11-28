@@ -12,6 +12,18 @@ import type { TranslateFn } from "@/models/conversations";
 import type { WorkspaceScheduledTask, WorkspaceScheduledTaskRun } from "@/models/scheduledTasks";
 import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
 
+async function selectScheduleTime(trigger: string, hour: number, minute: number) {
+  fireEvent.click(screen.getByRole("button", { name: trigger }));
+  for (const [label, number] of [
+    ["scheduledTaskHourColumn", hour],
+    ["scheduledTaskMinuteColumn", minute],
+  ] as const) {
+    const list = await screen.findByRole("listbox", { name: createTranslator("en")(label) });
+    fireEvent.click(within(list).getByRole("option", { name: String(number).padStart(2, "0") }));
+  }
+  fireEvent.click(screen.getByRole("button", { name: createTranslator("en")("confirm") }));
+}
+
 const labels: Record<string, string> = {
   mainTaskBoardTitle: "Task board",
   mainTaskBoardSubtitle: "Browse tasks",
@@ -148,7 +160,7 @@ const t: TranslateFn = (key, params = {}) => {
   if (key.startsWith("taskStatus.")) {
     return key.replace("taskStatus.", "");
   }
-  return labels[key] ?? key;
+  return labels[key] ?? createTranslator("en")(key, params);
 };
 
 function applyStateAction<Value>(action: SetStateAction<Value>, current: Value): Value {
@@ -500,7 +512,7 @@ describe("TasksView", () => {
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "New task" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Schedule" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Description")).not.toBeInTheDocument();
   });
 
@@ -516,31 +528,33 @@ describe("TasksView", () => {
     expect(screen.getByLabelText("Description")).toHaveValue("CD");
   });
 
-  it("accepts consecutive changes in every scheduled-task input field", async () => {
+  it("offers seven schedule types and clears a selected effective period when switched to once", async () => {
     const user = userEvent.setup();
-
-    render(<TasksView showCreateScheduledTaskModal agents={[agent()]} teams={[team()]} t={t} />);
-
+    render(<TasksView showCreateScheduledTaskModal agents={[agent()]} t={t} />);
     await user.type(screen.getByLabelText("Title"), "AB");
     await user.type(screen.getByLabelText("Prompt"), "CD");
 
-    const date = screen.getByLabelText("Date");
-    fireEvent.input(date, { target: { value: "2026-07-25" } });
-    fireEvent.input(date, { target: { value: "2026-07-26" } });
+    await user.click(screen.getByRole("button", { name: "Schedule" }));
+    expect(within(screen.getByRole("listbox", { name: "Schedule" })).getAllByRole("option")).toHaveLength(7);
+    await user.click(screen.getByRole("option", { name: "Daily" }));
+    const effective = createTranslator("en")("scheduledTaskEffectiveLabel");
+    const range = createTranslator("en")("scheduledTaskEffectiveRange");
+    const forever = createTranslator("en")("scheduledTaskEffectiveForever");
+    await user.click(screen.getByRole("button", { name: effective }));
+    await user.click(screen.getByRole("option", { name: range }));
+    const dates = screen.getAllByRole("gridcell");
+    await user.click(dates[12]);
+    await user.click(dates[15]);
+    expect(screen.getByRole("button", { name: effective })).not.toHaveTextContent(forever);
 
-    const time = screen.getByLabelText("Time");
-    fireEvent.input(time, { target: { value: "09:30" } });
-    fireEvent.input(time, { target: { value: "10:45" } });
-
-    const expiresDate = screen.getByLabelText("End date (optional)");
-    fireEvent.input(expiresDate, { target: { value: "2026-08-01" } });
-    fireEvent.input(expiresDate, { target: { value: "2026-08-02" } });
-
+    await user.click(screen.getByRole("button", { name: "Schedule" }));
+    await user.click(screen.getByRole("option", { name: "Does not repeat" }));
+    expect(screen.queryByRole("button", { name: effective })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Schedule" }));
+    await user.click(screen.getByRole("option", { name: "Daily" }));
+    expect(screen.getByRole("button", { name: effective })).toHaveTextContent(forever);
     expect(screen.getByLabelText("Title")).toHaveValue("AB");
     expect(screen.getByLabelText("Prompt")).toHaveValue("CD");
-    expect(date).toHaveValue("2026-07-26");
-    expect(time).toHaveValue("10:45");
-    expect(expiresDate).toHaveValue("2026-08-02");
   });
 
   it("captures task form values before passing deferred state updaters", () => {
@@ -572,8 +586,15 @@ describe("TasksView", () => {
   it("captures scheduled-task values before passing deferred state updaters", () => {
     const draft: ScheduledTaskFormDraft = {
       agentID: "",
-      date: "",
+      onceAt: "",
+      startsDate: "",
       expiresDate: "",
+      intervalValue: 1,
+      intervalUnit: "hour",
+      weekdays: [],
+      monthDays: [],
+      month: 1,
+      day: 1,
       prompt: "",
       recurrence: "once",
       time: "",
@@ -594,15 +615,9 @@ describe("TasksView", () => {
 
     fireEvent.input(screen.getByLabelText("Title"), { target: { value: "Scheduled title" } });
     fireEvent.input(screen.getByLabelText("Prompt"), { target: { value: "Scheduled prompt" } });
-    fireEvent.input(screen.getByLabelText("Date"), { target: { value: "2026-07-25" } });
-    fireEvent.input(screen.getByLabelText("Time"), { target: { value: "09:30" } });
-    fireEvent.input(screen.getByLabelText("End date (optional)"), { target: { value: "2026-08-01" } });
 
     expect(applyStateAction(updates[0], draft)).toEqual({ ...draft, title: "Scheduled title" });
     expect(applyStateAction(updates[1], draft)).toEqual({ ...draft, prompt: "Scheduled prompt" });
-    expect(applyStateAction(updates[2], draft)).toEqual({ ...draft, date: "2026-07-25" });
-    expect(applyStateAction(updates[3], draft)).toEqual({ ...draft, time: "09:30" });
-    expect(applyStateAction(updates[4], draft)).toEqual({ ...draft, expiresDate: "2026-08-01" });
   });
 
   it("does not show planner as the current worker after a parent task is completed", () => {
@@ -657,19 +672,12 @@ describe("TasksView", () => {
     expect(screen.getByRole("dialog", { name: "Edit scheduled task" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Morning report")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Summarize overnight progress")).toBeInTheDocument();
-    expect(screen.getByLabelText("Date")).toHaveValue("2026-07-07");
-    expect(screen.getByLabelText("Time")).toHaveValue("09:30");
-    expect(screen.getByLabelText("End date (optional)")).toHaveValue("2026-07-31");
+    expect(screen.getByRole("button", { name: "Time" })).toHaveTextContent("09:30");
 
     fireEvent.input(screen.getByLabelText("Title"), { target: { value: "Updated report" } });
     fireEvent.input(screen.getByLabelText("Prompt"), { target: { value: "Write the updated report" } });
     fireEvent.click(screen.getByRole("combobox", { name: "Assign to" }));
     fireEvent.click(await screen.findByRole("option", { name: /Worker Two/ }));
-    fireEvent.click(screen.getByRole("combobox", { name: "Schedule" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Weekly" }));
-    fireEvent.input(screen.getByLabelText("Date"), { target: { value: "2026-07-08" } });
-    fireEvent.input(screen.getByLabelText("Time"), { target: { value: "10:15" } });
-    fireEvent.input(screen.getByLabelText("End date (optional)"), { target: { value: "2026-08-01" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
@@ -677,10 +685,6 @@ describe("TasksView", () => {
         title: "Updated report",
         agent_id: "agent-2",
         prompt: "Write the updated report",
-        recurrence: "weekly",
-        next_run_at: new Date("2026-07-08T10:15:00").toISOString(),
-        expires_at: new Date("2026-08-01T23:59:00").toISOString(),
-        enabled: true,
       }),
     );
   });
@@ -706,29 +710,87 @@ describe("TasksView", () => {
       />,
     );
 
-    fireEvent.input(screen.getByLabelText("Date"), { target: { value: "2026-07-08" } });
-    fireEvent.input(screen.getByLabelText("Time"), { target: { value: "10:15" } });
+    await selectScheduleTime("Date", 10, 15);
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
       expect(onEditScheduledTask).toHaveBeenCalledWith(
         item.id,
         expect.objectContaining({
-          next_run_at: new Date("2026-07-08T10:15:00").toISOString(),
+          recurrence: "once",
+          next_run_at: expect.any(String),
+          starts_at: null,
+          expires_at: null,
           enabled: true,
         }),
       ),
     );
   });
 
-  it("reactivates a disabled scheduled task when editing to a new run time", async () => {
+  it("keeps a task disabled when clearing the start date leaves the next run unchanged", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-11-27T10:00:00Z"));
+      const onEditScheduledTask = vi.fn();
+      const item = scheduledTask({
+        enabled: false,
+        recurrence: "daily",
+        starts_at: "2026-11-26T00:00:00Z",
+        expires_at: "",
+        next_run_at: "2026-11-28T09:00:00+00:00",
+        schedule: {
+          clock: "09:00",
+          time_zone: "UTC",
+          interval_minutes: 60,
+          weekdays: [],
+          month_days: [],
+          month: 0,
+          day: 0,
+        },
+      });
+      render(
+        <TasksView
+          agents={[agent()]}
+          scheduledTasks={[item]}
+          selectedScheduledTaskID={item.id}
+          editingScheduledTaskID={item.id}
+          onEditScheduledTask={onEditScheduledTask}
+          t={t}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: t("scheduledTaskEffectiveLabel") }));
+      fireEvent.click(screen.getByRole("option", { name: t("scheduledTaskEffectiveForever") }));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      expect(onEditScheduledTask).toHaveBeenCalledWith(
+        item.id,
+        expect.objectContaining({ starts_at: null, next_run_at: "2026-11-28T09:00:00.000Z" }),
+      );
+      expect(onEditScheduledTask.mock.calls[0][1]).not.toHaveProperty("enabled");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reactivates a disabled scheduled task at the edited time in its saved time zone", async () => {
     const onEditScheduledTask = vi.fn();
     const agents = [agent()];
     const item = scheduledTask({
       enabled: false,
       next_run_at: "2026-07-07T09:30:00Z",
-      expires_at: "",
+      starts_at: "2026-01-01T03:15:00Z",
+      expires_at: "2099-01-01T07:00:00Z",
       recurrence: "daily",
+      schedule: {
+        clock: "17:30",
+        time_zone: "Asia/Shanghai",
+        interval_minutes: 60,
+        weekdays: [],
+        month_days: [],
+        month: 0,
+        day: 0,
+      },
     });
 
     render(
@@ -742,18 +804,82 @@ describe("TasksView", () => {
       />,
     );
 
-    fireEvent.input(screen.getByLabelText("Time"), { target: { value: "10:15" } });
+    await selectScheduleTime("Time", 10, 15);
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
       expect(onEditScheduledTask).toHaveBeenCalledWith(
         item.id,
         expect.objectContaining({
-          next_run_at: new Date("2026-07-07T10:15:00").toISOString(),
+          next_run_at: expect.stringMatching(/T02:15:00\.000Z$/),
+          schedule_detail: expect.objectContaining({ clock: "10:15", time_zone: "Asia/Shanghai" }),
           enabled: true,
         }),
       ),
     );
+    expect(onEditScheduledTask.mock.calls[0][1]).not.toHaveProperty("starts_at");
+    expect(onEditScheduledTask.mock.calls[0][1]).not.toHaveProperty("expires_at");
+  });
+
+  it("checks a new run time against the original expiry time", async () => {
+    const onEditScheduledTask = vi.fn();
+    const item = scheduledTask({
+      recurrence: "daily",
+      starts_at: "2099-01-01T01:00:00Z",
+      next_run_at: "2099-01-01T02:30:00Z",
+      expires_at: "2099-01-01T03:00:00Z",
+      schedule: {
+        clock: "10:30",
+        time_zone: "Asia/Shanghai",
+        interval_minutes: 60,
+        weekdays: [],
+        month_days: [],
+        month: 0,
+        day: 0,
+      },
+    });
+    render(
+      <TasksView
+        agents={[agent()]}
+        scheduledTasks={[item]}
+        selectedScheduledTaskID={item.id}
+        editingScheduledTaskID={item.id}
+        onEditScheduledTask={onEditScheduledTask}
+        t={t}
+      />,
+    );
+
+    await selectScheduleTime("Time", 12, 0);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(screen.getByText(t("scheduledTaskEffectiveRangeNoRun"))).toBeInTheDocument();
+    expect(onEditScheduledTask).not.toHaveBeenCalled();
+  });
+
+  it("saves metadata for a valid interval above 999 minutes", () => {
+    const onEditScheduledTask = vi.fn();
+    const item = scheduledTask({
+      recurrence: "interval",
+      schedule: { interval_minutes: 1001, weekdays: [], month_days: [], month: 0, day: 0 },
+    });
+    render(
+      <TasksView
+        agents={[agent()]}
+        scheduledTasks={[item]}
+        selectedScheduledTaskID={item.id}
+        editingScheduledTaskID={item.id}
+        onEditScheduledTask={onEditScheduledTask}
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onEditScheduledTask).toHaveBeenCalledWith(item.id, {
+      title: item.title,
+      agent_id: item.agent_id,
+      prompt: item.prompt,
+    });
   });
 
   it("allows daily scheduled task edits with only a time", async () => {
@@ -767,7 +893,6 @@ describe("TasksView", () => {
     });
     const now = new Date();
     const target = new Date(now.getTime() + 5 * 60 * 1000);
-    const targetTime = `${String(target.getHours()).padStart(2, "0")}:${String(target.getMinutes()).padStart(2, "0")}`;
     const expected = new Date(
       now.getFullYear(),
       now.getMonth(),
@@ -792,9 +917,9 @@ describe("TasksView", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("combobox", { name: "Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
     fireEvent.click(await screen.findByRole("option", { name: "Daily" }));
-    fireEvent.input(screen.getByLabelText("Time"), { target: { value: targetTime } });
+    await selectScheduleTime("Time", target.getHours(), target.getMinutes());
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(screen.queryByText("Choose a date.")).not.toBeInTheDocument();
@@ -844,22 +969,36 @@ describe("TasksView", () => {
       />,
     );
 
-    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Generated task detail" })).not.toBeInTheDocument();
     expect(screen.queryByText("Generated report")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Latest run result" }).parentElement).toHaveTextContent("Build passed");
 
     fireEvent.click(screen.getByRole("button", { name: generatedTask.id }));
     expect(screen.queryByRole("dialog", { name: "Generated report" })).not.toBeInTheDocument();
-    const detail = within(screen.getByLabelText("Generated task detail"));
+    const detail = within(screen.getByRole("dialog", { name: "Generated task detail" }));
     expect(detail.getByRole("heading", { name: "Result" }).parentElement).toHaveTextContent("Build passed");
     expect(screen.getByText("Generated task body")).toBeInTheDocument();
     fireEvent.click(detail.getByRole("button", { name: "View history" }));
     expect(onOpenConversation).toHaveBeenLastCalledWith("room-latest");
 
-    fireEvent.click(screen.getByRole("button", { name: "task-scheduled-run-1" }));
-    expect(detail.getByRole("heading", { name: "Result" }).parentElement).toHaveTextContent("Earlier result");
-    fireEvent.click(detail.getByRole("button", { name: "View history" }));
+    const olderRun = screen.getByRole("button", { name: "task-scheduled-run-1" }).parentElement!;
+    fireEvent.click(within(olderRun).getByRole("button", { name: "History" }));
     expect(onOpenConversation).toHaveBeenLastCalledWith("room-older");
+  });
+
+  it("opens failed run details even when no task was created", () => {
+    render(
+      <TasksView
+        activeView="scheduled"
+        scheduledTasks={[scheduledTask()]}
+        scheduledTaskRuns={[scheduledTaskRun({ status: "failed", task_id: "", error: "Executor offline" })]}
+        t={t}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Generated task detail" }));
+    expect(dialog.getByText("Executor offline")).toBeInTheDocument();
+    expect(dialog.queryByRole("button", { name: "View history" })).not.toBeInTheDocument();
   });
 
   it("warns instead of navigating when a scheduled run room no longer exists", () => {
@@ -906,7 +1045,7 @@ describe("TasksView", () => {
       />,
     );
 
-    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Generated task detail" })).not.toBeInTheDocument();
     expect(screen.queryByText("Select a run record to inspect the generated task.")).not.toBeInTheDocument();
   });
 
@@ -923,23 +1062,28 @@ describe("TasksView", () => {
     const { rerender } = render(<TasksView {...props} scheduledTaskRuns={[scheduledTaskRun()]} />);
 
     rerender(<TasksView {...props} scheduledTaskRuns={[scheduledTaskRun()]} />);
-    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Generated task detail" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: firstTask.id }));
     const refreshedRuns = [scheduledTaskRun({ id: "scheduled-run-2", task_id: secondTask.id }), scheduledTaskRun()];
     rerender(<TasksView {...props} scheduledTaskRuns={refreshedRuns} />);
-    expect(within(screen.getByLabelText("Generated task detail")).getByText(firstTask.title)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: firstTask.id })).toHaveAttribute("data-active", "true");
-    expect(screen.getByRole("button", { name: secondTask.id })).not.toHaveAttribute("data-active");
+    expect(
+      within(screen.getByRole("dialog", { name: "Generated task detail" })).getByText(firstTask.title),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Generated task detail" })).getByRole("button", { name: "Close" }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: secondTask.id }));
-    expect(within(screen.getByLabelText("Generated task detail")).getByText(secondTask.title)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("dialog", { name: "Generated task detail" })).getByText(secondTask.title),
+    ).toBeInTheDocument();
 
     rerender(<TasksView {...props} selectedScheduledTaskID="scheduled-task-2" scheduledTaskRuns={[]} />);
-    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Generated task detail" })).not.toBeInTheDocument();
 
     rerender(<TasksView {...props} scheduledTaskRuns={refreshedRuns} />);
-    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Generated task detail" })).not.toBeInTheDocument();
   });
 
   it("shows live status for unselected schedules without blocking the selected schedule", () => {

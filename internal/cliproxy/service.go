@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelprovider"
 
 	"github.com/gin-gonic/gin"
 	cliproxyapi "github.com/router-for-me/CLIProxyAPI/v8/sdk/api"
@@ -55,9 +56,11 @@ const (
 )
 
 type Service struct {
-	mu     sync.Mutex
-	run    *serviceRun
-	client *http.Client
+	mu         sync.Mutex
+	run        *serviceRun
+	client     *http.Client
+	quota      accountQuotas
+	codexQuota modelprovider.AccountUsageCache
 }
 
 type serviceRun struct {
@@ -173,6 +176,7 @@ func (s *Service) serve(run *serviceRun, serverOptions []cliproxyapi.ServerOptio
 		return fmt.Errorf("build embedded cliproxy: %w", err)
 	}
 
+	registerAccountQuotaObserver(&s.quota)
 	stopped := make(chan struct{})
 	var daemonErr error
 	go func() {

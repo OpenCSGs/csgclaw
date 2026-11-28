@@ -173,3 +173,28 @@ test("empty required model fields prompt for a provider before selecting a model
   );
   expect(screen.getByRole("combobox", { name: t("profileModel") })).toHaveTextContent(t("profileProviderSelectFirst"));
 });
+
+test("shows the OpenCSG amount in the provider selector", async () => {
+  const user = userEvent.setup();
+  render(
+    <AgentModelFields
+      providerOptions={providers.map((provider) =>
+        provider.id === "opencsg"
+          ? { ...provider, balance: { kind: "balance", currency: "CNY", remaining: 4722.43 } }
+          : provider,
+      )}
+      providerID="opencsg"
+      modelID="cloud-model"
+      models={["cloud-model"]}
+      onPatch={vi.fn()}
+      onRequireOpenCSGAuth={() => true}
+      t={t}
+    />,
+  );
+
+  const trigger = screen.getByRole("combobox", { name: t("profileModelProvider") });
+  expect(trigger).toHaveTextContent("¥4,722.43");
+  await user.click(trigger);
+  expect(screen.getByRole("option", { name: /OpenCSG/ })).toHaveTextContent("¥4,722.43");
+  expect(screen.getByRole("option", { name: /Custom/ })).not.toHaveTextContent("¥");
+});

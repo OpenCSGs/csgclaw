@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Cpu, Settings2 } from "lucide-react";
 import { Button, Combobox } from "@/components/ui";
+import { ModelProviderBalanceBadge } from "@/components/business/ModelProviderBalanceBadge";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
 import {
@@ -98,6 +99,8 @@ export function TaskModelPicker({
             return {
               value: encode(provider.id, model),
               group: provider.displayName,
+              groupKey: provider.id,
+              groupMeta: <ModelProviderBalanceBadge balance={provider.balance} t={t} compact />,
               textValue: `${model} ${provider.displayName}`,
               label: (
                 <ModelOptionLabel

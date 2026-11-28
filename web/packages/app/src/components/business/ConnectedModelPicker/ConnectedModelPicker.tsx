@@ -1,6 +1,7 @@
 import type { ComboboxOption } from "csgclaw-ui";
 import { useId, useRef, useState } from "react";
 import { Button, Combobox } from "@/components/ui";
+import { ModelProviderBalanceBadge } from "@/components/business/ModelProviderBalanceBadge";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider } from "@/api/modelProviders";
@@ -85,6 +86,7 @@ export function ConnectedModelPicker({
   const directories = [...providerGroups].flatMap(([group, connections]) =>
     connections.map((provider) => ({
       group,
+      separateAccounts: connections.length > 1 && connections.some((connection) => connection.balance),
       provider,
       models: modelIDsForPicker(
         provider.id,
@@ -94,12 +96,14 @@ export function ConnectedModelPicker({
       ),
     })),
   );
-  const options: ComboboxOption[] = directories.flatMap(({ group, provider, models }) =>
+  const options: ComboboxOption[] = directories.flatMap(({ group, provider, models, separateAccounts }) =>
     models.map((model) => {
       const recommended = isRecommendedOpenCSGModel(provider.id, model);
       return {
         value: encode(provider.id, model),
-        group,
+        group: separateAccounts ? detail(provider) : group,
+        groupKey: separateAccounts ? provider.id : undefined,
+        groupMeta: <ModelProviderBalanceBadge balance={provider.balance} t={t} compact />,
         textValue: `${model} ${detail(provider)} ${group} ${isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : ""}`,
         description: isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoDescription") : undefined,
         label: (

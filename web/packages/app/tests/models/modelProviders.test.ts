@@ -387,3 +387,19 @@ it.each([null, normalizeModelProviderCatalog({ providers: [] })])(
     ).toEqual([]);
   },
 );
+
+it("carries optional balance and quota data from the catalog into provider selections", () => {
+  const catalog = normalizeModelProviderCatalog({
+    providers: [
+      { id: "cash", status: "connected", balance: { remaining: "0", currency: "CNY" } },
+      { id: "plan", status: "connected", quota: { used: 80, total: 100, expires_at: "2026-12-01T08:00:00Z" } },
+      { id: "partial", status: "connected", balance: { kind: "quota", remaining: 5, unit: "tokens" } },
+      { id: "invalid", status: "connected", balance: { remaining: "5oops" } },
+    ],
+  });
+  const byID = new Map(modelProviderSelectOptionsFromCatalog(catalog).map((provider) => [provider.id, provider.balance]));
+  expect(byID.get("cash")).toMatchObject({ kind: "balance", remaining: 0, currency: "CNY" });
+  expect(byID.get("plan")).toMatchObject({ kind: "quota", remaining: 20, expires_at: "2026-12-01T08:00:00Z" });
+  expect(byID.get("partial")).toMatchObject({ kind: "quota", remaining: 5, unit: "tokens" });
+  expect(byID.get("invalid")).toBeUndefined();
+});

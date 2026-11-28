@@ -603,3 +603,14 @@
 .model-provider-page:global(.embedded) > .model-provider-list-header {
   display: none;
 }
+
+.model-provider-provider-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.model-provider-provider-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

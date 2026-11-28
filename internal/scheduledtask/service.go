@@ -122,7 +122,7 @@ func (s *Service) Create(input CreateInput) (Task, error) {
 	agentID := agent.CanonicalID(input.AgentID)
 	prompt := strings.TrimSpace(input.Prompt)
 	if !validRecurrence(input.Recurrence) {
-		return Task{}, fmt.Errorf("recurrence must be once, daily, weekly, or monthly")
+		return Task{}, fmt.Errorf("invalid recurrence")
 	}
 	recurrence := normalizeRecurrence(input.Recurrence)
 	if title == "" {
@@ -139,17 +139,19 @@ func (s *Service) Create(input CreateInput) (Task, error) {
 	}
 	now := s.now()
 	item := Task{
-		Title:      title,
-		AgentID:    agentID,
-		Prompt:     prompt,
-		Recurrence: recurrence,
-		Enabled:    input.Enabled,
-		NextRunAt:  input.FirstRunAt,
-		ExpiresAt:  cloneTime(input.ExpiresAt),
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		Title:          title,
+		AgentID:        agentID,
+		Prompt:         prompt,
+		Recurrence:     recurrence,
+		ScheduleDetail: cloneScheduleDetail(input.ScheduleDetail),
+		StartsAt:       cloneTime(input.StartsAt),
+		Enabled:        input.Enabled,
+		NextRunAt:      input.FirstRunAt,
+		ExpiresAt:      cloneTime(input.ExpiresAt),
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
-	if err := validateSchedule(item); err != nil {
+	if err := validateSchedule(&item); err != nil {
 		return Task{}, err
 	}
 	s.mu.Lock()
@@ -187,15 +189,28 @@ func (s *Service) Update(input UpdateInput) (Task, error) {
 	}
 	if input.Recurrence != nil {
 		if !validRecurrence(*input.Recurrence) {
-			return Task{}, fmt.Errorf("recurrence must be once, daily, weekly, or monthly")
+			return Task{}, fmt.Errorf("invalid recurrence")
 		}
-		item.Recurrence = normalizeRecurrence(*input.Recurrence)
+		recurrence := normalizeRecurrence(*input.Recurrence)
+		if item.Recurrence != recurrence {
+			item.ScheduleDetail = nil
+		}
+		item.Recurrence = recurrence
 	}
 	if input.NextRunAt != nil {
 		item.NextRunAt = *input.NextRunAt
 	}
+	if input.ScheduleDetail != nil {
+		item.ScheduleDetail = cloneScheduleDetail(input.ScheduleDetail)
+	}
+	if input.StartsAt != nil {
+		item.StartsAt = cloneTime(*input.StartsAt)
+	}
 	if input.ExpiresAt != nil {
 		item.ExpiresAt = cloneTime(*input.ExpiresAt)
+	}
+	if item.Recurrence == RecurrenceOnce && s.state.Tasks[idx].Recurrence != RecurrenceOnce {
+		item.ExpiresAt = nil
 	}
 	if input.Enabled != nil {
 		item.Enabled = *input.Enabled
@@ -217,7 +232,7 @@ func (s *Service) Update(input UpdateInput) (Task, error) {
 	if item.Enabled && item.NextRunAt.IsZero() {
 		return Task{}, fmt.Errorf("next_run_at is required")
 	}
-	if err := validateSchedule(item); err != nil {
+	if err := validateSchedule(&item); err != nil {
 		return Task{}, err
 	}
 	item.UpdatedAt = s.now()
@@ -270,7 +285,7 @@ func (s *Service) TriggerDue(ctx context.Context) []Run {
 	s.mu.Lock()
 	due := make([]Task, 0)
 	for _, item := range s.state.Tasks {
-		if item.Enabled && !item.NextRunAt.IsZero() && !item.NextRunAt.After(now) && !expired(item, now) && !s.hasActiveRunLocked(item.ID) && !s.inFlightLocked(item.ID) {
+		if dueAt(item, now) && !s.hasActiveRunLocked(item.ID) && !s.inFlightLocked(item.ID) {
 			due = append(due, item)
 		}
 	}
@@ -283,6 +298,11 @@ func (s *Service) TriggerDue(ctx context.Context) []Run {
 		}
 	}
 	return runs
+}
+
+func dueAt(item Task, now time.Time) bool {
+	return item.Enabled && !item.NextRunAt.IsZero() && !item.NextRunAt.After(now) &&
+		started(item, now) && !expired(item, now)
 }
 
 func (s *Service) Start(ctx context.Context) {
@@ -299,18 +319,32 @@ func (s *Service) Start(ctx context.Context) {
 	}
 }
 
-func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, skipIfActive bool) (Run, error) {
+func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, automatic bool) (Run, error) {
 	if s.checkAgent != nil {
 		if err := s.checkAgent(item.AgentID); err != nil {
 			return Run{}, err
 		}
 	}
 
-	now := s.now()
 	s.mu.Lock()
+	now := s.now()
 	if s.inFlightLocked(item.ID) || s.hasActiveRunLocked(item.ID) {
 		s.mu.Unlock()
 		return Run{}, ErrActiveTask
+	}
+	if automatic {
+		idx := s.indexLocked(item.ID)
+		if idx < 0 {
+			s.mu.Unlock()
+			return Run{}, fmt.Errorf("scheduled task no longer exists")
+		}
+		current := s.state.Tasks[idx]
+		if !dueAt(current, now) || !current.NextRunAt.Equal(item.NextRunAt) || current.AgentID != item.AgentID {
+			s.mu.Unlock()
+			return Run{}, fmt.Errorf("scheduled occurrence changed before dispatch")
+		}
+		// Reserve the occurrence using the latest task content.
+		item = current
 	}
 	run := Run{
 		ID:              fmt.Sprintf("scheduled-run-%d", s.state.NextRunID),
@@ -356,7 +390,7 @@ func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if skipIfActive && run.Status == StatusFailed && s.hasActiveRunLocked(item.ID) {
+	if automatic && run.Status == StatusFailed && s.hasActiveRunLocked(item.ID) {
 		return Run{}, ErrActiveTask
 	}
 	next = cloneServiceState(s.state)
@@ -364,7 +398,7 @@ func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, 
 		updated := next.Tasks[idx]
 		updated.LastRunAt = &now
 		updated.UpdatedAt = now
-		if advanceSchedule && updated.Enabled {
+		if advanceSchedule && updated.Enabled && updated.NextRunAt.Equal(item.NextRunAt) && !updated.NextRunAt.After(now) {
 			scheduledNext, ok := nextRunAt(updated, now)
 			updated.NextRunAt = scheduledNext
 			updated.Enabled = ok && !expired(updated, scheduledNext)
@@ -438,16 +472,9 @@ func indexTask(tasks []Task, id string) int {
 	return -1
 }
 
-func validateSchedule(item Task) error {
-	if item.Enabled && item.ExpiresAt != nil && !item.NextRunAt.IsZero() && item.ExpiresAt.Before(item.NextRunAt) {
-		return fmt.Errorf("expires_at must not be before next_run_at")
-	}
-	return nil
-}
-
 func normalizeRecurrence(value string) string {
 	switch strings.TrimSpace(value) {
-	case RecurrenceDaily, RecurrenceWeekly, RecurrenceMonthly:
+	case RecurrenceInterval, RecurrenceDaily, RecurrenceWeekly, RecurrenceBiweekly, RecurrenceMonthly, RecurrenceYearly:
 		return strings.TrimSpace(value)
 	default:
 		return RecurrenceOnce
@@ -455,6 +482,9 @@ func normalizeRecurrence(value string) string {
 }
 
 func nextRunAt(item Task, from time.Time) (time.Time, bool) {
+	if item.ScheduleDetail != nil {
+		return nextStructuredRun(item, from)
+	}
 	switch normalizeRecurrence(item.Recurrence) {
 	case RecurrenceDaily:
 		return advanceUntilAfter(item.NextRunAt, from, func(t time.Time) time.Time { return t.AddDate(0, 0, 1) }), true
@@ -525,7 +555,7 @@ func (s *Service) DisableAgent(id string) error {
 
 func validRecurrence(value string) bool {
 	switch strings.TrimSpace(value) {
-	case "", RecurrenceOnce, RecurrenceDaily, RecurrenceWeekly, RecurrenceMonthly:
+	case "", RecurrenceOnce, RecurrenceInterval, RecurrenceDaily, RecurrenceWeekly, RecurrenceBiweekly, RecurrenceMonthly, RecurrenceYearly:
 		return true
 	default:
 		return false
