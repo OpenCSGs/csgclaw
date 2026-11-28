@@ -1487,6 +1487,9 @@ export function useAgentController({
         refreshWorkspaceBootstrapConfig(),
         refreshWorkspaceModelProviders(),
         fetchAgentProfileDefaults(),
+        // The template selector reads this list, which is otherwise only
+        // fetched after visiting the Hub templates page.
+        refreshHubTemplates(),
       ]);
       if (agentModalRequestRef.current !== requestID) return;
       const effectiveBootstrapConfig = (config.status === "fulfilled" && config.value) || bootstrapConfig;
