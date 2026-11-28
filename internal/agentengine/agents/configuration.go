@@ -416,7 +416,9 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 		if (runtimeConfigUpdated && runtimeNormalized.ProfileComplete) || mcpServersUpdated {
 			s.mu.Unlock()
 			if runtimeConfigUpdated && runtimeNormalized.ProfileComplete {
-				if err := s.validateRuntimeConfig(ctx, runtimeKind, change.Current); err != nil {
+				validation := change.Current
+				validation.SkipModelAvailabilityCheck = req.skipModelAvailabilityCheck
+				if err := s.validateRuntimeConfig(ctx, runtimeKind, validation); err != nil {
 					return Agent{}, err
 				}
 			}

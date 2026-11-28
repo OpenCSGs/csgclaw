@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/config"
 	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcp"
 	"csgclaw/internal/mcpschema"
@@ -107,6 +108,7 @@ func (s *Controller) refreshWorkerTemplate(ctx context.Context, id, ref string) 
 		}
 	}()
 	if len(update.FieldMask) != 0 {
+		update.skipModelAvailabilityCheck = s.server.DeploymentMode == config.CSGHubProvider
 		current, err = s.update(context.WithValue(ctx, deferResourceRestartKey{}, true), id, update)
 		if err != nil {
 			actual, ok := s.Agent(id)
