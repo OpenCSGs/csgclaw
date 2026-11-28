@@ -489,8 +489,6 @@ type UpdateRequest struct {
 	RuntimeInitShell          *string                 `json:"-"`
 	AgentProfile              *AgentProfile           `json:"agent_profile,omitempty"`
 	FieldMask                 []string                `json:"field_mask,omitempty"`
-
-	skipModelAvailabilityCheck bool
 }
 
 func (r *UpdateRequest) UnmarshalJSON(data []byte) error {

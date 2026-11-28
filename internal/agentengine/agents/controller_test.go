@@ -8987,7 +8987,7 @@ func TestPlatformTemplateCreationDefersModelCheck(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := svc.validateCreateRuntimeConfig(context.Background(), CreateAgentSpec{FromTemplate: tc.template}, RuntimeKindCodex, agentruntime.RuntimeConfigSnapshot{}); err != nil {
+			if err := svc.validateTemplateRuntimeConfig(context.Background(), tc.template, RuntimeKindCodex, agentruntime.RuntimeConfigSnapshot{}); err != nil {
 				t.Fatal(err)
 			}
 			if calls != 1 {
